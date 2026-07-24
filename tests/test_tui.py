@@ -1148,3 +1148,63 @@ def test_tui_validate_repair_flow(tmp_path):
             assert app.dirty and orig.read_bytes() == bytes(broken)
 
     asyncio.run(scenario())
+
+
+def _blob_with_two_wavs(path):
+    import io
+    import math
+    import wave
+
+    def one(n, rate=11025, period=40, amp=8000):
+        b = io.BytesIO()
+        with wave.open(b, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+            w.writeframes(b"".join(struct.pack("<h", int(amp * math.sin(2 * math.pi * i / period)))
+                                   for i in range(n)))
+        return b.getvalue()
+    path.write_bytes(bytes(1024) + one(6000) + bytes(2048) + one(4000) + bytes(512))
+
+
+def test_tui_regions_browse_descend_ascend_extract(tmp_path):
+    """Opening a blob (two WAVs embedded in padding) auto-opens the region
+    browser; descending loads a region as a standalone file, ascend returns to
+    the browser, and extract-all writes each region out."""
+    pytest.importorskip("textual")
+    import asyncio
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen, DirPromptScreen
+
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+    outdir = tmp_path / "out"
+
+    async def scenario():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(120, 40)) as pilot:
+            for _ in range(50):
+                if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
+                    break
+                await pilot.pause(0.1)
+            rs = [s for s in app.screen_stack if isinstance(s, RegionsScreen)]
+            assert rs and len(rs[0].regions) == 2      # both WAVs located
+
+            rs[0].dismiss({"action": "descend", "index": 0})
+            await pilot.pause(0.3)
+            assert app._region_view is not None
+            assert app.fmt.startswith("RIFF")          # the region opened as a WAV
+            assert "region 0" in app._display_name()
+
+            app.action_ascend()
+            await pilot.pause(0.3)
+            assert any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+
+            [s for s in app.screen_stack if isinstance(s, RegionsScreen)][0].dismiss(
+                {"action": "extract_all", "index": -1})
+            await pilot.pause(0.2)
+            dp = [s for s in app.screen_stack if isinstance(s, DirPromptScreen)]
+            assert dp
+            dp[0].dismiss(str(outdir))
+            await pilot.pause(0.3)
+
+    asyncio.run(scenario())
+    files = sorted(os.listdir(outdir))
+    assert len(files) == 2 and all(f.endswith(".wav") for f in files)

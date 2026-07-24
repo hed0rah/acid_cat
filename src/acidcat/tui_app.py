@@ -26,13 +26,15 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
-    Button, DirectoryTree, Footer, Input, Label, Static, Tree,
+    Button, DataTable, DirectoryTree, Footer, Input, Label, Static, Tree,
 )
 
 from acidcat.core.walk import walk_file, Unsupported
 from acidcat.core import anomalies as ac_anom
+from acidcat.core import locate as locatemod
 from acidcat.core import writer
 from acidcat.core import viz
+from acidcat.commands.carve import _EXT as _CARVE_EXT
 from acidcat.util import play
 from acidcat.core.edits import EditError
 from acidcat.commands.write import _edit as _write_edit, _strip as _write_strip
@@ -376,12 +378,17 @@ class HelpScreen(ModalScreen):
             ("ctrl+s", "save to the original (writes a _original backup)"),
             ("ctrl+z / ctrl+r", "undo / redo the last edit"),
             ("o", "open another file"),
+            ("l", "locate audio regions in a blob / disk image (auto for a blob)"),
+            ("u", "from a region, go back up to the region browser"),
             ("esc", "cancel the current edit / prompt"),
             ("q", "quit"),
         ]
         for k, d in rows:
             t.append(f"  {k:16}", style=f"bold {PEND}")
             t.append(f"{d}\n", style=SOFT)
+        t.append("\nRegion browser (a blob opens straight into it): enter descends "
+                 "into a region as if it were a file, x / e extract one / all.",
+                 style=DIM)
         t.append("\nEdits go to a temp working copy; nothing touches the original "
                  "until ctrl+s.", style=DIM)
         with Vertical(id="helpbox"):
@@ -528,6 +535,109 @@ class ValidateScreen(ModalScreen):
         self.dismiss(None)
 
 
+class RegionsScreen(ModalScreen):
+    """The blob region browser: the `locate` results as a navigable table.
+    enter descends into the selected region (opened as if it were a standalone
+    file), x extracts it, e extracts every region. dismiss()es with a dict
+    {action: descend|extract|extract_all, index: row}, or None on esc."""
+
+    CSS = """
+    RegionsScreen { align: center middle; }
+    #regbox { width: 92%; height: 84%; border: round #08F9DF;
+              background: #16181C; padding: 1 2; }
+    #reghint { color: #8A9099; padding-bottom: 1; }
+    #regtable { height: 1fr; }
+    DataTable { background: #16181C; }
+    """
+    BINDINGS = [
+        ("x", "extract", "extract one"),
+        ("e", "extract_all", "extract all"),
+        ("escape", "cancel", "back"),
+    ]
+
+    def __init__(self, regions, blob_name):
+        super().__init__()
+        self.regions = regions
+        self.blob_name = blob_name
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="regbox"):
+            nc = sum(1 for r in self.regions if r["kind"] == "container")
+            nb = len(self.regions) - nc
+            yield Static(
+                Text(f"{self.blob_name}  --  {len(self.regions)} region(s), "
+                     f"{nc} container(s), {nb} blob(s)   "
+                     "[enter descend  x extract  e extract-all  esc back]",
+                     style=f"bold {ACCENT}"), id="reghint")
+            # populate before yield so the table never depends on post-mount
+            # query timing (which was flaky for a re-pushed screen)
+            t = DataTable(id="regtable")
+            t.cursor_type = "row"
+            t.zebra_stripes = True
+            t.add_columns("#", "offset", "end", "kind", "format", "conf", "length", "geometry")
+            for i, r in enumerate(self.regions):
+                geo = r.get("geometry") or {}
+                gs = ""
+                if geo:
+                    ch = "stereo" if geo.get("channels") == 2 else "mono"
+                    gs = (f"float{geo['width']}" if geo.get("float")
+                          else f"{geo.get('endian') or '?'}-{geo.get('width')}bit") + f" {ch}"
+                t.add_row(str(i), f"0x{r['offset']:08x}", f"0x{r['end']:08x}",
+                          r["kind"], r.get("transform") or r.get("format") or "raw-pcm",
+                          f"{r['confidence']:.2f}", f"{r['length']:,}", gs)
+            yield t
+
+    def on_mount(self):
+        try:
+            self.query_one("#regtable", DataTable).focus()
+        except Exception:
+            pass
+
+    def on_data_table_row_selected(self, event):
+        self.dismiss({"action": "descend", "index": event.cursor_row})
+
+    def action_extract(self):
+        self.dismiss({"action": "extract", "index": self.query_one(DataTable).cursor_row})
+
+    def action_extract_all(self):
+        self.dismiss({"action": "extract_all", "index": -1})
+
+    def action_cancel(self):
+        self.dismiss(None)
+
+
+class DirPromptScreen(ModalScreen):
+    """A one-line prompt for an output directory (mass-extract target). Enter
+    submits, esc cancels. dismiss()es with the typed path, or None."""
+
+    CSS = """
+    DirPromptScreen { align: center middle; }
+    #dpbox { width: 76; height: auto; border: round #FF4D00;
+             background: #16181C; padding: 1 2; }
+    #dphint { color: #8A9099; padding-bottom: 1; }
+    """
+    BINDINGS = [("escape", "cancel", "cancel")]
+
+    def __init__(self, prompt, default):
+        super().__init__()
+        self.prompt = prompt
+        self.default = default
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dpbox"):
+            yield Static(Text(self.prompt, style=f"bold {ACCENT}"), id="dphint")
+            yield Input(value=self.default, id="dpinput")
+
+    def on_mount(self):
+        self.query_one(Input).focus()
+
+    def on_input_submitted(self, event):
+        self.dismiss(event.value.strip() or None)
+
+    def action_cancel(self):
+        self.dismiss(None)
+
+
 class AcidcatTUI(App):
     CSS = """
     Screen { background: #16181C; }
@@ -564,6 +674,8 @@ class AcidcatTUI(App):
         ("ctrl+z", "undo", "undo"),
         ("ctrl+r", "redo", "redo"),
         ("o", "open", "open file"),
+        ("l", "locate_regions", "locate regions"),
+        ("u", "ascend", "up to regions"),
         ("e", "edit_field", "edit field"),
         ("tab", "hex_focus", "hex edit"),
         ("ctrl+t", "toggle_mode", "value/hex"),
@@ -615,6 +727,10 @@ class AcidcatTUI(App):
         self._cur_region = (None, None, ACCENT)  # last shown (off, length, accent)
         self._cur_spans = None    # field spans for per-field hex tint (chunk view)
         self._play = None         # handle to a running audio-audition process
+        self._regions = None      # locate regions of the blob being browsed, or None
+        self._blob_src = None     # path of the blob those regions came from
+        self._region_view = None  # (idx, region) when viewing a descended region
+        self._region_tmps = []    # carved-region temp files, cleaned on exit
 
     def compose(self) -> ComposeResult:
         yield Static(id="title")
@@ -641,14 +757,149 @@ class AcidcatTUI(App):
     def on_unmount(self):
         self.action_stop_play()
         self._discard_work()
+        self._clean_region_tmps()
 
     # ── working copy: all edits apply to a temp file until an explicit save ──
 
     def _open_path(self, path):
-        """Point the app at `path`: make a fresh temp working copy and load it."""
+        """Open `path` fresh: drop any region context, make a working copy, load,
+        and offer the region browser if it is a blob rather than a single file."""
         self.src = path
+        self._regions = None
+        self._blob_src = None
+        self._region_view = None
+        self._clean_region_tmps()
         self._make_work()
         self._load()
+        self._maybe_regions()
+
+    # ── blob region browsing: locate -> browse -> descend -> extract ──────────
+
+    def _clean_region_tmps(self):
+        for p in getattr(self, "_region_tmps", []):
+            try:
+                if os.path.isfile(p):
+                    os.unlink(p)
+            except OSError:
+                pass
+        self._region_tmps = []
+
+    def _maybe_regions(self):
+        """Auto-offer the region browser when the opened file is not a single
+        recognized format (a disk image, a raw dump, an unknown blob)."""
+        if self.fmt not in ("unsupported", "walk failed") or self.fsize < 4096:
+            return
+        self.action_locate_regions()
+
+    def action_locate_regions(self):
+        """Run `locate` over the current file and open the region browser. Works
+        on demand (the `l` key) as well as automatically for a blob."""
+        if len(self.screen_stack) > 1:
+            return
+        self.query_one("#title", Static).update(
+            Text(f" locating audio regions in {os.path.basename(self.src)} ...",
+                 style=f"bold {ACCENT}"))
+        self._blob_src = self.src
+        self.run_worker(self._locate_work, thread=True, exclusive=True)
+
+    def _locate_work(self):
+        try:
+            with open(self.work, "rb") as f:
+                data = f.read()
+            regions = locatemod.locate(data, mode="normal")
+        except Exception:
+            regions = []
+        self.call_from_thread(self._show_regions, regions)
+
+    def _show_regions(self, regions):
+        self._load()                                   # restore the title
+        if not regions:
+            self.query_one("#title", Static).update(
+                Text(f" {os.path.basename(self.src)}  --  no audio regions located",
+                     style=f"bold {ACCENT}"))
+            return
+        self._regions = regions
+        self.push_screen(
+            RegionsScreen(regions, os.path.basename(self._blob_src)),
+            self._on_region_action)
+
+    def _on_region_action(self, result):
+        if not result:
+            return
+        if result["action"] == "descend":
+            self._descend(result["index"])
+        elif result["action"] == "extract":
+            self._extract([self._regions[result["index"]]])
+        elif result["action"] == "extract_all":
+            self._extract(self._regions)
+
+    def _region_bytes(self, region):
+        with open(self._blob_src, "rb") as f:
+            f.seek(region["offset"])
+            return f.read(region["end"] - region["offset"])
+
+    def _descend(self, idx):
+        """Carve the selected region to a temp file and open it as if it were a
+        standalone file; the parent blob's regions stay set so `u` ascends."""
+        region = self._regions[idx]
+        ext = _CARVE_EXT.get(region.get("format")) or "bin"
+        fd, tmp = tempfile.mkstemp(suffix=f".{ext}", prefix="acidcat_region_")
+        os.close(fd)
+        with open(tmp, "wb") as f:
+            f.write(self._region_bytes(region))
+        self._region_tmps.append(tmp)
+        blob, regions = self._blob_src, self._regions   # preserve across _make_work
+        self.src = tmp
+        self._region_view = (idx, region)
+        self._make_work()
+        self._load()
+        self._blob_src, self._regions = blob, regions
+
+    def action_ascend(self):
+        """From a descended region, go back up to the blob's region browser."""
+        if self._regions is None or self._blob_src is None:
+            return
+        self._region_view = None
+        self.push_screen(
+            RegionsScreen(self._regions, os.path.basename(self._blob_src)),
+            self._on_region_action)
+
+    def _extract(self, regions):
+        default = os.path.join(os.path.dirname(os.path.abspath(self._blob_src)),
+                               os.path.splitext(os.path.basename(self._blob_src))[0]
+                               + "_regions")
+        self.push_screen(
+            DirPromptScreen(f"extract {len(regions)} region(s) to (enter to confirm):",
+                            default),
+            lambda d: self._do_extract(regions, d))
+
+    def _do_extract(self, regions, outdir):
+        if not outdir:
+            return
+        try:
+            os.makedirs(outdir, exist_ok=True)
+            n = 0
+            for r in regions:
+                ext = _CARVE_EXT.get(r.get("format")) or "raw"
+                name = f"{n:04d}_0x{r['offset']:08x}_{r['kind']}.{ext}"
+                with open(os.path.join(outdir, name), "wb") as f:
+                    f.write(self._region_bytes(r))
+                n += 1
+            self.query_one("#title", Static).update(
+                Text(f" extracted {n} region(s) -> {outdir}", style=f"bold {ACCENT}"))
+        except OSError as e:
+            self.query_one("#title", Static).update(
+                Text(f" extract failed: {e}", style=f"bold {SEV['alert']}"))
+
+    def _display_name(self):
+        """The name shown in the title/tree: a breadcrumb when inside a region,
+        the plain basename otherwise."""
+        if self._region_view is not None:
+            idx, r = self._region_view
+            fmt = r.get("transform") or r.get("format") or r["kind"]
+            return (f"{os.path.basename(self._blob_src)} > "
+                    f"region {idx} ({fmt} @ 0x{r['offset']:08x})")
+        return os.path.basename(self.src)
 
     def _make_work(self):
         self._discard_work()
@@ -848,9 +1099,11 @@ class AcidcatTUI(App):
             self.findings = []
 
         head = Text()
-        head.append(f" {os.path.basename(self.src)} ", style=f"bold {ACCENT}")
+        head.append(f" {self._display_name()} ", style=f"bold {ACCENT}")
         head.append(f" {self.fmt}  {self.fsize:,} bytes  "
                     f"{len(self.chunks)} chunks", style=SOFT)
+        if self._region_view is not None:
+            head.append("   [u back to regions]", style=DIM)
         if self.dirty:
             head.append("   ● UNSAVED", style=f"bold {SEV['alert']}")
         self.query_one("#title", Static).update(head)
@@ -874,7 +1127,7 @@ class AcidcatTUI(App):
         self._allnodes = []       # rebuilt each load, for goto/search/finding jumps
         self._xref = {}
         keyed = {}
-        tree.root.set_label(Text(os.path.basename(self.src), style=f"bold {FG}"))
+        tree.root.set_label(Text(self._display_name(), style=f"bold {FG}"))
         tree.root.data = (0, self.fsize, ACCENT)
         self._nodemeta[id(tree.root)] = (0, self.fsize, ACCENT)
         for i, c in enumerate(self.chunks):
