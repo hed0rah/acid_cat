@@ -52,6 +52,7 @@ _UNDO_CAP = 50         # most undo deltas to keep
 _UNDO_BYTES_CAP = 64 * 1024 * 1024   # total delta bytes kept (latest always kept)
 _DIFF_CAP = 200        # most changed regions to list in the pending-changes view
 _LARGE_FILE = 64 * 1024 * 1024       # above this, browse in place (no working copy)
+_SCAN_SEG = 16 * 1024 * 1024         # scan a blob in segments: live progress + cancel
 
 # the field value<->bytes engine (struct inference, named codecs, the three
 # bit-field encodings) lives in core/fieldcodec.py so the CLI and tests share
@@ -392,7 +393,9 @@ class HelpScreen(ModalScreen):
                  "into a region as if it were a file, x / e extract one / all, "
                  "m cycles the forensics mode (strict/normal/aggressive), t toggles "
                  "the transform lens (audio hidden under XOR/rotate/nibble-swap), "
-                 "c carves an arbitrary offset+length, / searches raw bytes.",
+                 "c carves an arbitrary offset+length, / searches raw bytes. A big "
+                 "image scans in segments with live progress; esc stops the scan and "
+                 "keeps what was found so far.",
                  style=DIM)
         t.append("\nEdits go to a temp working copy; nothing touches the original "
                  "until ctrl+s.", style=DIM)
@@ -771,6 +774,9 @@ class AcidcatTUI(App):
         self._locate_transforms = False  # also run the XOR/rotate/nibble lens
         self._readonly = False    # a large file is browsed in place (no working copy)
         self._work_is_temp = False  # self.work is a temp we own and must clean up
+        self._scanning = False    # a region scan is running in the worker
+        self._cancel_scan = False  # set by esc to stop the scan and keep partial
+        self._scan_partial = False  # last scan was cancelled (results are partial)
 
     def compose(self) -> ComposeResult:
         yield Static(id="title")
@@ -835,39 +841,87 @@ class AcidcatTUI(App):
         """Run `locate` over the blob and open the region browser. Works on demand
         (the `l` key on any file) and automatically for a blob; reset_blob=False
         keeps the current blob when re-scanning with a new mode / the lens."""
-        if len(self.screen_stack) > 1:
+        if len(self.screen_stack) > 1 or self._scanning:
             return
         if reset_blob:
             self._blob_src = self.src
-        self.query_one("#title", Static).update(
-            Text(f" locating regions in {os.path.basename(self._blob_src)} "
-                 f"[mode:{self._locate_mode}"
-                 f"{'  lens:ON' if self._locate_transforms else ''}] ...",
-                 style=f"bold {ACCENT}"))
+        self._scanning = True
+        self._cancel_scan = False
         self.run_worker(self._locate_work, thread=True, exclusive=True)
 
     def _locate_work(self):
+        """Scan the blob in segments so progress is visible and a scan can be
+        cancelled, keeping whatever was found so far. Segments are mmap'd, so the
+        image is never read whole into RAM."""
         import mmap
         regions = []
         try:
             with open(self._blob_src, "rb") as f:
-                if os.fstat(f.fileno()).st_size == 0:
-                    self.call_from_thread(self._show_regions, [])
+                size = os.fstat(f.fileno()).st_size
+                if size == 0:
+                    self.call_from_thread(self._finish_scan, [])
                     return
-                # memory-map instead of reading the whole image into RAM (a disk
-                # image is hundreds of MB); locate/transforms accept the mmap.
                 mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
                 try:
-                    regions = locatemod.locate(mm, mode=self._locate_mode)
-                    if self._locate_transforms:
-                        regions = sorted(
-                            regions + transformsmod.find_transformed_audio(mm),
-                            key=lambda r: r["offset"])
+                    pos = 0
+                    while pos < size and not self._cancel_scan:
+                        seg = mm[pos:pos + _SCAN_SEG]     # one segment, not the whole file
+                        segs = locatemod.locate(seg, mode=self._locate_mode)
+                        if self._locate_transforms:
+                            segs = segs + transformsmod.find_transformed_audio(seg)
+                        for r in segs:                   # shift into absolute offsets
+                            r["offset"] += pos
+                            r["end"] += pos
+                        regions.extend(segs)
+                        pos += _SCAN_SEG
+                        self.call_from_thread(self._scan_progress,
+                                              min(pos, size), size, len(regions))
                 finally:
                     mm.close()
         except Exception:
-            regions = []
-        self.call_from_thread(self._show_regions, regions)
+            pass
+        cancelled = bool(self._cancel_scan)
+        regions = self._merge_boundary(sorted(regions, key=lambda r: r["offset"]))
+        self.call_from_thread(self._finish_scan, regions, cancelled)
+
+    def _scan_progress(self, done, total, n):
+        if not self._scanning:
+            return
+        pct = done * 100 // total if total else 100
+        self.query_one("#title", Static).update(
+            Text(f" scanning {os.path.basename(self._blob_src)}  "
+                 f"{done >> 20}/{total >> 20} MB ({pct}%)  {n} region(s)  "
+                 f"[mode:{self._locate_mode}"
+                 f"{'  lens:ON' if self._locate_transforms else ''}]  "
+                 "-- esc to stop and keep what's found", style=f"bold {ACCENT}"))
+
+    @staticmethod
+    def _merge_boundary(regions):
+        """Heal a blob that got split across a segment boundary: coalesce exactly
+        adjacent regions of the same kind/format."""
+        if not regions:
+            return regions
+        out = [dict(regions[0])]
+        for r in regions[1:]:
+            prev = out[-1]
+            if (r["offset"] == prev["end"] and r["kind"] == prev["kind"]
+                    and r.get("format") == prev.get("format")):
+                prev["end"] = r["end"]
+                prev["length"] = prev["end"] - prev["offset"]
+            else:
+                out.append(dict(r))
+        return out
+
+    def action_cancel_scan(self):
+        """Stop a running region scan; whatever was found so far is shown."""
+        if self._scanning:
+            self._cancel_scan = True
+
+    def _finish_scan(self, regions, cancelled=False):
+        self._scanning = False
+        self._cancel_scan = False
+        self._scan_partial = cancelled
+        self._show_regions(regions)
 
     def _show_regions(self, regions):
         self._load()                                   # restore the title
@@ -880,9 +934,11 @@ class AcidcatTUI(App):
                      "(m mode  t lens  c carve  / search  l rescan)",
                      style=f"bold {ACCENT}"))
             return
+        name = os.path.basename(self._blob_src)
+        if self._scan_partial:
+            name += " (partial -- scan stopped)"
         self.push_screen(
-            RegionsScreen(regions, os.path.basename(self._blob_src),
-                          self._locate_mode, self._locate_transforms),
+            RegionsScreen(regions, name, self._locate_mode, self._locate_transforms),
             self._on_region_action)
 
     def _on_region_action(self, result):
@@ -2165,6 +2221,9 @@ class AcidcatTUI(App):
         self.query_one("#tree", Tree).focus()
 
     def action_cancel_edit(self):
+        if self._scanning:                   # esc stops a running region scan
+            self._cancel_scan = True
+            return
         if self._prompt:                     # esc cancels an armed goto/search prompt
             self._end_prompt()
             return

@@ -1300,3 +1300,47 @@ def test_tui_large_blob_browsed_in_place(tmp_path, monkeypatch):
 
     asyncio.run(scenario())
     assert blob.exists() and blob.read_bytes() == before   # original untouched
+
+
+def test_tui_scan_is_segmented_and_cancellable(tmp_path, monkeypatch):
+    """A blob scans in segments (so two WAVs are still found across tiny segment
+    boundaries), and esc mid-scan stops it and shows partial results."""
+    pytest.importorskip("textual")
+    import asyncio
+    import time
+    import acidcat.tui_app as tapp
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen
+
+    monkeypatch.setattr(tapp, "_SCAN_SEG", 4096)      # many segments for a small blob
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+
+    async def full():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(120, 40)) as pilot:
+            for _ in range(80):
+                if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
+                    break
+                await pilot.pause(0.05)
+            # boundary-merge reassembled the two WAVs despite the tiny segments
+            assert len(app._regions) == 2 and app._scan_partial is False
+
+    async def cancel():
+        orig = tapp.locatemod.locate
+        monkeypatch.setattr(tapp.locatemod, "locate",
+                            lambda *a, **k: (time.sleep(0.12) or orig(*a, **k)))
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause(0.2)                     # let a couple segments run
+            assert app._scanning
+            await pilot.press("escape")                # stop it
+            for _ in range(80):
+                if not app._scanning and any(isinstance(s, RegionsScreen)
+                                             for s in app.screen_stack):
+                    break
+                await pilot.pause(0.05)
+            assert app._scan_partial is True           # kept what was found so far
+            assert any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+
+    asyncio.run(full())
+    asyncio.run(cancel())
