@@ -215,7 +215,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== WAVE ===================== -->
     <div class="panel" data-panel="wave">
       <div class="pfacts"><span>magic<b>"RIFF" .. "WAVE"</b></span><span>endian<b>little</b></span><span>fmt<b>16 / 18 / 40 B</b></span><span>order<b>fmt before data</b></span></div>
-      <p class="plede">The core WAVE: a <b>fmt</b> chunk describing the encoding and a <b>data</b> chunk holding the samples, with a tail of optional chunks. The regions below list them; the <b>fmt</b> (PCM) and <b>acid</b> chunks are drawn byte by byte. Order varies by writer &mdash; only fmt-before-data is guaranteed.</p>
+      <p class="plede">The core WAVE: a <b>fmt</b> chunk describing the encoding and a <b>data</b> chunk holding the samples, with a tail of optional chunks. The regions below list them; the <b>fmt</b> (PCM), <b>acid</b>, and <b>smpl</b> loop chunks are drawn byte by byte. Order varies by writer &mdash; only fmt-before-data is guaranteed.</p>
 
       <div class="sec">chunk regions</div>
       <div>
@@ -236,10 +236,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div class="rbody"><p class="note">Interleaved PCM samples. duration = data_size / (rate * channels * bytes_per_sample). A declared size past EOF is linted, and acidcat derives duration from the bytes present, not the claim.</p></div></details>
         <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">acid</span><span class="rspan">loop metadata . drawn below</span></summary>
           <div class="rbody"><p class="note">The project's namesake: Sonic Foundry ACID tempo, beats, meter, and root note. No official spec; layout field-verified against real ACIDized packs. See the byte map below.</p></div></details>
-        <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">smpl</span><span class="rspan">sampler root + loops</span></summary>
+        <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">smpl</span><span class="rspan">sampler root + loops . record drawn below</span></summary>
           <div class="rbody"><div class="kv">
-            <div><span class="k">midi_unity_note</span><span class="v">root key; 0 = unset sentinel, not C-1</span></div>
-            <div><span class="k">num_sample_loops</span><span class="v">each loop is 24 bytes: start/end in sample frames</span></div>
+            <div><span class="k">sample_period</span><span class="v">nanoseconds per sample; tunes finer than the integer sample rate</span></div>
+            <div><span class="k">midi_unity_note</span><span class="v">root key 0-127; 0 is an unset sentinel, not C-1</span></div>
+            <div><span class="k">midi_pitch_fraction</span><span class="v">cents above the unity note; 0x80000000 = 50 cents</span></div>
+            <div><span class="k">num_sample_loops</span><span class="v">count of 24-byte loop records after the 36-byte header</span></div>
+            <div><span class="k">loop record</span><span class="v">id, type (0 fwd / 1 ping-pong / 2 back), start, end (inclusive), fraction, play count</span></div>
           </div></div></details>
         <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">inst</span><span class="rspan">instrument tuning . 7 bytes</span></summary>
           <div class="rbody"><div class="kv">
@@ -267,9 +270,19 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Example: 16-bit stereo at 44100 Hz.</p>
       <div id="block-fmt" data-build></div>
 
+      <div class="callout"><b>32-bit float (tag 0x0003).</b> Samples become little-endian IEEE-754 <b>binary32</b> (or binary64 at 64-bit), nominal full scale <b>&plusmn;1.0</b>. The exponent is the whole point: values past &plusmn;1.0 (0&nbsp;dBFS) are legal and survive in the file, so a take recorded too hot is recovered by pulling the gain down after the fact &mdash; only clipping at the analog or converter stage is irreversible. Eight exponent bits buy a ~1500&nbsp;dB theoretical range while the 24-bit mantissa keeps ~24-bit precision inside any 6&nbsp;dB window. Being non-PCM it formally needs a <b>fact</b> chunk and a cbSize-bearing fmt; some players (Windows Media Player) refuse a float file without them. Float also rides under EXTENSIBLE as the sub-format GUID <code>00000003-...</code>.</div>
+      <div class="callout"><b>the non-unit float variant.</b> Not every 32-bit float agrees on full scale. <b>Cool Edit</b>, and editors after it, declare <b>24</b> bits/sample with a 32-bit container and store the floats normalized to full scale <b>2<sup>23</sup></b> (8,388,608) rather than 1.0 &mdash; a reader that assumes unit scale is off by ~138&nbsp;dB. No flag marks it; you infer it from the sample statistics. The community <b>PEAK</b> chunk exists partly to settle this: it records each channel's peak so a reader can normalize and draw the waveform without a full scan, whatever the convention. (GoldWave carries the same non-unit-float reputation; the documented case is Cool Edit.)</div>
+
       <div class="sec">acid chunk (24 bytes)</div>
       <p class="note">Example: an 8-beat 4/4 loop at 120 BPM, root C4, root-set flag.</p>
       <div id="block-acid" data-build></div>
+
+      <div class="sec">smpl loop record (24 bytes)</div>
+      <p class="note">Example: one forward loop, a full second at 44.1 kHz. The 36-byte sampler header (root note, pitch, sample period) precedes these records; num_sample_loops says how many follow.</p>
+      <div id="block-smpl" data-build></div>
+
+      <div class="callout"><b>the inclusive loop end.</b> A loop's <code>end</code> names the <b>last sample that plays</b>, not one past it, so the length is <code>end - start + 1</code>. A reader that treats it as exclusive (the natural assumption, since almost all range math is half-open) drops the final frame, and a loop that is seamless in the editor that wrote it clicks in the one that reads it. Same off-by-one family as the odd-length pad byte &mdash; one field instead of one byte.</div>
+      <div class="callout"><b>loops in the wild.</b> The spec's own loop machinery is cue points plus a <b>plst</b> playlist chunk carrying a repeat count. Almost nothing writes it: across a census of <b>807,394</b> RIFF files from production sample libraries, <code>plst</code> appeared <b>48</b> times and <code>smpl</code> <b>154,697</b>. The sanctioned system lost outright to the sampler chunk. The other real loop carriers are the <b>acid</b> chunk (104,880 &mdash; ACIDized tempo + loop flags) and Sony's proprietary <b>SyLp</b> (7,564). Want a loop point? Read smpl.</div>
     </div>
 
     <!-- ===================== RIFF ===================== -->
@@ -454,6 +467,19 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"meter_denominator",k:"enum",r:[16,17],val:"4",body:"Lower number of the time signature (the 4 in 4/4)."},
         {label:"meter_numerator",k:"enum",r:[18,19],val:"4",body:"Upper number of the time signature."},
         {label:"tempo",k:"enum",r:[20,23],val:"120.0 BPM",body:"Original tempo as an IEEE-754 float. 0x42F00000 = 120.0.",note:"acidcat warns if tempo is outside 40-300 or disagrees with beats and duration."}
+      ]],
+    "block-smpl":["byte",
+      [0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 0xE8,0x03,0x00,0x00, 0x2B,0xB0,0x00,0x00, 0x00,0x00,0x00,0x80, 0x00,0x00,0x00,0x00],
+      [
+        {label:"identifier",k:"enum",r:[0,3],val:"0",body:"Loop id. May match a cue point's dwName so an editor can label the loop; 0 is a fine and common handle."},
+        {label:"type",k:"enum",r:[4,7],val:"forward (0)",sel:0,branch:[
+          ["0","forward"],["1","alternating (ping-pong)"],["2","backward"],["3-31","reserved"],["32+","vendor-defined"]],
+          body:"Playback direction. Forward dominates the wild; ping-pong reverses at each end for a smoother sustain.",
+          note:"values above 31 are vendor extensions and rarely honored."},
+        {label:"start",k:"enum",r:[8,11],val:"1000",body:"Loop start, in sample frames, u32 LE. 0x000003E8 = 1000."},
+        {label:"end",k:"enum",r:[12,15],val:"45099 (inclusive)",body:"Loop end, in sample frames -- and this sample ALSO plays. Length = end - start + 1 = 44100 frames = 1.000 s at 44.1 kHz.",note:"the inclusive end is the classic interop bug: a reader that assumes exclusive drops the final frame and the loop clicks. 0x0000B02B = 45099."},
+        {label:"fraction",k:"enum",r:[16,19],val:"0x80000000 = 1/2 frame",body:"Sub-sample loop tuning for fine pitch: a fraction of one sample frame. 0x80000000 is half a frame.",note:"almost no reader honors it; most treat the loop as sample-aligned."},
+        {label:"play_count",k:"enum",r:[20,23],val:"0 = infinite",body:"Times to play the loop before moving on. 0 means sustain forever, the usual value for an instrument loop."}
       ]],
     "riff-hdr":["byte",
       [0x52,0x49,0x46,0x46, 0x24,0x08,0x00,0x00, 0x57,0x41,0x56,0x45],
