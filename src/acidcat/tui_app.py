@@ -32,6 +32,7 @@ from textual.widgets import (
 from acidcat.core.walk import walk_file, Unsupported
 from acidcat.core import anomalies as ac_anom
 from acidcat.core import locate as locatemod
+from acidcat.core import transforms as transformsmod
 from acidcat.core import writer
 from acidcat.core import viz
 from acidcat.commands.carve import _EXT as _CARVE_EXT
@@ -387,7 +388,10 @@ class HelpScreen(ModalScreen):
             t.append(f"  {k:16}", style=f"bold {PEND}")
             t.append(f"{d}\n", style=SOFT)
         t.append("\nRegion browser (a blob opens straight into it): enter descends "
-                 "into a region as if it were a file, x / e extract one / all.",
+                 "into a region as if it were a file, x / e extract one / all, "
+                 "m cycles the forensics mode (strict/normal/aggressive), t toggles "
+                 "the transform lens (audio hidden under XOR/rotate/nibble-swap), "
+                 "c carves an arbitrary offset+length, / searches raw bytes.",
                  style=DIM)
         t.append("\nEdits go to a temp working copy; nothing touches the original "
                  "until ctrl+s.", style=DIM)
@@ -552,23 +556,36 @@ class RegionsScreen(ModalScreen):
     BINDINGS = [
         ("x", "extract", "extract one"),
         ("e", "extract_all", "extract all"),
+        ("m", "mode", "cycle mode"),
+        ("t", "transforms", "transform lens"),
+        ("c", "carve", "manual carve"),
+        ("slash", "search", "byte search"),
         ("escape", "cancel", "back"),
     ]
 
-    def __init__(self, regions, blob_name):
+    def __init__(self, regions, blob_name, mode="normal", transforms=False):
         super().__init__()
         self.regions = regions
         self.blob_name = blob_name
+        self.mode = mode
+        self.transforms = transforms
 
     def compose(self) -> ComposeResult:
         with Vertical(id="regbox"):
             nc = sum(1 for r in self.regions if r["kind"] == "container")
-            nb = len(self.regions) - nc
+            nt = sum(1 for r in self.regions if r["kind"] == "transformed")
+            nb = len(self.regions) - nc - nt
+            lens = "  lens:ON" if self.transforms else ""
             yield Static(
-                Text(f"{self.blob_name}  --  {len(self.regions)} region(s), "
-                     f"{nc} container(s), {nb} blob(s)   "
-                     "[enter descend  x extract  e extract-all  esc back]",
-                     style=f"bold {ACCENT}"), id="reghint")
+                Text(f"{self.blob_name}  --  {len(self.regions)} region(s): "
+                     f"{nc} container / {nb} blob"
+                     + (f" / {nt} transformed" if nt else "")
+                     + f"   [mode:{self.mode}{lens}]", style=f"bold {ACCENT}"),
+                id="reghint")
+            yield Static(
+                Text("enter descend   x/e extract one/all   m mode   "
+                     "t transform-lens   c carve range   / byte-search   esc back",
+                     style=SOFT), id="regkeys")
             # populate before yield so the table never depends on post-mount
             # query timing (which was flaky for a re-pushed screen)
             t = DataTable(id="regtable")
@@ -596,22 +613,40 @@ class RegionsScreen(ModalScreen):
     def on_data_table_row_selected(self, event):
         self.dismiss({"action": "descend", "index": event.cursor_row})
 
+    def _cursor(self):
+        return self.query_one("#regtable", DataTable).cursor_row
+
     def action_extract(self):
-        self.dismiss({"action": "extract", "index": self.query_one(DataTable).cursor_row})
+        self.dismiss({"action": "extract", "index": self._cursor()})
 
     def action_extract_all(self):
         self.dismiss({"action": "extract_all", "index": -1})
+
+    def action_mode(self):
+        nxt = {"strict": "normal", "normal": "aggressive",
+               "aggressive": "strict"}[self.mode]
+        self.dismiss({"action": "rescan", "mode": nxt, "transforms": self.transforms})
+
+    def action_transforms(self):
+        self.dismiss({"action": "rescan", "mode": self.mode,
+                      "transforms": not self.transforms})
+
+    def action_carve(self):
+        self.dismiss({"action": "carve"})
+
+    def action_search(self):
+        self.dismiss({"action": "search"})
 
     def action_cancel(self):
         self.dismiss(None)
 
 
-class DirPromptScreen(ModalScreen):
-    """A one-line prompt for an output directory (mass-extract target). Enter
-    submits, esc cancels. dismiss()es with the typed path, or None."""
+class PromptScreen(ModalScreen):
+    """A one-line text prompt (output dir, carve range, search pattern...). Enter
+    submits, esc cancels. dismiss()es with the typed string, or None."""
 
     CSS = """
-    DirPromptScreen { align: center middle; }
+    PromptScreen { align: center middle; }
     #dpbox { width: 76; height: auto; border: round #FF4D00;
              background: #16181C; padding: 1 2; }
     #dphint { color: #8A9099; padding-bottom: 1; }
@@ -731,6 +766,8 @@ class AcidcatTUI(App):
         self._blob_src = None     # path of the blob those regions came from
         self._region_view = None  # (idx, region) when viewing a descended region
         self._region_tmps = []    # carved-region temp files, cleaned on exit
+        self._locate_mode = "normal"    # strict | normal | aggressive
+        self._locate_transforms = False  # also run the XOR/rotate/nibble lens
 
     def compose(self) -> ComposeResult:
         yield Static(id="title")
@@ -791,47 +828,67 @@ class AcidcatTUI(App):
             return
         self.action_locate_regions()
 
-    def action_locate_regions(self):
-        """Run `locate` over the current file and open the region browser. Works
-        on demand (the `l` key) as well as automatically for a blob."""
+    def action_locate_regions(self, reset_blob=True):
+        """Run `locate` over the blob and open the region browser. Works on demand
+        (the `l` key on any file) and automatically for a blob; reset_blob=False
+        keeps the current blob when re-scanning with a new mode / the lens."""
         if len(self.screen_stack) > 1:
             return
+        if reset_blob:
+            self._blob_src = self.src
         self.query_one("#title", Static).update(
-            Text(f" locating audio regions in {os.path.basename(self.src)} ...",
+            Text(f" locating regions in {os.path.basename(self._blob_src)} "
+                 f"[mode:{self._locate_mode}"
+                 f"{'  lens:ON' if self._locate_transforms else ''}] ...",
                  style=f"bold {ACCENT}"))
-        self._blob_src = self.src
         self.run_worker(self._locate_work, thread=True, exclusive=True)
 
     def _locate_work(self):
         try:
-            with open(self.work, "rb") as f:
+            with open(self._blob_src, "rb") as f:
                 data = f.read()
-            regions = locatemod.locate(data, mode="normal")
+            regions = locatemod.locate(data, mode=self._locate_mode)
+            if self._locate_transforms:
+                regions = sorted(regions + transformsmod.find_transformed_audio(data),
+                                 key=lambda r: r["offset"])
         except Exception:
             regions = []
         self.call_from_thread(self._show_regions, regions)
 
     def _show_regions(self, regions):
         self._load()                                   # restore the title
+        self._regions = regions
         if not regions:
             self.query_one("#title", Static).update(
-                Text(f" {os.path.basename(self.src)}  --  no audio regions located",
+                Text(f" {os.path.basename(self.src)}  --  no audio regions located "
+                     f"[mode:{self._locate_mode}"
+                     f"{'  lens:ON' if self._locate_transforms else ''}]  "
+                     "(m mode  t lens  c carve  / search  l rescan)",
                      style=f"bold {ACCENT}"))
             return
-        self._regions = regions
         self.push_screen(
-            RegionsScreen(regions, os.path.basename(self._blob_src)),
+            RegionsScreen(regions, os.path.basename(self._blob_src),
+                          self._locate_mode, self._locate_transforms),
             self._on_region_action)
 
     def _on_region_action(self, result):
         if not result:
             return
-        if result["action"] == "descend":
+        act = result["action"]
+        if act == "descend":
             self._descend(result["index"])
-        elif result["action"] == "extract":
+        elif act == "extract":
             self._extract([self._regions[result["index"]]])
-        elif result["action"] == "extract_all":
+        elif act == "extract_all":
             self._extract(self._regions)
+        elif act == "rescan":
+            self._locate_mode = result["mode"]
+            self._locate_transforms = result["transforms"]
+            self.action_locate_regions(reset_blob=False)
+        elif act == "carve":
+            self._carve_prompt()
+        elif act == "search":
+            self._search_prompt()
 
     def _region_bytes(self, region):
         with open(self._blob_src, "rb") as f:
@@ -839,9 +896,11 @@ class AcidcatTUI(App):
             return f.read(region["end"] - region["offset"])
 
     def _descend(self, idx):
-        """Carve the selected region to a temp file and open it as if it were a
-        standalone file; the parent blob's regions stay set so `u` ascends."""
-        region = self._regions[idx]
+        self._descend_region(self._regions[idx], idx)
+
+    def _descend_region(self, region, label):
+        """Carve `region` to a temp file and open it as if it were a standalone
+        file; the parent blob's regions stay set so `u` ascends."""
         ext = _CARVE_EXT.get(region.get("format")) or "bin"
         fd, tmp = tempfile.mkstemp(suffix=f".{ext}", prefix="acidcat_region_")
         os.close(fd)
@@ -850,7 +909,7 @@ class AcidcatTUI(App):
         self._region_tmps.append(tmp)
         blob, regions = self._blob_src, self._regions   # preserve across _make_work
         self.src = tmp
-        self._region_view = (idx, region)
+        self._region_view = (label, region)
         self._make_work()
         self._load()
         self._blob_src, self._regions = blob, regions
@@ -861,15 +920,90 @@ class AcidcatTUI(App):
             return
         self._region_view = None
         self.push_screen(
-            RegionsScreen(self._regions, os.path.basename(self._blob_src)),
+            RegionsScreen(self._regions, os.path.basename(self._blob_src),
+                          self._locate_mode, self._locate_transforms),
             self._on_region_action)
+
+    # ── RE tools inside the browser: manual carve + raw-byte search ───────────
+
+    def _carve_prompt(self):
+        self.push_screen(
+            PromptScreen("carve range -- offset length (hex ok, e.g. 0x4a00 0x800):", ""),
+            self._do_carve)
+
+    def _do_carve(self, spec):
+        if not spec:
+            return
+        try:
+            parts = spec.replace(",", " ").split()
+            off = int(parts[0], 0)
+            length = int(parts[1], 0) if len(parts) > 1 else None
+            end = off + length if length is not None else os.path.getsize(self._blob_src)
+        except (ValueError, IndexError):
+            self.query_one("#title", Static).update(
+                Text(" carve: need 'offset length' (0x.. or decimal)",
+                     style=f"bold {SEV['alert']}"))
+            return
+        blob_size = os.path.getsize(self._blob_src)
+        off = max(0, min(off, blob_size))
+        end = max(off, min(end, blob_size))
+        self._descend_region(
+            {"offset": off, "end": end, "length": end - off,
+             "kind": "carve", "format": None, "confidence": 1.0}, "manual carve")
+
+    def _search_prompt(self):
+        self.push_screen(
+            PromptScreen('byte search -- 0x48454C4C hex, or "text" ascii:', ""),
+            self._do_search)
+
+    def _do_search(self, pat):
+        if not pat:
+            return
+        needle = self._parse_needle(pat)
+        if not needle:
+            self.query_one("#title", Static).update(
+                Text(" search: give hex (0x..) or a \"quoted\" string",
+                     style=f"bold {SEV['alert']}"))
+            return
+        try:
+            with open(self._blob_src, "rb") as f:
+                data = f.read()
+        except OSError:
+            return
+        hit = data.find(needle)
+        if hit < 0:
+            self.query_one("#title", Static).update(
+                Text(f" search: {pat!r} not found", style=f"bold {ACCENT}"))
+            self.action_locate_regions(reset_blob=False)   # reopen the browser
+            return
+        end = min(hit + max(len(needle), 1 << 20), len(data))   # a 1 MB window from the hit
+        self._descend_region(
+            {"offset": hit, "end": end, "length": end - hit,
+             "kind": "match", "format": None, "confidence": 1.0},
+            f"search @ 0x{hit:08x}")
+
+    @staticmethod
+    def _parse_needle(pat):
+        pat = pat.strip()
+        if len(pat) >= 2 and pat[0] == pat[-1] == '"':
+            return pat[1:-1].encode("latin-1", "replace")
+        low = pat.lower()
+        if low.startswith("0x"):
+            low = low[2:]
+        low = low.replace(" ", "")
+        if low and all(c in "0123456789abcdef" for c in low) and len(low) % 2 == 0:
+            try:
+                return bytes.fromhex(low)
+            except ValueError:
+                return b""
+        return pat.encode("latin-1", "replace")     # bare text -> ascii
 
     def _extract(self, regions):
         default = os.path.join(os.path.dirname(os.path.abspath(self._blob_src)),
                                os.path.splitext(os.path.basename(self._blob_src))[0]
                                + "_regions")
         self.push_screen(
-            DirPromptScreen(f"extract {len(regions)} region(s) to (enter to confirm):",
+            PromptScreen(f"extract {len(regions)} region(s) to (enter to confirm):",
                             default),
             lambda d: self._do_extract(regions, d))
 
@@ -895,10 +1029,11 @@ class AcidcatTUI(App):
         """The name shown in the title/tree: a breadcrumb when inside a region,
         the plain basename otherwise."""
         if self._region_view is not None:
-            idx, r = self._region_view
+            label, r = self._region_view
             fmt = r.get("transform") or r.get("format") or r["kind"]
+            where = f"region {label}" if isinstance(label, int) else str(label)
             return (f"{os.path.basename(self._blob_src)} > "
-                    f"region {idx} ({fmt} @ 0x{r['offset']:08x})")
+                    f"{where} ({fmt} @ 0x{r['offset']:08x})")
         return os.path.basename(self.src)
 
     def _make_work(self):

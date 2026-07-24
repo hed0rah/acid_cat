@@ -1171,7 +1171,7 @@ def test_tui_regions_browse_descend_ascend_extract(tmp_path):
     the browser, and extract-all writes each region out."""
     pytest.importorskip("textual")
     import asyncio
-    from acidcat.tui_app import AcidcatTUI, RegionsScreen, DirPromptScreen
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen, PromptScreen
 
     blob = tmp_path / "disk.img"
     _blob_with_two_wavs(blob)
@@ -1200,7 +1200,7 @@ def test_tui_regions_browse_descend_ascend_extract(tmp_path):
             [s for s in app.screen_stack if isinstance(s, RegionsScreen)][0].dismiss(
                 {"action": "extract_all", "index": -1})
             await pilot.pause(0.2)
-            dp = [s for s in app.screen_stack if isinstance(s, DirPromptScreen)]
+            dp = [s for s in app.screen_stack if isinstance(s, PromptScreen)]
             assert dp
             dp[0].dismiss(str(outdir))
             await pilot.pause(0.3)
@@ -1208,3 +1208,63 @@ def test_tui_regions_browse_descend_ascend_extract(tmp_path):
     asyncio.run(scenario())
     files = sorted(os.listdir(outdir))
     assert len(files) == 2 and all(f.endswith(".wav") for f in files)
+
+
+def test_tui_regions_re_tools(tmp_path):
+    """The region browser's RE toolkit: cycle the forensics mode, toggle the
+    transform lens (wiring, not detection), manual-carve an arbitrary range, and
+    raw-byte search -- each descends or re-scans without crashing."""
+    pytest.importorskip("textual")
+    import asyncio
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen, PromptScreen
+
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+
+    async def scenario():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(140, 45)) as pilot:
+            def browser():
+                return [s for s in app.screen_stack if isinstance(s, RegionsScreen)]
+            for _ in range(50):
+                if browser():
+                    break
+                await pilot.pause(0.1)
+            assert browser() and app._locate_mode == "normal"
+
+            # cycle the forensics mode -> aggressive
+            browser()[0].dismiss({"action": "rescan", "mode": "aggressive",
+                                  "transforms": False})
+            for _ in range(50):
+                if browser():
+                    break
+                await pilot.pause(0.1)
+            assert app._locate_mode == "aggressive" and browser()[0].mode == "aggressive"
+
+            # toggle the transform lens (wiring: flag flips, rescan runs cleanly)
+            browser()[0].dismiss({"action": "rescan", "mode": "aggressive",
+                                  "transforms": True})
+            for _ in range(80):
+                if browser():
+                    break
+                await pilot.pause(0.1)
+            assert app._locate_transforms is True and browser()
+
+            # manual carve an arbitrary range -> descends into it
+            browser()[0].dismiss({"action": "carve"})
+            await pilot.pause(0.2)
+            [s for s in app.screen_stack if isinstance(s, PromptScreen)][0].dismiss("0x400 0x1000")
+            await pilot.pause(0.3)
+            assert app._region_view is not None and "manual carve" in app._display_name()
+            assert app.fmt.startswith("RIFF")          # 0x400 is where the first WAV starts
+
+            app.action_ascend()
+            await pilot.pause(0.3)
+            # raw-byte search for the RIFF magic -> lands on it
+            browser()[0].dismiss({"action": "search"})
+            await pilot.pause(0.2)
+            [s for s in app.screen_stack if isinstance(s, PromptScreen)][0].dismiss('"RIFF"')
+            await pilot.pause(0.3)
+            assert "search @" in app._display_name() and app.fmt.startswith("RIFF")
+
+    asyncio.run(scenario())
