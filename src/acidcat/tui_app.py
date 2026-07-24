@@ -51,6 +51,7 @@ _HEXEDIT_CAP = 512     # refuse editing a byte region bigger than this (pick a f
 _UNDO_CAP = 50         # most undo deltas to keep
 _UNDO_BYTES_CAP = 64 * 1024 * 1024   # total delta bytes kept (latest always kept)
 _DIFF_CAP = 200        # most changed regions to list in the pending-changes view
+_LARGE_FILE = 64 * 1024 * 1024       # above this, browse in place (no working copy)
 
 # the field value<->bytes engine (struct inference, named codecs, the three
 # bit-field encodings) lives in core/fieldcodec.py so the CLI and tests share
@@ -768,6 +769,8 @@ class AcidcatTUI(App):
         self._region_tmps = []    # carved-region temp files, cleaned on exit
         self._locate_mode = "normal"    # strict | normal | aggressive
         self._locate_transforms = False  # also run the XOR/rotate/nibble lens
+        self._readonly = False    # a large file is browsed in place (no working copy)
+        self._work_is_temp = False  # self.work is a temp we own and must clean up
 
     def compose(self) -> ComposeResult:
         yield Static(id="title")
@@ -844,13 +847,24 @@ class AcidcatTUI(App):
         self.run_worker(self._locate_work, thread=True, exclusive=True)
 
     def _locate_work(self):
+        import mmap
+        regions = []
         try:
             with open(self._blob_src, "rb") as f:
-                data = f.read()
-            regions = locatemod.locate(data, mode=self._locate_mode)
-            if self._locate_transforms:
-                regions = sorted(regions + transformsmod.find_transformed_audio(data),
-                                 key=lambda r: r["offset"])
+                if os.fstat(f.fileno()).st_size == 0:
+                    self.call_from_thread(self._show_regions, [])
+                    return
+                # memory-map instead of reading the whole image into RAM (a disk
+                # image is hundreds of MB); locate/transforms accept the mmap.
+                mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                try:
+                    regions = locatemod.locate(mm, mode=self._locate_mode)
+                    if self._locate_transforms:
+                        regions = sorted(
+                            regions + transformsmod.find_transformed_audio(mm),
+                            key=lambda r: r["offset"])
+                finally:
+                    mm.close()
         except Exception:
             regions = []
         self.call_from_thread(self._show_regions, regions)
@@ -965,18 +979,23 @@ class AcidcatTUI(App):
                 Text(" search: give hex (0x..) or a \"quoted\" string",
                      style=f"bold {SEV['alert']}"))
             return
+        import mmap
         try:
+            size = os.path.getsize(self._blob_src)
             with open(self._blob_src, "rb") as f:
-                data = f.read()
-        except OSError:
+                mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                try:
+                    hit = mm.find(needle)                    # scans the image, no full read
+                finally:
+                    mm.close()
+        except (OSError, ValueError):
             return
-        hit = data.find(needle)
         if hit < 0:
             self.query_one("#title", Static).update(
                 Text(f" search: {pat!r} not found", style=f"bold {ACCENT}"))
             self.action_locate_regions(reset_blob=False)   # reopen the browser
             return
-        end = min(hit + max(len(needle), 1 << 20), len(data))   # a 1 MB window from the hit
+        end = min(hit + max(len(needle), 1 << 20), size)   # a 1 MB window from the hit
         self._descend_region(
             {"offset": hit, "end": end, "length": end - hit,
              "kind": "match", "format": None, "confidence": 1.0},
@@ -1038,10 +1057,20 @@ class AcidcatTUI(App):
 
     def _make_work(self):
         self._discard_work()
-        ext = os.path.splitext(self.src)[1]
-        fd, self.work = tempfile.mkstemp(suffix=ext or ".bin", prefix="acidcat_tui_")
-        os.close(fd)
-        shutil.copyfile(self.src, self.work)
+        if os.path.getsize(self.src) > _LARGE_FILE:
+            # too big to copy on open; browse it in place, read-only (a disk image
+            # is not something you edit field-by-field anyway). Descended regions
+            # are small and still get an editable working copy.
+            self.work = self.src
+            self._readonly = True
+            self._work_is_temp = False
+        else:
+            ext = os.path.splitext(self.src)[1]
+            fd, self.work = tempfile.mkstemp(suffix=ext or ".bin", prefix="acidcat_tui_")
+            os.close(fd)
+            shutil.copyfile(self.src, self.work)
+            self._readonly = False
+            self._work_is_temp = True
         self.dirty = False
         self._backed_up = False
         self._undo = []
@@ -1062,11 +1091,13 @@ class AcidcatTUI(App):
     def _discard_work(self):
         w = self.work
         self.work = None
-        if w and os.path.isfile(w):
+        # only delete a temp we created; never the original (read-only large file)
+        if w and self._work_is_temp and os.path.isfile(w):
             try:
                 os.unlink(w)
             except OSError:
                 pass
+        self._work_is_temp = False
 
     @staticmethod
     def _minimal_delta(old, new):
@@ -1153,6 +1184,10 @@ class AcidcatTUI(App):
     def action_save(self):
         if not self.work:
             return
+        if self._readonly:
+            self.notify("read-only: this file is too large for in-place editing; "
+                        "descend into a region to edit it")
+            return
         if not self.dirty:
             self.notify("no unsaved changes")
             return
@@ -1228,10 +1263,13 @@ class AcidcatTUI(App):
             self.fmt, self.chunks, self.warns = (
                 "walk failed", [], [f"{e.__class__.__name__}: {e}"])
         self._prefer_be = self.fmt in _BE_FMTS
-        try:
-            self.findings = ac_anom.scan(self.work, self.fmt, self.chunks, self.warns)
-        except Exception:
-            self.findings = []
+        if self._readonly:
+            self.findings = []     # skip the whole-file anomaly scan on a large blob
+        else:
+            try:
+                self.findings = ac_anom.scan(self.work, self.fmt, self.chunks, self.warns)
+            except Exception:
+                self.findings = []
 
         head = Text()
         head.append(f" {self._display_name()} ", style=f"bold {ACCENT}")

@@ -1268,3 +1268,35 @@ def test_tui_regions_re_tools(tmp_path):
             assert "search @" in app._display_name() and app.fmt.startswith("RIFF")
 
     asyncio.run(scenario())
+
+
+def test_tui_large_blob_browsed_in_place(tmp_path, monkeypatch):
+    """A file over the size threshold is browsed in place (no full-file working
+    copy, read-only), its region scan mmaps rather than reading it all, and the
+    original is never touched."""
+    pytest.importorskip("textual")
+    import asyncio
+    import acidcat.tui_app as tapp
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen
+
+    monkeypatch.setattr(tapp, "_LARGE_FILE", 8192)   # force the large path
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+    before = blob.read_bytes()
+
+    async def scenario():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(120, 40)) as pilot:
+            for _ in range(50):
+                if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
+                    break
+                await pilot.pause(0.1)
+            assert app._readonly is True             # no working copy was made
+            assert app.work == str(blob)             # browsed in place
+            assert app._work_is_temp is False        # so it is never unlinked
+            assert any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+            app.action_save()                        # save must refuse, not write
+            await pilot.pause(0.1)
+
+    asyncio.run(scenario())
+    assert blob.exists() and blob.read_bytes() == before   # original untouched
