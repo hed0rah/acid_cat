@@ -1302,12 +1302,11 @@ def test_tui_large_blob_browsed_in_place(tmp_path, monkeypatch):
     assert blob.exists() and blob.read_bytes() == before   # original untouched
 
 
-def test_tui_scan_is_segmented_and_cancellable(tmp_path, monkeypatch):
-    """A blob scans in segments (so two WAVs are still found across tiny segment
-    boundaries), and esc mid-scan stops it and shows partial results."""
+def test_tui_scan_is_segmented(tmp_path, monkeypatch):
+    """A blob scans in segments, and boundary-merge reassembles the two WAVs even
+    when the segments are tiny enough to split them."""
     pytest.importorskip("textual")
     import asyncio
-    import time
     import acidcat.tui_app as tapp
     from acidcat.tui_app import AcidcatTUI, RegionsScreen
 
@@ -1322,25 +1321,71 @@ def test_tui_scan_is_segmented_and_cancellable(tmp_path, monkeypatch):
                 if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
                     break
                 await pilot.pause(0.05)
-            # boundary-merge reassembled the two WAVs despite the tiny segments
             assert len(app._regions) == 2 and app._scan_partial is False
 
-    async def cancel():
-        orig = tapp.locatemod.locate
-        monkeypatch.setattr(tapp.locatemod, "locate",
-                            lambda *a, **k: (time.sleep(0.12) or orig(*a, **k)))
+    asyncio.run(full())
+
+
+def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
+    """The three scan-control keys: space pauses/resumes, enter keeps what was
+    found so far (partial), esc discards and backs out with no browser."""
+    pytest.importorskip("textual")
+    import asyncio
+    import time
+    import acidcat.tui_app as tapp
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen
+
+    monkeypatch.setattr(tapp, "_SCAN_SEG", 4096)
+    orig = tapp.locatemod.locate
+    monkeypatch.setattr(tapp.locatemod, "locate",     # slow enough to act mid-scan
+                        lambda *a, **k: (time.sleep(0.15) or orig(*a, **k)))
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+
+    def has_browser(app):
+        return any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+
+    async def keep():
         app = AcidcatTUI(str(blob))
-        async with app.run_test(size=(120, 40)) as pilot:
-            await pilot.pause(0.2)                     # let a couple segments run
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.pause(0.25)
             assert app._scanning
-            await pilot.press("escape")                # stop it
+            await pilot.press("enter")                 # stop and keep
             for _ in range(80):
-                if not app._scanning and any(isinstance(s, RegionsScreen)
-                                             for s in app.screen_stack):
+                if not app._scanning and has_browser(app):
                     break
                 await pilot.pause(0.05)
-            assert app._scan_partial is True           # kept what was found so far
-            assert any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+            assert app._scan_partial is True and has_browser(app)
 
-    asyncio.run(full())
-    asyncio.run(cancel())
+    async def discard():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.pause(0.25)
+            assert app._scanning
+            await pilot.press("escape")                # cancel and discard
+            for _ in range(80):
+                if not app._scanning:
+                    break
+                await pilot.pause(0.05)
+            assert app._scan_partial is False
+            assert not has_browser(app) and app._regions is None
+
+    async def pause_resume():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.pause(0.2)
+            await pilot.press("space")                 # freeze
+            assert app._scanning and app._scan_paused
+            await pilot.pause(0.4)
+            assert app._scanning and app._scan_paused  # still held, not progressing
+            await pilot.press("space")                 # resume
+            for _ in range(120):
+                if not app._scanning and has_browser(app):
+                    break
+                await pilot.pause(0.05)
+            assert not app._scanning and len(app._regions) == 2
+            assert app._scan_partial is False          # ran to completion
+
+    asyncio.run(keep())
+    asyncio.run(discard())
+    asyncio.run(pause_resume())

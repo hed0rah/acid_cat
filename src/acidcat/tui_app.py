@@ -23,6 +23,7 @@ import tempfile
 from rich.text import Text
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
@@ -43,7 +44,12 @@ from acidcat.commands.write import _edit as _write_edit, _strip as _write_strip
 
 # brand theme (ink / gunmetal + teal/orange accents); source of truth is
 # acidcat/tui_theme.py, imported by the playground TUI too so they cannot drift.
-from acidcat.tui_theme import PALETTE, ACCENT, FG, SOFT, DIM, GUTTER, PEND, SEV, byte_color
+from acidcat.tui_theme import (
+    PALETTE, ACCENT, FG, SOFT, DIM, GUTTER, PEND, AMBER, SEV, byte_color,
+)
+
+_SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # braille scan spinner
+_BAR_W = 18            # width of the scan progress bar
 
 _HEX_CAP = 1024        # most bytes to render in the hex pane for one node
 _ROW_CAP = 400         # most per-element rows (events/frames) to list per chunk
@@ -394,8 +400,8 @@ class HelpScreen(ModalScreen):
                  "m cycles the forensics mode (strict/normal/aggressive), t toggles "
                  "the transform lens (audio hidden under XOR/rotate/nibble-swap), "
                  "c carves an arbitrary offset+length, / searches raw bytes. A big "
-                 "image scans in segments with live progress; esc stops the scan and "
-                 "keeps what was found so far.",
+                 "image scans in segments with live progress: space pauses/resumes, "
+                 "enter keeps what was found so far, esc discards and backs out.",
                  style=DIM)
         t.append("\nEdits go to a temp working copy; nothing touches the original "
                  "until ctrl+s.", style=DIM)
@@ -724,9 +730,15 @@ class AcidcatTUI(App):
         ("c", "collapse_all", "collapse"),
         ("question_mark", "help", "help"),
         ("escape", "cancel_edit", "cancel edit"),
+        # scan controls: priority so they beat the tree's own space/enter while a
+        # scan runs; check_action keeps them dormant otherwise.
+        Binding("space", "pause_scan", "pause scan", priority=True, show=False),
+        Binding("enter", "keep_scan", "keep scan", priority=True, show=False),
     ]
 
     def check_action(self, action, parameters):
+        if action in ("pause_scan", "keep_scan"):
+            return self._scanning        # only live during a scan
         # while a modal (edit form / file browser / help / diff / map / confirm)
         # is open, the app-global single-letter bindings must not fire under it
         # -- so typing in the browser or a form does not trigger edit/strip/etc.
@@ -775,8 +787,13 @@ class AcidcatTUI(App):
         self._readonly = False    # a large file is browsed in place (no working copy)
         self._work_is_temp = False  # self.work is a temp we own and must clean up
         self._scanning = False    # a region scan is running in the worker
-        self._cancel_scan = False  # set by esc to stop the scan and keep partial
-        self._scan_partial = False  # last scan was cancelled (results are partial)
+        self._cancel_scan = False  # set to break the scan loop (keep or discard)
+        self._scan_paused = False  # space: freeze the scan at the current segment
+        self._scan_discard = False  # esc chose discard (vs enter = keep partial)
+        self._scan_partial = False  # last scan was kept early (results are partial)
+        self._scan_frame = 0      # spinner phase
+        self._scan_last = None    # (done, total, n) for the spinner re-render
+        self._scan_timer = None   # set_interval handle animating the spinner
 
     def compose(self) -> ComposeResult:
         yield Static(id="title")
@@ -847,13 +864,28 @@ class AcidcatTUI(App):
             self._blob_src = self.src
         self._scanning = True
         self._cancel_scan = False
+        self._scan_paused = False
+        self._scan_discard = False
+        self._scan_frame = 0
+        try:
+            total0 = os.path.getsize(self._blob_src)
+        except OSError:
+            total0 = 0
+        self._scan_last = (0, total0, 0)                 # a bar at 0% before segment 1
+        self._render_scan_title()
+        try:                                             # so space/enter reach the
+            self.query_one("#tree", Tree).focus()        # scan-control priority binds,
+        except Exception:                                # not the hidden editbar Input
+            pass
+        self._scan_timer = self.set_interval(0.1, self._spin_scan)
         self.run_worker(self._locate_work, thread=True, exclusive=True)
 
     def _locate_work(self):
         """Scan the blob in segments so progress is visible and a scan can be
-        cancelled, keeping whatever was found so far. Segments are mmap'd, so the
-        image is never read whole into RAM."""
+        paused, kept early, or discarded. Segments are mmap'd, so the image is
+        never read whole into RAM."""
         import mmap
+        import time
         regions = []
         try:
             with open(self._blob_src, "rb") as f:
@@ -865,6 +897,10 @@ class AcidcatTUI(App):
                 try:
                     pos = 0
                     while pos < size and not self._cancel_scan:
+                        while self._scan_paused and not self._cancel_scan:
+                            time.sleep(0.08)             # space froze it; hold here
+                        if self._cancel_scan:
+                            break
                         seg = mm[pos:pos + _SCAN_SEG]     # one segment, not the whole file
                         segs = locatemod.locate(seg, mode=self._locate_mode)
                         if self._locate_transforms:
@@ -887,13 +923,59 @@ class AcidcatTUI(App):
     def _scan_progress(self, done, total, n):
         if not self._scanning:
             return
-        pct = done * 100 // total if total else 100
-        self.query_one("#title", Static).update(
-            Text(f" scanning {os.path.basename(self._blob_src)}  "
-                 f"{done >> 20}/{total >> 20} MB ({pct}%)  {n} region(s)  "
-                 f"[mode:{self._locate_mode}"
-                 f"{'  lens:ON' if self._locate_transforms else ''}]  "
-                 "-- esc to stop and keep what's found", style=f"bold {ACCENT}"))
+        self._scan_last = (done, total, n)
+        self._render_scan_title()
+
+    def _spin_scan(self):
+        """Interval tick: advance the spinner so the status bar stays alive even
+        between (coarse) segment completions."""
+        if not self._scanning:
+            return
+        if not self._scan_paused:
+            self._scan_frame += 1
+        self._render_scan_title()
+
+    def _render_scan_title(self):
+        if self._scan_last is None:
+            return
+        try:
+            title = self.query_one("#title", Static)
+        except Exception:
+            return
+        title.update(self._scan_title(*self._scan_last))
+
+    @staticmethod
+    def _cap(t, key, label, label_style=SOFT):
+        """A keycap: dim brackets, bright key, muted label -- the anti-style bit."""
+        t.append(" [", style=DIM)
+        t.append(key, style=f"bold {ACCENT}")
+        t.append("]", style=DIM)
+        t.append(f" {label} ", style=label_style)
+
+    def _scan_title(self, done, total, n):
+        pct = done * 100 // total if total else 0
+        fill = pct * _BAR_W // 100
+        t = Text()
+        if self._scan_paused:
+            t.append(" ⏸ ", style=f"bold {AMBER}")     # pause glyph
+            t.append("paused", style=f"bold {AMBER}")
+        else:
+            t.append(f" {_SPIN[self._scan_frame % len(_SPIN)]} ", style=f"bold {ACCENT}")
+            t.append("scanning", style=f"bold {ACCENT}")
+        t.append("  ")
+        t.append("█" * fill, style=ACCENT)              # filled bar
+        t.append("░" * (_BAR_W - fill), style=GUTTER)   # empty bar
+        t.append(f" {pct:>3}%", style=f"bold {FG}")
+        t.append(f"   {done >> 20}/{total >> 20} MB", style=SOFT)
+        t.append(f"   {n} region{'' if n == 1 else 's'}", style=SOFT)
+        t.append(f"   {self._locate_mode}", style=DIM)
+        if self._locate_transforms:
+            t.append(" +lens", style=DIM)
+        t.append("  ")
+        self._cap(t, "space", "resume" if self._scan_paused else "pause")
+        self._cap(t, "enter", "keep")
+        self._cap(t, "esc", "discard", label_style=AMBER)
+        return t
 
     @staticmethod
     def _merge_boundary(regions):
@@ -912,15 +994,42 @@ class AcidcatTUI(App):
                 out.append(dict(r))
         return out
 
-    def action_cancel_scan(self):
-        """Stop a running region scan; whatever was found so far is shown."""
+    def action_pause_scan(self):
+        """space: freeze the scan at the current segment, or resume it."""
+        if not self._scanning:
+            return
+        self._scan_paused = not self._scan_paused
+        self._render_scan_title()
+
+    def action_keep_scan(self):
+        """enter: stop the scan now and browse whatever was found so far."""
         if self._scanning:
+            self._scan_paused = False
+            self._scan_discard = False
+            self._cancel_scan = True
+
+    def action_cancel_scan(self):
+        """esc: abandon the scan and discard the partial results."""
+        if self._scanning:
+            self._scan_paused = False
+            self._scan_discard = True
             self._cancel_scan = True
 
     def _finish_scan(self, regions, cancelled=False):
+        if self._scan_timer is not None:
+            self._scan_timer.stop()
+            self._scan_timer = None
         self._scanning = False
         self._cancel_scan = False
-        self._scan_partial = cancelled
+        self._scan_paused = False
+        self._scan_last = None
+        discard = self._scan_discard
+        self._scan_discard = False
+        if discard:                       # esc: drop everything, back to the file
+            self._scan_partial = False
+            self._load()
+            return
+        self._scan_partial = cancelled    # enter mid-scan: results are partial
         self._show_regions(regions)
 
     def _show_regions(self, regions):
@@ -2221,8 +2330,8 @@ class AcidcatTUI(App):
         self.query_one("#tree", Tree).focus()
 
     def action_cancel_edit(self):
-        if self._scanning:                   # esc stops a running region scan
-            self._cancel_scan = True
+        if self._scanning:                   # esc discards a running region scan
+            self.action_cancel_scan()
             return
         if self._prompt:                     # esc cancels an armed goto/search prompt
             self._end_prompt()
