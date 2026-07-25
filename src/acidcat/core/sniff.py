@@ -70,6 +70,8 @@ def sniff_bytes(head):
         return "gf1pat"                                # Gravis UltraSound GF1 patch
     if head[:4] == b"VAGp":
         return "vag"                                   # PS1 SPU-ADPCM sample
+    if head[:8] == b" HALPST\x00":
+        return "hps"                                   # HAL PCM Stream (GameCube DSP-ADPCM)
     if len(head) >= 14 and head[:4] == b"MThd":
         return "midi"
     if len(head) >= 12 and head[:4] == b"RF64" and head[8:12] == b"WAVE":
@@ -127,6 +129,11 @@ def sniff(filepath):
     fmt = sniff_bytes(head)
     if fmt == "mp3" and head[:3] == b"ID3" and _id3_wraps_other_container(filepath):
         return "id3-wrapped"
+    # a GameCube disc image carries its magic word at 0x1C, past the sniff head
+    if fmt is None:
+        from acidcat.core import gcm
+        if gcm.is_gcm(filepath):
+            return "gcm"
     # a .sigmf-meta is JSON starting with '{', which sniff_bytes reads as vital;
     # the mandated extension reroutes it, exactly like the id3-wrapped demotion.
     if fmt == "vital" and filepath.lower().endswith(".sigmf-meta"):

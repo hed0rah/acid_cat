@@ -553,6 +553,34 @@ def _cdxa_samples(filepath):
                    "note": f"{(b - a) / rate:.0f}s {_wav_note(ch, rate)}"}
 
 
+def _hps_samples(data):
+    """HAL PCM Stream (.hps): decode the DSP-ADPCM stream to one WAV."""
+    from acidcat.core import hps
+    pcm, info = hps.decode(data)
+    yield {"name": "stream", "wav": _wav(pcm, info["rate"], channels=info["channels"]),
+           "note": f"{info['frames'] / info['rate']:.0f}s "
+                   f"{'stereo' if info['channels'] == 2 else 'mono'} @ {info['rate']} Hz "
+                   f"DSP-ADPCM"}
+
+
+def _gcm_samples(filepath):
+    """A GameCube disc image: walk the filesystem and decode each audio file --
+    .hps HAL streams (music) for now. Reads via seeks, never slurps the disc."""
+    from acidcat.core import gcm, hps
+    for ent in gcm.walk(filepath):
+        if not ent["path"].lower().endswith(".hps"):
+            continue
+        try:
+            pcm, info = hps.decode(gcm.read_file(filepath, ent))
+        except Exception:
+            continue
+        base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        yield {"name": base,
+               "wav": _wav(pcm, info["rate"], channels=info["channels"]),
+               "note": f"{info['frames'] / info['rate']:.0f}s "
+                       f"{'stereo' if info['channels'] == 2 else 'mono'} @ {info['rate']} Hz DSP"}
+
+
 def _vag_samples(data):
     """PS1 .VAG: a 48-byte header then SPU-ADPCM. One mono sample per file."""
     from acidcat.core import vag as vagmod
@@ -566,12 +594,12 @@ _EXTRACTORS = {
     "mod": _mod_samples, "xm": _xm_samples, "it": _it_samples,
     "s3m": _s3m_samples, "gf1pat": _gf1pat_samples,
     "8svx": _svx_samples, "ncw": _ncw_samples, "sf2": _sf2_samples,
-    "vag": _vag_samples,
+    "vag": _vag_samples, "hps": _hps_samples,
 }
 # formats whose extractor reads the path itself (walk/stream), not a bytes buffer
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
                     "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples,
-                    "cdxa": _cdxa_samples}
+                    "cdxa": _cdxa_samples, "gcm": _gcm_samples}
 
 EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 
