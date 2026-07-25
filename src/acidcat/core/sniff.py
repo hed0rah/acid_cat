@@ -134,6 +134,11 @@ def sniff(filepath):
     # a .cue may open with REM/CATALOG lines before FILE; trust the extension
     if fmt is None and filepath.lower().endswith(".cue"):
         return "cue"
+    # ADX opens with 0x8000 (weak); confirm via the (c)CRI marker before the audio
+    if fmt is None and head[:2] == b"\x80\x00":
+        from acidcat.core import adx
+        if adx.is_adx(filepath):
+            return "adx"
     # a GameCube disc image carries its magic word at 0x1C, past the sniff head
     if fmt is None:
         from acidcat.core import gcm
