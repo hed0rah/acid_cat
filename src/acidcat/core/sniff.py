@@ -34,6 +34,8 @@ def sniff_bytes(head):
     Magic-only: an ID3v2 tag classifies as "mp3" here; use ``sniff`` to
     distinguish a tag that wraps a different container.
     """
+    if head[:12] == b"\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00":
+        return "cdxa"                                   # raw CD sector image (Mode1/2/2352)
     if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WAVE":
         return "wav"
     if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"sfbk":
@@ -66,6 +68,8 @@ def sniff_bytes(head):
         return "bfdlac"                                # FXpansion BFD compressed audio
     if head[:8] == b"GF1PATCH":
         return "gf1pat"                                # Gravis UltraSound GF1 patch
+    if head[:4] == b"VAGp":
+        return "vag"                                   # PS1 SPU-ADPCM sample
     if len(head) >= 14 and head[:4] == b"MThd":
         return "midi"
     if len(head) >= 12 and head[:4] == b"RF64" and head[8:12] == b"WAVE":

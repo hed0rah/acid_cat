@@ -430,14 +430,102 @@ def _multisample_samples(filepath):
                        "wav": z.read(n), "note": f"{z.getinfo(n).file_size:,} B"}
 
 
+def _wav_note(ch, rate):
+    return f"{'stereo' if ch == 2 else 'mono'} @ {rate} Hz"
+
+
+def _cdxa_named(filepath):
+    """ISO 9660-aware extraction: named XA tracks from .STR/.XA movies and SPU
+    sound banks from .VB / standalone .VAG. Returns True if it yielded anything."""
+    from acidcat.core import cdxa, iso9660, vag
+    got = False
+    files = list(iso9660.walk(filepath))
+    for ent in files:                                    # named soundtrack (.STR/.XA)
+        up = ent["path"].upper()
+        if not (up.endswith(".STR") or up.endswith(".XA")):
+            continue
+        r = cdxa.decode_range(filepath, ent["lba"], (ent["size"] + 2047) // 2048)
+        if not r:
+            continue
+        pcm, info = r
+        base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        got = True
+        yield {"name": base, "wav": _wav(pcm, info["rate"], channels=info["channels"]),
+               "note": f"{info['frames'] / info['rate']:.0f}s "
+                       f"{_wav_note(info['channels'], info['rate'])} XA"}
+    for ent in files:                                    # SPU sound/instrument banks
+        up = ent["path"].upper()
+        base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if up.endswith(".VB"):
+            pcm = vag.decode_spu(iso9660.read_file(filepath, ent), stop_on_end=False)
+            got = True
+            yield {"name": base + "_bank", "wav": _wav(pcm, 22050),
+                   "note": f"SPU-ADPCM bank {len(pcm) // 2:,} frames @ 22050 Hz (nominal)"}
+        elif up.endswith(".VAG"):
+            try:
+                vinfo = vag.parse_vag(iso9660.read_file(filepath, ent))
+            except vag.VagError:
+                continue
+            got = True
+            yield {"name": vinfo["name"] or base,
+                   "wav": _wav(vag.decode_spu(vinfo["data"]), vinfo["rate"]),
+                   "note": f"SPU-ADPCM VAG @ {vinfo['rate']} Hz"}
+    return got
+
+
+def _cdxa_samples(filepath):
+    """A raw CD sector image (PlayStation and CD-XA kin). With an ISO 9660
+    filesystem, yields named .STR tracks and .VB/.VAG sound banks. Without one,
+    falls back to decoding the raw XA channel and splitting it on silence.
+    Reads via seeks, so a multi-hundred-MB disc is never slurped."""
+    from acidcat.core import cdxa
+    info0 = cdxa.detect_cd_image(filepath)
+    if not info0 or not info0.get("xa"):
+        return
+    named = yield from _cdxa_named(filepath)
+    if named:
+        return
+    streams = cdxa.xa_streams(filepath)
+    for key in sorted(streams, key=lambda k: -len(streams[k]["sectors"])):
+        cod = cdxa.coding_of(streams[key]["coding"])
+        if cod["bits"] != 4:
+            yield {"name": f"stream_f{key[0]}c{key[1]}", "wav": None,
+                   "note": "8-bit XA-ADPCM not decoded yet"}
+            continue
+        pcm, info = cdxa.decode_stream(filepath, key)
+        ch, rate = info["channels"], info["rate"]
+        songs = cdxa.split_gaps(pcm, info)
+        if len(songs) <= 1:
+            yield {"name": f"soundtrack_f{key[0]}c{key[1]}",
+                   "wav": _wav(pcm, rate, channels=ch),
+                   "note": f"{info['frames'] / rate:.0f}s {_wav_note(ch, rate)} XA-ADPCM"}
+            continue
+        bpf = 2 * ch
+        for i, (a, b) in enumerate(songs, 1):
+            yield {"name": f"track_{i:02d}",
+                   "wav": _wav(pcm[a * bpf:b * bpf], rate, channels=ch),
+                   "note": f"{(b - a) / rate:.0f}s {_wav_note(ch, rate)}"}
+
+
+def _vag_samples(data):
+    """PS1 .VAG: a 48-byte header then SPU-ADPCM. One mono sample per file."""
+    from acidcat.core import vag as vagmod
+    info = vagmod.parse_vag(data)
+    pcm = vagmod.decode_spu(info["data"])
+    yield {"name": info["name"] or "sample", "wav": _wav(pcm, info["rate"]),
+           "note": f"SPU-ADPCM {len(pcm) // 2:,} frames @ {info['rate']} Hz"}
+
+
 _EXTRACTORS = {
     "mod": _mod_samples, "xm": _xm_samples, "it": _it_samples,
     "s3m": _s3m_samples, "gf1pat": _gf1pat_samples,
     "8svx": _svx_samples, "ncw": _ncw_samples, "sf2": _sf2_samples,
+    "vag": _vag_samples,
 }
 # formats whose extractor reads the path itself (walk/stream), not a bytes buffer
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
-                    "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples}
+                    "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples,
+                    "cdxa": _cdxa_samples}
 
 EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 
