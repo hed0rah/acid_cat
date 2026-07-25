@@ -1148,3 +1148,244 @@ def test_tui_validate_repair_flow(tmp_path):
             assert app.dirty and orig.read_bytes() == bytes(broken)
 
     asyncio.run(scenario())
+
+
+def _blob_with_two_wavs(path):
+    import io
+    import math
+    import wave
+
+    def one(n, rate=11025, period=40, amp=8000):
+        b = io.BytesIO()
+        with wave.open(b, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+            w.writeframes(b"".join(struct.pack("<h", int(amp * math.sin(2 * math.pi * i / period)))
+                                   for i in range(n)))
+        return b.getvalue()
+    path.write_bytes(bytes(1024) + one(6000) + bytes(2048) + one(4000) + bytes(512))
+
+
+def test_tui_regions_browse_descend_ascend_extract(tmp_path):
+    """Opening a blob (two WAVs embedded in padding) auto-opens the region
+    browser; descending loads a region as a standalone file, ascend returns to
+    the browser, and extract-all writes each region out."""
+    pytest.importorskip("textual")
+    import asyncio
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen, PromptScreen
+
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+    outdir = tmp_path / "out"
+
+    async def scenario():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(120, 40)) as pilot:
+            for _ in range(50):
+                if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
+                    break
+                await pilot.pause(0.1)
+            rs = [s for s in app.screen_stack if isinstance(s, RegionsScreen)]
+            assert rs and len(rs[0].regions) == 2      # both WAVs located
+
+            rs[0].dismiss({"action": "descend", "index": 0})
+            await pilot.pause(0.3)
+            assert app._region_view is not None
+            assert app.fmt.startswith("RIFF")          # the region opened as a WAV
+            assert "region 0" in app._display_name()
+
+            app.action_ascend()
+            await pilot.pause(0.3)
+            assert any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+
+            [s for s in app.screen_stack if isinstance(s, RegionsScreen)][0].dismiss(
+                {"action": "extract_all", "index": -1})
+            await pilot.pause(0.2)
+            dp = [s for s in app.screen_stack if isinstance(s, PromptScreen)]
+            assert dp
+            dp[0].dismiss(str(outdir))
+            await pilot.pause(0.3)
+
+    asyncio.run(scenario())
+    files = sorted(os.listdir(outdir))
+    assert len(files) == 2 and all(f.endswith(".wav") for f in files)
+
+
+def test_tui_regions_re_tools(tmp_path):
+    """The region browser's RE toolkit: cycle the forensics mode, toggle the
+    transform lens (wiring, not detection), manual-carve an arbitrary range, and
+    raw-byte search -- each descends or re-scans without crashing."""
+    pytest.importorskip("textual")
+    import asyncio
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen, PromptScreen
+
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+
+    async def scenario():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(140, 45)) as pilot:
+            def browser():
+                return [s for s in app.screen_stack if isinstance(s, RegionsScreen)]
+            for _ in range(50):
+                if browser():
+                    break
+                await pilot.pause(0.1)
+            assert browser() and app._locate_mode == "normal"
+
+            # cycle the forensics mode -> aggressive
+            browser()[0].dismiss({"action": "rescan", "mode": "aggressive",
+                                  "transforms": False})
+            for _ in range(50):
+                if browser():
+                    break
+                await pilot.pause(0.1)
+            assert app._locate_mode == "aggressive" and browser()[0].mode == "aggressive"
+
+            # toggle the transform lens (wiring: flag flips, rescan runs cleanly)
+            browser()[0].dismiss({"action": "rescan", "mode": "aggressive",
+                                  "transforms": True})
+            for _ in range(80):
+                if browser():
+                    break
+                await pilot.pause(0.1)
+            assert app._locate_transforms is True and browser()
+
+            # manual carve an arbitrary range -> descends into it
+            browser()[0].dismiss({"action": "carve"})
+            await pilot.pause(0.2)
+            [s for s in app.screen_stack if isinstance(s, PromptScreen)][0].dismiss("0x400 0x1000")
+            await pilot.pause(0.3)
+            assert app._region_view is not None and "manual carve" in app._display_name()
+            assert app.fmt.startswith("RIFF")          # 0x400 is where the first WAV starts
+
+            app.action_ascend()
+            await pilot.pause(0.3)
+            # raw-byte search for the RIFF magic -> lands on it
+            browser()[0].dismiss({"action": "search"})
+            await pilot.pause(0.2)
+            [s for s in app.screen_stack if isinstance(s, PromptScreen)][0].dismiss('"RIFF"')
+            await pilot.pause(0.3)
+            assert "search @" in app._display_name() and app.fmt.startswith("RIFF")
+
+    asyncio.run(scenario())
+
+
+def test_tui_large_blob_browsed_in_place(tmp_path, monkeypatch):
+    """A file over the size threshold is browsed in place (no full-file working
+    copy, read-only), its region scan mmaps rather than reading it all, and the
+    original is never touched."""
+    pytest.importorskip("textual")
+    import asyncio
+    import acidcat.tui_app as tapp
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen
+
+    monkeypatch.setattr(tapp, "_LARGE_FILE", 8192)   # force the large path
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+    before = blob.read_bytes()
+
+    async def scenario():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(120, 40)) as pilot:
+            for _ in range(50):
+                if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
+                    break
+                await pilot.pause(0.1)
+            assert app._readonly is True             # no working copy was made
+            assert app.work == str(blob)             # browsed in place
+            assert app._work_is_temp is False        # so it is never unlinked
+            assert any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+            app.action_save()                        # save must refuse, not write
+            await pilot.pause(0.1)
+
+    asyncio.run(scenario())
+    assert blob.exists() and blob.read_bytes() == before   # original untouched
+
+
+def test_tui_scan_is_segmented(tmp_path, monkeypatch):
+    """A blob scans in segments, and boundary-merge reassembles the two WAVs even
+    when the segments are tiny enough to split them."""
+    pytest.importorskip("textual")
+    import asyncio
+    import acidcat.tui_app as tapp
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen
+
+    monkeypatch.setattr(tapp, "_SCAN_SEG", 4096)      # many segments for a small blob
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+
+    async def full():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(120, 40)) as pilot:
+            for _ in range(80):
+                if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
+                    break
+                await pilot.pause(0.05)
+            assert len(app._regions) == 2 and app._scan_partial is False
+
+    asyncio.run(full())
+
+
+def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
+    """The three scan-control keys: space pauses/resumes, enter keeps what was
+    found so far (partial), esc discards and backs out with no browser."""
+    pytest.importorskip("textual")
+    import asyncio
+    import time
+    import acidcat.tui_app as tapp
+    from acidcat.tui_app import AcidcatTUI, RegionsScreen
+
+    monkeypatch.setattr(tapp, "_SCAN_SEG", 4096)
+    orig = tapp.locatemod.locate
+    monkeypatch.setattr(tapp.locatemod, "locate",     # slow enough to act mid-scan
+                        lambda *a, **k: (time.sleep(0.15) or orig(*a, **k)))
+    blob = tmp_path / "disk.img"
+    _blob_with_two_wavs(blob)
+
+    def has_browser(app):
+        return any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+
+    async def keep():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.pause(0.25)
+            assert app._scanning
+            await pilot.press("enter")                 # stop and keep
+            for _ in range(80):
+                if not app._scanning and has_browser(app):
+                    break
+                await pilot.pause(0.05)
+            assert app._scan_partial is True and has_browser(app)
+
+    async def discard():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.pause(0.25)
+            assert app._scanning
+            await pilot.press("escape")                # cancel and discard
+            for _ in range(80):
+                if not app._scanning:
+                    break
+                await pilot.pause(0.05)
+            assert app._scan_partial is False
+            assert not has_browser(app) and app._regions is None
+
+    async def pause_resume():
+        app = AcidcatTUI(str(blob))
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.pause(0.2)
+            await pilot.press("space")                 # freeze
+            assert app._scanning and app._scan_paused
+            await pilot.pause(0.4)
+            assert app._scanning and app._scan_paused  # still held, not progressing
+            await pilot.press("space")                 # resume
+            for _ in range(120):
+                if not app._scanning and has_browser(app):
+                    break
+                await pilot.pause(0.05)
+            assert not app._scanning and len(app._regions) == 2
+            assert app._scan_partial is False          # ran to completion
+
+    asyncio.run(keep())
+    asyncio.run(discard())
+    asyncio.run(pause_resume())

@@ -23,16 +23,20 @@ import tempfile
 from rich.text import Text
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
-    Button, DirectoryTree, Footer, Input, Label, Static, Tree,
+    Button, DataTable, DirectoryTree, Footer, Input, Label, Static, Tree,
 )
 
 from acidcat.core.walk import walk_file, Unsupported
 from acidcat.core import anomalies as ac_anom
+from acidcat.core import locate as locatemod
+from acidcat.core import transforms as transformsmod
 from acidcat.core import writer
 from acidcat.core import viz
+from acidcat.commands.carve import _EXT as _CARVE_EXT
 from acidcat.util import play
 from acidcat.core.edits import EditError
 from acidcat.commands.write import _edit as _write_edit, _strip as _write_strip
@@ -40,7 +44,12 @@ from acidcat.commands.write import _edit as _write_edit, _strip as _write_strip
 
 # brand theme (ink / gunmetal + teal/orange accents); source of truth is
 # acidcat/tui_theme.py, imported by the playground TUI too so they cannot drift.
-from acidcat.tui_theme import PALETTE, ACCENT, FG, SOFT, DIM, GUTTER, PEND, SEV, byte_color
+from acidcat.tui_theme import (
+    PALETTE, ACCENT, FG, SOFT, DIM, GUTTER, PEND, AMBER, SEV, byte_color,
+)
+
+_SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # braille scan spinner
+_BAR_W = 18            # width of the scan progress bar
 
 _HEX_CAP = 1024        # most bytes to render in the hex pane for one node
 _ROW_CAP = 400         # most per-element rows (events/frames) to list per chunk
@@ -48,6 +57,8 @@ _HEXEDIT_CAP = 512     # refuse editing a byte region bigger than this (pick a f
 _UNDO_CAP = 50         # most undo deltas to keep
 _UNDO_BYTES_CAP = 64 * 1024 * 1024   # total delta bytes kept (latest always kept)
 _DIFF_CAP = 200        # most changed regions to list in the pending-changes view
+_LARGE_FILE = 64 * 1024 * 1024       # above this, browse in place (no working copy)
+_SCAN_SEG = 16 * 1024 * 1024         # scan a blob in segments: live progress + cancel
 
 # the field value<->bytes engine (struct inference, named codecs, the three
 # bit-field encodings) lives in core/fieldcodec.py so the CLI and tests share
@@ -376,12 +387,22 @@ class HelpScreen(ModalScreen):
             ("ctrl+s", "save to the original (writes a _original backup)"),
             ("ctrl+z / ctrl+r", "undo / redo the last edit"),
             ("o", "open another file"),
+            ("l", "locate audio regions in a blob / disk image (auto for a blob)"),
+            ("u", "from a region, go back up to the region browser"),
             ("esc", "cancel the current edit / prompt"),
             ("q", "quit"),
         ]
         for k, d in rows:
             t.append(f"  {k:16}", style=f"bold {PEND}")
             t.append(f"{d}\n", style=SOFT)
+        t.append("\nRegion browser (a blob opens straight into it): enter descends "
+                 "into a region as if it were a file, x / e extract one / all, "
+                 "m cycles the forensics mode (strict/normal/aggressive), t toggles "
+                 "the transform lens (audio hidden under XOR/rotate/nibble-swap), "
+                 "c carves an arbitrary offset+length, / searches raw bytes. A big "
+                 "image scans in segments with live progress: space pauses/resumes, "
+                 "enter keeps what was found so far, esc discards and backs out.",
+                 style=DIM)
         t.append("\nEdits go to a temp working copy; nothing touches the original "
                  "until ctrl+s.", style=DIM)
         with Vertical(id="helpbox"):
@@ -528,6 +549,140 @@ class ValidateScreen(ModalScreen):
         self.dismiss(None)
 
 
+class RegionsScreen(ModalScreen):
+    """The blob region browser: the `locate` results as a navigable table.
+    enter descends into the selected region (opened as if it were a standalone
+    file), x extracts it, e extracts every region. dismiss()es with a dict
+    {action: descend|extract|extract_all, index: row}, or None on esc."""
+
+    CSS = """
+    RegionsScreen { align: center middle; }
+    #regbox { width: 92%; height: 84%; border: round #08F9DF;
+              background: #16181C; padding: 1 2; }
+    #reghint { color: #8A9099; padding-bottom: 1; }
+    #regtable { height: 1fr; }
+    DataTable { background: #16181C; }
+    """
+    BINDINGS = [
+        ("x", "extract", "extract one"),
+        ("e", "extract_all", "extract all"),
+        ("m", "mode", "cycle mode"),
+        ("t", "transforms", "transform lens"),
+        ("c", "carve", "manual carve"),
+        ("slash", "search", "byte search"),
+        ("escape", "cancel", "back"),
+    ]
+
+    def __init__(self, regions, blob_name, mode="normal", transforms=False):
+        super().__init__()
+        self.regions = regions
+        self.blob_name = blob_name
+        self.mode = mode
+        self.transforms = transforms
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="regbox"):
+            nc = sum(1 for r in self.regions if r["kind"] == "container")
+            nt = sum(1 for r in self.regions if r["kind"] == "transformed")
+            nb = len(self.regions) - nc - nt
+            lens = "  lens:ON" if self.transforms else ""
+            yield Static(
+                Text(f"{self.blob_name}  --  {len(self.regions)} region(s): "
+                     f"{nc} container / {nb} blob"
+                     + (f" / {nt} transformed" if nt else "")
+                     + f"   [mode:{self.mode}{lens}]", style=f"bold {ACCENT}"),
+                id="reghint")
+            yield Static(
+                Text("enter descend   x/e extract one/all   m mode   "
+                     "t transform-lens   c carve range   / byte-search   esc back",
+                     style=SOFT), id="regkeys")
+            # populate before yield so the table never depends on post-mount
+            # query timing (which was flaky for a re-pushed screen)
+            t = DataTable(id="regtable")
+            t.cursor_type = "row"
+            t.zebra_stripes = True
+            t.add_columns("#", "offset", "end", "kind", "format", "conf", "length", "geometry")
+            for i, r in enumerate(self.regions):
+                geo = r.get("geometry") or {}
+                gs = ""
+                if geo:
+                    ch = "stereo" if geo.get("channels") == 2 else "mono"
+                    gs = (f"float{geo['width']}" if geo.get("float")
+                          else f"{geo.get('endian') or '?'}-{geo.get('width')}bit") + f" {ch}"
+                t.add_row(str(i), f"0x{r['offset']:08x}", f"0x{r['end']:08x}",
+                          r["kind"], r.get("transform") or r.get("format") or "raw-pcm",
+                          f"{r['confidence']:.2f}", f"{r['length']:,}", gs)
+            yield t
+
+    def on_mount(self):
+        try:
+            self.query_one("#regtable", DataTable).focus()
+        except Exception:
+            pass
+
+    def on_data_table_row_selected(self, event):
+        self.dismiss({"action": "descend", "index": event.cursor_row})
+
+    def _cursor(self):
+        return self.query_one("#regtable", DataTable).cursor_row
+
+    def action_extract(self):
+        self.dismiss({"action": "extract", "index": self._cursor()})
+
+    def action_extract_all(self):
+        self.dismiss({"action": "extract_all", "index": -1})
+
+    def action_mode(self):
+        nxt = {"strict": "normal", "normal": "aggressive",
+               "aggressive": "strict"}[self.mode]
+        self.dismiss({"action": "rescan", "mode": nxt, "transforms": self.transforms})
+
+    def action_transforms(self):
+        self.dismiss({"action": "rescan", "mode": self.mode,
+                      "transforms": not self.transforms})
+
+    def action_carve(self):
+        self.dismiss({"action": "carve"})
+
+    def action_search(self):
+        self.dismiss({"action": "search"})
+
+    def action_cancel(self):
+        self.dismiss(None)
+
+
+class PromptScreen(ModalScreen):
+    """A one-line text prompt (output dir, carve range, search pattern...). Enter
+    submits, esc cancels. dismiss()es with the typed string, or None."""
+
+    CSS = """
+    PromptScreen { align: center middle; }
+    #dpbox { width: 76; height: auto; border: round #FF4D00;
+             background: #16181C; padding: 1 2; }
+    #dphint { color: #8A9099; padding-bottom: 1; }
+    """
+    BINDINGS = [("escape", "cancel", "cancel")]
+
+    def __init__(self, prompt, default):
+        super().__init__()
+        self.prompt = prompt
+        self.default = default
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dpbox"):
+            yield Static(Text(self.prompt, style=f"bold {ACCENT}"), id="dphint")
+            yield Input(value=self.default, id="dpinput")
+
+    def on_mount(self):
+        self.query_one(Input).focus()
+
+    def on_input_submitted(self, event):
+        self.dismiss(event.value.strip() or None)
+
+    def action_cancel(self):
+        self.dismiss(None)
+
+
 class AcidcatTUI(App):
     CSS = """
     Screen { background: #16181C; }
@@ -564,6 +719,8 @@ class AcidcatTUI(App):
         ("ctrl+z", "undo", "undo"),
         ("ctrl+r", "redo", "redo"),
         ("o", "open", "open file"),
+        ("l", "locate_regions", "locate regions"),
+        ("u", "ascend", "up to regions"),
         ("e", "edit_field", "edit field"),
         ("tab", "hex_focus", "hex edit"),
         ("ctrl+t", "toggle_mode", "value/hex"),
@@ -573,9 +730,15 @@ class AcidcatTUI(App):
         ("c", "collapse_all", "collapse"),
         ("question_mark", "help", "help"),
         ("escape", "cancel_edit", "cancel edit"),
+        # scan controls: priority so they beat the tree's own space/enter while a
+        # scan runs; check_action keeps them dormant otherwise.
+        Binding("space", "pause_scan", "pause scan", priority=True, show=False),
+        Binding("enter", "keep_scan", "keep scan", priority=True, show=False),
     ]
 
     def check_action(self, action, parameters):
+        if action in ("pause_scan", "keep_scan"):
+            return self._scanning        # only live during a scan
         # while a modal (edit form / file browser / help / diff / map / confirm)
         # is open, the app-global single-letter bindings must not fire under it
         # -- so typing in the browser or a form does not trigger edit/strip/etc.
@@ -615,6 +778,22 @@ class AcidcatTUI(App):
         self._cur_region = (None, None, ACCENT)  # last shown (off, length, accent)
         self._cur_spans = None    # field spans for per-field hex tint (chunk view)
         self._play = None         # handle to a running audio-audition process
+        self._regions = None      # locate regions of the blob being browsed, or None
+        self._blob_src = None     # path of the blob those regions came from
+        self._region_view = None  # (idx, region) when viewing a descended region
+        self._region_tmps = []    # carved-region temp files, cleaned on exit
+        self._locate_mode = "normal"    # strict | normal | aggressive
+        self._locate_transforms = False  # also run the XOR/rotate/nibble lens
+        self._readonly = False    # a large file is browsed in place (no working copy)
+        self._work_is_temp = False  # self.work is a temp we own and must clean up
+        self._scanning = False    # a region scan is running in the worker
+        self._cancel_scan = False  # set to break the scan loop (keep or discard)
+        self._scan_paused = False  # space: freeze the scan at the current segment
+        self._scan_discard = False  # esc chose discard (vs enter = keep partial)
+        self._scan_partial = False  # last scan was kept early (results are partial)
+        self._scan_frame = 0      # spinner phase
+        self._scan_last = None    # (done, total, n) for the spinner re-render
+        self._scan_timer = None   # set_interval handle animating the spinner
 
     def compose(self) -> ComposeResult:
         yield Static(id="title")
@@ -641,21 +820,422 @@ class AcidcatTUI(App):
     def on_unmount(self):
         self.action_stop_play()
         self._discard_work()
+        self._clean_region_tmps()
 
     # ── working copy: all edits apply to a temp file until an explicit save ──
 
     def _open_path(self, path):
-        """Point the app at `path`: make a fresh temp working copy and load it."""
+        """Open `path` fresh: drop any region context, make a working copy, load,
+        and offer the region browser if it is a blob rather than a single file."""
         self.src = path
+        self._regions = None
+        self._blob_src = None
+        self._region_view = None
+        self._clean_region_tmps()
         self._make_work()
         self._load()
+        self._maybe_regions()
+
+    # ── blob region browsing: locate -> browse -> descend -> extract ──────────
+
+    def _clean_region_tmps(self):
+        for p in getattr(self, "_region_tmps", []):
+            try:
+                if os.path.isfile(p):
+                    os.unlink(p)
+            except OSError:
+                pass
+        self._region_tmps = []
+
+    def _maybe_regions(self):
+        """Auto-offer the region browser when the opened file is not a single
+        recognized format (a disk image, a raw dump, an unknown blob)."""
+        if self.fmt not in ("unsupported", "walk failed") or self.fsize < 4096:
+            return
+        self.action_locate_regions()
+
+    def action_locate_regions(self, reset_blob=True):
+        """Run `locate` over the blob and open the region browser. Works on demand
+        (the `l` key on any file) and automatically for a blob; reset_blob=False
+        keeps the current blob when re-scanning with a new mode / the lens."""
+        if len(self.screen_stack) > 1 or self._scanning:
+            return
+        if reset_blob:
+            self._blob_src = self.src
+        self._scanning = True
+        self._cancel_scan = False
+        self._scan_paused = False
+        self._scan_discard = False
+        self._scan_frame = 0
+        try:
+            total0 = os.path.getsize(self._blob_src)
+        except OSError:
+            total0 = 0
+        self._scan_last = (0, total0, 0)                 # a bar at 0% before segment 1
+        self._render_scan_title()
+        try:                                             # so space/enter reach the
+            self.query_one("#tree", Tree).focus()        # scan-control priority binds,
+        except Exception:                                # not the hidden editbar Input
+            pass
+        self._scan_timer = self.set_interval(0.1, self._spin_scan)
+        self.run_worker(self._locate_work, thread=True, exclusive=True)
+
+    def _locate_work(self):
+        """Scan the blob in segments so progress is visible and a scan can be
+        paused, kept early, or discarded. Segments are mmap'd, so the image is
+        never read whole into RAM."""
+        import mmap
+        import time
+        regions = []
+        try:
+            with open(self._blob_src, "rb") as f:
+                size = os.fstat(f.fileno()).st_size
+                if size == 0:
+                    self.call_from_thread(self._finish_scan, [])
+                    return
+                mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                try:
+                    pos = 0
+                    while pos < size and not self._cancel_scan:
+                        while self._scan_paused and not self._cancel_scan:
+                            time.sleep(0.08)             # space froze it; hold here
+                        if self._cancel_scan:
+                            break
+                        seg = mm[pos:pos + _SCAN_SEG]     # one segment, not the whole file
+                        segs = locatemod.locate(seg, mode=self._locate_mode)
+                        if self._locate_transforms:
+                            segs = segs + transformsmod.find_transformed_audio(seg)
+                        for r in segs:                   # shift into absolute offsets
+                            r["offset"] += pos
+                            r["end"] += pos
+                        regions.extend(segs)
+                        pos += _SCAN_SEG
+                        self.call_from_thread(self._scan_progress,
+                                              min(pos, size), size, len(regions))
+                finally:
+                    mm.close()
+        except Exception:
+            pass
+        cancelled = bool(self._cancel_scan)
+        regions = self._merge_boundary(sorted(regions, key=lambda r: r["offset"]))
+        self.call_from_thread(self._finish_scan, regions, cancelled)
+
+    def _scan_progress(self, done, total, n):
+        if not self._scanning:
+            return
+        self._scan_last = (done, total, n)
+        self._render_scan_title()
+
+    def _spin_scan(self):
+        """Interval tick: advance the spinner so the status bar stays alive even
+        between (coarse) segment completions."""
+        if not self._scanning:
+            return
+        if not self._scan_paused:
+            self._scan_frame += 1
+        self._render_scan_title()
+
+    def _render_scan_title(self):
+        if self._scan_last is None:
+            return
+        try:
+            title = self.query_one("#title", Static)
+        except Exception:
+            return
+        title.update(self._scan_title(*self._scan_last))
+
+    @staticmethod
+    def _cap(t, key, label, label_style=SOFT):
+        """A keycap: dim brackets, bright key, muted label -- the anti-style bit."""
+        t.append(" [", style=DIM)
+        t.append(key, style=f"bold {ACCENT}")
+        t.append("]", style=DIM)
+        t.append(f" {label} ", style=label_style)
+
+    def _scan_title(self, done, total, n):
+        pct = done * 100 // total if total else 0
+        fill = pct * _BAR_W // 100
+        t = Text()
+        if self._scan_paused:
+            t.append(" ⏸ ", style=f"bold {AMBER}")     # pause glyph
+            t.append("paused", style=f"bold {AMBER}")
+        else:
+            t.append(f" {_SPIN[self._scan_frame % len(_SPIN)]} ", style=f"bold {ACCENT}")
+            t.append("scanning", style=f"bold {ACCENT}")
+        t.append("  ")
+        t.append("█" * fill, style=ACCENT)              # filled bar
+        t.append("░" * (_BAR_W - fill), style=GUTTER)   # empty bar
+        t.append(f" {pct:>3}%", style=f"bold {FG}")
+        t.append(f"   {done >> 20}/{total >> 20} MB", style=SOFT)
+        t.append(f"   {n} region{'' if n == 1 else 's'}", style=SOFT)
+        t.append(f"   {self._locate_mode}", style=DIM)
+        if self._locate_transforms:
+            t.append(" +lens", style=DIM)
+        t.append("  ")
+        self._cap(t, "space", "resume" if self._scan_paused else "pause")
+        self._cap(t, "enter", "keep")
+        self._cap(t, "esc", "discard", label_style=AMBER)
+        return t
+
+    @staticmethod
+    def _merge_boundary(regions):
+        """Heal a blob that got split across a segment boundary: coalesce exactly
+        adjacent regions of the same kind/format."""
+        if not regions:
+            return regions
+        out = [dict(regions[0])]
+        for r in regions[1:]:
+            prev = out[-1]
+            if (r["offset"] == prev["end"] and r["kind"] == prev["kind"]
+                    and r.get("format") == prev.get("format")):
+                prev["end"] = r["end"]
+                prev["length"] = prev["end"] - prev["offset"]
+            else:
+                out.append(dict(r))
+        return out
+
+    def action_pause_scan(self):
+        """space: freeze the scan at the current segment, or resume it."""
+        if not self._scanning:
+            return
+        self._scan_paused = not self._scan_paused
+        self._render_scan_title()
+
+    def action_keep_scan(self):
+        """enter: stop the scan now and browse whatever was found so far."""
+        if self._scanning:
+            self._scan_paused = False
+            self._scan_discard = False
+            self._cancel_scan = True
+
+    def action_cancel_scan(self):
+        """esc: abandon the scan and discard the partial results."""
+        if self._scanning:
+            self._scan_paused = False
+            self._scan_discard = True
+            self._cancel_scan = True
+
+    def _finish_scan(self, regions, cancelled=False):
+        if self._scan_timer is not None:
+            self._scan_timer.stop()
+            self._scan_timer = None
+        self._scanning = False
+        self._cancel_scan = False
+        self._scan_paused = False
+        self._scan_last = None
+        discard = self._scan_discard
+        self._scan_discard = False
+        if discard:                       # esc: drop everything, back to the file
+            self._scan_partial = False
+            self._load()
+            return
+        self._scan_partial = cancelled    # enter mid-scan: results are partial
+        self._show_regions(regions)
+
+    def _show_regions(self, regions):
+        self._load()                                   # restore the title
+        self._regions = regions
+        if not regions:
+            self.query_one("#title", Static).update(
+                Text(f" {os.path.basename(self.src)}  --  no audio regions located "
+                     f"[mode:{self._locate_mode}"
+                     f"{'  lens:ON' if self._locate_transforms else ''}]  "
+                     "(m mode  t lens  c carve  / search  l rescan)",
+                     style=f"bold {ACCENT}"))
+            return
+        name = os.path.basename(self._blob_src)
+        if self._scan_partial:
+            name += " (partial -- scan stopped)"
+        self.push_screen(
+            RegionsScreen(regions, name, self._locate_mode, self._locate_transforms),
+            self._on_region_action)
+
+    def _on_region_action(self, result):
+        if not result:
+            return
+        act = result["action"]
+        if act == "descend":
+            self._descend(result["index"])
+        elif act == "extract":
+            self._extract([self._regions[result["index"]]])
+        elif act == "extract_all":
+            self._extract(self._regions)
+        elif act == "rescan":
+            self._locate_mode = result["mode"]
+            self._locate_transforms = result["transforms"]
+            self.action_locate_regions(reset_blob=False)
+        elif act == "carve":
+            self._carve_prompt()
+        elif act == "search":
+            self._search_prompt()
+
+    def _region_bytes(self, region):
+        with open(self._blob_src, "rb") as f:
+            f.seek(region["offset"])
+            return f.read(region["end"] - region["offset"])
+
+    def _descend(self, idx):
+        self._descend_region(self._regions[idx], idx)
+
+    def _descend_region(self, region, label):
+        """Carve `region` to a temp file and open it as if it were a standalone
+        file; the parent blob's regions stay set so `u` ascends."""
+        ext = _CARVE_EXT.get(region.get("format")) or "bin"
+        fd, tmp = tempfile.mkstemp(suffix=f".{ext}", prefix="acidcat_region_")
+        os.close(fd)
+        with open(tmp, "wb") as f:
+            f.write(self._region_bytes(region))
+        self._region_tmps.append(tmp)
+        blob, regions = self._blob_src, self._regions   # preserve across _make_work
+        self.src = tmp
+        self._region_view = (label, region)
+        self._make_work()
+        self._load()
+        self._blob_src, self._regions = blob, regions
+
+    def action_ascend(self):
+        """From a descended region, go back up to the blob's region browser."""
+        if self._regions is None or self._blob_src is None:
+            return
+        self._region_view = None
+        self.push_screen(
+            RegionsScreen(self._regions, os.path.basename(self._blob_src),
+                          self._locate_mode, self._locate_transforms),
+            self._on_region_action)
+
+    # ── RE tools inside the browser: manual carve + raw-byte search ───────────
+
+    def _carve_prompt(self):
+        self.push_screen(
+            PromptScreen("carve range -- offset length (hex ok, e.g. 0x4a00 0x800):", ""),
+            self._do_carve)
+
+    def _do_carve(self, spec):
+        if not spec:
+            return
+        try:
+            parts = spec.replace(",", " ").split()
+            off = int(parts[0], 0)
+            length = int(parts[1], 0) if len(parts) > 1 else None
+            end = off + length if length is not None else os.path.getsize(self._blob_src)
+        except (ValueError, IndexError):
+            self.query_one("#title", Static).update(
+                Text(" carve: need 'offset length' (0x.. or decimal)",
+                     style=f"bold {SEV['alert']}"))
+            return
+        blob_size = os.path.getsize(self._blob_src)
+        off = max(0, min(off, blob_size))
+        end = max(off, min(end, blob_size))
+        self._descend_region(
+            {"offset": off, "end": end, "length": end - off,
+             "kind": "carve", "format": None, "confidence": 1.0}, "manual carve")
+
+    def _search_prompt(self):
+        self.push_screen(
+            PromptScreen('byte search -- 0x48454C4C hex, or "text" ascii:', ""),
+            self._do_search)
+
+    def _do_search(self, pat):
+        if not pat:
+            return
+        needle = self._parse_needle(pat)
+        if not needle:
+            self.query_one("#title", Static).update(
+                Text(" search: give hex (0x..) or a \"quoted\" string",
+                     style=f"bold {SEV['alert']}"))
+            return
+        import mmap
+        try:
+            size = os.path.getsize(self._blob_src)
+            with open(self._blob_src, "rb") as f:
+                mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                try:
+                    hit = mm.find(needle)                    # scans the image, no full read
+                finally:
+                    mm.close()
+        except (OSError, ValueError):
+            return
+        if hit < 0:
+            self.query_one("#title", Static).update(
+                Text(f" search: {pat!r} not found", style=f"bold {ACCENT}"))
+            self.action_locate_regions(reset_blob=False)   # reopen the browser
+            return
+        end = min(hit + max(len(needle), 1 << 20), size)   # a 1 MB window from the hit
+        self._descend_region(
+            {"offset": hit, "end": end, "length": end - hit,
+             "kind": "match", "format": None, "confidence": 1.0},
+            f"search @ 0x{hit:08x}")
+
+    @staticmethod
+    def _parse_needle(pat):
+        pat = pat.strip()
+        if len(pat) >= 2 and pat[0] == pat[-1] == '"':
+            return pat[1:-1].encode("latin-1", "replace")
+        low = pat.lower()
+        if low.startswith("0x"):
+            low = low[2:]
+        low = low.replace(" ", "")
+        if low and all(c in "0123456789abcdef" for c in low) and len(low) % 2 == 0:
+            try:
+                return bytes.fromhex(low)
+            except ValueError:
+                return b""
+        return pat.encode("latin-1", "replace")     # bare text -> ascii
+
+    def _extract(self, regions):
+        default = os.path.join(os.path.dirname(os.path.abspath(self._blob_src)),
+                               os.path.splitext(os.path.basename(self._blob_src))[0]
+                               + "_regions")
+        self.push_screen(
+            PromptScreen(f"extract {len(regions)} region(s) to (enter to confirm):",
+                            default),
+            lambda d: self._do_extract(regions, d))
+
+    def _do_extract(self, regions, outdir):
+        if not outdir:
+            return
+        try:
+            os.makedirs(outdir, exist_ok=True)
+            n = 0
+            for r in regions:
+                ext = _CARVE_EXT.get(r.get("format")) or "raw"
+                name = f"{n:04d}_0x{r['offset']:08x}_{r['kind']}.{ext}"
+                with open(os.path.join(outdir, name), "wb") as f:
+                    f.write(self._region_bytes(r))
+                n += 1
+            self.query_one("#title", Static).update(
+                Text(f" extracted {n} region(s) -> {outdir}", style=f"bold {ACCENT}"))
+        except OSError as e:
+            self.query_one("#title", Static).update(
+                Text(f" extract failed: {e}", style=f"bold {SEV['alert']}"))
+
+    def _display_name(self):
+        """The name shown in the title/tree: a breadcrumb when inside a region,
+        the plain basename otherwise."""
+        if self._region_view is not None:
+            label, r = self._region_view
+            fmt = r.get("transform") or r.get("format") or r["kind"]
+            where = f"region {label}" if isinstance(label, int) else str(label)
+            return (f"{os.path.basename(self._blob_src)} > "
+                    f"{where} ({fmt} @ 0x{r['offset']:08x})")
+        return os.path.basename(self.src)
 
     def _make_work(self):
         self._discard_work()
-        ext = os.path.splitext(self.src)[1]
-        fd, self.work = tempfile.mkstemp(suffix=ext or ".bin", prefix="acidcat_tui_")
-        os.close(fd)
-        shutil.copyfile(self.src, self.work)
+        if os.path.getsize(self.src) > _LARGE_FILE:
+            # too big to copy on open; browse it in place, read-only (a disk image
+            # is not something you edit field-by-field anyway). Descended regions
+            # are small and still get an editable working copy.
+            self.work = self.src
+            self._readonly = True
+            self._work_is_temp = False
+        else:
+            ext = os.path.splitext(self.src)[1]
+            fd, self.work = tempfile.mkstemp(suffix=ext or ".bin", prefix="acidcat_tui_")
+            os.close(fd)
+            shutil.copyfile(self.src, self.work)
+            self._readonly = False
+            self._work_is_temp = True
         self.dirty = False
         self._backed_up = False
         self._undo = []
@@ -676,11 +1256,13 @@ class AcidcatTUI(App):
     def _discard_work(self):
         w = self.work
         self.work = None
-        if w and os.path.isfile(w):
+        # only delete a temp we created; never the original (read-only large file)
+        if w and self._work_is_temp and os.path.isfile(w):
             try:
                 os.unlink(w)
             except OSError:
                 pass
+        self._work_is_temp = False
 
     @staticmethod
     def _minimal_delta(old, new):
@@ -767,6 +1349,10 @@ class AcidcatTUI(App):
     def action_save(self):
         if not self.work:
             return
+        if self._readonly:
+            self.notify("read-only: this file is too large for in-place editing; "
+                        "descend into a region to edit it")
+            return
         if not self.dirty:
             self.notify("no unsaved changes")
             return
@@ -842,15 +1428,20 @@ class AcidcatTUI(App):
             self.fmt, self.chunks, self.warns = (
                 "walk failed", [], [f"{e.__class__.__name__}: {e}"])
         self._prefer_be = self.fmt in _BE_FMTS
-        try:
-            self.findings = ac_anom.scan(self.work, self.fmt, self.chunks, self.warns)
-        except Exception:
-            self.findings = []
+        if self._readonly:
+            self.findings = []     # skip the whole-file anomaly scan on a large blob
+        else:
+            try:
+                self.findings = ac_anom.scan(self.work, self.fmt, self.chunks, self.warns)
+            except Exception:
+                self.findings = []
 
         head = Text()
-        head.append(f" {os.path.basename(self.src)} ", style=f"bold {ACCENT}")
+        head.append(f" {self._display_name()} ", style=f"bold {ACCENT}")
         head.append(f" {self.fmt}  {self.fsize:,} bytes  "
                     f"{len(self.chunks)} chunks", style=SOFT)
+        if self._region_view is not None:
+            head.append("   [u back to regions]", style=DIM)
         if self.dirty:
             head.append("   ● UNSAVED", style=f"bold {SEV['alert']}")
         self.query_one("#title", Static).update(head)
@@ -874,7 +1465,7 @@ class AcidcatTUI(App):
         self._allnodes = []       # rebuilt each load, for goto/search/finding jumps
         self._xref = {}
         keyed = {}
-        tree.root.set_label(Text(os.path.basename(self.src), style=f"bold {FG}"))
+        tree.root.set_label(Text(self._display_name(), style=f"bold {FG}"))
         tree.root.data = (0, self.fsize, ACCENT)
         self._nodemeta[id(tree.root)] = (0, self.fsize, ACCENT)
         for i, c in enumerate(self.chunks):
@@ -1739,6 +2330,9 @@ class AcidcatTUI(App):
         self.query_one("#tree", Tree).focus()
 
     def action_cancel_edit(self):
+        if self._scanning:                   # esc discards a running region scan
+            self.action_cancel_scan()
+            return
         if self._prompt:                     # esc cancels an armed goto/search prompt
             self._end_prompt()
             return
