@@ -6,6 +6,51 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.77.0] - 2026-07-25
+
+Game-disc audio extraction. `acidcat extract <disc>` now rips soundtracks and
+sound effects off console disc images across five codecs, each reverse-engineered
+from real discs and verified by decoding to coherent audio.
+
+### Added
+
+- **PlayStation / CD-XA.** Detect a raw CD sector image (Mode1/2/2352), walk its
+  ISO 9660 filesystem, and decode the audio: each `.STR`/`.XA` movie's CD-XA
+  ADPCM soundtrack (named by file), and SPU-ADPCM sound banks from `.VB`/`.BD`/
+  `.VAG` or any file whose content matches. Banks are split into individual named
+  samples via the VAB `.VH`/`.HD` header. Falls back to decoding the raw XA
+  channel and splitting it on silence when there is no filesystem. New
+  `core/cdxa.py`, `core/vag.py`, `core/iso9660.py`.
+- **CD-DA (Red Book) from `.cue` sheets.** Extract each audio track to WAV -- raw
+  16-bit LE stereo 44100 PCM, no codec -- handling both split (one `.bin` per
+  track) and single-`.bin` (cumulative MSF) layouts, with the pregap skipped. How
+  PS1, Sega CD, Neo Geo CD, PC-Engine CD and countless discs carry music. New
+  `core/cue.py`.
+- **GameCube.** Walk a GameCube disc (`.iso`) filesystem and decode its audio:
+  HAL `.hps` streams, CRI `.adx`, and DTK `.adp`. New `core/gcm.py`,
+  `core/dsp.py` (Nintendo DSP-ADPCM), `core/hps.py`, `core/dtk.py`.
+- **CRI ADX** decoder (`core/adx.py`) -- the middleware behind two decades of
+  Dreamcast / PS2 / GameCube / Wii / arcade audio. Standard linear types (2, 3);
+  AHX and encrypted raise.
+- **TUI region browser.** A blob or disc image opens into a live, segmented
+  `locate` scan (space pauses, enter keeps, esc discards) with a browsable region
+  table: descend into a region as its own file, extract one/all, cycle the
+  forensics mode, toggle the transform lens, carve a range, search raw bytes.
+- **TUI disc audio browser.** A PS1/CD-XA disc opens straight into its audio
+  catalog -- `.STR` tracks and SPU banks from the ISO -- to audition (a decoded
+  preview through ffplay) and extract in place.
+- **Ranked codec-vs-PCM detection** (`audioscan.classify`). Instead of labelling
+  everything audio-shaped a "raw-pcm blob", rank the possibilities: PS1 SPU-ADPCM
+  (a codec -- decode, don't play as PCM) vs linear PCM at a geometry, flagging a
+  low-confidence guess as uncertain. Surfaced in the region browser.
+
+### Documentation
+
+- Anatomy pages enriched across the fleet: WAV loop-metadata (the `smpl`
+  inclusive-`dwEnd` interop bug) and 32-bit float (the non-unit Cool Edit
+  variant); verified corrections and small format details on ~15 pages; fixed a
+  doubled-IIFE bug that had left the fxp, rx2, and rmid byte-maps dead.
+
 ## [0.76.0] - 2026-07-23
 
 ### Added
