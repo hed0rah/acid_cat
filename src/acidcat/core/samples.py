@@ -589,7 +589,7 @@ def _adx_samples(data):
 def _gcm_samples(filepath):
     """A GameCube disc image: walk the filesystem and decode each audio file --
     HAL .hps streams and CRI .adx. Reads via seeks, never slurps the disc."""
-    from acidcat.core import gcm, hps, adx
+    from acidcat.core import gcm, hps, adx, dtk
     for ent in gcm.walk(filepath):
         p = ent["path"].lower()
         try:
@@ -599,6 +599,9 @@ def _gcm_samples(filepath):
             elif p.endswith(".adx"):
                 pcm, info = adx.decode(gcm.read_file(filepath, ent))
                 kind = "ADX"
+            elif p.endswith(".adp"):
+                pcm, info = dtk.decode(gcm.read_file(filepath, ent))
+                kind = "DTK"
             else:
                 continue
         except Exception:
