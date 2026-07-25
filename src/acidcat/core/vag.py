@@ -85,6 +85,40 @@ def decode_spu(data, stop_on_end=True):
     return out.tobytes()
 
 
+VAB_MAGIC = b"pBAV"                  # "VABp" little-endian, the VAB header magic
+
+
+def parse_vab(vh):
+    """Parse a VAB header (.VH / .HD). It carries the per-VAG sizes that split
+    the sibling .VB / .BD body into individual SPU-ADPCM samples. Returns
+    dict(version, programs, tones, vags, sizes) where sizes are byte lengths.
+    Raises VagError if the magic is wrong or the header is truncated.
+
+    Layout: 32-byte header, 128 program-attr records (16 B each), then one
+    16-tone table (32 B/tone) per used program, then a 256-entry VAG size table
+    (u16, in 8-byte units; entry 0 is a leading pad)."""
+    if vh[:4] != VAB_MAGIC:
+        raise VagError("not a VAB header (missing 'pBAV' magic)")
+    version = struct.unpack_from("<I", vh, 4)[0]
+    _, nprog, ntone, nvag = struct.unpack_from("<HHHH", vh, 16)
+    off = 32 + 2048 + nprog * 512
+    if off + (nvag + 1) * 2 > len(vh):
+        raise VagError("VAB header truncated")
+    sizes = struct.unpack_from(f"<{nvag + 1}H", vh, off)
+    return {"version": version, "programs": nprog, "tones": ntone, "vags": nvag,
+            "sizes": [s * 8 for s in sizes[1:nvag + 1]]}
+
+
+def split_vb(vb, sizes):
+    """Yield (index, sample_bytes) for each VAG in a .VB / .BD body, given the
+    byte sizes from parse_vab. Skips zero-length and out-of-range entries."""
+    pos = 0
+    for i, sz in enumerate(sizes):
+        if sz and pos + sz <= len(vb):
+            yield i, vb[pos:pos + sz]
+        pos += sz
+
+
 def looks_like_spu(data, blocks=512, min_nonzero=0.05):
     """Heuristic: does `data` look like raw SPU-ADPCM (a .VB/.BD-style sample
     bank with no header)? Returns the fraction of leading 16-byte blocks with a

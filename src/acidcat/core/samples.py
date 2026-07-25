@@ -441,6 +441,7 @@ def _cdxa_named(filepath):
     from acidcat.core import cdxa, iso9660, vag
     got = False
     files = list(iso9660.walk(filepath))
+    by_upper = {e["path"].upper(): e for e in files}     # sibling-header lookup
     for ent in files:                                    # named soundtrack (.STR/.XA)
         up = ent["path"].upper()
         if not (up.endswith(".STR") or up.endswith(".XA")):
@@ -476,13 +477,46 @@ def _cdxa_named(filepath):
         if not bank:
             head = iso9660.read_file(filepath, ent, limit=16 * 1024)
             bank = vag.looks_like_spu(head) >= 0.9
-        if bank:
-            pcm = vag.decode_spu(iso9660.read_file(filepath, ent), stop_on_end=False)
+        if not bank:
+            continue
+        raw = iso9660.read_file(filepath, ent)
+        sizes = _vab_sizes(filepath, ent, by_upper)     # from the sibling .VH/.HD
+        if sizes:                                       # split into named samples
+            for i, sdata in vag.split_vb(raw, sizes):
+                pcm = vag.decode_spu(sdata)
+                if len(pcm) < 2:
+                    continue
+                got = True
+                yield {"name": f"{base}_{i:02d}", "wav": _wav(pcm, 22050),
+                       "note": f"SPU sample {len(pcm) // 2:,} frames @ 22050 Hz (nominal)"}
+        else:                                           # no header: one whole-bank WAV
+            pcm = vag.decode_spu(raw, stop_on_end=False)
             if len(pcm) >= 2:
                 got = True
                 yield {"name": base + "_bank", "wav": _wav(pcm, 22050),
                        "note": f"SPU-ADPCM bank {len(pcm) // 2:,} frames @ 22050 Hz (nominal)"}
     return got
+
+
+_VAB_HDR_EXT = {".VB": ".VH", ".BD": ".HD"}
+
+
+def _vab_sizes(filepath, ent, by_upper):
+    """The per-sample byte sizes from a bank's sibling VAB header (.VH/.HD), or
+    None if there is no matching header or it does not parse."""
+    from acidcat.core import iso9660, vag
+    up = ent["path"].upper()
+    dot = up.rfind(".")
+    hext = _VAB_HDR_EXT.get(up[dot:]) if dot >= 0 else None
+    if not hext:
+        return None
+    hdr = by_upper.get(up[:dot] + hext)
+    if hdr is None:
+        return None
+    try:
+        return vag.parse_vab(iso9660.read_file(filepath, hdr))["sizes"]
+    except (vag.VagError, OSError):
+        return None
 
 
 def _cdxa_samples(filepath):

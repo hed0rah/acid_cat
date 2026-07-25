@@ -86,3 +86,19 @@ def test_looks_like_spu():
     rand = bytes((i * 37 + 11) % 256 for i in range(16 * 20))
     assert vag.looks_like_spu(rand) < 0.5                     # random: rejected
     assert vag.looks_like_spu(b"tiny") == 0.0                 # too short
+
+
+def test_vab_parse_and_split():
+    nprog, nvag = 1, 2
+    hdr = (b"pBAV" + struct.pack("<III", 1, 0, 0)
+           + struct.pack("<HHHH", 0, nprog, 0, nvag) + bytes(32 - 24)
+           + bytes(2048) + bytes(nprog * 512)
+           + struct.pack("<256H", *([0, 2, 4] + [0] * 253)))   # sizes/8 -> 16B, 32B
+    vab = vag.parse_vab(hdr)
+    assert vab["vags"] == 2 and vab["sizes"] == [16, 32]
+    vb = bytes(range(48))
+    parts = list(vag.split_vb(vb, vab["sizes"]))
+    assert [i for i, _ in parts] == [0, 1]
+    assert parts[0][1] == vb[:16] and parts[1][1] == vb[16:48]
+    with pytest.raises(vag.VagError):
+        vag.parse_vab(b"XXXX" + bytes(3100))
