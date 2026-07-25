@@ -577,22 +577,37 @@ def _hps_samples(data):
                    f"DSP-ADPCM"}
 
 
+def _adx_samples(data):
+    """CRI ADX: decode to one WAV."""
+    from acidcat.core import adx
+    pcm, info = adx.decode(data)
+    yield {"name": "stream", "wav": _wav(pcm, info["rate"], channels=info["channels"]),
+           "note": f"{info['frames'] / info['rate']:.0f}s "
+                   f"{'stereo' if info['channels'] == 2 else 'mono'} @ {info['rate']} Hz ADX"}
+
+
 def _gcm_samples(filepath):
     """A GameCube disc image: walk the filesystem and decode each audio file --
-    .hps HAL streams (music) for now. Reads via seeks, never slurps the disc."""
-    from acidcat.core import gcm, hps
+    HAL .hps streams and CRI .adx. Reads via seeks, never slurps the disc."""
+    from acidcat.core import gcm, hps, adx
     for ent in gcm.walk(filepath):
-        if not ent["path"].lower().endswith(".hps"):
-            continue
+        p = ent["path"].lower()
         try:
-            pcm, info = hps.decode(gcm.read_file(filepath, ent))
+            if p.endswith(".hps"):
+                pcm, info = hps.decode(gcm.read_file(filepath, ent))
+                kind = "DSP"
+            elif p.endswith(".adx"):
+                pcm, info = adx.decode(gcm.read_file(filepath, ent))
+                kind = "ADX"
+            else:
+                continue
         except Exception:
             continue
         base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
         yield {"name": base,
                "wav": _wav(pcm, info["rate"], channels=info["channels"]),
                "note": f"{info['frames'] / info['rate']:.0f}s "
-                       f"{'stereo' if info['channels'] == 2 else 'mono'} @ {info['rate']} Hz DSP"}
+                       f"{'stereo' if info['channels'] == 2 else 'mono'} @ {info['rate']} Hz {kind}"}
 
 
 def _vag_samples(data):
@@ -608,7 +623,7 @@ _EXTRACTORS = {
     "mod": _mod_samples, "xm": _xm_samples, "it": _it_samples,
     "s3m": _s3m_samples, "gf1pat": _gf1pat_samples,
     "8svx": _svx_samples, "ncw": _ncw_samples, "sf2": _sf2_samples,
-    "vag": _vag_samples, "hps": _hps_samples,
+    "vag": _vag_samples, "hps": _hps_samples, "adx": _adx_samples,
 }
 # formats whose extractor reads the path itself (walk/stream), not a bytes buffer
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
