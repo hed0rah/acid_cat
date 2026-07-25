@@ -77,3 +77,12 @@ def test_extract_wires_vag(tmp_path):
     assert recs[0]["name"] == "boom" and "SPU-ADPCM" in recs[0]["note"]
     w = wave.open(io.BytesIO(recs[0]["wav"]))
     assert w.getnchannels() == 1 and w.getframerate() == 44100
+
+
+def test_looks_like_spu():
+    spu = (bytes([0x00, 0x00]) + bytes([0x11] * 14)) * 20
+    assert vag.looks_like_spu(spu) == 1.0
+    assert vag.looks_like_spu(bytes(16 * 20)) == 0.0          # all zero: not a bank
+    rand = bytes((i * 37 + 11) % 256 for i in range(16 * 20))
+    assert vag.looks_like_spu(rand) < 0.5                     # random: rejected
+    assert vag.looks_like_spu(b"tiny") == 0.0                 # too short

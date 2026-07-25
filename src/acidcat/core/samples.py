@@ -436,7 +436,8 @@ def _wav_note(ch, rate):
 
 def _cdxa_named(filepath):
     """ISO 9660-aware extraction: named XA tracks from .STR/.XA movies and SPU
-    sound banks from .VB / standalone .VAG. Returns True if it yielded anything."""
+    sound banks from .VB/.BD, standalone .VAG, or any file whose content is a
+    strong SPU-ADPCM match. Returns True if it yielded anything."""
     from acidcat.core import cdxa, iso9660, vag
     got = False
     files = list(iso9660.walk(filepath))
@@ -456,12 +457,9 @@ def _cdxa_named(filepath):
     for ent in files:                                    # SPU sound/instrument banks
         up = ent["path"].upper()
         base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
-        if up.endswith(".VB"):
-            pcm = vag.decode_spu(iso9660.read_file(filepath, ent), stop_on_end=False)
-            got = True
-            yield {"name": base + "_bank", "wav": _wav(pcm, 22050),
-                   "note": f"SPU-ADPCM bank {len(pcm) // 2:,} frames @ 22050 Hz (nominal)"}
-        elif up.endswith(".VAG"):
+        if up.endswith((".STR", ".XA")):
+            continue                                     # already emitted as a track
+        if up.endswith(".VAG"):
             try:
                 vinfo = vag.parse_vag(iso9660.read_file(filepath, ent))
             except vag.VagError:
@@ -470,6 +468,20 @@ def _cdxa_named(filepath):
             yield {"name": vinfo["name"] or base,
                    "wav": _wav(vag.decode_spu(vinfo["data"]), vinfo["rate"]),
                    "note": f"SPU-ADPCM VAG @ {vinfo['rate']} Hz"}
+            continue
+        # .VB / .BD are SPU banks by name; anything else is taken only on a strong
+        # content match, so a bank with an odd extension is still found and a data
+        # file is not mistaken for one.
+        bank = up.endswith((".VB", ".BD"))
+        if not bank:
+            head = iso9660.read_file(filepath, ent, limit=16 * 1024)
+            bank = vag.looks_like_spu(head) >= 0.9
+        if bank:
+            pcm = vag.decode_spu(iso9660.read_file(filepath, ent), stop_on_end=False)
+            if len(pcm) >= 2:
+                got = True
+                yield {"name": base + "_bank", "wav": _wav(pcm, 22050),
+                       "note": f"SPU-ADPCM bank {len(pcm) // 2:,} frames @ 22050 Hz (nominal)"}
     return got
 
 

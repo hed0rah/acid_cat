@@ -98,11 +98,13 @@ def walk(path):
                     yield {"path": full, "lba": rec["lba"], "size": rec["size"]}
 
 
-def read_file(path, entry):
-    """Read a file's bytes from its walk() entry. Reads Form1/2048 user data;
-    XA (Form2) audio files are decoded via core.cdxa by sector range instead."""
+def read_file(path, entry, limit=None):
+    """Read a file's bytes from its walk() entry. `limit` caps the bytes read (a
+    prefix, for content sniffing). Reads Form1/2048 user data; XA (Form2) audio
+    files are decoded via core.cdxa by sector range instead."""
     with open(path, "rb") as f:
         layout = _layout(f)
         if layout is None:
             raise ValueError("no ISO 9660 filesystem")
-        return _read_extent(f, entry["lba"], entry["size"], layout)
+        size = entry["size"] if limit is None else min(entry["size"], limit)
+        return _read_extent(f, entry["lba"], size, layout)

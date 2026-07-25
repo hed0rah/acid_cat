@@ -85,6 +85,27 @@ def decode_spu(data, stop_on_end=True):
     return out.tobytes()
 
 
+def looks_like_spu(data, blocks=512, min_nonzero=0.05):
+    """Heuristic: does `data` look like raw SPU-ADPCM (a .VB/.BD-style sample
+    bank with no header)? Returns the fraction of leading 16-byte blocks with a
+    valid header -- shift 0..12, filter 0..4, flag byte 0..7. Random bytes score
+    ~0.03 (only flag<=7 is 8/256), a real bank scores ~1.0. Returns 0 if the data
+    is essentially all zero (a silent region is not a bank worth carving)."""
+    n = min(blocks, len(data) // _BLOCK)
+    if n < 8:
+        return 0.0
+    ok = nonzero = 0
+    for b in range(n):
+        blk = data[b * _BLOCK:(b + 1) * _BLOCK]
+        if (blk[0] & 0x0F) <= 12 and (blk[0] >> 4) <= 4 and blk[1] <= 7:
+            ok += 1
+        if any(blk[2:]):
+            nonzero += 1
+    if nonzero / n < min_nonzero:
+        return 0.0
+    return ok / n
+
+
 def loop_points(data):
     """Scan SPU-ADPCM blocks for loop markers. Returns (start_sample, end_sample)
     in mono samples, or None if the sample is a one-shot. Each block is 28
