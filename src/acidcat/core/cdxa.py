@@ -171,6 +171,36 @@ def _payloads(path, sector_indices):
             yield f.read(SECTOR)[_XA_DATA:_XA_DATA + _XA_AUDIO_BYTES]
 
 
+def audio_sectors_in_range(path, lba, count):
+    """Yield the audio-submode sector indices within [lba, lba+count) -- the XA
+    audio belonging to one ISO file (a .STR movie or .XA stream)."""
+    with open(path, "rb") as f:
+        f.seek(lba * SECTOR)
+        for idx in range(lba, lba + count):
+            s = f.read(SECTOR)
+            if len(s) < SECTOR:
+                break
+            if s[18] & _SUBMODE_AUDIO:
+                yield idx
+
+
+def decode_range(path, lba, count):
+    """Decode the XA audio inside one ISO file's sector range. Returns
+    (pcm_bytes, info) or None if the range holds no 4-bit XA audio."""
+    secs = list(audio_sectors_in_range(path, lba, count))
+    if not secs:
+        return None
+    with open(path, "rb") as f:
+        f.seek(secs[0] * SECTOR)
+        cod = coding_of(f.read(SECTOR)[19])
+    if cod["bits"] != 4:
+        return None
+    pcm = decode_sectors(_payloads(path, secs), cod["stereo"])
+    ch = 2 if cod["stereo"] else 1
+    return pcm, {"channels": ch, "rate": cod["rate"], "bits": 16,
+                 "frames": len(pcm) // (2 * ch)}
+
+
 def decode_stream(path, key=None):
     """Decode one XA stream to PCM. `key` is a (file, channel) tuple; defaults to
     the largest stream on the disc. Returns (pcm_bytes, info) where info has

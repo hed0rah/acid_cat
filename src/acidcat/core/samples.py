@@ -430,13 +430,60 @@ def _multisample_samples(filepath):
                        "wav": z.read(n), "note": f"{z.getinfo(n).file_size:,} B"}
 
 
+def _wav_note(ch, rate):
+    return f"{'stereo' if ch == 2 else 'mono'} @ {rate} Hz"
+
+
+def _cdxa_named(filepath):
+    """ISO 9660-aware extraction: named XA tracks from .STR/.XA movies and SPU
+    sound banks from .VB / standalone .VAG. Returns True if it yielded anything."""
+    from acidcat.core import cdxa, iso9660, vag
+    got = False
+    files = list(iso9660.walk(filepath))
+    for ent in files:                                    # named soundtrack (.STR/.XA)
+        up = ent["path"].upper()
+        if not (up.endswith(".STR") or up.endswith(".XA")):
+            continue
+        r = cdxa.decode_range(filepath, ent["lba"], (ent["size"] + 2047) // 2048)
+        if not r:
+            continue
+        pcm, info = r
+        base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        got = True
+        yield {"name": base, "wav": _wav(pcm, info["rate"], channels=info["channels"]),
+               "note": f"{info['frames'] / info['rate']:.0f}s "
+                       f"{_wav_note(info['channels'], info['rate'])} XA"}
+    for ent in files:                                    # SPU sound/instrument banks
+        up = ent["path"].upper()
+        base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if up.endswith(".VB"):
+            pcm = vag.decode_spu(iso9660.read_file(filepath, ent), stop_on_end=False)
+            got = True
+            yield {"name": base + "_bank", "wav": _wav(pcm, 22050),
+                   "note": f"SPU-ADPCM bank {len(pcm) // 2:,} frames @ 22050 Hz (nominal)"}
+        elif up.endswith(".VAG"):
+            try:
+                vinfo = vag.parse_vag(iso9660.read_file(filepath, ent))
+            except vag.VagError:
+                continue
+            got = True
+            yield {"name": vinfo["name"] or base,
+                   "wav": _wav(vag.decode_spu(vinfo["data"]), vinfo["rate"]),
+                   "note": f"SPU-ADPCM VAG @ {vinfo['rate']} Hz"}
+    return got
+
+
 def _cdxa_samples(filepath):
-    """A raw CD sector image (PlayStation and CD-XA kin): decode each XA audio
-    stream and split it into tracks on silence gaps. Reads via seeks, so a
-    multi-hundred-MB disc is never slurped; the decoded PCM is held per stream."""
+    """A raw CD sector image (PlayStation and CD-XA kin). With an ISO 9660
+    filesystem, yields named .STR tracks and .VB/.VAG sound banks. Without one,
+    falls back to decoding the raw XA channel and splitting it on silence.
+    Reads via seeks, so a multi-hundred-MB disc is never slurped."""
     from acidcat.core import cdxa
     info0 = cdxa.detect_cd_image(filepath)
     if not info0 or not info0.get("xa"):
+        return
+    named = yield from _cdxa_named(filepath)
+    if named:
         return
     streams = cdxa.xa_streams(filepath)
     for key in sorted(streams, key=lambda k: -len(streams[k]["sectors"])):
@@ -447,19 +494,17 @@ def _cdxa_samples(filepath):
             continue
         pcm, info = cdxa.decode_stream(filepath, key)
         ch, rate = info["channels"], info["rate"]
-        chan = "stereo" if ch == 2 else "mono"
         songs = cdxa.split_gaps(pcm, info)
-        if len(songs) <= 1:                              # one continuous stream
-            dur = info["frames"] / rate
+        if len(songs) <= 1:
             yield {"name": f"soundtrack_f{key[0]}c{key[1]}",
                    "wav": _wav(pcm, rate, channels=ch),
-                   "note": f"{dur:.0f}s {chan} @ {rate} Hz XA-ADPCM"}
+                   "note": f"{info['frames'] / rate:.0f}s {_wav_note(ch, rate)} XA-ADPCM"}
             continue
         bpf = 2 * ch
         for i, (a, b) in enumerate(songs, 1):
             yield {"name": f"track_{i:02d}",
                    "wav": _wav(pcm[a * bpf:b * bpf], rate, channels=ch),
-                   "note": f"{(b - a) / rate:.0f}s {chan} @ {rate} Hz"}
+                   "note": f"{(b - a) / rate:.0f}s {_wav_note(ch, rate)}"}
 
 
 def _vag_samples(data):

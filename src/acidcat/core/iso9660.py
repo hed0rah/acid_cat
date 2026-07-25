@@ -1,0 +1,108 @@
+"""ISO 9660 filesystem walk for CD images.
+
+A CD-XA disc is not just a stream of sectors; its data track carries an ISO 9660
+filesystem naming the game's files -- the .STR movies, .XA audio, .VAB/.VB sound
+banks, .VAG samples. Walking it turns "raw audio channel" into named tracks and
+lets us reach the sound effects, not just the streamed music.
+
+Layout handled: raw Mode2/2352 images (user data 2048 bytes at sector offset 24,
+the PlayStation case), raw Mode1/2352 (offset 16), and cooked 2048-byte images.
+The volume descriptor at logical block 16 carries "CD001"; that anchors both the
+sector geometry and the root directory.
+
+    from acidcat.core import iso9660
+    for f in iso9660.walk("game.bin"):
+        print(f["path"], f["lba"], f["size"])
+    data = iso9660.read_file("game.bin", entry)
+"""
+
+import struct
+
+_USER = 2048                         # ISO logical block size
+
+
+def _layout(f):
+    """Find the sector geometry by locating 'CD001' at logical block 16.
+    Returns (sector_size, user_offset) or None."""
+    for sector_size, user_off in ((2352, 24), (2352, 16), (2048, 0)):
+        f.seek(16 * sector_size + user_off)
+        vd = f.read(6)
+        if len(vd) == 6 and vd[0] == 1 and vd[1:6] == b"CD001":
+            return sector_size, user_off
+    return None
+
+
+def _read_block(f, lba, layout):
+    sector_size, user_off = layout
+    f.seek(lba * sector_size + user_off)
+    return f.read(_USER)
+
+
+def _read_extent(f, lba, size, layout):
+    n = (size + _USER - 1) // _USER
+    return b"".join(_read_block(f, lba + k, layout) for k in range(n))[:size]
+
+
+def _dir_records(block):
+    """Yield the directory records in a directory extent."""
+    i = 0
+    while i < len(block):
+        rec_len = block[i]
+        if rec_len == 0:                     # zero padding runs to the next block
+            i = ((i // _USER) + 1) * _USER
+            continue
+        rec = block[i:i + rec_len]
+        if len(rec) >= 33:
+            name_len = rec[32]
+            yield {
+                "lba": struct.unpack_from("<I", rec, 2)[0],
+                "size": struct.unpack_from("<I", rec, 10)[0],
+                "is_dir": bool(rec[25] & 0x02),
+                "name": rec[33:33 + name_len],
+            }
+        i += rec_len
+
+
+def _clean_name(raw):
+    # ISO names are "NAME.EXT;VERSION"; drop the version and a trailing dot
+    nm = raw.split(b";", 1)[0].decode("latin-1", "replace")
+    return nm[:-1] if nm.endswith(".") else nm
+
+
+def walk(path):
+    """Yield {path, lba, size} for every file in the ISO 9660 tree (depth-first).
+    Returns nothing if `path` has no ISO filesystem."""
+    with open(path, "rb") as f:
+        layout = _layout(f)
+        if layout is None:
+            return
+        pvd = _read_block(f, 16, layout)
+        root = pvd[156:156 + 34]                         # root directory record
+        stack = [("", struct.unpack_from("<I", root, 2)[0],
+                  struct.unpack_from("<I", root, 10)[0])]
+        seen = set()
+        while stack:
+            prefix, lba, size = stack.pop()
+            if (lba, size) in seen or not size:          # guard cycles / empty
+                continue
+            seen.add((lba, size))
+            data = _read_extent(f, lba, size, layout)
+            for rec in _dir_records(data):
+                if rec["name"] in (b"\x00", b"\x01"):    # '.' and '..'
+                    continue
+                name = _clean_name(rec["name"])
+                full = f"{prefix}/{name}" if prefix else name
+                if rec["is_dir"]:
+                    stack.append((full, rec["lba"], rec["size"]))
+                else:
+                    yield {"path": full, "lba": rec["lba"], "size": rec["size"]}
+
+
+def read_file(path, entry):
+    """Read a file's bytes from its walk() entry. Reads Form1/2048 user data;
+    XA (Form2) audio files are decoded via core.cdxa by sector range instead."""
+    with open(path, "rb") as f:
+        layout = _layout(f)
+        if layout is None:
+            raise ValueError("no ISO 9660 filesystem")
+        return _read_extent(f, entry["lba"], entry["size"], layout)
