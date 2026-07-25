@@ -1389,3 +1389,70 @@ def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
     asyncio.run(keep())
     asyncio.run(discard())
     asyncio.run(pause_resume())
+
+
+def _cdxa_disc_with_vb(vb_data):
+    """A minimal CD-XA Mode2/2352 disc: an ISO 9660 tree with one HIT.VB file
+    carrying SPU-ADPCM. Used to exercise the TUI disc audio browser."""
+    import struct as _st
+    U = 2048
+
+    def rec(lba, size, is_dir, name):
+        b = bytearray(b"\x00\x00" + _st.pack("<I", lba) + _st.pack(">I", lba)
+                      + _st.pack("<I", size) + _st.pack(">I", size) + b"\x00" * 7
+                      + bytes([2 if is_dir else 0]) + b"\x00\x00"
+                      + _st.pack("<H", 1) + _st.pack(">H", 1) + bytes([len(name)]) + name)
+        if len(b) % 2:
+            b += b"\x00"
+        b[0] = len(b)
+        return bytes(b)
+
+    def pad(x):
+        return x + bytes((-len(x)) % U)
+
+    pvd = bytearray(U)
+    pvd[0] = 1
+    pvd[1:6] = b"CD001"
+    pvd[156:190] = rec(17, U, True, b"\x00")
+    root = pad(rec(17, U, True, b"\x00") + rec(17, U, True, b"\x01")
+               + rec(18, len(vb_data), False, b"HIT.VB;1"))
+    logical = [bytes(U)] * 16 + [bytes(pvd), root, pad(vb_data)]
+    out = bytearray()
+    for blk in logical:                          # wrap Mode2/2352: mode byte 2, dup subheader
+        out += b"\x00" + b"\xff" * 10 + b"\x00" + bytes(3) + bytes([2])
+        out += bytes([0, 0, 0x08, 0, 0, 0, 0x08, 0]) + blk + bytes(2352 - 24 - U)
+    return bytes(out)
+
+
+def test_tui_cdxa_disc_browser(tmp_path):
+    """Opening a CD-XA disc image opens the DiscScreen listing its audio files,
+    and the decode path turns a .VB entry into PCM."""
+    pytest.importorskip("textual")
+    import asyncio
+    import array
+    from acidcat.tui_app import AcidcatTUI, DiscScreen
+    from textual.widgets import DataTable
+
+    vb = (bytes([0x00, 0x00]) + bytes([0x11] * 14)) * 8     # SPU-ADPCM blocks
+    img = tmp_path / "game.bin"
+    img.write_bytes(_cdxa_disc_with_vb(vb))
+
+    async def go():
+        app = AcidcatTUI(str(img))
+        async with app.run_test(size=(140, 40)) as pilot:
+            for _ in range(60):
+                if any(isinstance(s, DiscScreen) for s in app.screen_stack):
+                    break
+                await pilot.pause(0.05)
+            ds = [s for s in app.screen_stack if isinstance(s, DiscScreen)]
+            assert ds, "disc browser did not open"
+            assert ds[0].query_one(DataTable).row_count == 1
+            e = ds[0].entries[0]
+            assert e["kind"] == "VB" and e["path"] == "HIT.VB"
+            # decode path yields PCM
+            pcm, info = app._decode_entry(e, preview=False)
+            assert info["channels"] == 1 and len(pcm) > 0
+            a = array.array("h"); a.frombytes(pcm)
+            assert len(a) == 8 * 28                         # 8 blocks x 28 samples
+
+    asyncio.run(go())
