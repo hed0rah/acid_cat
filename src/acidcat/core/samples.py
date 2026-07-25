@@ -462,10 +462,20 @@ def _cdxa_samples(filepath):
                    "note": f"{(b - a) / rate:.0f}s {chan} @ {rate} Hz"}
 
 
+def _vag_samples(data):
+    """PS1 .VAG: a 48-byte header then SPU-ADPCM. One mono sample per file."""
+    from acidcat.core import vag as vagmod
+    info = vagmod.parse_vag(data)
+    pcm = vagmod.decode_spu(info["data"])
+    yield {"name": info["name"] or "sample", "wav": _wav(pcm, info["rate"]),
+           "note": f"SPU-ADPCM {len(pcm) // 2:,} frames @ {info['rate']} Hz"}
+
+
 _EXTRACTORS = {
     "mod": _mod_samples, "xm": _xm_samples, "it": _it_samples,
     "s3m": _s3m_samples, "gf1pat": _gf1pat_samples,
     "8svx": _svx_samples, "ncw": _ncw_samples, "sf2": _sf2_samples,
+    "vag": _vag_samples,
 }
 # formats whose extractor reads the path itself (walk/stream), not a bytes buffer
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,

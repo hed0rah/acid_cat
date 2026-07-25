@@ -68,6 +68,8 @@ def sniff_bytes(head):
         return "bfdlac"                                # FXpansion BFD compressed audio
     if head[:8] == b"GF1PATCH":
         return "gf1pat"                                # Gravis UltraSound GF1 patch
+    if head[:4] == b"VAGp":
+        return "vag"                                   # PS1 SPU-ADPCM sample
     if len(head) >= 14 and head[:4] == b"MThd":
         return "midi"
     if len(head) >= 12 and head[:4] == b"RF64" and head[8:12] == b"WAVE":
