@@ -34,6 +34,9 @@ from acidcat.core.walk import walk_file, Unsupported
 from acidcat.core import anomalies as ac_anom
 from acidcat.core import locate as locatemod
 from acidcat.core import transforms as transformsmod
+from acidcat.core import cdxa as cdxamod
+from acidcat.core import vag as vagmod
+from acidcat.core import iso9660 as isomod
 from acidcat.core import writer
 from acidcat.core import viz
 from acidcat.commands.carve import _EXT as _CARVE_EXT
@@ -403,6 +406,10 @@ class HelpScreen(ModalScreen):
                  "image scans in segments with live progress: space pauses/resumes, "
                  "enter keeps what was found so far, esc discards and backs out.",
                  style=DIM)
+        t.append("\nDisc audio browser (a PS1 / CD-XA disc image opens into it): the "
+                 "game's .STR soundtrack tracks and .VB/.VAG SPU sound banks, from the "
+                 "ISO filesystem. enter / p auditions the selected track, x / a extract "
+                 "one / all to WAV.", style=DIM)
         t.append("\nEdits go to a temp working copy; nothing touches the original "
                  "until ctrl+s.", style=DIM)
         with Vertical(id="helpbox"):
@@ -651,6 +658,78 @@ class RegionsScreen(ModalScreen):
         self.dismiss(None)
 
 
+class DiscScreen(ModalScreen):
+    """CD-XA disc audio browser: the game's .STR soundtrack tracks and .VB/.VAG
+    SPU sound banks, from the ISO 9660 filesystem. enter/p auditions the selected
+    entry, x/a extract one/all. dismiss()es with {action: play|extract|extract_all,
+    index} or None on esc."""
+
+    CSS = """
+    DiscScreen { align: center middle; }
+    #discbox { width: 92%; height: 84%; border: round #08F9DF;
+               background: #16181C; padding: 1 2; }
+    #dischint { color: #8A9099; padding-bottom: 1; }
+    #disctable { height: 1fr; }
+    DataTable { background: #16181C; }
+    """
+    BINDINGS = [
+        ("x", "extract", "extract one"),
+        ("a", "extract_all", "extract all"),
+        ("p", "play", "audition"),
+        ("escape", "cancel", "back"),
+    ]
+    _KIND = {"XA": "soundtrack (XA)", "VB": "sound bank (SPU)", "VAG": "sample (SPU)"}
+
+    def __init__(self, entries, disc_name):
+        super().__init__()
+        self.entries = entries
+        self.disc_name = disc_name
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="discbox"):
+            nx = sum(1 for e in self.entries if e["kind"] == "XA")
+            nb = sum(1 for e in self.entries if e["kind"] in ("VB", "VAG"))
+            yield Static(
+                Text(f"{self.disc_name}  --  {len(self.entries)} audio file(s): "
+                     f"{nx} soundtrack / {nb} sound bank", style=f"bold {ACCENT}"),
+                id="dischint")
+            yield Static(Text("enter/p audition   x/a extract one/all   esc back",
+                              style=SOFT), id="disckeys")
+            t = DataTable(id="disctable")
+            t.cursor_type = "row"
+            t.zebra_stripes = True
+            t.add_columns("#", "name", "kind", "size")
+            for i, e in enumerate(self.entries):
+                t.add_row(str(i), e["path"], self._KIND.get(e["kind"], e["kind"]),
+                          f"{e['size']:,}")
+            yield t
+
+    def on_mount(self):
+        try:
+            self.query_one("#disctable", DataTable).focus()
+        except Exception:
+            pass
+
+    def _cursor(self):
+        return self.query_one("#disctable", DataTable).cursor_row
+
+    def on_data_table_row_selected(self, event):
+        self.app._audition_disc(self.entries[event.cursor_row])
+
+    def action_play(self):
+        self.app._audition_disc(self.entries[self._cursor()])
+
+    def action_extract(self):
+        self.app._extract_disc([self.entries[self._cursor()]])
+
+    def action_extract_all(self):
+        self.app._extract_disc(list(self.entries))
+
+    def action_cancel(self):
+        self.app.action_stop_play()
+        self.dismiss(None)
+
+
 class PromptScreen(ModalScreen):
     """A one-line text prompt (output dir, carve range, search pattern...). Enter
     submits, esc cancels. dismiss()es with the typed string, or None."""
@@ -782,6 +861,8 @@ class AcidcatTUI(App):
         self._blob_src = None     # path of the blob those regions came from
         self._region_view = None  # (idx, region) when viewing a descended region
         self._region_tmps = []    # carved-region temp files, cleaned on exit
+        self._disc_src = None     # path of an opened CD-XA disc image
+        self._disc_list = []      # its audio catalog (.STR/.VB/.VAG entries)
         self._locate_mode = "normal"    # strict | normal | aggressive
         self._locate_transforms = False  # also run the XOR/rotate/nibble lens
         self._readonly = False    # a large file is browsed in place (no working copy)
@@ -834,6 +915,8 @@ class AcidcatTUI(App):
         self._clean_region_tmps()
         self._make_work()
         self._load()
+        if self._maybe_disc():          # a CD-XA disc opens straight into audio browsing
+            return
         self._maybe_regions()
 
     # ── blob region browsing: locate -> browse -> descend -> extract ──────────
@@ -853,6 +936,122 @@ class AcidcatTUI(App):
         if self.fmt not in ("unsupported", "walk failed") or self.fsize < 4096:
             return
         self.action_locate_regions()
+
+    # ── CD-XA disc audio: detect -> browse tracks/banks -> audition/extract ──
+
+    def _maybe_disc(self):
+        """If the file is a CD-XA disc image with named audio, open the disc
+        audio browser instead of the generic region browser. Returns True if so."""
+        try:
+            info = cdxamod.detect_cd_image(self.src)
+        except Exception:
+            return False
+        if not info or not info.get("xa"):
+            return False
+        entries = self._disc_entries(self.src)
+        if not entries:
+            return False
+        self._disc_src = self.src
+        self._disc_list = entries
+        self.push_screen(DiscScreen(entries, os.path.basename(self.src)))
+        return True
+
+    @staticmethod
+    def _disc_entries(path):
+        """The disc's audio catalog from its ISO 9660 tree: .STR/.XA soundtrack
+        and .VB/.VAG SPU sound banks."""
+        entries = []
+        try:
+            for ent in isomod.walk(path):
+                up = ent["path"].upper()
+                kind = ("XA" if up.endswith((".STR", ".XA"))
+                        else "VB" if up.endswith(".VB")
+                        else "VAG" if up.endswith(".VAG") else None)
+                if kind:
+                    entries.append({**ent, "kind": kind})
+        except Exception:
+            return []
+        return entries
+
+    def _decode_entry(self, ent, preview=False):
+        """Decode a disc audio entry to (pcm_bytes, info). `preview` caps the
+        length for a fast audition. Runs off the UI thread. None on failure."""
+        path = self._disc_src
+        try:
+            if ent["kind"] == "XA":
+                count = (ent["size"] + 2047) // 2048
+                return cdxamod.decode_range(path, ent["lba"], count,
+                                            max_audio=180 if preview else None)
+            raw = isomod.read_file(path, ent)
+            if ent["kind"] == "VB":
+                if preview:
+                    raw = raw[:24 * 1024]
+                pcm = vagmod.decode_spu(raw, stop_on_end=False)
+                return pcm, {"channels": 1, "rate": 22050, "bits": 16}
+            info = vagmod.parse_vag(raw)                  # VAG
+            data = info["data"][:24 * 1024] if preview else info["data"]
+            return vagmod.decode_spu(data), {"channels": 1, "rate": info["rate"], "bits": 16}
+        except Exception:
+            return None
+
+    def _audition_disc(self, ent):
+        if not play.have_audio():
+            self.notify("no audio player found (install ffmpeg for ffplay)",
+                        severity="warning")
+            return
+        self.notify(f"decoding {ent['path']} ...")
+        self.run_worker(lambda: self._audition_work(ent), thread=True)
+
+    def _audition_work(self, ent):
+        r = self._decode_entry(ent, preview=True)
+        if r:
+            self.call_from_thread(self._play_pcm, r[0], r[1], ent["path"])
+        else:
+            self.call_from_thread(self.notify, f"could not decode {ent['path']}",
+                                  severity="warning")
+
+    def _play_pcm(self, pcm, info, label):
+        self.action_stop_play()
+        self._play = play.play_bytes(pcm, rate=info["rate"], ch=info["channels"],
+                                     bits=16, floating=False)
+        secs = len(pcm) / max(1, info["rate"] * info["channels"] * 2)
+        self.notify(f"playing {label}  ~{secs:.0f}s (preview) -- . to stop")
+
+    def _extract_disc(self, entries):
+        default = os.path.join(os.path.dirname(os.path.abspath(self._disc_src)),
+                               os.path.splitext(os.path.basename(self._disc_src))[0]
+                               + "_audio")
+        self.push_screen(
+            PromptScreen(f"extract {len(entries)} audio file(s) to (enter to confirm):",
+                         default),
+            lambda d: self._do_extract_disc(entries, d))
+
+    def _do_extract_disc(self, entries, outdir):
+        if not outdir:
+            return
+        self.notify(f"extracting {len(entries)} file(s) to {outdir} ...")
+        self.run_worker(lambda: self._extract_disc_work(entries, outdir), thread=True)
+
+    def _extract_disc_work(self, entries, outdir):
+        import wave
+        try:
+            os.makedirs(outdir, exist_ok=True)
+            n = 0
+            for ent in entries:
+                r = self._decode_entry(ent, preview=False)
+                if not r:
+                    continue
+                pcm, info = r
+                base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                with wave.open(os.path.join(outdir, f"{n:04d}_{base}.wav"), "wb") as w:
+                    w.setnchannels(info["channels"])
+                    w.setsampwidth(2)
+                    w.setframerate(info["rate"])
+                    w.writeframes(pcm)
+                n += 1
+            self.call_from_thread(self.notify, f"extracted {n} file(s) -> {outdir}")
+        except Exception as e:
+            self.call_from_thread(self.notify, f"extract failed: {e}", severity="error")
 
     def action_locate_regions(self, reset_blob=True):
         """Run `locate` over the blob and open the region browser. Works on demand

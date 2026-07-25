@@ -184,10 +184,13 @@ def audio_sectors_in_range(path, lba, count):
                 yield idx
 
 
-def decode_range(path, lba, count):
+def decode_range(path, lba, count, max_audio=None):
     """Decode the XA audio inside one ISO file's sector range. Returns
-    (pcm_bytes, info) or None if the range holds no 4-bit XA audio."""
-    secs = list(audio_sectors_in_range(path, lba, count))
+    (pcm_bytes, info) or None if the range holds no 4-bit XA audio. max_audio
+    caps the number of audio sectors decoded (a fast preview)."""
+    import itertools
+    gen = audio_sectors_in_range(path, lba, count)
+    secs = list(itertools.islice(gen, max_audio)) if max_audio else list(gen)
     if not secs:
         return None
     with open(path, "rb") as f:
