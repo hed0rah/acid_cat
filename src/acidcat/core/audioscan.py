@@ -354,6 +354,51 @@ def analyze_geometry(data, cap=16384):
             **tells}
 
 
+_PCM_TRUST = 0.5                     # linear-PCM autocorr below this is not trustworthy
+_SPU_MIN = 0.85                      # SPU block-header validity to call it SPU-ADPCM
+
+
+def classify(data, cap=32768):
+    """Rank what a byte region is, audio-wise, instead of committing to one guess.
+
+    The statistical detector labels anything audio-shaped a "raw-pcm blob", but a
+    lot of it is a *codec* (4-bit ADPCM) that turns to noise played as linear PCM.
+    The two signals are anti-correlated: SPU-ADPCM has a rigid 16-byte block header
+    (shift/filter nibble + a 0..7 flag) that PCM almost never satisfies, while its
+    bytes read as PCM are jagged (low autocorrelation); linear PCM is the mirror.
+    So a strong SPU score with a weak PCM score means codec, the reverse means PCM,
+    and both weak means "uncertain -- do not trust the raw-pcm guess."
+
+    Returns {top, is_codec, uncertain, candidates:[{label, confidence, codec, ...}]}
+    sorted most-confident first. Never raises."""
+    from acidcat.core import vag
+    b = data[:cap]
+    cands = []
+
+    spu = vag.looks_like_spu(b)
+    if spu >= _SPU_MIN:
+        cands.append({"label": "spu-adpcm", "confidence": round(spu, 2), "codec": True,
+                      "detail": "PS1 SPU-ADPCM (4-bit blocks) -- decode, not linear PCM"})
+
+    geo = analyze_geometry(b)
+    if geo:
+        gl = (f"float{geo['width']}" if geo.get("float")
+              else f"{geo.get('endian') or '?'}-{geo['width']}bit")
+        ch = "stereo" if geo.get("channels") == 2 else "mono"
+        cands.append({"label": f"raw-pcm {gl} {ch}",
+                      "confidence": float(geo.get("confidence", 0.0)), "codec": False,
+                      "geometry": geo, "detail": "linear PCM (rate is not in the bytes)"})
+
+    cands.sort(key=lambda c: -c["confidence"])
+    if not cands:
+        return {"top": "unknown", "is_codec": False, "uncertain": True, "candidates": []}
+    top = cands[0]
+    uncertain = (not top["codec"]) and top["confidence"] < _PCM_TRUST
+    return {"top": top["label"] + (" (uncertain)" if uncertain else ""),
+            "is_codec": bool(top["codec"]), "uncertain": uncertain,
+            "candidates": cands}
+
+
 def _debug_tells(vals, peak_ref, full):
     """Signal-health flags for a decoded region: silence (flat), DC offset (mean
     far off centre), clipping (pinned at the rails). The 'why is my audio broken'

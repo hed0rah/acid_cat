@@ -37,6 +37,7 @@ from acidcat.core import transforms as transformsmod
 from acidcat.core import cdxa as cdxamod
 from acidcat.core import vag as vagmod
 from acidcat.core import iso9660 as isomod
+from acidcat.core import audioscan as audioscanmod
 from acidcat.core import writer
 from acidcat.core import viz
 from acidcat.commands.carve import _EXT as _CARVE_EXT
@@ -616,8 +617,10 @@ class RegionsScreen(ModalScreen):
                     ch = "stereo" if geo.get("channels") == 2 else "mono"
                     gs = (f"float{geo['width']}" if geo.get("float")
                           else f"{geo.get('endian') or '?'}-{geo.get('width')}bit") + f" {ch}"
+                fmt = (r.get("transform") or r.get("format")
+                       or (r.get("probe") or {}).get("top") or "raw-pcm")
                 t.add_row(str(i), f"0x{r['offset']:08x}", f"0x{r['end']:08x}",
-                          r["kind"], r.get("transform") or r.get("format") or "raw-pcm",
+                          r["kind"], fmt,
                           f"{r['confidence']:.2f}", f"{r['length']:,}", gs)
             yield t
 
@@ -1231,8 +1234,23 @@ class AcidcatTUI(App):
         self._scan_partial = cancelled    # enter mid-scan: results are partial
         self._show_regions(regions)
 
+    def _classify_regions(self, regions):
+        """Rank each blob region -- codec (SPU-ADPCM) vs linear PCM at a geometry
+        -- so the browser shows the real interpretation, not a bare 'raw-pcm'."""
+        for r in regions:
+            if r.get("kind") != "blob" or r.get("format"):
+                continue
+            try:
+                with open(self._blob_src, "rb") as f:
+                    f.seek(r["offset"])
+                    data = f.read(min(r["end"] - r["offset"], 32768))
+                r["probe"] = audioscanmod.classify(data)
+            except Exception:
+                pass
+
     def _show_regions(self, regions):
         self._load()                                   # restore the title
+        self._classify_regions(regions)
         self._regions = regions
         if not regions:
             self.query_one("#title", Static).update(
