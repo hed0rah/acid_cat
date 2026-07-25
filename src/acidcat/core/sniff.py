@@ -34,6 +34,8 @@ def sniff_bytes(head):
     Magic-only: an ID3v2 tag classifies as "mp3" here; use ``sniff`` to
     distinguish a tag that wraps a different container.
     """
+    if head[:12] == b"\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00":
+        return "cdxa"                                   # raw CD sector image (Mode1/2/2352)
     if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WAVE":
         return "wav"
     if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"sfbk":

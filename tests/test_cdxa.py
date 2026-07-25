@@ -118,3 +118,25 @@ def test_split_gaps(tmp_path):
     pcm = (tone + quiet + tone).tobytes()
     songs = cdxa.split_gaps(pcm, info, min_gap_s=1.0, min_song_s=1.0)
     assert len(songs) == 2
+
+
+def test_extract_wires_cdxa(tmp_path):
+    """A raw CD-XA image sniffs as cdxa and iter_samples yields a soundtrack WAV."""
+    from acidcat.core import sniff as sniffmod
+    from acidcat.core import samples as smod
+    import wave, io
+
+    # a short, non-silent stereo stream: header 0 (filter 0, shift 12), buzz data
+    data = bytes([0x71] * 112)                 # nonzero nibbles -> audible level
+    payload = bytes(16) + data
+    payload += bytes(cdxa._XA_AUDIO_BYTES - len(payload))
+    img = tmp_path / "game.bin"
+    img.write_bytes(_xa_sector(1, 0, 0x01, payload) * 12)   # stereo, 12 sectors
+
+    assert sniffmod.sniff(str(img)) == "cdxa"
+    recs = list(smod.iter_samples(str(img)))
+    assert len(recs) == 1                       # one continuous soundtrack (no gaps)
+    r = recs[0]
+    assert r["wav"] and "37800" in r["note"] and "stereo" in r["note"]
+    w = wave.open(io.BytesIO(r["wav"]))
+    assert w.getnchannels() == 2 and w.getframerate() == 37800

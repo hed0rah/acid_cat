@@ -430,6 +430,38 @@ def _multisample_samples(filepath):
                        "wav": z.read(n), "note": f"{z.getinfo(n).file_size:,} B"}
 
 
+def _cdxa_samples(filepath):
+    """A raw CD sector image (PlayStation and CD-XA kin): decode each XA audio
+    stream and split it into tracks on silence gaps. Reads via seeks, so a
+    multi-hundred-MB disc is never slurped; the decoded PCM is held per stream."""
+    from acidcat.core import cdxa
+    info0 = cdxa.detect_cd_image(filepath)
+    if not info0 or not info0.get("xa"):
+        return
+    streams = cdxa.xa_streams(filepath)
+    for key in sorted(streams, key=lambda k: -len(streams[k]["sectors"])):
+        cod = cdxa.coding_of(streams[key]["coding"])
+        if cod["bits"] != 4:
+            yield {"name": f"stream_f{key[0]}c{key[1]}", "wav": None,
+                   "note": "8-bit XA-ADPCM not decoded yet"}
+            continue
+        pcm, info = cdxa.decode_stream(filepath, key)
+        ch, rate = info["channels"], info["rate"]
+        chan = "stereo" if ch == 2 else "mono"
+        songs = cdxa.split_gaps(pcm, info)
+        if len(songs) <= 1:                              # one continuous stream
+            dur = info["frames"] / rate
+            yield {"name": f"soundtrack_f{key[0]}c{key[1]}",
+                   "wav": _wav(pcm, rate, channels=ch),
+                   "note": f"{dur:.0f}s {chan} @ {rate} Hz XA-ADPCM"}
+            continue
+        bpf = 2 * ch
+        for i, (a, b) in enumerate(songs, 1):
+            yield {"name": f"track_{i:02d}",
+                   "wav": _wav(pcm[a * bpf:b * bpf], rate, channels=ch),
+                   "note": f"{(b - a) / rate:.0f}s {chan} @ {rate} Hz"}
+
+
 _EXTRACTORS = {
     "mod": _mod_samples, "xm": _xm_samples, "it": _it_samples,
     "s3m": _s3m_samples, "gf1pat": _gf1pat_samples,
@@ -437,7 +469,8 @@ _EXTRACTORS = {
 }
 # formats whose extractor reads the path itself (walk/stream), not a bytes buffer
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
-                    "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples}
+                    "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples,
+                    "cdxa": _cdxa_samples}
 
 EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 
