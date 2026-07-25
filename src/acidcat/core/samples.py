@@ -553,6 +553,20 @@ def _cdxa_samples(filepath):
                    "note": f"{(b - a) / rate:.0f}s {_wav_note(ch, rate)}"}
 
 
+def _cue_samples(cue_path):
+    """A .cue sheet: extract each CD-DA (Red Book) audio track to a WAV -- raw
+    16-bit little-endian stereo PCM at 44100 Hz, straight off the audio track."""
+    from acidcat.core import cue as cuemod
+    for t in cuemod.audio_tracks(cue_path):
+        with open(t["file"], "rb") as f:
+            f.seek(t["start"])
+            raw = f.read(t["size"])
+        dur = len(raw) / (cuemod.CDDA_RATE * 4)
+        yield {"name": f"track_{t['num']:02d}",
+               "wav": _wav(raw, cuemod.CDDA_RATE, channels=2),
+               "note": f"{dur:.0f}s CD-DA stereo @ 44100 Hz"}
+
+
 def _hps_samples(data):
     """HAL PCM Stream (.hps): decode the DSP-ADPCM stream to one WAV."""
     from acidcat.core import hps
@@ -599,7 +613,7 @@ _EXTRACTORS = {
 # formats whose extractor reads the path itself (walk/stream), not a bytes buffer
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
                     "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples,
-                    "cdxa": _cdxa_samples, "gcm": _gcm_samples}
+                    "cdxa": _cdxa_samples, "gcm": _gcm_samples, "cue": _cue_samples}
 
 EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 
