@@ -159,7 +159,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody"><div class="kv">
         <div><span class="k">raw</span><span class="v">8-bit SIGNED PCM (-128..127), high octave first</span></div>
         <div><span class="k">Fibonacci-delta</span><span class="v">when sCompression = 1: a 2-byte header then 4-bit deltas indexing a Fibonacci table, 2 samples per byte</span></div>
-        <div><span class="k">octaves</span><span class="v">ctOctave copies follow, each a successively halved (one octave down) resample of the last</span></div>
+        <div><span class="k">octaves</span><span class="v">ctOctave copies, highest octave first; each octave DOWN holds twice the samples of the one above</span></div>
       </div></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">NAME / AUTH</span><span class="rspan">voice name, author</span></summary>
       <div class="rbody"><div class="kv">
@@ -188,7 +188,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   <div id="vhdr-map"></div>
 
   <div class="callout"><b>the shared atom, older than RIFF.</b> 8SVX is the same chunk grammar WAV uses &mdash; a <b>4-byte id</b>, a <b>size</b>, a <b>payload</b>, and a <b>pad byte</b> on odd lengths &mdash; but big-endian, six years earlier. Microsoft's RIFF (1991) is literally this reversed for the little-endian PC. The map is one-to-one: <b>FORM&rarr;RIFF</b>, <b>VHDR&rarr;fmt</b>, <b>BODY&rarr;data</b>, <b>ANNO&rarr;ISFT</b>, <b>NAME&rarr;INAM</b>, <b>AUTH&rarr;IART</b>. Learn 8SVX and you have already read WAV.</div>
-  <div class="callout"><b>Fibonacci-delta compression.</b> With sCompression = 1 the BODY is not raw PCM: it opens with a padding byte and a first sample, then each following byte holds two 4-bit codes that index a fixed table <code>[-34,-21,-13,-8,-5,-3,-2,-1,0,1,2,3,5,8,13,21]</code>, added to a running accumulator. 2:1 compression, lossy, and a distinct decoder path &mdash; roughly 1 file in 1300 uses it. acidcat flags it from the VHDR and reports the raw sample count from the header, not the byte count.</div>
+  <div class="callout"><b>Fibonacci-delta compression.</b> With sCompression = 1 the BODY is not raw PCM: it opens with a padding byte and a first sample, then each following byte holds two 4-bit codes that index a fixed table <code>[-34,-21,-13,-8,-5,-3,-2,-1,0,1,2,3,5,8,13,21]</code>, added to a running accumulator &mdash; the positive codes 1,2,3,5,8,13,21 are the Fibonacci numbers, hence the name. 2:1 compression, lossy, and a distinct decoder path &mdash; roughly 1 file in 1300 uses it. acidcat flags it from the VHDR and reports the raw sample count from the header, not the byte count.</div>
   <div class="callout"><b>ANNO as a provenance surface.</b> Because the tool signs the ANNO, the corpus yields a fingerprint catalogue: <b>AudioMaster</b> versions split by <i>string spacing</i> ("Audio Master II" spaced vs "AudioMasterIII" unspaced) and field padding; <b>PERFECT SOUND</b> embeds a vendor phone number; <b>SoundZAP</b> a pre-1995 email; Linel's Sound FX truncates mid-word at a fixed buffer size &mdash; the truncation point itself a tell. The Amiga-side of acidcat's provenance engine starts here.</div>
 
   <footer><span>acidcat / 8svx anatomy</span><span>iff/8svx . amiga 8-bit voice . VHDR + BODY, big-endian</span><span><a href="https://hed0rah.github.io">hed0rah</a> &middot; <a href="https://x.com/r3l0z">r3l0z</a></span></footer>
@@ -303,11 +303,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     [
       {label:"oneShotHiSamples",k:"enum",r:[0,3],val:"5520",body:"Length in samples of the 1-shot (non-repeating) part of the high-octave waveform, u32 big-endian.",note:"0x00001590 = 5520 samples; at 9016 Hz that is ~0.61 s."},
       {label:"repeatHiSamples",k:"enum",r:[4,7],val:"0",body:"Length of the repeating/loop part (high octave). 0 here means a one-shot sound with no loop."},
-      {label:"samplesPerHiCycle",k:"enum",r:[8,11],val:"32",body:"Samples per waveform cycle in the high octave -- meaningful for a single-cycle wavetable, and 0 for an ordinary sampled sound."},
+      {label:"samplesPerHiCycle",k:"enum",r:[8,11],val:"32",body:"Samples per waveform cycle in the high octave -- meaningful for a single-cycle wavetable, and 0 for an ordinary sampled sound.",note:"the hardware leaks in: every one-shot and repeat part must have an even sample count, and some drivers want this value a power of two to play in tune."},
       {label:"samplesPerSec",k:"enum",r:[12,13],val:"9016 Hz",body:"Playback sample rate, u16 BIG-endian. There is no separate bit-depth field: 8SVX is always 8-bit signed.",note:"0x2338 = 9016. Amiga sample rates are quirky because they derive from the hardware timer, not round numbers."},
-      {label:"ctOctave",k:"enum",r:[14,14],val:"1",body:"Number of octaves of waveform stored in BODY. The Amiga could not resample cheaply in real time, so a multi-octave voice ships each octave pre-rendered, successively halved."},
+      {label:"ctOctave",k:"enum",r:[14,14],val:"1",body:"Number of octaves of waveform stored in BODY. The Amiga could not resample cheaply in real time, so a multi-octave voice ships each octave pre-rendered, highest first, every octave down twice the length of the one above."},
       {label:"sCompression",k:"flag",r:[15,15],val:"0 = none",sel:0,branch:[["0","none -- raw 8-bit signed PCM"],["1","Fibonacci-delta (4-bit, 2:1, lossy)"]],
-        body:"How BODY is encoded. 0 is raw 8-bit signed PCM; 1 is Fibonacci-delta, a 4-bit table-indexed delta code decoded 2 samples per byte.",note:"a value other than 0 or 1 is warned; acidcat never silently treats compressed bytes as PCM."},
+        body:"How BODY is encoded. 0 is raw 8-bit signed PCM; 1 is Fibonacci-delta, a 4-bit table-indexed delta code decoded 2 samples per byte.",note:"a value other than 0 or 1 is warned (2, an exponential-delta variant, is seen in the wild but not in the 1985 spec); acidcat never silently treats compressed bytes as PCM."},
       {label:"volume",k:"enum",r:[16,19],val:"0x10000 (1.0x)",body:"Default playback volume as a 16.16 fixed-point number: the integer part is the whole, the low 16 bits the fraction. Unity gain is 0x10000.",note:"0x00010000 = 1.0. The Amiga's Paula chip took a 0-64 volume, so players scale this down."}
     ]);
 })();

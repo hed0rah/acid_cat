@@ -163,7 +163,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">events</span><span class="v">delta-time (VLQ) + event, repeated to end-of-track</span></div>
       </div></div></details>
     <details class="region"><summary><span class="chev">&#9656;</span><span class="rname">VLQ delta time</span><span class="rspan">the variable encoding</span></summary>
-      <div class="rbody"><p class="note">Seven payload bits per byte; the high bit set means another byte follows. A parser that loses sync here misreads everything after it. acidcat's running-status bookkeeping is exactly where a one-byte desync once corrupted note counts.</p></div></details>
+      <div class="rbody"><p class="note">Seven payload bits per byte; the high bit set means another byte follows. A VLQ is capped at 4 bytes (28 payload bits), so the largest delta is 0x0FFFFFFF. A parser that loses sync here misreads everything after it. acidcat's running-status bookkeeping is exactly where a one-byte desync once corrupted note counts.</p></div></details>
     <details class="region"><summary><span class="chev">&#9656;</span><span class="rname">running status</span><span class="rspan">the omitted byte</span></summary>
       <div class="rbody"><p class="note">Consecutive channel events with the same status may drop the repeated status byte; the parser must remember the last one. Every mainstream DAW exports this way.</p></div></details>
     <details class="region"><summary><span class="chev">&#9656;</span><span class="rname">channel voice messages</span><span class="rspan">status 0x80-0xEF . SSSS CCCC</span></summary>
@@ -309,7 +309,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"ntrks",k:"enum",r:[10,11],val:"3",body:"Number of MTrk chunks that follow, u16 big-endian."},
       {label:"division",k:"enum",r:[12,13],val:"480 ticks/quarter",sel:0,branch:[
         ["bit 15 = 0","ticks per quarter note (lower 15 bits)"],
-        ["bit 15 = 1","SMPTE: high byte -fps, low byte ticks/frame"]],
+        ["bit 15 = 1","SMPTE: high byte = signed -fps, low byte ticks/frame"]],
         body:"Timing resolution. The top bit selects the scheme; 0x01E0 has it clear, so the value is 480 ticks per quarter note.",
         note:"expanded bit by bit below. with no tempo event a player assumes 120 bpm."}
     ]);
@@ -318,7 +318,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   build("block-div","bit",[0x01,0xE0],[
     {label:"scheme flag",k:"flag",r:[0,0],val:"0 = ticks/quarter",sel:0,branch:[
       ["0","ticks per quarter note"],["1","SMPTE frame timing"]],
-      body:"The high bit of the 16-bit field. Clear here, so the remaining 15 bits are a tick count per quarter note."},
+      body:"The high bit of the 16-bit field. Clear here, so the remaining 15 bits are a tick count per quarter note.",
+      note:"when set, the high byte is a signed 2's-complement frame rate (0xE8 = -24, 0xE7 = -25, 0xE3 = -29 meaning 29.97 drop-frame, 0xE2 = -30) and the low byte is ticks per frame."},
     {label:"ticks per quarter",k:"enum",r:[1,15],val:"480",
       body:"Pulses per quarter note (PPQN): how many delta-time ticks make one beat. 480 is a common DAW resolution.",
       note:"seconds per tick = (60 / bpm) / division, using the first tempo event."}

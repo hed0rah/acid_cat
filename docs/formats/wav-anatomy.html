@@ -197,18 +197,20 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">The chunked container is not a WAV invention. It descends from Electronic Arts' <b>IFF</b> (1985, Amiga): a <b>FORM</b> whose body is a run of chunks, each a 4-character id + a 32-bit size + payload, padded to an even boundary &mdash; so a reader that meets an unknown chunk knows exactly how many bytes to skip. Microsoft's <b>RIFF</b> (1991) is that grammar with the byte order reversed for the little-endian PC; its designer Greg Riker had co-authored IFF, and its name means &ldquo;Resource IFF / Reverse IFF.&rdquo; <b>WAVE</b> is the RIFF form for audio. Everything else on these tabs is a dialect layered on that one idea.</p>
+      <p class="plede">The chunked container is not a WAV invention. It descends from Electronic Arts' <b>IFF</b> (1985, Amiga): a <b>FORM</b> whose body is a run of chunks, each a 4-character id + a 32-bit size + payload, padded to an even boundary &mdash; so a reader that meets an unknown chunk knows exactly how many bytes to skip. Microsoft's <b>RIFF</b> (1991) is that grammar with the byte order reversed for the little-endian PC; its creation is traced to Greg Riker, an IFF co-author then at Microsoft, and its name means &ldquo;Resource IFF / Reverse IFF.&rdquo; <b>WAVE</b> is the RIFF form for audio. Everything else on these tabs is a dialect layered on that one idea.</p>
       <div class="sec">the family, dated</div>
       <div class="timeline">
         <div><span class="y">1985</span><span><b>EA IFF 85</b> &mdash; the ancestor. FORM/LIST/CAT, big-endian 4CC+size chunks, even-byte pad.</span></div>
+        <div><span class="y">1986</span><span><b>Uhuru / DMCS</b> (Mac) &mdash; IFF's acknowledged prior art, recovered from disk 2026: Geoff Brown's 4CC + u32 big-endian length chunks, no FORM, a bare UEND end-mark. The shipped product postdates the 1985 spec; the design is the &ldquo;Previous Work&rdquo; IFF credits.</span></div>
         <div><span class="y">1988</span><span><b>AIFF</b> (Apple) &mdash; IFF for audio, big-endian, COMM + SSND, 80-bit sample rate. The sibling, not the child.</span></div>
         <div><span class="y">1991</span><span><b>RIFF / WAVE</b> (Microsoft + IBM) &mdash; IFF reversed to little-endian for the PC. fmt + data.</span></div>
-        <div><span class="y">1996</span><span><b>BWF</b> (EBU Tech 3285) &mdash; the bext chunk: originator, timestamp, coding history. + <b>Wave64</b> GUIDs minted (Sony).</span></div>
-        <div><span class="y">1999</span><span><b>Wave64</b> (Sonic Foundry) finalized &mdash; 128-bit GUID chunk ids, 64-bit sizes, to break 4&nbsp;GB.</span></div>
+        <div><span class="y">1997</span><span><b>BWF</b> (EBU Tech 3285) &mdash; the bext chunk: originator, timestamp, coding history.</span></div>
+        <div><span class="y">1999</span><span><b>Wave64</b> (Sonic Foundry) finalized &mdash; 128-bit GUID chunk ids, 64-bit sizes, to break 4&nbsp;GB (its container GUIDs date to 1996, the audio-chunk GUIDs to 1999).</span></div>
+        <div><span class="y">2004</span><span><b>DSDIFF</b> (Philips) &mdash; the IFF side's 64-bit answer: <b>FRM8</b> replaces FORM, sizes widen to 64-bit big-endian, the pad byte stays. DSD/SACD masters.</span></div>
         <div><span class="y">2007</span><span><b>RF64</b> (EBU Tech 3306) &mdash; the ds64 chunk carries 64-bit sizes; magic flips to RF64 only when needed.</span></div>
         <div><span class="y">2019</span><span><b>BW64</b> (ITU-R BS.2088) &mdash; RF64 generalized, tied to the Audio Definition Model (chna/axml).</span></div>
       </div>
-      <div class="callout"><b>the shared grammar.</b> Every format on these tabs is the same atom: a <b>4-byte id</b>, a <b>size</b>, a <b>payload</b>, and a <b>pad byte</b> when the size is odd. Only three things vary across the family &mdash; the byte order (IFF/AIFF big-endian, RIFF little-endian), the width of the size field (32-bit, or 64-bit in RF64/Wave64), and whether the id is a 4-character code or a 16-byte GUID (Wave64). Learn the atom once and every dialect reads the same.</div>
+      <div class="callout"><b>the shared grammar.</b> Every format on these tabs is the same atom: a <b>4-byte id</b>, a <b>size</b>, a <b>payload</b>, and a <b>pad byte</b> when the size is odd &mdash; excluded from the size that owns it, but counted inside the parent that contains it, the asymmetry (inherited from IFF) behind most off-by-one bugs in the family. Only three things vary across the family &mdash; the byte order (IFF/AIFF big-endian, RIFF little-endian), the width of the size field (32-bit, or 64-bit in RF64/Wave64/DSDIFF), and whether the id is a 4-character code or a 16-byte GUID (Wave64). Learn the atom once and every dialect reads the same.</div>
       <div class="callout"><b>the three normative WAVE rules.</b> Of everything a writer can do, only these are guaranteed: the file opens with <b>RIFF</b> (or RF64); the form type is <b>WAVE</b>; and <b>fmt precedes data</b>. Chunk order is otherwise free, the declared RIFF size is often stale, and acidcat lints every claim against the bytes that are actually present rather than trusting the header.</div>
     </div>
 
@@ -249,6 +251,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
             <div><span class="k">base_note</span><span class="v">MIDI root, usually duplicates the smpl unity note</span></div>
             <div><span class="k">detune / gain</span><span class="v">i8 cents (-50..+50) and i8 dB adjustment</span></div>
             <div><span class="k">note / velocity range</span><span class="v">low..high playable keys and trigger velocities, one u8 each</span></div>
+            <div><span class="k">odd length</span><span class="v">7 data bytes, so inst always forces a pad byte &mdash; a free conformance test for a reader's padding logic</span></div>
           </div></div></details>
         <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">cue / LIST</span><span class="rspan">markers, text</span></summary>
           <div class="rbody"><div class="kv">
@@ -308,7 +311,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== RF64 / ds64 ===================== -->
     <div class="panel" data-panel="rf64">
       <div class="pfacts"><span>magic<b>"RF64"</b></span><span>sizes<b>u64 in ds64</b></span><span>2007<b>EBU Tech 3306</b></span></div>
-      <p class="plede">The large-file answer that stays RIFF. A file over 4&nbsp;GB flips its magic from <b>RIFF</b> to <b>RF64</b>, writes <b>0xFFFFFFFF</b> as a sentinel in the 32-bit size fields, and adds a <b>ds64</b> chunk as the first chunk carrying the real 64-bit sizes. A clever writer reserves a <b>JUNK</b> chunk of exactly the ds64 size up front while the file is small, then overwrites it in place with ds64 if the recording crosses 4&nbsp;GB &mdash; so the file never has to be rewritten. (That JUNK-to-ds64 reservation, at 28 bytes right after fmt, is itself an ffmpeg fingerprint acidcat reads.)</p>
+      <p class="plede">The large-file answer that stays RIFF. A file over 4&nbsp;GB flips its magic from <b>RIFF</b> to <b>RF64</b>, writes <b>0xFFFFFFFF</b> as a sentinel in the 32-bit size fields, and adds a <b>ds64</b> chunk as the first chunk carrying the real 64-bit sizes. A clever writer reserves a <b>JUNK</b> chunk of exactly the ds64 size up front while the file is small, then overwrites it in place with ds64 if the recording crosses 4&nbsp;GB &mdash; so the file never has to be rewritten. (That 28-byte JUNK-to-ds64 reservation sits where ds64 must &mdash; the first chunk after the 12-byte header, before fmt &mdash; and is itself an ffmpeg fingerprint acidcat reads.)</p>
       <div class="sec">ds64 fixed area (28 bytes)</div>
       <p class="note">Example: a 4.3 GB recording &mdash; just past the u32 ceiling, which is the whole point.</p>
       <div id="ds64-map" data-build></div>

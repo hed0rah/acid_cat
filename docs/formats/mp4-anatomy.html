@@ -167,20 +167,20 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       </div></div></details>
     <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">moov</span><span class="rspan">movie container . entire metadata tree</span></summary>
       <div class="rbody"><div class="kv">
-        <div><span class="k">mvhd</span><span class="v">timescale, duration, creation and modification times</span></div>
+        <div><span class="k">mvhd</span><span class="v">timescale, duration, creation/modification times (seconds since 1904-01-01; unix = value &#8722; 2082844800). Version-0 times are 32-bit and wrap in 2040; version 1 uses 64-bit</span></div>
         <div><span class="k">trak</span><span class="v">one per track; audio track contains mdia &gt; minf &gt; stbl &gt; stsd</span></div>
         <div><span class="k">stsd</span><span class="v">sample description: "mp4a" = AAC, "alac" = Apple Lossless</span></div>
         <div><span class="k">udta / ilst</span><span class="v">iTunes tag atoms nested under moov &gt; udta &gt; meta &gt; ilst</span></div>
       </div></div></details>
     <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">mdat</span><span class="rspan">media data . raw encoded samples</span></summary>
-      <div class="rbody"><p class="note">Raw encoded audio frames with no intrinsic framing. May appear before moov (streaming layout) or after it. The stco/co64 box inside stbl holds absolute file offsets into mdat; duration = stts sample count / mvhd timescale.</p></div></details>
+      <div class="rbody"><p class="note">Raw encoded audio frames with no intrinsic framing. May appear before moov (streaming layout) or after it. The stco/co64 box inside stbl holds absolute file offsets into mdat; duration = stts sample count / mvhd timescale. Because samples are reached only through stsc + stsz + stco/co64, any bytes in mdat that no sample table points at are a legal cavity -- edit leftovers, alignment padding, or a place to hide data.</p></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">free / skip</span><span class="rspan">padding . in-place edit slack</span></summary>
       <div class="rbody"><p class="note">Payload is zeroed or arbitrary. Sized to let moov be rewritten in place without moving stco sample offsets into mdat.</p></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">udta / meta / ilst</span><span class="rspan">iTunes tags</span></summary>
       <div class="rbody"><div class="kv">
         <div><span class="k">path</span><span class="v">moov &gt; udta &gt; meta &gt; ilst &gt; &#169;nam, &#169;ART, &#169;day, aART, trkn, covr</span></div>
         <div><span class="k">covr</span><span class="v">artwork: nested data atom, type flag 0x0D = JPEG, 0x0E = PNG</span></div>
-        <div><span class="k">note</span><span class="v">meta is a FullBox (version + 3-byte flags precede its children)</span></div>
+        <div><span class="k">note</span><span class="v">meta is a FullBox (version + 3-byte flags precede its children) in ISO-BMFF; in QuickTime (.mov) meta is a plain container with no version/flags, so a parser must sniff (peek whether the first child is a valid box) rather than assume</span></div>
       </div></div></details>
   </div>
 
@@ -206,6 +206,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 │        └─ <b>stco</b>  chunk offsets into mdat
 └─ <b>udta</b> › <b>meta</b> › <b>ilst</b>  iTunes tags (title, artist, artwork, BPM ...)
 <b>mdat</b>  raw encoded audio samples</pre>
+
+  <div class="sec">fragmented layout</div>
+  <p class="note">Streaming files (DASH, HLS) drop the single moov + mdat for repeated fragments. Here moov is an init segment carrying an <b>mvex</b> that declares fragments follow but holds no samples; each fragment is a <b>moof</b> (with <b>traf</b> &gt; <b>trun</b> giving per-sample sizes and offsets) paired with its own <b>mdat</b>. Segments may open with a <b>styp</b> brand box. Sample offsets then live in trun, not stco.</p>
 
   <footer><span>acidcat / mp4 anatomy</span><span>ISO-BMFF . ftyp M4A  . box header + ftyp payload</span><span><a href="https://hed0rah.github.io">hed0rah</a> &middot; <a href="https://x.com/r3l0z">r3l0z</a></span></footer>
 </div>
@@ -315,7 +318,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       branch:[["0","box extends to end of file"],["1","64-bit largesize u64 follows at bytes 8-15"],["24 (0x18)","this box is 24 bytes total"]],sel:2},
     {label:"type (fourCC)",k:"sync",r:[4,7],val:'"ftyp"',
       body:'Four-character code identifying the box kind. 0x66747970 = "ftyp" in ASCII. The type drives how the payload is interpreted; unknown box types must be skipped using the size field, never aborted on.',
-      note:"fourCC values containing lower-case letters are user-space extension boxes by convention.",
+      note:"fourCC values containing lower-case letters are user-space extension boxes by convention. Type 'uuid' is the vendor escape hatch: a 16-byte user UUID follows the type, then vendor payload (XMP, PSP, and the like).",
       branch:[["ftyp","file type brand declaration"],["moov","movie container (metadata tree)"],["trak","track container (audio or video)"],["mdia","media information container"],["minf","media handler information"],["stbl","sample table (offsets, sizes, timestamps)"],["stsd","sample description / codec"],["mdat","media data (raw encoded samples)"],["mvhd","movie header: timescale and duration"],["free","free space (skip over payload)"],["udta","user data (iTunes tags)"],["meta","metadata container (FullBox)"]],sel:0}
   ]);
 

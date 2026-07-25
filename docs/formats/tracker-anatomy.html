@@ -164,10 +164,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">ProTracker MOD</span><span class="rspan">.mod . no signature</span></summary>
       <div class="rbody">
-        <p class="note">The oldest and the trickiest to detect. Everything before offset 1080 is fixed by position: a 20-byte title, 31 sample descriptors of 30 bytes each, a song length and restart byte, then a 128-entry order table. The audio location is stored nowhere; it is computed from the number of patterns (one greater than the highest index in the order table) times the pattern size (64 rows x channels x 4 bytes).</p>
+        <p class="note">The oldest and the trickiest to detect. Everything before offset 1080 is fixed by position: a 20-byte title, 31 sample descriptors of 30 bytes each, a song length and restart byte, then a 128-entry order table. The audio location is stored nowhere; it is computed from the number of patterns (one greater than the highest index in the order table) times the pattern size (64 rows x channels x 4 bytes). That layout, and the offset-1080 tag, belong to the 31-sample format only: the original 15-sample Soundtracker MOD had neither, its patterns starting at offset 600 (0x258) with no magic anywhere -- the genuinely headerless case a detector falls back to heuristics for.</p>
         <div class="kv">
-          <div><span class="k">detection</span><span class="v">4-byte magic at offset 1080: M.K. (4ch), 6CHN / 8CHN / 16CH (wider)</span></div>
+          <div><span class="k">detection</span><span class="v">4-byte magic at offset 1080: M.K. (4ch, standardly read as coders Mahoney &amp; Kaktus), M!K! (&gt;64 patterns), 6CHN / 8CHN / 16CH (wider), FLT4 / FLT8 (Startrekker)</span></div>
+          <div><span class="k">15-sample MOD</span><span class="v">the original Soundtracker: no 1080 tag at all, header 480 bytes shorter, patterns at 0x258 -- confirmed only by heuristics</span></div>
           <div><span class="k">sample descriptor</span><span class="v">30 bytes: name[22] . length(u16 BE, in words) . finetune . volume . loop start/len</span></div>
+          <div><span class="k">finetune</span><span class="v">low nibble only, signed -8..+7, each step 1/8 semitone (indexes an alternate period table)</span></div>
+          <div><span class="k">loop length</span><span class="v">words like length; a value of 1 (2 bytes) is the "no loop" sentinel, not a 2-byte loop</span></div>
           <div><span class="k">gotcha</span><span class="v">lengths are in words, so double them for bytes; samples are signed 8-bit PCM</span></div>
         </div>
       </div>
@@ -179,6 +182,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note">Opens with "Extended Module: ", a module name, a tracker string, a version word, and a header whose size is a u32 field. From there it is a walk, not a fixed map: pattern blocks announce their own header and packed-data lengths, and instrument blocks announce their own size and sample count. To reach the last instrument's samples you traverse every pattern and every preceding instrument.</p>
         <div class="kv">
           <div><span class="k">signature</span><span class="v">"Extended Module: " (17 bytes) at offset 0</span></div>
+          <div><span class="k">0x1A marker</span><span class="v">a DOS EOF byte at offset 37, after the 20-byte module name and before the tracker string -- so TYPE stops cleanly</span></div>
           <div><span class="k">header</span><span class="v">song length, channels, patterns, instruments, tempo/BPM, 256-byte order table</span></div>
           <div><span class="k">samples</span><span class="v">delta-encoded PCM; acidcat resolves each sample's byte offset by walking the blocks</span></div>
         </div>

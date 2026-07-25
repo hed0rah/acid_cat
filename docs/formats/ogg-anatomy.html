@@ -190,6 +190,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">255 rule</span><span class="v">a value of 255 means the packet spans into the next segment (more data follows)</span></div>
         <div><span class="k">termination</span><span class="v">a value strictly less than 255 ends the packet at that segment boundary</span></div>
         <div><span class="k">exact multiple of 255</span><span class="v">a packet whose total size is an exact multiple of 255 bytes appends a trailing 0 lacing byte to signal termination</span></div>
+        <div><span class="k">max page payload</span><span class="v">page_segments is one byte (&#8804; 255) and each lacing byte is &#8804; 255, so a page carries at most 255 &times; 255 = 65,025 data bytes; a larger packet must span pages</span></div>
       </div></div></details>
   </div>
 
@@ -200,8 +201,20 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody"><div class="kv">
         <div><span class="k">Vorbis</span><span class="v">0x01 followed by "vorbis" (7 bytes total) -- the 0x01 is the Vorbis packet type</span></div>
         <div><span class="k">Opus</span><span class="v">"OpusHead" (8 literal ASCII bytes) per RFC 7845</span></div>
+        <div><span class="k">Opus pre_skip</span><span class="v">u16 LE in OpusHead: samples to discard at the start (encoder priming). Opus always decodes at 48 kHz, so duration = (last_granule &#8722; pre_skip) / 48000</span></div>
         <div><span class="k">FLAC-in-Ogg</span><span class="v">0x7F followed by "FLAC" (5 bytes), then the native fLaC STREAMINFO block</span></div>
         <div><span class="k">note</span><span class="v">a reader identifies the codec from these first bytes of the BOS packet, before decoding anything else; a mismatch is a hard error</span></div>
+      </div></div></details>
+  </div>
+
+  <div class="sec">stream organization</div>
+  <p class="note">Two ways logical streams combine in one physical file. A reader must handle both.</p>
+  <div>
+    <details class="region"><summary><span class="chev">&#9656;</span><span class="rname">multiplexed vs chained</span><span class="rspan">grouping . serial numbers</span></summary>
+      <div class="rbody"><div class="kv">
+        <div><span class="k">multiplexed</span><span class="v">several logical streams interleaved page by page, each a distinct serial_number (e.g. audio + video); all their BOS pages appear grouped at the very start</span></div>
+        <div><span class="k">chained</span><span class="v">whole logical streams concatenated end to end: a full BOS..EOS sequence, then a fresh BOS..EOS with a new serial_number</span></div>
+        <div><span class="k">the trap</span><span class="v">across a chain seam the codec, channel count, and sample rate can all change; a reader that stops at the first EOS misses everything after it</span></div>
       </div></div></details>
   </div>
 
@@ -339,7 +352,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         body:"Monotonically increasing page counter for this logical bitstream, little-endian. Starts at 0 on the BOS page. A gap in sequence numbers signals a dropped or corrupt page during streaming.",
         note:"used for loss detection and recovery; resets at BOS for each logical stream"},
       {label:"CRC_checksum",k:"rsv",r:[22,25],val:"0x114A27CE (example, LE)",
-        body:"CRC-32 of the entire page (header + segment table + data) computed with this field zeroed. Uses Ogg's own generator polynomial 0x04C11DB7, not the standard PKZIP/Ethernet CRC.",
+        body:"CRC-32 of the entire page (header + segment table + data) computed with this field zeroed. Same polynomial as Ethernet/PKZIP (0x04C11DB7), but unreflected with init 0 and xorout 0 -- so a stock reflected CRC-32 yields a different value; use the OGG-specific implementation.",
         note:"stored bytes 0xCE 0x27 0x4A 0x11 read little-endian as 0x114A27CE; a mismatch indicates a corrupt page"},
       {label:"page_segments",k:"enum",r:[26,26],val:"1 segment",
         body:"Count of lacing bytes in the segment table that immediately follows this 27-byte fixed header. Each lacing byte describes one segment of 0-255 data bytes.",

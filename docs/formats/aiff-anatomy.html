@@ -150,10 +150,14 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">magic</span><span class="v">"FORM"</span></div>
         <div><span class="k">size</span><span class="v">u32 BIG-endian = file size - 8</span></div>
         <div><span class="k">form type</span><span class="v">"AIFF" (PCM) or "AIFC" (compressed)</span></div>
+        <div><span class="k">signed size</span><span class="v">the IFF size field is signed by spec (Pascal-compatible), a ~2 GB nominal ceiling; unsigned use is common but a deviation</span></div>
       </div></div></details>
+    <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">FVER</span><span class="rspan">aifc version . 4 bytes</span></summary>
+      <div class="rbody"><p class="note">Required in AIFC, absent in plain AIFF. One u32 timestamp naming the format version; the only defined value is <b>0xA2805140</b>, the Mac epoch (seconds since 1904-01-01) encoding of 23 May 1990. Readers compare it exactly.</p></div></details>
     <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">COMM</span><span class="rspan">common . drawn below</span></summary>
       <div class="rbody"><p class="note">Channels, frame count, bit depth, and the 80-bit sample rate. AIFC adds a 4-char compression type and a pascal-string name after the rate; acidcat validates the type against its known set and warns on anything else. See the byte map below.</p><div class="kv">
         <div><span class="k">uncompressed</span><span class="v">NONE, twos, sowt, raw&nbsp;, in24/in32, 42ni/23ni, fl32/fl64: frames are real frames, duration is exact</span></div>
+        <div><span class="k">sowt</span><span class="v">&ldquo;twos&rdquo; reversed: little-endian PCM inside the big-endian container. Assume big-endian samples and it decodes to full-scale noise</span></div>
         <div><span class="k">packet-coded</span><span class="v">alaw/ulaw, ima4, MAC3/MAC6, QDMC/QDM2, Qclp: frames count packets, duration is only approximate and flagged ~</span></div>
         <div><span class="k">unknown 4cc</span><span class="v">surfaced with a warning, never silently treated as PCM</span></div>
       </div></div></details>
