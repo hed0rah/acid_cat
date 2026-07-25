@@ -194,8 +194,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note">One smpl chunk holding every sample concatenated. In SF2 this is 16-bit signed PCM, little-endian; a sample is the slice smpl[start*2 : end*2]. In SF3 it is a run of Ogg-Vorbis streams; a sample is smpl[start : end], a self-contained .ogg.</p>
         <div class="kv">
           <div><span class="k">SF2</span><span class="v">16-bit PCM; sample bytes = smpl_offset + start*2 .. end*2</span></div>
+          <div><span class="k">sm24 (24-bit)</span><span class="v">a 24-bit SF2 keeps the top 16 bits in smpl and the low byte in a parallel sm24 chunk; a smpl-only read is a 16-bit downgrade</span></div>
           <div><span class="k">SF3</span><span class="v">Ogg-Vorbis streams; sample bytes = smpl_offset + start .. end (a playable .ogg)</span></div>
           <div><span class="k">acidcat</span><span class="v">each sample gets its real byte offset, so carve --offset extracts it and the hex pane shows it</span></div>
+          <div><span class="k">padding</span><span class="v">the spec writes &ge;46 zero sample points after each sample; a carve of start..end is clean, the gap between is mandated silence</span></div>
         </div>
       </div>
     </details>
@@ -208,6 +210,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div class="kv">
           <div><span class="k">layout</span><span class="v">name[20] . start/end/loop_start/loop_end/rate (5 x u32) . pitch(u8) . correction(s8) . link(u16) . type(u16)</span></div>
           <div><span class="k">SF3 twist</span><span class="v">start/end become byte offsets, and type has bit 0x10 set to mark an Ogg sample</span></div>
+          <div><span class="k">terminals</span><span class="v">each pdta list ends in a sentinel record -- phdr "EOP", inst "EOI", shdr "EOS" -- structural, not real content</span></div>
           <div><span class="k">anti-garbage</span><span class="v">acidcat keeps only in-range headers (end within smpl), so a lied index cannot carve past the blob</span></div>
         </div>
       </div>
@@ -352,8 +355,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"u32 LE index where the sustain loop begins, for held notes. 0x00005680 = 22144.",
        note:"loop_end > loop_start marks a looped sample; otherwise it is a one-shot."},
       {label:"loop_end",k:"sync",r:[32,35],val:"22677",
-       body:"u32 LE index where the sustain loop ends. 0x00005895 = 22677, just inside the sample.",
-       note:""},
+       body:"u32 LE index where the sustain loop ends. 0x00005895 = 22677.",
+       note:"SF2 loop end is EXCLUSIVE -- it points to the first sample point after the loop, the opposite of the WAV smpl chunk's inclusive dwEnd (the last point in the loop)."},
       {label:"sample_rate",k:"enum",r:[36,39],val:"44100 Hz",
        body:"u32 LE recording sample rate of this specific sample. 0x0000AC44 = 44100.",
        note:"per-sample; a soundfont can mix rates across its samples."},
@@ -371,6 +374,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["0x0002","right channel"],
         ["0x0004","left channel"],
         ["0x0008","linked"],
+        ["| 0x8000","ROM: audio in the engine ROM, not the file"],
         ["| 0x10","SF3: sample is Ogg-Vorbis compressed"]],
        body:"u16 LE sample type. 1 = mono here. SF3 sets bit 0x10 on top of the channel type to mark an Ogg-compressed sample, and repurposes start/end as byte offsets.",
        note:"acidcat reads bit 0x10 to decide SF2 (PCM) vs SF3 (Ogg) extraction."}

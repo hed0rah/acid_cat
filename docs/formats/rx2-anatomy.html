@@ -152,7 +152,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">An <b>.rx2</b> is a Propellerhead ReCycle loop: an IFF-style <b>CAT</b> group whose form type is <b>REX2</b>, holding <b>big-endian</b> chunks. ReCycle slices a drum or instrument loop into transient-aligned segments and stores the slice markers so a host can retrigger each and follow tempo. The markers hide in a <b>nested CAT/SLCL</b> group. <b>Hover</b> any field or byte to light its span and read the decode. Color marks kind (see the key).</p>
+  <p class="lede">An <b>.rx2</b> is a Propellerhead ReCycle loop: an IFF-style <b>CAT</b> group whose form type is <b>REX2</b>, holding <b>big-endian</b> chunks. ReCycle slices a drum or instrument loop into transient-aligned segments and stores the slice markers so a host can retrigger each and follow tempo. The markers hide in a <b>nested CAT/SLCL</b> group. The format was never openly published: for years the only way to read a REX2 was Propellerhead's NDA-licensed <b>REX Shared Library</b> SDK, so this walker is reverse-engineered. <b>Hover</b> any field or byte to light its span and read the decode. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">umber</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -168,7 +168,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">CAT container</span><span class="rspan">0x00 . 12 bytes . big-endian</span></summary>
       <div class="rbody">
-        <p class="note">The group header, drawn above: the CAT keyword, the group size, and the REX2 form type.</p>
+        <p class="note">The group header, drawn above: the CAT keyword, the group size, and the REX2 form type. IFF reserves <b>CAT</b> for concatenating <b>FORM</b>/<b>LIST</b> groups, with the word after its size a hint at their type; REX2 repurposes that slot for a real form id (<b>REX2</b>) and hangs the chunks straight off the CAT, using it where IFF would use a FORM.</p>
         <div id="block-head"></div>
       </div>
     </details>
@@ -315,7 +315,6 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"The form type. REX2 marks a ReCycle loop; the child chunks (HEAD, CREI, GLOB, SLCE, SD) follow.",
        note:"the slice markers live in a nested CAT/SLCL sub-group."}
     ]);
-})();
 })();
 </script>
 <script>

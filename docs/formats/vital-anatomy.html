@@ -240,6 +240,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">dispatch</span><span class="v">0x7B magic plus a bytes search for "synth_version" before json.loads; arbitrary JSON that merely starts with a brace is rejected without a parse</span></div>
           <div><span class="k">inspect --pretty</span><span class="v">preset_name, author, comments, preset_style, synth_version, and the four macro labels; one region spanning the whole file</span></div>
           <div><span class="k">deep mode</span><span class="v">enumerates osc_1..3 with their wavetable names, the LFO/envelope/effect inventory, and walks the modulation matrix as source -&gt; destination : amount lines</span></div>
+          <div><span class="k">tolerant load</span><span class="v">trailing bytes after the top-level closing brace still load: the parser stops at the object's end, and acidcat surfaces the extra bytes as a warning rather than rejecting the file. Top-level keys outside the Vital schema are an unvalidated side-channel, also flagged</span></div>
           <div><span class="k">hardening</span><span class="v">a forged deeply nested object raises RecursionError and is caught, matching the Serum walker; the threat model for a JSON preset is DoS, not code execution</span></div>
         </div>
       </div>

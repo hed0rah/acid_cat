@@ -385,7 +385,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"Layer I/II/III select the frame-length formula. Layer III is the MP3."},
       {label:"protection",k:"flag",r:[15,15],val:"no CRC",sel:1,branch:[
         ["0","16-bit CRC after the header"],["1","no CRC"]],
-       body:"When 0, a 2-byte CRC sits immediately after the 4-byte header."},
+       body:"When 0, a 2-byte CRC sits immediately after the 4-byte header. It protects only the last 2 header bytes and the side-information block, not the main audio data -- a bit error in the samples still passes clean."},
       {label:"bitrate index",k:"enum",r:[16,19],val:"128 kbps",sel:9,branch:[
         ["0","free"],["1","32"],["2","40"],["3","48"],["4","56"],["5","64"],["6","80"],
         ["7","96"],["8","112"],["9","128"],["10","160"],["11","192"],["12","224"],

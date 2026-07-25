@@ -197,25 +197,27 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">The chunked container is not a WAV invention. It descends from Electronic Arts' <b>IFF</b> (1985, Amiga): a <b>FORM</b> whose body is a run of chunks, each a 4-character id + a 32-bit size + payload, padded to an even boundary &mdash; so a reader that meets an unknown chunk knows exactly how many bytes to skip. Microsoft's <b>RIFF</b> (1991) is that grammar with the byte order reversed for the little-endian PC; its designer Greg Riker had co-authored IFF, and its name means &ldquo;Resource IFF / Reverse IFF.&rdquo; <b>WAVE</b> is the RIFF form for audio. Everything else on these tabs is a dialect layered on that one idea.</p>
+      <p class="plede">The chunked container is not a WAV invention. It descends from Electronic Arts' <b>IFF</b> (1985, Amiga): a <b>FORM</b> whose body is a run of chunks, each a 4-character id + a 32-bit size + payload, padded to an even boundary &mdash; so a reader that meets an unknown chunk knows exactly how many bytes to skip. Microsoft's <b>RIFF</b> (1991) is that grammar with the byte order reversed for the little-endian PC; its creation is traced to Greg Riker, an IFF co-author then at Microsoft, and its name means &ldquo;Resource IFF / Reverse IFF.&rdquo; <b>WAVE</b> is the RIFF form for audio. Everything else on these tabs is a dialect layered on that one idea.</p>
       <div class="sec">the family, dated</div>
       <div class="timeline">
         <div><span class="y">1985</span><span><b>EA IFF 85</b> &mdash; the ancestor. FORM/LIST/CAT, big-endian 4CC+size chunks, even-byte pad.</span></div>
+        <div><span class="y">1986</span><span><b>Uhuru / DMCS</b> (Mac) &mdash; IFF's acknowledged prior art, recovered from disk 2026: Geoff Brown's 4CC + u32 big-endian length chunks, no FORM, a bare UEND end-mark. The shipped product postdates the 1985 spec; the design is the &ldquo;Previous Work&rdquo; IFF credits.</span></div>
         <div><span class="y">1988</span><span><b>AIFF</b> (Apple) &mdash; IFF for audio, big-endian, COMM + SSND, 80-bit sample rate. The sibling, not the child.</span></div>
         <div><span class="y">1991</span><span><b>RIFF / WAVE</b> (Microsoft + IBM) &mdash; IFF reversed to little-endian for the PC. fmt + data.</span></div>
-        <div><span class="y">1996</span><span><b>BWF</b> (EBU Tech 3285) &mdash; the bext chunk: originator, timestamp, coding history. + <b>Wave64</b> GUIDs minted (Sony).</span></div>
-        <div><span class="y">1999</span><span><b>Wave64</b> (Sonic Foundry) finalized &mdash; 128-bit GUID chunk ids, 64-bit sizes, to break 4&nbsp;GB.</span></div>
+        <div><span class="y">1997</span><span><b>BWF</b> (EBU Tech 3285) &mdash; the bext chunk: originator, timestamp, coding history.</span></div>
+        <div><span class="y">1999</span><span><b>Wave64</b> (Sonic Foundry) finalized &mdash; 128-bit GUID chunk ids, 64-bit sizes, to break 4&nbsp;GB (its container GUIDs date to 1996, the audio-chunk GUIDs to 1999).</span></div>
+        <div><span class="y">2004</span><span><b>DSDIFF</b> (Philips) &mdash; the IFF side's 64-bit answer: <b>FRM8</b> replaces FORM, sizes widen to 64-bit big-endian, the pad byte stays. DSD/SACD masters.</span></div>
         <div><span class="y">2007</span><span><b>RF64</b> (EBU Tech 3306) &mdash; the ds64 chunk carries 64-bit sizes; magic flips to RF64 only when needed.</span></div>
         <div><span class="y">2019</span><span><b>BW64</b> (ITU-R BS.2088) &mdash; RF64 generalized, tied to the Audio Definition Model (chna/axml).</span></div>
       </div>
-      <div class="callout"><b>the shared grammar.</b> Every format on these tabs is the same atom: a <b>4-byte id</b>, a <b>size</b>, a <b>payload</b>, and a <b>pad byte</b> when the size is odd. Only three things vary across the family &mdash; the byte order (IFF/AIFF big-endian, RIFF little-endian), the width of the size field (32-bit, or 64-bit in RF64/Wave64), and whether the id is a 4-character code or a 16-byte GUID (Wave64). Learn the atom once and every dialect reads the same.</div>
+      <div class="callout"><b>the shared grammar.</b> Every format on these tabs is the same atom: a <b>4-byte id</b>, a <b>size</b>, a <b>payload</b>, and a <b>pad byte</b> when the size is odd &mdash; excluded from the size that owns it, but counted inside the parent that contains it, the asymmetry (inherited from IFF) behind most off-by-one bugs in the family. Only three things vary across the family &mdash; the byte order (IFF/AIFF big-endian, RIFF little-endian), the width of the size field (32-bit, or 64-bit in RF64/Wave64/DSDIFF), and whether the id is a 4-character code or a 16-byte GUID (Wave64). Learn the atom once and every dialect reads the same.</div>
       <div class="callout"><b>the three normative WAVE rules.</b> Of everything a writer can do, only these are guaranteed: the file opens with <b>RIFF</b> (or RF64); the form type is <b>WAVE</b>; and <b>fmt precedes data</b>. Chunk order is otherwise free, the declared RIFF size is often stale, and acidcat lints every claim against the bytes that are actually present rather than trusting the header.</div>
     </div>
 
     <!-- ===================== WAVE ===================== -->
     <div class="panel" data-panel="wave">
       <div class="pfacts"><span>magic<b>"RIFF" .. "WAVE"</b></span><span>endian<b>little</b></span><span>fmt<b>16 / 18 / 40 B</b></span><span>order<b>fmt before data</b></span></div>
-      <p class="plede">The core WAVE: a <b>fmt</b> chunk describing the encoding and a <b>data</b> chunk holding the samples, with a tail of optional chunks. The regions below list them; the <b>fmt</b> (PCM) and <b>acid</b> chunks are drawn byte by byte. Order varies by writer &mdash; only fmt-before-data is guaranteed.</p>
+      <p class="plede">The core WAVE: a <b>fmt</b> chunk describing the encoding and a <b>data</b> chunk holding the samples, with a tail of optional chunks. The regions below list them; the <b>fmt</b> (PCM), <b>acid</b>, and <b>smpl</b> loop chunks are drawn byte by byte. Order varies by writer &mdash; only fmt-before-data is guaranteed.</p>
 
       <div class="sec">chunk regions</div>
       <div>
@@ -236,16 +238,20 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div class="rbody"><p class="note">Interleaved PCM samples. duration = data_size / (rate * channels * bytes_per_sample). A declared size past EOF is linted, and acidcat derives duration from the bytes present, not the claim.</p></div></details>
         <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">acid</span><span class="rspan">loop metadata . drawn below</span></summary>
           <div class="rbody"><p class="note">The project's namesake: Sonic Foundry ACID tempo, beats, meter, and root note. No official spec; layout field-verified against real ACIDized packs. See the byte map below.</p></div></details>
-        <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">smpl</span><span class="rspan">sampler root + loops</span></summary>
+        <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">smpl</span><span class="rspan">sampler root + loops . record drawn below</span></summary>
           <div class="rbody"><div class="kv">
-            <div><span class="k">midi_unity_note</span><span class="v">root key; 0 = unset sentinel, not C-1</span></div>
-            <div><span class="k">num_sample_loops</span><span class="v">each loop is 24 bytes: start/end in sample frames</span></div>
+            <div><span class="k">sample_period</span><span class="v">nanoseconds per sample; tunes finer than the integer sample rate</span></div>
+            <div><span class="k">midi_unity_note</span><span class="v">root key 0-127; 0 is an unset sentinel, not C-1</span></div>
+            <div><span class="k">midi_pitch_fraction</span><span class="v">cents above the unity note; 0x80000000 = 50 cents</span></div>
+            <div><span class="k">num_sample_loops</span><span class="v">count of 24-byte loop records after the 36-byte header</span></div>
+            <div><span class="k">loop record</span><span class="v">id, type (0 fwd / 1 ping-pong / 2 back), start, end (inclusive), fraction, play count</span></div>
           </div></div></details>
         <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">inst</span><span class="rspan">instrument tuning . 7 bytes</span></summary>
           <div class="rbody"><div class="kv">
             <div><span class="k">base_note</span><span class="v">MIDI root, usually duplicates the smpl unity note</span></div>
             <div><span class="k">detune / gain</span><span class="v">i8 cents (-50..+50) and i8 dB adjustment</span></div>
             <div><span class="k">note / velocity range</span><span class="v">low..high playable keys and trigger velocities, one u8 each</span></div>
+            <div><span class="k">odd length</span><span class="v">7 data bytes, so inst always forces a pad byte &mdash; a free conformance test for a reader's padding logic</span></div>
           </div></div></details>
         <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">cue / LIST</span><span class="rspan">markers, text</span></summary>
           <div class="rbody"><div class="kv">
@@ -267,9 +273,19 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Example: 16-bit stereo at 44100 Hz.</p>
       <div id="block-fmt" data-build></div>
 
+      <div class="callout"><b>32-bit float (tag 0x0003).</b> Samples become little-endian IEEE-754 <b>binary32</b> (or binary64 at 64-bit), nominal full scale <b>&plusmn;1.0</b>. The exponent is the whole point: values past &plusmn;1.0 (0&nbsp;dBFS) are legal and survive in the file, so a take recorded too hot is recovered by pulling the gain down after the fact &mdash; only clipping at the analog or converter stage is irreversible. Eight exponent bits buy a ~1500&nbsp;dB theoretical range while the 24-bit mantissa keeps ~24-bit precision inside any 6&nbsp;dB window. Being non-PCM it formally needs a <b>fact</b> chunk and a cbSize-bearing fmt; some players (Windows Media Player) refuse a float file without them. Float also rides under EXTENSIBLE as the sub-format GUID <code>00000003-...</code>.</div>
+      <div class="callout"><b>the non-unit float variant.</b> Not every 32-bit float agrees on full scale. <b>Cool Edit</b>, and editors after it, declare <b>24</b> bits/sample with a 32-bit container and store the floats normalized to full scale <b>2<sup>23</sup></b> (8,388,608) rather than 1.0 &mdash; a reader that assumes unit scale is off by ~138&nbsp;dB. No flag marks it; you infer it from the sample statistics. The community <b>PEAK</b> chunk exists partly to settle this: it records each channel's peak so a reader can normalize and draw the waveform without a full scan, whatever the convention. (GoldWave carries the same non-unit-float reputation; the documented case is Cool Edit.)</div>
+
       <div class="sec">acid chunk (24 bytes)</div>
       <p class="note">Example: an 8-beat 4/4 loop at 120 BPM, root C4, root-set flag.</p>
       <div id="block-acid" data-build></div>
+
+      <div class="sec">smpl loop record (24 bytes)</div>
+      <p class="note">Example: one forward loop, a full second at 44.1 kHz. The 36-byte sampler header (root note, pitch, sample period) precedes these records; num_sample_loops says how many follow.</p>
+      <div id="block-smpl" data-build></div>
+
+      <div class="callout"><b>the inclusive loop end.</b> A loop's <code>end</code> names the <b>last sample that plays</b>, not one past it, so the length is <code>end - start + 1</code>. A reader that treats it as exclusive (the natural assumption, since almost all range math is half-open) drops the final frame, and a loop that is seamless in the editor that wrote it clicks in the one that reads it. Same off-by-one family as the odd-length pad byte &mdash; one field instead of one byte.</div>
+      <div class="callout"><b>loops in the wild.</b> The spec's own loop machinery is cue points plus a <b>plst</b> playlist chunk carrying a repeat count. Almost nothing writes it: across a census of <b>807,394</b> RIFF files from production sample libraries, <code>plst</code> appeared <b>48</b> times and <code>smpl</code> <b>154,697</b>. The sanctioned system lost outright to the sampler chunk. The other real loop carriers are the <b>acid</b> chunk (104,880 &mdash; ACIDized tempo + loop flags) and Sony's proprietary <b>SyLp</b> (7,564). Want a loop point? Read smpl.</div>
     </div>
 
     <!-- ===================== RIFF ===================== -->
@@ -295,7 +311,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== RF64 / ds64 ===================== -->
     <div class="panel" data-panel="rf64">
       <div class="pfacts"><span>magic<b>"RF64"</b></span><span>sizes<b>u64 in ds64</b></span><span>2007<b>EBU Tech 3306</b></span></div>
-      <p class="plede">The large-file answer that stays RIFF. A file over 4&nbsp;GB flips its magic from <b>RIFF</b> to <b>RF64</b>, writes <b>0xFFFFFFFF</b> as a sentinel in the 32-bit size fields, and adds a <b>ds64</b> chunk as the first chunk carrying the real 64-bit sizes. A clever writer reserves a <b>JUNK</b> chunk of exactly the ds64 size up front while the file is small, then overwrites it in place with ds64 if the recording crosses 4&nbsp;GB &mdash; so the file never has to be rewritten. (That JUNK-to-ds64 reservation, at 28 bytes right after fmt, is itself an ffmpeg fingerprint acidcat reads.)</p>
+      <p class="plede">The large-file answer that stays RIFF. A file over 4&nbsp;GB flips its magic from <b>RIFF</b> to <b>RF64</b>, writes <b>0xFFFFFFFF</b> as a sentinel in the 32-bit size fields, and adds a <b>ds64</b> chunk as the first chunk carrying the real 64-bit sizes. A clever writer reserves a <b>JUNK</b> chunk of exactly the ds64 size up front while the file is small, then overwrites it in place with ds64 if the recording crosses 4&nbsp;GB &mdash; so the file never has to be rewritten. (That 28-byte JUNK-to-ds64 reservation sits where ds64 must &mdash; the first chunk after the 12-byte header, before fmt &mdash; and is itself an ffmpeg fingerprint acidcat reads.)</p>
       <div class="sec">ds64 fixed area (28 bytes)</div>
       <p class="note">Example: a 4.3 GB recording &mdash; just past the u32 ceiling, which is the whole point.</p>
       <div id="ds64-map" data-build></div>
@@ -454,6 +470,19 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"meter_denominator",k:"enum",r:[16,17],val:"4",body:"Lower number of the time signature (the 4 in 4/4)."},
         {label:"meter_numerator",k:"enum",r:[18,19],val:"4",body:"Upper number of the time signature."},
         {label:"tempo",k:"enum",r:[20,23],val:"120.0 BPM",body:"Original tempo as an IEEE-754 float. 0x42F00000 = 120.0.",note:"acidcat warns if tempo is outside 40-300 or disagrees with beats and duration."}
+      ]],
+    "block-smpl":["byte",
+      [0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 0xE8,0x03,0x00,0x00, 0x2B,0xB0,0x00,0x00, 0x00,0x00,0x00,0x80, 0x00,0x00,0x00,0x00],
+      [
+        {label:"identifier",k:"enum",r:[0,3],val:"0",body:"Loop id. May match a cue point's dwName so an editor can label the loop; 0 is a fine and common handle."},
+        {label:"type",k:"enum",r:[4,7],val:"forward (0)",sel:0,branch:[
+          ["0","forward"],["1","alternating (ping-pong)"],["2","backward"],["3-31","reserved"],["32+","vendor-defined"]],
+          body:"Playback direction. Forward dominates the wild; ping-pong reverses at each end for a smoother sustain.",
+          note:"values above 31 are vendor extensions and rarely honored."},
+        {label:"start",k:"enum",r:[8,11],val:"1000",body:"Loop start, in sample frames, u32 LE. 0x000003E8 = 1000."},
+        {label:"end",k:"enum",r:[12,15],val:"45099 (inclusive)",body:"Loop end, in sample frames -- and this sample ALSO plays. Length = end - start + 1 = 44100 frames = 1.000 s at 44.1 kHz.",note:"the inclusive end is the classic interop bug: a reader that assumes exclusive drops the final frame and the loop clicks. 0x0000B02B = 45099."},
+        {label:"fraction",k:"enum",r:[16,19],val:"0x80000000 = 1/2 frame",body:"Sub-sample loop tuning for fine pitch: a fraction of one sample frame. 0x80000000 is half a frame.",note:"almost no reader honors it; most treat the loop as sample-aligned."},
+        {label:"play_count",k:"enum",r:[20,23],val:"0 = infinite",body:"Times to play the loop before moving on. 0 means sustain forever, the usual value for an instrument loop."}
       ]],
     "riff-hdr":["byte",
       [0x52,0x49,0x46,0x46, 0x24,0x08,0x00,0x00, 0x57,0x41,0x56,0x45],

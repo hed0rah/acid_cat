@@ -187,7 +187,12 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">APPLICATION</span><span class="v">4-byte app id + opaque data</span></div>
       </div></div></details>
     <details class="region"><summary><span class="chev">&#9656;</span><span class="rname">audio frames</span><span class="rspan">after the last block</span></summary>
-      <div class="rbody"><p class="note">Encoded audio. Opaque for metadata; STREAMINFO already gives duration = total_samples / sample_rate.</p></div></details>
+      <div class="rbody"><p class="note">Opaque for metadata -- STREAMINFO already gives duration = total_samples / sample_rate -- but each frame opens with its own header:</p><div class="kv">
+        <div><span class="k">frame sync</span><span class="v">14 bits, 0xFFF8 (byte0 == 0xFF and byte1 &amp; 0xFE == 0xF8); the collision this would cause is why block type 127 is forbidden</span></div>
+        <div><span class="k">blocking strategy</span><span class="v">1 bit after the sync: 0 = fixed block size (the coded number is a frame number), 1 = variable (it is a sample number)</span></div>
+        <div><span class="k">coded number</span><span class="v">that frame-or-sample number in a UTF-8-like variable length, the 8-bit scheme stretched to carry up to 36 bits</span></div>
+        <div><span class="k">rate / depth</span><span class="v">4-bit codes, unlike STREAMINFO's exact fields; escape values read the rate from STREAMINFO or inline as 8 or 16 bits</span></div>
+      </div></div></details>
   </div>
 
   <div class="sec">metadata block header</div>
@@ -305,7 +310,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     {label:"block type",k:"enum",r:[1,7],val:"4 = VORBIS_COMMENT",sel:4,branch:[
       ["0","STREAMINFO"],["1","PADDING"],["2","APPLICATION"],["3","SEEKTABLE"],
       ["4","VORBIS_COMMENT"],["5","CUESHEET"],["6","PICTURE"],["127","invalid"]],
-      body:"Seven bits naming the block. STREAMINFO (0) must come first; this one is the tag block."},
+      body:"Seven bits naming the block. STREAMINFO (0) must come first; this one is the tag block. Type 127 is forbidden, not merely unused: with the last-block flag set the header byte would be 0xFF, and the audio frame sync also opens 0xFF -- reserving 127 stops a metadata header from masquerading as a frame."},
     {label:"length",k:"enum",r:[8,31],val:"304 bytes",
       body:"24-bit big-endian payload size that follows this 4-byte header. 0x000130 = 304.",
       note:"checked against the bytes that remain; an overrun is linted, not trusted."}
@@ -324,7 +329,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["20 bits","sample rate = 44100 Hz"],["3 bits","channels - 1 = 1  ->  2"],
         ["5 bits","bits/sample - 1 = 15  ->  16"],["36 bits","total samples = 88200"]],
         body:"A bit-packed 64-bit field, not byte-aligned: rate, channels-1, bits-1, then a 36-bit total sample count.",
-        note:"duration = total_samples / sample_rate, no frame walk needed. channels and bits store minus one."},
+        note:"duration = total_samples / sample_rate, no frame walk needed. channels and bits store minus one. The 20-bit rate holds any value up to 1,048,575 Hz (0 is invalid); frame headers re-code it in just 4 bits with escapes back to here."},
       {label:"md5_signature",k:"enum",r:[18,33],val:"16-byte MD5",body:"MD5 of the unencoded audio, so a decoder can verify a bit-exact round trip. 0 = unset."}
     ]);
 })();

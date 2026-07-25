@@ -151,7 +151,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">NCW is the sample format inside Kontakt instruments: PCM audio, losslessly compressed. The file is a fixed little-endian header, a block table, and a run of delta/bit-packed audio blocks that reconstruct the original samples exactly. No ASCII magic here; the file opens with the 4-byte sentinel <b>01 A8 9E D6</b> (a newer writer variant uses <b>01 A8 9E D7</b>). Everything below is field-verified against a real Kontakt library .ncw. <b>Hover</b> any field to light its exact bytes and read the decode; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
+  <p class="lede">NCW is the sample format inside Kontakt instruments: PCM audio, losslessly compressed. The file is a fixed little-endian header, a block table, and a run of delta/bit-packed audio blocks that reconstruct the original samples exactly. No ASCII magic here; the file opens with the 4-byte sentinel <b>01 A8 9E D6</b> (a newer <b>01 A8 9E D7</b> writer variant is documented but acidcat does not yet accept it). Everything below is field-verified against a real Kontakt library .ncw. <b>Hover</b> any field to light its exact bytes and read the decode; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">ember</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -171,7 +171,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note">All integers little-endian. The first 32 bytes carry the magic, the audio parameters, and three offsets that lay out the rest of the file; the remainder of the 120-byte header is zero in the files examined. The worked example is the corpus file: 2 channels, 24-bit, 48000 Hz, 439295 samples.</p>
         <div id="block-header"></div>
         <div class="kv">
-          <div><span class="k">magic</span><span class="v">01 A8 9E D6 at offset 0; 01 A8 9E D7 on newer writers</span></div>
+          <div><span class="k">magic</span><span class="v">01 A8 9E D6 at offset 0 (matched); 01 A8 9E D7 is a newer-writer variant, not yet handled</span></div>
           <div><span class="k">audio params</span><span class="v">channels u16 @ 0x08 . bits u16 @ 0x0A . sample_rate u32 @ 0x0C . num_samples u32 @ 0x10</span></div>
           <div><span class="k">layout offsets</span><span class="v">block table @ the u32 at 0x14, audio data @ the u32 at 0x18, body size in the u32 at 0x1C</span></div>
           <div><span class="k">cross-check</span><span class="v">data_offset + data_size = file size; 3556 + 1909184 = 1912740 on the corpus file</span></div>
@@ -198,9 +198,12 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note">The samples themselves, packed block by block. Each block is delta/bit-packed: store the differences between neighbouring samples, then keep only as many bits per delta as the block actually needs. Quiet or smooth material packs tight; noise barely shrinks. Decoding reconstructs the original PCM exactly; this is lossless, not perceptual.</p>
         <div class="kv">
           <div><span class="k">unit</span><span class="v">fixed blocks of 512 samples, each independently decodable via the table</span></div>
-          <div><span class="k">packing</span><span class="v">per-block delta coding with a per-block bit width</span></div>
+          <div><span class="k">block header</span><span class="v">each block opens with 16 bytes: magic 0x3E9A0C16, a base sample, a bit width, a flags word</span></div>
+          <div><span class="k">bit width</span><span class="v">signed: &gt;0 delta-code from the base, &lt;0 store truncated values (no delta), 0 raw uncompressed PCM</span></div>
+          <div><span class="k">stereo</span><span class="v">flag 0x01 = mid/side; L = mid+side, R = mid-side, decorrelated the way FLAC does it</span></div>
+          <div><span class="k">float</span><span class="v">flag 0x02 = the samples are 32-bit IEEE float, not integers (WAV fmt tag 3 on the way out)</span></div>
           <div><span class="k">guarantee</span><span class="v">bit-exact PCM out; the WAV that went in comes back whole</span></div>
-          <div><span class="k">acidcat</span><span class="v">left opaque; deep audio decode is out of scope, the header already answers the catalog questions</span></div>
+          <div><span class="k">acidcat</span><span class="v">the inspect walker leaves the body opaque; convert / extract runs the full lossless decode</span></div>
         </div>
       </div>
     </details>
@@ -335,10 +338,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
      0xC0,0x21,0x1D,0x00],
     [
       {label:"magic",k:"sync",r:[0,3],val:"01 A8 9E D6",sel:0,branch:[
-        ["..D6","classic sentinel; this file and most library content"],
-        ["..D7","newer writer variant; same header layout past the magic"]],
-       body:"Four bytes open the file: the little-endian sentinel 0xD69EA801. Not ASCII, not human-readable, just a signature. A file that does not start with one of the two variants is not NCW.",
-       note:"acidcat matches both magics and parses the rest identically."},
+        ["..D6","classic sentinel; matched, most library content"],
+        ["..D7","newer writer variant; documented, not yet accepted"]],
+       body:"Four bytes open the file: the little-endian sentinel 0xD69EA801. Not ASCII, not human-readable, just a signature. A file that does not start with the D6 sentinel is declined.",
+       note:"acidcat currently matches only the D6 sentinel; the D7 variant is real but not yet handled."},
       {label:"header tag",k:"rsv",r:[4,7],val:"0x131",
        body:"Four bytes between the magic and the audio parameters: a block-header / version area. Reads 0x131 on the corpus file. Left uninterpreted; nothing downstream depends on it.",
        note:"treated as reserved until a second value shows up in the wild."},

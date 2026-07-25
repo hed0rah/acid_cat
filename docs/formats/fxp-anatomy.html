@@ -299,7 +299,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     dcol.style.minHeight=(maxH+6)+"px";
   }
 
-  // CcnK header: "CcnK" + byte_size(BE) + "FPCh" + version(BE) + "XfsX" + plugin_version(BE) + num_programs(BE)
+  // CcnK header: "CcnK" + byte_size(BE) + "FPCh" + version(BE) + "XfsX" + plugin_version(BE) + num_params(BE)
   build("block-head","byte",
     [0x43,0x63,0x6E,0x4B, 0x00,0x00,0x00,0x64, 0x46,0x50,0x43,0x68, 0x00,0x00,0x00,0x01, 0x58,0x66,0x73,0x58, 0x00,0x00,0x00,0x01, 0x00,0x00,0x00,0x01],
     [
@@ -307,7 +307,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"The container signature at offset 0. Steinberg\'s VST 2 chunk magic; the same word opens .fxb banks.",
        note:"43 63 6E 4B."},
       {label:"byte_size",k:"sync",r:[4,7],val:"100",
-       body:"uint32 BIG-endian: bytes that follow this field. Big-endian is the classic FXP trap on a little-endian host; a wrong reading yields garbage.",
+       body:"uint32 BIG-endian: bytes that follow this field, so it equals the total file size minus 8 (the magic + byte_size ahead of it are excluded). Big-endian is the classic FXP trap on a little-endian host; a wrong reading yields garbage.",
        note:"00 00 00 64 = 0x64 = 100."},
       {label:"fxMagic",k:"enum",r:[8,11],val:'\'"FPCh"\'',sel:1,branch:[
         ["FxCk","regular preset (float params)"],["FPCh","opaque-chunk preset"],
@@ -321,10 +321,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        note:"a chosen id, not standardized across vendors."},
       {label:"plugin_version",k:"enum",r:[20,23],val:"1",
        body:"uint32 BE: the plugin\'s own version stamp."},
-      {label:"num_programs",k:"enum",r:[24,27],val:"1",
-       body:"uint32 BE: number of programs. 1 for a single .fxp preset."}
+      {label:"num_params",k:"enum",r:[24,27],val:"1",
+       body:"uint32 BE. In a single-program .fxp (an fxProgram) this field is num_params, the count of float parameters the plugin exposes, NOT a program count; num_programs only exists in a .fxb bank (fxSet). This example header reads 1."}
     ]);
-})();
 })();
 </script>
 <script>

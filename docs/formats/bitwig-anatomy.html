@@ -204,7 +204,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region">
       <summary><span class="chev">&#9656;</span><span class="rname">module / device tree</span><span class="rspan">after the meta block . opaque</span></summary>
       <div class="rbody">
-        <p class="note">The Grid and device graph: a nested CONTENTS/MODULES/N/CONTENTS/... structure holding every module in the patch. acidcat v1 leaves it opaque; the meta block already carries what the browser needs.</p>
+        <p class="note">The Grid and device graph: a nested CONTENTS/MODULES/N/CONTENTS/... structure holding every module in the patch. Plain inspect reads the meta block alone; deep mode (--verbose / --frames) walks this tree too, listing module/device names in pre-order, named device parameters in raw internal units, and an addressable structure tree built from the Grid paths.</p>
         <div class="kv">
           <div><span class="k">nesting</span><span class="v">CONTENTS &gt; MODULES &gt; N &gt; CONTENTS, recursively</span></div>
           <div><span class="k">module names</span><span class="v">e.g. Pitch Shifter . Stereo Split/Merge . All-pass Delay . Peak Limiter</span></div>
@@ -369,8 +369,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"That many ASCII bytes name the entry. Here: device_name, the device this preset targets, e.g. Drum Machine, Polysynth, Convolution."},
       {label:"value_type",k:"enum",r:[15,15],val:"0x08 string",sel:0,branch:[
         ["0x08","string: u32-BE length + bytes"],
-        ["other","non-string types appear past the meta block; not decoded"]],
-       body:"One type byte announces the value encoding. Every key in the meta block carries 0x08, a length-prefixed string.",
+        ["0x07","f64 double, big-endian (bpm, beat_length)"],
+        ["0x01","1-byte int"],
+        ["0x19","array: u32-BE count + items (referenced_*_ids)"]],
+       body:"One type byte announces the value encoding. Every string key in the meta block carries 0x08; the same self-describing scheme also uses 0x07 for big-endian doubles (a clip's bpm, beat_length), 0x01 for a byte, and 0x19 for count-prefixed arrays like the referenced_*_ids dependency lists.",
        note:"acidcat inspect decodes device, creator, category, tags, description, and version from these entries."},
       {label:"value_len",k:"sync",r:[16,19],val:"12",
        body:"u32 big-endian: the byte count of the value. \"Drum Machine\" is 12 bytes."},
