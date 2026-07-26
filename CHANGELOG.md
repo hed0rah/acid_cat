@@ -6,6 +6,19 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Wii disc audio.** `acidcat extract <disc.iso>` on a Wii disc image decrypts
+  the data partition, walks its filesystem, and decodes every BRSTM music stream
+  to WAV. New `core/brstm.py` (RSTM container over Nintendo DSP-ADPCM, reuses
+  `core/dsp.py`) and `core/wiidisc.py` (AES-128-CBC partition decryption, cluster
+  cache, FST walk). Verified end-to-end on a retail disc (81 streams, decoded to
+  coherent audio).
+- **`[crypto]` extra.** `pip install acidcat[crypto]` adds `cryptography` for the
+  Wii partition AES. Kept optional so the base install stays dependency-light and
+  the DRM-adjacent crypto is opt-in; without it, `extract` on a Wii disc prints a
+  one-line install hint. Standalone `.brstm` files decode with no extra.
+
 ## [0.77.0] - 2026-07-25
 
 Game-disc audio extraction. `acidcat extract <disc>` now rips soundtracks and

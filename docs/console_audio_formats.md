@@ -110,7 +110,7 @@ middleware wrappers. Increasingly `HARD` or `SCOPE`, with the exceptions noted.
 |---|---|---|
 | Xbox 360 (2005) | XMA/XMA2 (WMA-Pro based), XWMA, PCM | XMA HARD; PCM SHIPPED |
 | PlayStation 3 (2006) | ATRAC3/AT3+, MP3, AC3, CRI HCA, Bink | MP3 SHIPPED; ATRAC/HCA/AC3 HARD |
-| **Wii** (2006) | **BRSTM / BRWAV / BRWSD / `.ast`** -- Nintendo **DSP-ADPCM** (or PCM) in a RIFF-like container | **NEXT** (the codec is SHIPPED; BRSTM is mostly container parsing) |
+| **Wii** (2006) | **BRSTM / BRWAV / BRWSD / `.ast`** -- Nintendo **DSP-ADPCM** (or PCM) in a RIFF-like container | **SHIPPED** (BRSTM decode + `extract` off an encrypted Wii disc via `[crypto]`); BRWAV/BRWSD/AST REACHABLE |
 | Wii U (2012) | **BFSTM / BFWAV** -- DSP-ADPCM | REACHABLE (same codec, newer container) |
 | Nintendo Switch (2017) | BFSTM (DSP-ADPCM), custom **Opus**, CRI HCA, Wwise | DSP REACHABLE; Opus REACHABLE-ish; HCA/Wwise HARD |
 | PS4 / PS5 (2013/2020) | ATRAC9, Vorbis (Wwise), MP3, HCA | Vorbis/MP3 REACHABLE; ATRAC9/HCA HARD |
@@ -140,11 +140,14 @@ catalogue. This is where the biggest remaining wins (and the hardest ones) sit.
 **Shipped:** the full 5th/6th-gen disc-audio core -- PS1 (CD-XA, SPU banks split
 per-sample, CD-DA), CD-DA for every `.cue` disc (Sega CD, Neo Geo CD, PC-Engine,
 Saturn), GameCube (DSP-ADPCM, HAL HPS, DTK, CRI ADX), and CRI ADX cross-platform.
-Plus the standalone codec surface (IMA/MS ADPCM, tracker/sampler/preset formats).
+Plus **Wii BRSTM** -- decoded straight off an encrypted Wii disc: `extract` walks
+the AES-decrypted data partition (via the optional `[crypto]` extra) and decodes
+every `.brstm`. Plus the standalone codec surface (IMA/MS ADPCM, tracker/sampler/
+preset formats).
 
-**Next (the capstone):** **Wii BRSTM/BFSTM.** It is DSP-ADPCM -- which we already
-decode -- in a RIFF-like container, so it is almost entirely container parsing for
-a large coverage jump (all of Wii, and Wii U / 3DS / Switch share the family).
+**Next (the capstone):** **BFSTM** (Wii U / 3DS / Switch) -- the same DSP-ADPCM
+family in the newer container, a short follow-up now that BRSTM and the DSP codec
+are in.
 
 **Reachable, to round out the disc era** (each reuses a codec we have or is a
 short, well-documented RE): Dreamcast AICA ADPCM; Xbox-ADPCM; PS2 interleaved SPU
