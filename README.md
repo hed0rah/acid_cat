@@ -83,6 +83,19 @@ full-text.
 | Tracker | `.mod`, `.xm`, `.it` | ProTracker / FastTracker II / Impulse Tracker: header, pattern order, every embedded sample at its byte offset; IT offset tables as pointers (inspect) |
 | MP4    | `.mp4`, `.m4a` | Box tree, codec info, iTunes tags, `stco`/`co64` offset tables (inspect + repair) |
 
+## Format anatomy
+
+Interactive datasheets for the formats acidcat dissects, each drawn byte by byte:
+**hover** a field to light its exact bytes and read the decode, **click** a field
+for its table. The RIFF/WAVE family, MP3, FLAC, Ogg, MP4, MIDI, the trackers, the
+sampler and synth-preset formats, and more, with the history and edge-case notes
+behind each.
+
+**Browse them at [hed0rah.github.io/audio_files_anatomy](https://hed0rah.github.io/audio_files_anatomy/)**
+-- a good start is the [WAV / RIFF page](https://hed0rah.github.io/audio_files_anatomy/wav-anatomy.html),
+which walks the container, the `fmt`/`data`/`smpl`/`acid` chunks byte by byte, and
+the whole RIFF-to-BWF-to-RF64-to-Wave64 family.
+
 ## Commands
 
 | Command | Description |
