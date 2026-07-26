@@ -6,6 +6,8 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.78.0] - 2026-07-26
+
 ### Added
 
 - **Wii disc audio.** `acidcat extract <disc.iso>` on a Wii disc image decrypts
