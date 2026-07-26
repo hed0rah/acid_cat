@@ -339,7 +339,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">Wave64 header (40 bytes)</div>
       <p class="note">The RIFF GUID + 64-bit file size + WAVE GUID. Watch the first four bytes of each GUID.</p>
       <div id="wave64-map" data-build></div>
-      <div class="callout"><b>the GUID trick.</b> The first four bytes of each Wave64 GUID are literally the little-endian ASCII of the old 4CC &mdash; <b>72 69 66 66</b> spells <code>riff</code>, <b>77 61 76 65</b> spells <code>wave</code>. The remaining twelve bytes are a fixed v1-UUID suffix. The suffix mimics a version-1 UUID, but its time_low bytes are overwritten with the ASCII 4CC, so no exact timestamp survives &mdash; the node bytes, though, do match documented Microsoft DirectShow GUIDs of 1996-97, and Sonic Foundry's CTO was ex-Microsoft.</div>
+      <div class="callout"><b>the GUID trick.</b> The first four bytes of each Wave64 GUID are literally the little-endian ASCII of the old 4CC &mdash; <b>72 69 66 66</b> spells <code>riff</code>, <b>77 61 76 65</b> spells <code>wave</code>. The remaining twelve bytes are a fixed v1-UUID suffix. The suffix mimics a version-1 UUID, but its time_low bytes are overwritten with the ASCII 4CC, so no exact timestamp survives &mdash; the node bytes, though, resemble the Microsoft DirectShow GUID style of that era, and Sonic Foundry's CTO was ex-Microsoft.</div>
     </div>
 
     <!-- ===================== AIFF ===================== -->
@@ -535,9 +535,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     "wave64-map":["byte",
       [0x72,0x69,0x66,0x66,0x2E,0x91,0xCF,0x11,0xA5,0xD6,0x28,0xDB,0x04,0xC1,0x00,0x00, 0x00,0x00,0x10,0x00,0x00,0x00,0x00,0x00, 0x77,0x61,0x76,0x65,0xF3,0xAC,0xD3,0x11,0x8C,0xD1,0x00,0xC0,0x4F,0x8E,0xDB,0x8A],
       [
-        {label:"riff_guid",k:"sync",r:[0,15],val:"RIFF GUID",sel:0,branch:[["72 69 66 66","= 'riff' in ASCII, LE"],["2E 91 CF 11","v1-UUID layout; time_low forced to ASCII"],["A5 D6 28 DB 04 C1 00 00","node + clock-seq (shared w/ MS DirectShow)"]],
+        {label:"riff_guid",k:"sync",r:[0,15],val:"RIFF GUID",sel:0,branch:[["72 69 66 66","= 'riff' in ASCII, LE"],["2E 91 CF 11","v1-UUID layout; time_low forced to ASCII"],["A5 D6 28 DB 04 C1 00 00","node + clock-seq (MS DirectShow-style)"]],
           body:"The 16-byte container id, replacing the 4-character \"RIFF\". Its first four bytes literally spell 'riff'; the rest follows a version-1 UUID layout, but its time_low field is overwritten to spell 'riff', so no exact timestamp remains.",
-          note:"the node bytes match documented 1996-97 Microsoft DirectShow GUIDs; Sonic Foundry's CTO was ex-Microsoft."},
+          note:"the node bytes resemble MS DirectShow-era GUID constants (identifiers, not an encoded creation time); Sonic Foundry's CTO was ex-Microsoft."},
         {label:"file_size",k:"enum",r:[16,23],val:"1,048,576",body:"Total file size as a u64 LE. Unlike RIFF, Wave64 sizes INCLUDE the 24-byte chunk header (16-byte GUID + 8-byte size), not just the payload.",note:"0x100000 = 1,048,576 (1 MB, an example)."},
         {label:"wave_guid",k:"sync",r:[24,39],val:"WAVE GUID",sel:0,branch:[["77 61 76 65","= 'wave' in ASCII, LE"],["F3 AC D3 11","v1-UUID layout; time_low forced to ASCII"],["8C D1 00 C0 4F 8E DB 8A","node + clock-seq"]],
           body:"The 16-byte form-type id, the analogue of \"WAVE\". Its first four bytes spell 'wave'; its time_low is likewise overwritten to spell 'wave', so like the container GUID it carries no exact timestamp."}
