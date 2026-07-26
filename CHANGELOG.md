@@ -6,6 +6,14 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.78.1] - 2026-07-26
+
+### Fixed
+
+- **fxp:** the VST2 field at offset 0x18 is `numPrograms` only for a bank
+  (fxSet / FxBk / FBCh); for a single preset (fxProgram / FxCk / FPCh) it is
+  `numParams`. The `.fxp` walker labeled it `num_programs` universally.
+
 ## [0.78.0] - 2026-07-26
 
 ### Added
