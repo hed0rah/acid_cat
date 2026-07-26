@@ -20,7 +20,9 @@
   --sync:#5C5563;  --sync-soft:#DCD8DE;
   --ff:"IBM Plex Mono","SFMono-Regular",ui-monospace,monospace;
 }
-:root[data-theme="dark"]{--paper:#191a17;--panel:#212320;--ink:#e6e6e1;--soft:#abaca1;--faint:#7c7d72;--line:#383a32;--hair:#2b2d26;--enum:#94a5aa;--enum-soft:#1e2424;--flag:#c3b492;--flag-soft:#2c291d;--rsv:#bcbaae;--rsv-soft:rgba(230,230,225,0.04);--sync:#a7a4a7;--sync-soft:#232322;}.theme-toggle{position:fixed;bottom:0.9rem;right:0.9rem;z-index:50;font-family:var(--ff);font-size:0.56rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--soft);background:var(--panel);border:1px solid var(--line);padding:0.45rem 0.7rem;cursor:pointer;font-weight:400;transition:color .15s,border-color .15s}.theme-toggle:hover{color:var(--enum);border-color:var(--enum)}*{box-sizing:border-box;margin:0;padding:0}
+:root[data-theme="dark"]{--paper:#191a17;--panel:#212320;--ink:#e6e6e1;--soft:#abaca1;--faint:#7c7d72;--line:#383a32;--hair:#2b2d26;--enum:#94a5aa;--enum-soft:#1e2424;--flag:#c3b492;--flag-soft:#2c291d;--rsv:#bcbaae;--rsv-soft:rgba(230,230,225,0.04);--sync:#a7a4a7;--sync-soft:#232322;}
+:root[data-theme="acid"]{--paper:#0b0912;--panel:#161022;--ink:#f4ecff;--soft:#ccb9f2;--faint:#8f7ec6;--line:#3b2c5c;--hair:#241a3a;--enum:#3fd0ff;--enum-soft:#0f2942;--flag:#ff45a8;--flag-soft:#3a1030;--rsv:#bb8cff;--rsv-soft:rgba(244,236,255,0.05);--sync:#f2e400;--sync-soft:#33300a;}
+.theme-toggle{position:fixed;bottom:0.9rem;right:0.9rem;z-index:50;font-family:var(--ff);font-size:0.56rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--soft);background:var(--panel);border:1px solid var(--line);padding:0.45rem 0.7rem;cursor:pointer;font-weight:400;transition:color .15s,border-color .15s}.theme-toggle:hover{color:var(--enum);border-color:var(--enum)}*{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--paper);color:var(--ink);font-family:var(--ff);font-weight:300;line-height:1.7;font-size:14px;-webkit-font-smoothing:antialiased}
 ::selection{background:var(--enum);color:var(--paper)}
 .sheet{max-width:1040px;margin:0 auto;padding:clamp(1.5rem,4vw,3.25rem) clamp(1.25rem,4vw,3rem) 5rem}
@@ -29,6 +31,8 @@ body{background:var(--paper);color:var(--ink);font-family:var(--ff);font-weight:
 .head .title{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.9rem 1.1rem}
 .head .title acidcat-toggle{--acidcat-size:64px;color:var(--soft);flex:0 0 auto;transition:color .15s}
 .head .title acidcat-toggle:hover{color:var(--enum)}
+:root[data-theme="acid"] .head .title acidcat-toggle{color:var(--sync)}
+:root[data-theme="acid"] .head .title acidcat-toggle:hover{color:var(--flag)}
 .head .sysmark{font-size:0.62rem;letter-spacing:0.34em;color:var(--soft)}
 .head h1{font-weight:500;font-size:clamp(1.5rem,4vw,2rem);letter-spacing:0.02em;line-height:1.1;margin-top:0.2rem}
 .head .stamp{border-left:1px solid var(--line);padding:0.9rem 1.1rem;text-align:right;font-size:0.6rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--faint);display:flex;flex-direction:column;justify-content:center;gap:0.2rem}
@@ -77,6 +81,16 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
 .region.opt .rname::after{content:"opt";margin-left:0.6rem;font-size:0.54rem;letter-spacing:0.14em;color:var(--faint);border:1px solid var(--line);padding:1px 4px}
 .region.req .rname::after{content:"req";margin-left:0.6rem;font-size:0.54rem;letter-spacing:0.14em;color:var(--enum);border:1px solid var(--enum);padding:1px 4px}
 .region .rbody{padding:0.6rem 1rem 1.1rem 3rem;border-top:1px solid var(--hair)}
+details.deep{border:1px solid var(--line);border-left:2px solid var(--flag);background:var(--panel);margin:1.2rem 0 0.4rem;max-width:calc(100% - 330px - 1.6rem)}
+@media(max-width:820px){details.deep{max-width:none}}
+details.deep>summary{list-style:none;cursor:pointer;display:flex;gap:0.6rem;align-items:center;padding:0.7rem 1rem;font-size:0.76rem;color:var(--soft)}
+details.deep>summary::-webkit-details-marker{display:none}
+details.deep>summary:hover{background:var(--enum-soft)}
+details.deep>summary b{color:var(--ink);font-weight:500}
+details.deep .chev{color:var(--enum);transition:transform .18s;font-size:0.62rem}
+details.deep[open] .chev{transform:rotate(90deg)}
+details.deep .dbody{font-size:0.76rem;color:var(--soft);line-height:1.7;padding:0.7rem 1rem 0.9rem 1rem;border-top:1px solid var(--hair)}
+details.deep .dbody b{color:var(--ink);font-weight:500}
 .kv{font-size:0.74rem}
 .kv div{display:grid;grid-template-columns:12rem 1fr;gap:1rem;padding:0.3rem 0;border-bottom:1px solid var(--hair)}
 .kv div:last-child{border-bottom:none}
@@ -162,7 +176,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
   <div class="head">
     <div class="row">
-      <div class="title"><div class="tt"><div class="sysmark">ACIDCAT . FILE FORMAT REFERENCE</div><h1>WAV Anatomy</h1></div><acidcat-toggle aria-label="Toggle light and dark theme"></acidcat-toggle></div>
+      <div class="title"><div class="tt"><div class="sysmark">ACIDCAT . FILE FORMAT REFERENCE</div><h1>WAV Anatomy</h1></div><acidcat-toggle aria-label="Cycle theme: light, dark, acid"></acidcat-toggle></div>
       <div class="stamp"><b>RIFF / WAVE + family</b>PCM, metadata, large-file<br>rev 2026.07</div>
     </div>
     <div class="strip">
@@ -197,7 +211,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">The chunked container is not a WAV invention. It descends from Electronic Arts' <b>IFF</b> (1985, Amiga): a <b>FORM</b> whose body is a run of chunks, each a 4-character id + a 32-bit size + payload, padded to an even boundary &mdash; so a reader that meets an unknown chunk knows exactly how many bytes to skip. Microsoft's <b>RIFF</b> (1991) is that grammar with the byte order reversed for the little-endian PC; its creation is traced to Greg Riker, an IFF co-author then at Microsoft, and its name means &ldquo;Resource IFF / Reverse IFF.&rdquo; <b>WAVE</b> is the RIFF form for audio. Everything else on these tabs is a dialect layered on that one idea.</p>
+      <p class="plede">The chunked container is not a WAV invention. It descends from Electronic Arts' <b>IFF</b> (1985, Amiga): a <b>FORM</b> whose body is a run of chunks, each a 4-character id + a 32-bit size + payload, padded to an even boundary &mdash; so a reader that meets an unknown chunk knows exactly how many bytes to skip. Microsoft's <b>RIFF</b> (1991) is that grammar with the byte order reversed for the little-endian PC; the name expands to <b>Resource Interchange File Format</b>, though the little-endian flip earned it the informal nickname <b>Reverse IFF</b>. <b>WAVE</b> is the RIFF form for audio. Everything else on these tabs is a dialect layered on that one idea.</p>
       <div class="sec">the family, dated</div>
       <div class="timeline">
         <div><span class="y">1985</span><span><b>EA IFF 85</b> &mdash; the ancestor. FORM/LIST/CAT, big-endian 4CC+size chunks, even-byte pad.</span></div>
@@ -208,7 +222,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="y">1999</span><span><b>Wave64</b> (Sonic Foundry) finalized &mdash; 128-bit GUID chunk ids, 64-bit sizes, to break 4&nbsp;GB (its container GUIDs date to 1996, the audio-chunk GUIDs to 1999).</span></div>
         <div><span class="y">2004</span><span><b>DSDIFF</b> (Philips) &mdash; the IFF side's 64-bit answer: <b>FRM8</b> replaces FORM, sizes widen to 64-bit big-endian, the pad byte stays. DSD/SACD masters.</span></div>
         <div><span class="y">2007</span><span><b>RF64</b> (EBU Tech 3306) &mdash; the ds64 chunk carries 64-bit sizes; magic flips to RF64 only when needed.</span></div>
-        <div><span class="y">2019</span><span><b>BW64</b> (ITU-R BS.2088) &mdash; RF64 generalized, tied to the Audio Definition Model (chna/axml).</span></div>
+        <div><span class="y">2015</span><span><b>BW64</b> (ITU-R BS.2088-0) &mdash; RF64 generalized, tied to the Audio Definition Model (chna/axml).</span></div>
       </div>
       <div class="callout"><b>the shared grammar.</b> Every format on these tabs is the same atom: a <b>4-byte id</b>, a <b>size</b>, a <b>payload</b>, and a <b>pad byte</b> when the size is odd &mdash; excluded from the size that owns it, but counted inside the parent that contains it, the asymmetry (inherited from IFF) behind most off-by-one bugs in the family. Only three things vary across the family &mdash; the byte order (IFF/AIFF big-endian, RIFF little-endian), the width of the size field (32-bit, or 64-bit in RF64/Wave64/DSDIFF), and whether the id is a 4-character code or a 16-byte GUID (Wave64). Learn the atom once and every dialect reads the same.</div>
       <div class="callout"><b>the three normative WAVE rules.</b> Of everything a writer can do, only these are guaranteed: the file opens with <b>RIFF</b> (or RF64); the form type is <b>WAVE</b>; and <b>fmt precedes data</b>. Chunk order is otherwise free, the declared RIFF size is often stale, and acidcat lints every claim against the bytes that are actually present rather than trusting the header.</div>
@@ -273,8 +287,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Example: 16-bit stereo at 44100 Hz.</p>
       <div id="block-fmt" data-build></div>
 
-      <div class="callout"><b>32-bit float (tag 0x0003).</b> Samples become little-endian IEEE-754 <b>binary32</b> (or binary64 at 64-bit), nominal full scale <b>&plusmn;1.0</b>. The exponent is the whole point: values past &plusmn;1.0 (0&nbsp;dBFS) are legal and survive in the file, so a take recorded too hot is recovered by pulling the gain down after the fact &mdash; only clipping at the analog or converter stage is irreversible. Eight exponent bits buy a ~1500&nbsp;dB theoretical range while the 24-bit mantissa keeps ~24-bit precision inside any 6&nbsp;dB window. Being non-PCM it formally needs a <b>fact</b> chunk and a cbSize-bearing fmt; some players (Windows Media Player) refuse a float file without them. Float also rides under EXTENSIBLE as the sub-format GUID <code>00000003-...</code>.</div>
-      <div class="callout"><b>the non-unit float variant.</b> Not every 32-bit float agrees on full scale. <b>Cool Edit</b>, and editors after it, declare <b>24</b> bits/sample with a 32-bit container and store the floats normalized to full scale <b>2<sup>23</sup></b> (8,388,608) rather than 1.0 &mdash; a reader that assumes unit scale is off by ~138&nbsp;dB. No flag marks it; you infer it from the sample statistics. The community <b>PEAK</b> chunk exists partly to settle this: it records each channel's peak so a reader can normalize and draw the waveform without a full scan, whatever the convention. (GoldWave carries the same non-unit-float reputation; the documented case is Cool Edit.)</div>
+      <details class="deep"><summary><span class="chev">&#9656;</span><b>32-bit float (tag 0x0003)</b></summary><div class="dbody">Samples become little-endian IEEE-754 <b>binary32</b> (or binary64 at 64-bit), nominal full scale <b>&plusmn;1.0</b>. The exponent is the whole point: values past &plusmn;1.0 (0&nbsp;dBFS) are legal and survive in the file, so a take recorded too hot is recovered by pulling the gain down after the fact &mdash; only clipping at the analog or converter stage is irreversible. Eight exponent bits buy a ~1500&nbsp;dB theoretical range while the 24-bit mantissa keeps ~24-bit precision inside any 6&nbsp;dB window. Being non-PCM it formally needs a <b>fact</b> chunk and a cbSize-bearing fmt; some players (Windows Media Player) refuse a float file without them. Float also rides under EXTENSIBLE as the sub-format GUID <code>00000003-...</code>.</div></details>
+      <details class="deep"><summary><span class="chev">&#9656;</span><b>the non-unit float variant</b></summary><div class="dbody">Not every 32-bit float agrees on full scale. <b>Cool Edit</b>, and editors after it, declare <b>24</b> bits/sample with a 32-bit container and store the floats normalized to full scale <b>2<sup>23</sup></b> (8,388,608) rather than 1.0 &mdash; a reader that assumes unit scale is off by ~138&nbsp;dB. No flag marks it; you infer it from the sample statistics. The community <b>PEAK</b> chunk exists partly to settle this: it records each channel's peak so a reader can normalize and draw the waveform without a full scan, whatever the convention. (GoldWave carries the same non-unit-float reputation; the documented case is Cool Edit.)</div></details>
 
       <div class="sec">acid chunk (24 bytes)</div>
       <p class="note">Example: an 8-beat 4/4 loop at 120 BPM, root C4, root-set flag.</p>
@@ -284,8 +298,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Example: one forward loop, a full second at 44.1 kHz. The 36-byte sampler header (root note, pitch, sample period) precedes these records; num_sample_loops says how many follow.</p>
       <div id="block-smpl" data-build></div>
 
-      <div class="callout"><b>the inclusive loop end.</b> A loop's <code>end</code> names the <b>last sample that plays</b>, not one past it, so the length is <code>end - start + 1</code>. A reader that treats it as exclusive (the natural assumption, since almost all range math is half-open) drops the final frame, and a loop that is seamless in the editor that wrote it clicks in the one that reads it. Same off-by-one family as the odd-length pad byte &mdash; one field instead of one byte.</div>
-      <div class="callout"><b>loops in the wild.</b> The spec's own loop machinery is cue points plus a <b>plst</b> playlist chunk carrying a repeat count. Almost nothing writes it: across a census of <b>807,394</b> RIFF files from production sample libraries, <code>plst</code> appeared <b>48</b> times and <code>smpl</code> <b>154,697</b>. The sanctioned system lost outright to the sampler chunk. The other real loop carriers are the <b>acid</b> chunk (104,880 &mdash; ACIDized tempo + loop flags) and Sony's proprietary <b>SyLp</b> (7,564). Want a loop point? Read smpl.</div>
+      <details class="deep"><summary><span class="chev">&#9656;</span><b>loops in the wild</b></summary><div class="dbody">The spec's own loop machinery is cue points plus a <b>plst</b> playlist chunk carrying a repeat count. Almost nothing writes it: across a census of <b>807,394</b> RIFF files from production sample libraries, <code>plst</code> appeared <b>48</b> times and <code>smpl</code> <b>154,697</b>. The sanctioned system lost outright to the sampler chunk. The other real loop carriers are the <b>acid</b> chunk (104,880 &mdash; ACIDized tempo + loop flags) and Sony's proprietary <b>SyLp</b> (7,564). Want a loop point? Read smpl.</div></details>
     </div>
 
     <!-- ===================== RIFF ===================== -->
@@ -293,7 +306,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="pfacts"><span>magic<b>"RIFF" / "RIFX"</b></span><span>size<b>u32, 4 GB cap</b></span><span>1991<b>MS + IBM</b></span></div>
       <p class="plede">The container itself: 12 bytes that every WAV opens with. <b>"RIFF"</b>, a 32-bit little-endian size, and a form type <b>"RIFF"</b> wraps IFF's grammar with the byte order flipped for the Intel PC &mdash; the little-endian concession that gave it the name <b>Reverse IFF</b>. A rare big-endian variant, <b>RIFX</b>, keeps everything else the same and flips only the number encoding. The riff_size field claims the file length minus 8, but writers routinely leave it stale, so acidcat lints it rather than trusting it.</p>
       <div class="sec">RIFF header (12 bytes)</div>
-      <p class="note">Example: a small WAVE file, 2,084 bytes total.</p>
+      <p class="note">Example: a small WAVE file, 2,092 bytes total.</p>
       <div id="riff-hdr" data-build></div>
       <div class="callout"><b>RIFX &mdash; big-endian RIFF.</b> Identical layout, but the size fields and all multi-byte values are big-endian, and the magic is <b>"RIFX"</b>. Microsoft defined it; almost nothing writes it. Macromedia Director used big-endian RIFF internally &mdash; whether that was registered RIFX or an independent reinvention is unrecorded.</div>
       <div class="callout"><b>other RIFF forms.</b> WAVE is one of many form types after the size field: <b>AVI</b> (video), <b>RMID</b> (RIFF-wrapped MIDI), <b>RDIB</b> (bitmap), <b>PAL</b> (palette), <b>RMMP</b> (Director), <b>sfbk</b> (SoundFont), <b>DLS</b> (Downloadable Sounds). The form type at 0x08 is what a reader branches on.</div>
@@ -311,7 +324,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== RF64 / ds64 ===================== -->
     <div class="panel" data-panel="rf64">
       <div class="pfacts"><span>magic<b>"RF64"</b></span><span>sizes<b>u64 in ds64</b></span><span>2007<b>EBU Tech 3306</b></span></div>
-      <p class="plede">The large-file answer that stays RIFF. A file over 4&nbsp;GB flips its magic from <b>RIFF</b> to <b>RF64</b>, writes <b>0xFFFFFFFF</b> as a sentinel in the 32-bit size fields, and adds a <b>ds64</b> chunk as the first chunk carrying the real 64-bit sizes. A clever writer reserves a <b>JUNK</b> chunk of exactly the ds64 size up front while the file is small, then overwrites it in place with ds64 if the recording crosses 4&nbsp;GB &mdash; so the file never has to be rewritten. (That 28-byte JUNK-to-ds64 reservation sits where ds64 must &mdash; the first chunk after the 12-byte header, before fmt &mdash; and is itself an ffmpeg fingerprint acidcat reads.)</p>
+      <p class="plede">The large-file answer that stays RIFF. A file over 4&nbsp;GB flips its magic from <b>RIFF</b> to <b>RF64</b>, writes <b>0xFFFFFFFF</b> as a sentinel in the 32-bit size fields, and adds a <b>ds64</b> chunk as the first chunk carrying the real 64-bit sizes. A clever writer reserves a <b>JUNK</b> chunk of exactly the ds64 size up front while the file is small, then overwrites it in place with ds64 if the recording crosses 4&nbsp;GB &mdash; so the file never has to be rewritten. (ffmpeg goes one further: it reserves a 28-byte JUNK placeholder right after <b>fmt</b> &mdash; not the ds64 spec slot, which is the first chunk before fmt &mdash; then overwrites it with ds64 in place if the file crosses 4&nbsp;GB. A 28-byte JUNK right after fmt is itself an ffmpeg fingerprint acidcat reads.)</p>
       <div class="sec">ds64 fixed area (28 bytes)</div>
       <p class="note">Example: a 4.3 GB recording &mdash; just past the u32 ceiling, which is the whole point.</p>
       <div id="ds64-map" data-build></div>
@@ -326,7 +339,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">Wave64 header (40 bytes)</div>
       <p class="note">The RIFF GUID + 64-bit file size + WAVE GUID. Watch the first four bytes of each GUID.</p>
       <div id="wave64-map" data-build></div>
-      <div class="callout"><b>the GUID trick.</b> The first four bytes of each Wave64 GUID are literally the little-endian ASCII of the old 4CC &mdash; <b>72 69 66 66</b> spells <code>riff</code>, <b>77 61 76 65</b> spells <code>wave</code>. The remaining twelve bytes are a fixed v1-UUID suffix. Decoding that suffix's embedded timestamp is what dates the format; the container GUIDs share their node bytes with Microsoft DirectShow GUIDs of 1996-97, and Sonic Foundry's CTO was ex-Microsoft.</div>
+      <div class="callout"><b>the GUID trick.</b> The first four bytes of each Wave64 GUID are literally the little-endian ASCII of the old 4CC &mdash; <b>72 69 66 66</b> spells <code>riff</code>, <b>77 61 76 65</b> spells <code>wave</code>. The remaining twelve bytes are a fixed v1-UUID suffix. The suffix mimics a version-1 UUID, but its time_low bytes are overwritten with the ASCII 4CC, so no exact timestamp survives &mdash; the node bytes, though, do match documented Microsoft DirectShow GUIDs of 1996-97, and Sonic Foundry's CTO was ex-Microsoft.</div>
     </div>
 
     <!-- ===================== AIFF ===================== -->
@@ -509,25 +522,25 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           ["0x1","FL front left"],["0x2","FR front right"],["0x4","FC center"],["0x8","LFE"],["0x10","BL back left"],["0x20","BR back right"]],
           body:"Speaker bitmask, low bit first: FL FR FC LFE BL BR FLC FRC BC SL SR ... 0x3 = front L + R (plain stereo).",
           note:"the order of the samples follows the mask bit order, not the channel index."},
-        {label:"sub_format",k:"sync",r:[24,39],val:"PCM GUID",body:"16-byte GUID: the leading 2 bytes are the real format tag (0x0001 = PCM) and the fixed 14-byte tail 00 00 10 00 80 00 00 AA 00 38 9B 71 marks it a standard KSDATAFORMAT_SUBTYPE.",note:"a non-standard tail (an unofficial codec GUID) is warned by acidcat."}
+        {label:"sub_format",k:"sync",r:[24,39],val:"PCM GUID",body:"16-byte GUID: the leading 2 bytes are the real format tag (0x0001 = PCM) and the fixed 14-byte tail 00 00 00 00 10 00 80 00 00 AA 00 38 9B 71 marks it a standard KSDATAFORMAT_SUBTYPE.",note:"a non-standard tail (an unofficial codec GUID) is warned by acidcat."}
       ]],
     "ds64-map":["byte",
-      [0xA0,0x4B,0x4C,0x00,0x01,0x00,0x00,0x00, 0x40,0x4B,0x4C,0x00,0x01,0x00,0x00,0x00, 0x80,0x18,0x16,0x40,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00],
+      [0xA0,0xCB,0x4C,0x00,0x01,0x00,0x00,0x00, 0x00,0xCB,0x4C,0x00,0x01,0x00,0x00,0x00, 0xC0,0x32,0x13,0x40,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00],
       [
-        {label:"riff_size",k:"sync",r:[0,7],val:"4,300,000,160",body:"The true size of the whole RF64 chunk as a u64 LE, standing in for the 32-bit RIFF size field which now holds the 0xFFFFFFFF sentinel.",note:"0x1004C4BA0 = 4,300,000,160 bytes."},
-        {label:"data_size",k:"enum",r:[8,15],val:"4,300,000,000",body:"The true size of the data chunk, u64 LE -- 4.3 GB, past the 4 GB (0xFFFFFFFF) u32 ceiling. This is the whole reason RF64 exists.",note:"0x1004C4B40 = 4,300,000,000."},
-        {label:"sample_count",k:"enum",r:[16,23],val:"1,075,000,000",body:"Samples per channel, u64 LE -- the fact-chunk value at 64-bit. 4,300,000,000 bytes / 4 bytes-per-frame.",note:"0x40161880 = 1,075,000,000."},
+        {label:"riff_size",k:"sync",r:[0,7],val:"4,300,000,160",body:"The true size of the whole RF64 chunk as a u64 LE, standing in for the 32-bit RIFF size field which now holds the 0xFFFFFFFF sentinel.",note:"0x1004CCBA0 = 4,300,000,160 bytes."},
+        {label:"data_size",k:"enum",r:[8,15],val:"4,300,000,000",body:"The true size of the data chunk, u64 LE -- 4.3 GB, past the 4 GB (0xFFFFFFFF) u32 ceiling. This is the whole reason RF64 exists.",note:"0x1004CCB00 = 4,300,000,000."},
+        {label:"sample_count",k:"enum",r:[16,23],val:"1,075,000,000",body:"Samples per channel, u64 LE -- the fact-chunk value at 64-bit. 4,300,000,000 bytes / 4 bytes-per-frame.",note:"0x401332C0 = 1,075,000,000."},
         {label:"table_length",k:"enum",r:[24,27],val:"0",body:"Number of chunk-size override records that follow (each a 4-byte id + u64 size), for any OTHER chunk also over 4 GB. 0 here -- only data is large."}
       ]],
     "wave64-map":["byte",
       [0x72,0x69,0x66,0x66,0x2E,0x91,0xCF,0x11,0xA5,0xD6,0x28,0xDB,0x04,0xC1,0x00,0x00, 0x00,0x00,0x10,0x00,0x00,0x00,0x00,0x00, 0x77,0x61,0x76,0x65,0xF3,0xAC,0xD3,0x11,0x8C,0xD1,0x00,0xC0,0x4F,0x8E,0xDB,0x8A],
       [
-        {label:"riff_guid",k:"sync",r:[0,15],val:"RIFF GUID",sel:0,branch:[["72 69 66 66","= 'riff' in ASCII, LE"],["2E 91 CF 11","v1-UUID: timestamp Apr 1996"],["A5 D6 28 DB 04 C1 00 00","node + clock-seq (shared w/ MS DirectShow)"]],
-          body:"The 16-byte container id, replacing the 4-character \"RIFF\". Its first four bytes literally spell 'riff'; the rest is a version-1 UUID whose embedded timestamp dates to April 1996.",
+        {label:"riff_guid",k:"sync",r:[0,15],val:"RIFF GUID",sel:0,branch:[["72 69 66 66","= 'riff' in ASCII, LE"],["2E 91 CF 11","v1-UUID layout; time_low forced to ASCII"],["A5 D6 28 DB 04 C1 00 00","node + clock-seq (shared w/ MS DirectShow)"]],
+          body:"The 16-byte container id, replacing the 4-character \"RIFF\". Its first four bytes literally spell 'riff'; the rest follows a version-1 UUID layout, but its time_low field is overwritten to spell 'riff', so no exact timestamp remains.",
           note:"the node bytes match documented 1996-97 Microsoft DirectShow GUIDs; Sonic Foundry's CTO was ex-Microsoft."},
         {label:"file_size",k:"enum",r:[16,23],val:"1,048,576",body:"Total file size as a u64 LE. Unlike RIFF, Wave64 sizes INCLUDE the 24-byte chunk header (16-byte GUID + 8-byte size), not just the payload.",note:"0x100000 = 1,048,576 (1 MB, an example)."},
-        {label:"wave_guid",k:"sync",r:[24,39],val:"WAVE GUID",sel:0,branch:[["77 61 76 65","= 'wave' in ASCII, LE"],["F3 AC D3 11","v1-UUID: timestamp Dec 1999"],["8C D1 00 C0 4F 8E DB 8A","node + clock-seq"]],
-          body:"The 16-byte form-type id, the analogue of \"WAVE\". Its first four bytes spell 'wave'; its UUID timestamp dates to December 1999 -- three years after the container GUIDs, a gap the research reads as reuse of earlier Microsoft tooling."}
+        {label:"wave_guid",k:"sync",r:[24,39],val:"WAVE GUID",sel:0,branch:[["77 61 76 65","= 'wave' in ASCII, LE"],["F3 AC D3 11","v1-UUID layout; time_low forced to ASCII"],["8C D1 00 C0 4F 8E DB 8A","node + clock-seq"]],
+          body:"The 16-byte form-type id, the analogue of \"WAVE\". Its first four bytes spell 'wave'; its time_low is likewise overwritten to spell 'wave', so like the container GUID it carries no exact timestamp."}
       ]],
     "aiff-comm":["byte",
       [0x00,0x02, 0x00,0x01,0x58,0x88, 0x00,0x10, 0x40,0x0E,0xAC,0x44,0x00,0x00,0x00,0x00,0x00,0x00],
@@ -611,6 +624,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <ellipse class="eye" cx="1394" cy="975" rx="78" ry="140" fill="currentColor"/>
     <path class="swirl" d="${spiral(772, 975)}"/>
     <path class="swirl" d="${spiral(1394, 975)}"/>
+    <path class="eye-shut" d="M688,966 q84,90 168,0"/>
+    <path class="eye-shut" d="M1310,966 q84,90 168,0"/>
+    <text class="zzz z1" x="1712" y="612">z</text>
+    <text class="zzz z2" x="1846" y="452">z</text>
+    <text class="zzz z3" x="1992" y="286">Z</text>
     <path class="tongue" d="M1004,1735 h150 v215 a75,75 0 0 1 -150,0 z" fill="currentColor"/>
     <path d="${MOUTH}" style="${stroke(28.33)}"/>
     <path d="${CURLR}" style="${stroke(25.96)}"/>
@@ -625,44 +643,63 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
     button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
     .box{width:var(--acidcat-size,40px);height:var(--acidcat-size,40px)}
-    /* cat holds still — only the eyes and tongue react */
+    /* cat holds still: the eyes, Zzz, swirl and tongue carry the three moods */
     .eye{transition:opacity .28s ease}
+    .eye-shut{fill:none;stroke:currentColor;stroke-width:52;stroke-linecap:round;opacity:0;transition:opacity .28s ease}
+    .zzz{fill:currentColor;font-family:var(--ff,monospace);font-weight:600;opacity:0}
+    .zzz.z1{font-size:150px}.zzz.z2{font-size:205px}.zzz.z3{font-size:270px}
     .swirl{fill:none;stroke:currentColor;stroke-width:70;stroke-linecap:round;opacity:0;transition:opacity .32s ease;transform-box:fill-box;transform-origin:center}
     .tongue{transform-box:fill-box;transform-origin:center top;transform:scaleY(0);transition:transform .4s cubic-bezier(.34,1.45,.5,1) .05s}
-    :host([data-on]) .eye{opacity:0}
-    :host([data-on]) .swirl{opacity:1;animation:acid-spin 2.6s linear infinite}
-    :host([data-on]) .swirl:last-of-type{animation-direction:reverse}
-    :host([data-on]) .tongue{transform:scaleY(1)}
+    /* dark = asleep: eyes shut, Zzz drifting up */
+    :host([data-state="dark"]) .eye{opacity:0}
+    :host([data-state="dark"]) .eye-shut{opacity:1}
+    :host([data-state="dark"]) .zzz{animation:zfloat 3.2s ease-in-out infinite}
+    :host([data-state="dark"]) .zzz.z2{animation-delay:.5s}
+    :host([data-state="dark"]) .zzz.z3{animation-delay:1s}
+    /* acid = rave: spiral eyes in neon, tongue out */
+    :host([data-state="acid"]) .eye{opacity:0}
+    :host([data-state="acid"]) .swirl{opacity:1;animation:acid-spin 2.6s linear infinite}
+    :host([data-state="acid"]) .swirl:first-of-type{stroke:var(--enum)}
+    :host([data-state="acid"]) .swirl:last-of-type{stroke:var(--flag);animation-direction:reverse}
+    :host([data-state="acid"]) .tongue{transform:scaleY(1)}
     @keyframes acid-spin{to{transform:rotate(1turn)}}
-    @media (prefers-reduced-motion:reduce){.eye,.tongue,.swirl{transition:none}.swirl{animation:none}}
+    @keyframes zfloat{0%{opacity:0;transform:translateY(40px)}25%{opacity:.9}60%{opacity:.9}100%{opacity:0;transform:translateY(-90px)}}
+    @media (prefers-reduced-motion:reduce){
+      .eye,.tongue,.swirl,.eye-shut{transition:none}.swirl{animation:none}
+      :host([data-state="dark"]) .zzz{animation:none;opacity:.85}
+    }
   `;
 
+  const STATES = ['light', 'dark', 'acid'];
   class AcidcatToggle extends HTMLElement {
     connectedCallback() {
       const root = this.attachShadow({ mode: 'open' });
-      root.innerHTML = `<style>${css}</style><button type="button" aria-label="Toggle dark mode" title="Toggle dark mode"><span class="box">${svg}</span></button>`;
+      root.innerHTML = `<style>${css}</style><button type="button" aria-label="Cycle theme: light, dark, acid" title="Theme (click to cycle)"><span class="box">${svg}</span></button>`;
       this._btn = root.querySelector('button');
-      this._btn.addEventListener('click', () => this.toggle());
+      this._btn.addEventListener('click', () => this.cycle());
       // keep multiple toggles on one page visually in sync
-      this._sync = (e) => { if (e.target !== this && e.detail) this.toggleAttribute('data-on', e.detail.dark); };
+      this._sync = (e) => { if (e.target !== this && e.detail && e.detail.state) this.apply(e.detail.state, false, false); };
       document.addEventListener('acidcat-theme', this._sync);
 
       let saved = null;
       try { saved = localStorage.getItem('acidcat-theme'); } catch (e) {}
-      const dark = saved ? saved === 'dark'
-        : (this.hasAttribute('default-dark') || window.matchMedia('(prefers-color-scheme: dark)').matches);
-      this.apply(dark, false);
+      const initial = STATES.indexOf(saved) >= 0 ? saved
+        : (this.hasAttribute('default-dark') || window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      this.apply(initial, false, true);
     }
     disconnectedCallback() { if (this._sync) document.removeEventListener('acidcat-theme', this._sync); }
-    get isDark() { return this.hasAttribute('data-on'); }
-    toggle() { this.apply(!this.isDark, true); }
-    apply(dark, persist) {
-      this.toggleAttribute('data-on', dark);
-      const theme = dark ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', theme);
-      if (this._btn) this._btn.setAttribute('aria-pressed', String(dark));
-      if (persist) { try { localStorage.setItem('acidcat-theme', theme); } catch (e) {} }
-      this.dispatchEvent(new CustomEvent('acidcat-theme', { bubbles: true, composed: true, detail: { theme, dark } }));
+    get state() { return this.getAttribute('data-state') || 'light'; }
+    cycle() { this.apply(STATES[(STATES.indexOf(this.state) + 1) % STATES.length], true, true); }
+    apply(state, persist, emit) {
+      if (STATES.indexOf(state) < 0) state = 'light';
+      this.setAttribute('data-state', state);
+      document.documentElement.setAttribute('data-theme', state);
+      if (this._btn) {
+        this._btn.setAttribute('aria-pressed', String(state !== 'light'));
+        this._btn.title = 'Theme: ' + state + ' (click to cycle)';
+      }
+      if (persist) { try { localStorage.setItem('acidcat-theme', state); } catch (e) {} }
+      if (emit !== false) this.dispatchEvent(new CustomEvent('acidcat-theme', { bubbles: true, composed: true, detail: { state } }));
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
