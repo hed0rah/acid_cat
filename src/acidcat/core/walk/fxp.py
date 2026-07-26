@@ -40,7 +40,7 @@ def inspect_fxp(filepath):
     version = struct.unpack_from(">I", head, 12)[0]
     fx_id = head[16:20]
     fx_version = struct.unpack_from(">I", head, 20)[0]
-    num_programs = struct.unpack_from(">I", head, 24)[0]
+    num_count = struct.unpack_from(">I", head, 24)[0]
     kind = _FX_MAGIC.get(fx_magic, "unknown fxMagic")
     id_str = fx_id.decode("latin-1", errors="replace")
     plugin = _KNOWN_IDS.get(fx_id)
@@ -54,7 +54,9 @@ def inspect_fxp(filepath):
         _f(0x0C, 4, "version", version),
         _f(0x10, 4, "plugin_id", id_str + (f" ({plugin})" if plugin else "")),
         _f(0x14, 4, "plugin_version", fx_version),
-        _f(0x18, 4, "num_programs", num_programs),
+        # per the VST2 SDK this word is numPrograms only for a bank (fxSet);
+        # for a single preset (fxProgram) it is numParams.
+        _f(0x18, 4, "num_programs" if is_bank else "num_params", num_count),
     ]
     summary = f"VST {kind}, plugin {id_str}"
     name = ""
