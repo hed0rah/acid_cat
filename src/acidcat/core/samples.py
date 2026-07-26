@@ -613,6 +613,43 @@ def _gcm_samples(filepath):
                        f"{'stereo' if info['channels'] == 2 else 'mono'} @ {info['rate']} Hz {kind}"}
 
 
+def _brstm_samples(data):
+    """BRSTM (RSTM): decode the DSP-ADPCM stream to one WAV."""
+    from acidcat.core import brstm
+    pcm, info = brstm.decode(data)
+    yield {"name": "stream", "wav": _wav(pcm, info["rate"], channels=info["channels"]),
+           "note": f"{info['frames'] / info['rate']:.0f}s "
+                   f"{'stereo' if info['channels'] == 2 else 'mono'} @ {info['rate']} Hz "
+                   f"DSP-ADPCM"}
+
+
+def _wiidisc_samples(filepath):
+    """A Wii disc image: decrypt the data partition, walk it, and decode each
+    BRSTM stream. Needs the crypto extra (pip install acidcat[crypto]); decrypts
+    clusters on demand, never slurping the disc."""
+    from acidcat.core import wiidisc, brstm
+    try:
+        disc = wiidisc.WiiDisc(filepath)
+    except wiidisc.WiiError as e:
+        raise SampleError(str(e))
+    try:
+        for ent in disc.files():
+            if not ent["path"].lower().endswith(".brstm"):
+                continue
+            try:
+                pcm, info = brstm.decode(disc.read(ent))
+            except Exception:
+                continue
+            base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            yield {"name": base,
+                   "wav": _wav(pcm, info["rate"], channels=info["channels"]),
+                   "note": f"{info['frames'] / info['rate']:.0f}s "
+                           f"{'stereo' if info['channels'] == 2 else 'mono'} "
+                           f"@ {info['rate']} Hz DSP-ADPCM"}
+    finally:
+        disc.close()
+
+
 def _vag_samples(data):
     """PS1 .VAG: a 48-byte header then SPU-ADPCM. One mono sample per file."""
     from acidcat.core import vag as vagmod
@@ -627,11 +664,13 @@ _EXTRACTORS = {
     "s3m": _s3m_samples, "gf1pat": _gf1pat_samples,
     "8svx": _svx_samples, "ncw": _ncw_samples, "sf2": _sf2_samples,
     "vag": _vag_samples, "hps": _hps_samples, "adx": _adx_samples,
+    "brstm": _brstm_samples,
 }
 # formats whose extractor reads the path itself (walk/stream), not a bytes buffer
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
                     "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples,
-                    "cdxa": _cdxa_samples, "gcm": _gcm_samples, "cue": _cue_samples}
+                    "cdxa": _cdxa_samples, "gcm": _gcm_samples, "cue": _cue_samples,
+                    "wii": _wiidisc_samples}
 
 EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 

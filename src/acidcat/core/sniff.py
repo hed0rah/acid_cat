@@ -72,6 +72,8 @@ def sniff_bytes(head):
         return "vag"                                   # PS1 SPU-ADPCM sample
     if head[:8] == b" HALPST\x00":
         return "hps"                                   # HAL PCM Stream (GameCube DSP-ADPCM)
+    if head[:4] == b"RSTM":
+        return "brstm"                                 # Nintendo streamed audio (GameCube/Wii DSP-ADPCM)
     if head[:6] == b'FILE "':
         return "cue"                                   # CUE sheet (CD-DA track layout)
     if len(head) >= 14 and head[:4] == b"MThd":
@@ -139,7 +141,12 @@ def sniff(filepath):
         from acidcat.core import adx
         if adx.is_adx(filepath):
             return "adx"
-    # a GameCube disc image carries its magic word at 0x1C, past the sniff head
+    # disc images carry their magic past the sniff head: Wii at 0x18, GameCube at
+    # 0x1C. Wii is checked first (its partitions are encrypted; distinct magic).
+    if fmt is None:
+        from acidcat.core import wiidisc
+        if wiidisc.is_wii(filepath):
+            return "wii"
     if fmt is None:
         from acidcat.core import gcm
         if gcm.is_gcm(filepath):

@@ -35,6 +35,7 @@ full-text.
     pip install -e .[analysis]      # + librosa BPM/key detection + features
     pip install -e .[mcp]           # + MCP server (acidcat-mcp, stdio)
     pip install -e .[mcp-http]      # + MCP streamable-HTTP transport (acidcat-mcp --transport http)
+    pip install -e .[crypto]        # + AES for encrypted Wii disc extraction
     pip install -e .[all]           # everything
 
 ## Quick Start
@@ -119,7 +120,7 @@ the whole RIFF-to-BWF-to-RF64-to-Wave64 family.
 | `acidcat query --compatible-with FILE` | Find samples that mix with FILE: harmonic key (Camelot) + compatible tempo (incl. half/double-time) |
 | `acidcat convert FILE [-o OUT]` | Export/transcode: `.bwclip` -> MIDI, NCW -> WAV (single file or a directory), SF2/SF3 -> a folder of samples, 8SVX -> WAV; `--to-pcm` decodes an ADPCM or mistagged WAV to plain playable 16-bit PCM (`--codec ima` to force it) |
 | `acidcat locate BLOB [--mode strict\|normal\|aggressive] [--analyze] [--transforms] [-v]` | "PhotoRec for audio": find the audio regions in a raw blob or disk image (containers, signatureless raw PCM, headerless MP3 streams) and report them; never writes. `--analyze` infers PCM geometry, `--transforms` finds audio hidden under XOR/rotate/nibble-swap, `-v` shows the evidence. Pipe `-f json` into `carve --batch` |
-| `acidcat extract BANK [-o DIR]` | Pull every embedded sample out of a known bank/module as its own WAV: MOD/XM/IT/S3M, Gravis `.pat`, 8SVX, NCW, SF2/SF3, Bitwig `.multisample`, Kurzweil `.krz`, E-mu `.e4b`/`.e5b`, MPC `.snd`. `--json` for a manifest |
+| `acidcat extract BANK [-o DIR]` | Pull every embedded sample out of a known bank/module as its own WAV: MOD/XM/IT/S3M, Gravis `.pat`, 8SVX, NCW, SF2/SF3, Bitwig `.multisample`, Kurzweil `.krz`, E-mu `.e4b`/`.e5b`, MPC `.snd`. Also rips soundtracks off console disc images: PlayStation/CD-XA (`.bin`/`.img`), any `.cue` (CD-DA), GameCube `.iso` (HPS/ADX/DTK), and Wii `.iso` (BRSTM, needs `[crypto]`). `--json` for a manifest |
 | `acidcat write FILE --set field=value` | Edit metadata in place, with a `_original` backup, `-o` copy, and `--dry-run`; custom frames via `txxx:NAME=value`; Bitwig/NI preset editing (experimental) |
 | `acidcat probe FILE read\|scan\|find\|strings\|hexdump\|diff\|entropy\|map ...` | Low-level byte dissection (RE-tool surface): typed read at an offset (`read fmt.sample_rate -t u32`), value scan, byte-pattern find, strings, hexdump, diff, plus `entropy` (Shannon curve + histogram) and `map` (binvis Hilbert byte-map). Addresses can be raw offsets or structural names (`chunk` / `chunk.field`) resolved through the walker |
 | `acidcat carve FILE (--chunk ID \| --trailing \| --offset N [--length N] \| --at EXPR \| --batch SRC)` | Extract a structurally-identified byte region (a chunk payload, an appended blob, or an explicit/anchored range) to a file or stdout; `--batch` consumes `locate` records and cuts every region into a directory |
@@ -152,7 +153,8 @@ Most commands accept `table`, `json`, and `csv` (default `table`, but
 | `[analysis]` | librosa, numpy, scipy, soundfile | detect, features, info --deep |
 | `[mcp]` | mcp SDK | `acidcat-mcp` stdio server |
 | `[mcp-http]` | starlette + uvicorn | `acidcat-mcp --transport http` (streamable-HTTP transport) |
-| `[all]` | everything (includes `[mcp-http]`) | all commands, all formats |
+| `[crypto]` | cryptography | extract audio from encrypted Wii disc images |
+| `[all]` | everything (includes `[mcp-http]`, `[crypto]`) | all commands, all formats |
 
 ## Examples
 
