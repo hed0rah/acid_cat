@@ -6,6 +6,20 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.79.0] - 2026-07-27
+
+### Added
+
+- **MIDI 2.0 / UMP.** New `core/ump.py` decodes Universal MIDI Packets -- the
+  MIDI 2.0 wire/file primitive, self-delimiting by the message-type nibble:
+  MIDI 1.0/2.0 channel voice, utility (JR clock/timestamp, Delta Clockstamp,
+  DCTPQ), SysEx7/8, Flex Data (tempo / time signature / text), and UMP Stream
+  messages. `acidcat inspect` now walks the **MIDI Clip File** (`.midi2` /
+  SMF2CLIP): the 8-byte magic then a big-endian UMP stream, surfacing resolution,
+  tempo, time signature, metadata, and -- with `--frames` -- the tick-stamped
+  event list. Classic `.mid` (SMF 1.0) is unaffected. Layouts verified against
+  MMA M2-104-UM (UMP) and M2-116-U (Clip File).
+
 ## [0.78.1] - 2026-07-26
 
 ### Fixed

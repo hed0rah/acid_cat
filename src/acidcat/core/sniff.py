@@ -76,6 +76,8 @@ def sniff_bytes(head):
         return "brstm"                                 # Nintendo streamed audio (GameCube/Wii DSP-ADPCM)
     if head[:6] == b'FILE "':
         return "cue"                                   # CUE sheet (CD-DA track layout)
+    if head[:8] == b"SMF2CLIP":
+        return "midi2"                                 # MIDI 2.0 clip file (a UMP stream)
     if len(head) >= 14 and head[:4] == b"MThd":
         return "midi"
     if len(head) >= 12 and head[:4] == b"RF64" and head[8:12] == b"WAVE":
