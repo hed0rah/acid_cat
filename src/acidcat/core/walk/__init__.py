@@ -13,8 +13,8 @@ import os
 
 from acidcat.core import sniff as sniffmod
 from acidcat.core.walk import (
-    aiff, akai, amiga, bfdlac, bitwig, gf1pat, emu, flac, fxp, krz, labx, midi, midi2, mp3, mp4,
-    mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
+    aiff, akai, albank, amiga, bfdlac, bitwig, gf1pat, emu, flac, fxp, krz, labx, midi, midi2, mp3,
+    mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
     vital, wav, wt,
 )
 from acidcat.core.walk.base import Unsupported
@@ -37,6 +37,8 @@ _WALKERS = {
              lambda path, deep: midi.inspect_midi(path, deep=deep)),
     "midi2": ("MIDI Clip File (MIDI 2.0 / UMP)",
               lambda path, deep: midi2.inspect_midi2(path, deep=deep)),
+    "albank": ("N64 audio bank (.ctl / ALBankFile)",
+               lambda path, deep: albank.inspect_albank(path, deep=deep)),
     "rmid": ("RMID (RIFF/MIDI)",
              lambda path, deep: rmid.inspect_rmid(path, deep=deep)),
     "serum": ("Xfer Serum preset", lambda path, deep: serum.inspect_serum(path)),

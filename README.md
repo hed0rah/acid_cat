@@ -72,6 +72,7 @@ full-text.
 | MIDI   | `.mid`    | BPM, key sig, time sig, tracks, note count/range |
 | RMID   | `.rmid`   | RIFF-wrapped MIDI: RIFF wrapper + the inner SMF (inspect) |
 | MIDI 2.0 | `.midi2` | MIDI Clip File: SMF2CLIP magic + UMP stream -- resolution, tempo, time sig, tick-stamped events (inspect) |
+| N64 bank | `.ctl` | libultra ALBankFile: bank/instrument/wavetable tree + VADPCM codebooks (inspect); `core/vadpcm.py` decodes N64 vector ADPCM |
 | Serum  | `.SerumPreset` | Preset name, author, tags, description |
 | VST FXP | `.fxp` | Preset kind, plugin id, version, preset name (inspect) |
 | ReCycle | `.rx2` | CAT/REX2 chunks, creator, slice count (inspect) |
@@ -115,7 +116,7 @@ the whole RIFF-to-BWF-to-RF64-to-Wave64 family.
 | `acidcat similar FILE` | Find samples that sound like FILE, over the index (`index --features` first); `-n N`, `--kind`, `--no-kind-filter`, `--paths-only` |
 | `acidcat dump FILE CHUNK [...]` | Hex-dump specific RIFF chunks |
 | `acidcat od FILE` | Colored objdump-x-style hex view: header bytes plus per-field offset / hex / decoded value, opaque payloads dimmed; `--color`, `--width` |
-| `acidcat inspect FILE... [--hex] [--frames] [--only/--exclude IDS] [--full] [--anomalies] [--pretty] [--color]` | Byte-level structural dump (WAV, RF64, AIFF, MIDI, MIDI 2.0 clip (.midi2), RMID, Serum, VST FXP, ReCycle RX2, Bitwig WT, MP3, FLAC, OGG, MP4/M4A, Bitwig, Vital, NCW, Native Instruments (Massive/Absynth/Kontakt/NKS/KORE)) with lint warnings. Takes multiple files (each under a `File:` banner; JSON becomes NDJSON). `--frames` per-frame/event dump, `--only`/`--exclude` select chunks, `--hex` raw bytes, `--full` a self-contained JSON dump feeding `acidcat explore`, `--anomalies` a forensic scan (trailing data, polyglots, cavities, size mismatches, LSB-stego notice), `--pretty` a human-friendly metadata view, `--verbose` a deep deconstruction (Bitwig device tree/parameters/notes, Vital modulation matrix, ...), `--color` to syntax-highlight |
+| `acidcat inspect FILE... [--hex] [--frames] [--only/--exclude IDS] [--full] [--anomalies] [--pretty] [--color]` | Byte-level structural dump (WAV, RF64, AIFF, MIDI, MIDI 2.0 clip (.midi2), N64 bank (.ctl), RMID, Serum, VST FXP, ReCycle RX2, Bitwig WT, MP3, FLAC, OGG, MP4/M4A, Bitwig, Vital, NCW, Native Instruments (Massive/Absynth/Kontakt/NKS/KORE)) with lint warnings. Takes multiple files (each under a `File:` banner; JSON becomes NDJSON). `--frames` per-frame/event dump, `--only`/`--exclude` select chunks, `--hex` raw bytes, `--full` a self-contained JSON dump feeding `acidcat explore`, `--anomalies` a forensic scan (trailing data, polyglots, cavities, size mismatches, LSB-stego notice), `--pretty` a human-friendly metadata view, `--verbose` a deep deconstruction (Bitwig device tree/parameters/notes, Vital modulation matrix, ...), `--color` to syntax-highlight |
 | `acidcat index DIR` | Upsert DIR into the global SQLite index |
 | `acidcat query [flags]` | Filter the global index by bpm/key/tag/text |
 | `acidcat query --compatible-with FILE` | Find samples that mix with FILE: harmonic key (Camelot) + compatible tempo (incl. half/double-time) |

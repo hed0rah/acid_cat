@@ -153,6 +153,10 @@ def sniff(filepath):
         from acidcat.core import gcm
         if gcm.is_gcm(filepath):
             return "gcm"
+    # an N64 .ctl audio bank opens with the weak 2-byte 0x4231 ('B1') revision;
+    # confirm structurally (a valid bank offset -> a bank with a sane sample rate)
+    if fmt is None and _is_albank(filepath):
+        return "albank"
     # a .sigmf-meta is JSON starting with '{', which sniff_bytes reads as vital;
     # the mandated extension reroutes it, exactly like the id3-wrapped demotion.
     if fmt == "vital" and filepath.lower().endswith(".sigmf-meta"):
@@ -216,6 +220,28 @@ def sniff(filepath):
     if fmt is None and _is_mod(filepath):
         return "mod"
     return fmt
+
+
+def _is_albank(filepath):
+    """An N64 libultra .ctl: revision 0x4231, a small bankCount, and a first bank
+    offset that lands on an ALBank whose sampleRate is a sane audio rate. The
+    sample-rate gate cheaply rejects the many false 0x4231 hits in random data."""
+    import struct
+    try:
+        with open(filepath, "rb") as f:
+            head = f.read(65536)
+    except OSError:
+        return False
+    if len(head) < 16 or head[:2] != b"\x42\x31":
+        return False
+    bank_count = struct.unpack_from(">h", head, 2)[0]
+    if not (1 <= bank_count <= 64) or 4 + 4 * bank_count > len(head):
+        return False
+    b0 = struct.unpack_from(">I", head, 4)[0]
+    if not (4 + 4 * bank_count <= b0 <= len(head) - 8):
+        return False
+    sample_rate = struct.unpack_from(">i", head, b0 + 4)[0]
+    return 8000 <= sample_rate <= 48000
 
 
 def _is_mod(filepath):
