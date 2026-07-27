@@ -6,6 +6,23 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.80.0] - 2026-07-27
+
+### Added
+
+- **N64 VADPCM + audio bank.** New `core/vadpcm.py` decodes Nintendo 64 vector
+  ADPCM -- the RSP codec: 9-byte frames, a per-sample codebook of predictor
+  vectors, order-N history, and CLAMP16 to match the hardware (the SDK C tool
+  doesn't clamp; the RSP does). Verified against the SDK algorithm: order-1
+  bit-exact plus order-2 property tests isolating every term. `acidcat inspect`
+  now walks the classic libultra **audio bank** (`.ctl` / ALBankFile): the
+  ALBank tree (instruments, sounds, wavetables) with each waveform's codebook,
+  detected by the 0x4231 revision confirmed against a sane sample rate. Both the
+  classic ALBank and the newer SM64-style engine share this codec; sample
+  extraction from a full ROM is game-specific (the `.tbl` base is not
+  self-describing) and is a follow-up. Layouts verified against libultra
+  libaudio.h + the N64 SDK VADPCM decoder.
+
 ## [0.79.0] - 2026-07-27
 
 ### Added
