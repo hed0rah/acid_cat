@@ -6,6 +6,22 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.81.0] - 2026-07-28
+
+### Added
+
+- **N64 audio recovery (container-agnostic).** `acidcat extract <rom.z64>` now
+  rips VADPCM samples out of an N64 ROM without parsing the game's bank format.
+  Each N64 game wraps VADPCM in its own container (classic ALBank, SM64
+  ALSeqFile, Zelda AudioTable, Camelot PtrTables, and more), so instead of a
+  per-game parser, new `core/n64rip.py` finds the codebooks + audiotable by
+  structure and pairs them by decoding to loud-and-coherent audio (peak AND
+  autocorrelation -- autocorrelation alone is fooled by silence). Byte order is
+  normalized off the ROM magic (z64/n64/v64). This is "PhotoRec for audio"
+  applied to a ROM: it rescues the samples, not the instrument tree. Verified
+  across different container formats (Wave Race, GoldenEye). Builds on the
+  `core/vadpcm.py` codec.
+
 ## [0.80.0] - 2026-07-27
 
 ### Added

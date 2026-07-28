@@ -157,6 +157,10 @@ def sniff(filepath):
     # confirm structurally (a valid bank offset -> a bank with a sane sample rate)
     if fmt is None and _is_albank(filepath):
         return "albank"
+    # an N64 ROM (z64/n64/v64) by its fixed magic word -- extract recovers its
+    # VADPCM samples regardless of the game's bank format
+    if fmt is None and head[:4] in (b"\x80\x37\x12\x40", b"\x37\x80\x40\x12", b"\x40\x12\x37\x80"):
+        return "n64rom"
     # a .sigmf-meta is JSON starting with '{', which sniff_bytes reads as vital;
     # the mandated extension reroutes it, exactly like the id3-wrapped demotion.
     if fmt == "vital" and filepath.lower().endswith(".sigmf-meta"):
