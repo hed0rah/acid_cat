@@ -6,6 +6,12 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.82.0] - 2026-07-29
+
+### Added
+- **`acidcat extract <rom.sfc>`** recovers SNES BRR samples from a ROM without parsing the game's sample table. SNES BRR carries no codebook (its four filters are fixed second-order predictors), so `core/snesrip.py` walks the ROM for end-flag-terminated runs of valid 9-byte blocks and keeps the ones that decode to loud, coherent audio -- loud measured by RMS (sustained energy), not just peak, so a lone spike over near-silence is not mistaken for a sample. This is the container-agnostic approach used for N64, minus the codebook-pairing step. New `core/brr.py` is the S-DSP BRR decoder (15-bit clip domain, standard integer filter coefficients). ROMs are detected by their internal cartridge-header checksum/complement (LoROM/HiROM, copier-header aware). Verified on Chrono Trigger, Super Mario RPG, and Mega Man X.
+
+
 ## [0.81.0] - 2026-07-28
 
 ### Added

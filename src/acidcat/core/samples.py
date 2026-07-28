@@ -665,6 +665,22 @@ def _n64rom_samples(filepath):
                        f"(coherence {s['coherence']}, peak {s['peak']}; ~22050 Hz)"}
 
 
+def _snesrom_samples(filepath):
+    """A SNES ROM: recover BRR samples container-agnostically (core/snesrip). BRR
+    carries no codebook, so an end-flag-terminated run of valid blocks that decodes
+    to coherent audio is a sample -- found without parsing the game's sample table.
+    Rate is the S-DSP native 32000 Hz (per-note pitch lives in the ARAM directory)."""
+    from acidcat.core import snesrip
+    with open(filepath, "rb") as f:
+        data = f.read()
+    for s in snesrip.recover(data):
+        yield {"name": f"brr_{s['offset']:06X}",
+               "wav": _wav(s["pcm"], 32000, channels=1),
+               "note": f"{len(s['pcm']) // 2 / 32000:.2f}s BRR recovered @0x{s['offset']:X} "
+                       f"({s['blocks']} blocks, coherence {s['coherence']}, rms {s['rms']}, "
+                       f"peak {s['peak']}; 32000 Hz)"}
+
+
 def _vag_samples(data):
     """PS1 .VAG: a 48-byte header then SPU-ADPCM. One mono sample per file."""
     from acidcat.core import vag as vagmod
@@ -685,7 +701,8 @@ _EXTRACTORS = {
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
                     "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples,
                     "cdxa": _cdxa_samples, "gcm": _gcm_samples, "cue": _cue_samples,
-                    "wii": _wiidisc_samples, "n64rom": _n64rom_samples}
+                    "wii": _wiidisc_samples, "n64rom": _n64rom_samples,
+                    "snesrom": _snesrom_samples}
 
 EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 
