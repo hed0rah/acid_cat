@@ -650,6 +650,21 @@ def _wiidisc_samples(filepath):
         disc.close()
 
 
+def _n64rom_samples(filepath):
+    """An N64 ROM: recover VADPCM samples container-agnostically (core/n64rip).
+    N64 games each wrap VADPCM differently, so this finds the codebooks + audiotable
+    by structure and pairs them by coherence rather than parsing a bank. Rate is
+    approximate (22050; the real rate lives in the game-specific bank we skip)."""
+    from acidcat.core import n64rip
+    with open(filepath, "rb") as f:
+        data = f.read()
+    for s in n64rip.recover(data):
+        yield {"name": f"vadpcm_{s['offset']:07X}",
+               "wav": _wav(s["pcm"], 22050, channels=1),
+               "note": f"{s['frames'] / 22050:.2f}s VADPCM recovered @0x{s['offset']:X} "
+                       f"(coherence {s['coherence']}, peak {s['peak']}; ~22050 Hz)"}
+
+
 def _vag_samples(data):
     """PS1 .VAG: a 48-byte header then SPU-ADPCM. One mono sample per file."""
     from acidcat.core import vag as vagmod
@@ -670,7 +685,7 @@ _EXTRACTORS = {
 _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
                     "e4b": _emu_samples, "e5b": _emu5_samples, "snd": _snd_samples,
                     "cdxa": _cdxa_samples, "gcm": _gcm_samples, "cue": _cue_samples,
-                    "wii": _wiidisc_samples}
+                    "wii": _wiidisc_samples, "n64rom": _n64rom_samples}
 
 EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 
