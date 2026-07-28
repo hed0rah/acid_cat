@@ -6,6 +6,14 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.83.0] - 2026-07-29
+
+### Added
+- **`acidcat formats [FMT] [-f table|json|tsv]`** prints the capability matrix -- inspect / extract / convert / repair support per format -- the single answer to "what does acidcat do with format X", which was previously spread across separate dispatch tables.
+
+### Changed
+- **Format-dispatch is now guarded.** acidcat keys several independent tables (walkers, sample extractors, convert, repair) on the format-id strings `core/sniff.py` returns, with nothing checking a table key is a real id (a typo failed as a silent dict-miss). New `sniff.KNOWN_FORMATS` declares the id namespace as data, and tests assert every dispatch-table key is a known id, that `KNOWN_FORMATS` matches the ids sniff actually returns, and that the convert/repair capability sets match the live dispatch (which caught the repair set under-listing FLAC and the IFF family).
+
 ## [0.82.0] - 2026-07-29
 
 ### Added

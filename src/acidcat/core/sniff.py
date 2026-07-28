@@ -10,11 +10,12 @@ The check order is part of the contract: RIFF/WAVE must be tried before
 the RIFF/NIKS preset magic, and the MP4 ftyp probe before the ID3
 fallbacks, or edge-case files reroute. Do not reorder.
 
-Format ids returned (all lowercase strings):
-    wav, rf64, aiff, aifc, midi, serum, bitwig, ncw, sf2, vital, mp4, ni,
-    flac, ogg, mp3, mod, xm, it, id3-wrapped (an ID3 tag around a non-MP3
-    container)
-or None for anything unrecognized.
+Every id this module can return is declared in ``KNOWN_FORMATS`` below -- the
+canonical format-id namespace the rest of acidcat keys its dispatch tables on
+(walk/_WALKERS, samples extractors, convert/repair). ``sniff`` returns one of
+those ids or None. A test guards that the tables only use ids from this set (so a
+typo'd key fails loudly, not as a silent dict-miss) and that the set stays in
+sync with the ids sniff actually returns.
 
 MOD has no leading signature (its magic is at offset 1080), so ``sniff``
 confirms it from disk; ``sniff_bytes`` cannot classify a MOD from a head.
@@ -26,6 +27,18 @@ from acidcat.core import ncw as ncwmod
 # containers an ID3v2 tag is known to wrap; the tag then does not make
 # the file an MP3.
 _ID3_WRAPPED_MAGICS = (b"RIFF", b"RF64", b"FORM", b"fLaC", b"MThd")
+
+# the canonical set of ids sniff/sniff_bytes can return. This is the source of
+# truth every dispatch table keys on; keep it in sync with the returns below (the
+# test suite asserts both directions). "id3-wrapped" is a sentinel, not a format.
+KNOWN_FORMATS = frozenset({
+    "8svx", "adx", "aifc", "aiff", "akp", "albank", "bfdlac", "bitwig", "brstm",
+    "cdxa", "cue", "e4b", "e5b", "fc", "flac", "fxp", "gcm", "gf1pat", "hps",
+    "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
+    "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni", "ogg",
+    "okt", "pgm", "rf64", "rmid", "rx2", "s3m", "serum", "sf2", "sigmf", "smus",
+    "snd", "snesrom", "vag", "vital", "wav", "wii", "wt", "xm", "xpm", "xpn", "xtd",
+})
 
 
 def sniff_bytes(head):
