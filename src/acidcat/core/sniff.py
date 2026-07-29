@@ -161,6 +161,11 @@ def sniff(filepath):
     # VADPCM samples regardless of the game's bank format
     if fmt is None and head[:4] in (b"\x80\x37\x12\x40", b"\x37\x80\x40\x12", b"\x40\x12\x37\x80"):
         return "n64rom"
+    # a SNES ROM has no leading magic; its internal cartridge header (LoROM 0x7FC0
+    # / HiROM 0xFFC0) carries a checksum + complement that xor to 0xFFFF. extract
+    # recovers its BRR samples regardless of the game's sample table.
+    if fmt is None and _is_snes_rom(filepath):
+        return "snesrom"
     # a .sigmf-meta is JSON starting with '{', which sniff_bytes reads as vital;
     # the mandated extension reroutes it, exactly like the id3-wrapped demotion.
     if fmt == "vital" and filepath.lower().endswith(".sigmf-meta"):
@@ -246,6 +251,34 @@ def _is_albank(filepath):
         return False
     sample_rate = struct.unpack_from(">i", head, b0 + 4)[0]
     return 8000 <= sample_rate <= 48000
+
+
+def _is_snes_rom(filepath):
+    """A headerless SNES ROM. No leading magic, but the internal cartridge header
+    at 0x7FC0 (LoROM) or 0xFFC0 (HiROM) ends with a 16-bit checksum and its
+    complement that xor to 0xFFFF -- a 1-in-65536 gate. A 512-byte copier header
+    shifts both locations by 0x200. The map-mode byte (0x20..0x3F) is a sanity
+    check so a chance complement pair in non-ROM data is not mistaken for a cart."""
+    import os
+    try:
+        size = os.path.getsize(filepath)
+    except OSError:
+        return False
+    if size < 0x8000 or size > 0x800000:               # 32 KiB .. 8 MiB (SNES range)
+        return False
+    base = 0x200 if size % 0x400 == 0x200 else 0        # strip a 512-byte copier header
+    with open(filepath, "rb") as f:
+        for hdr in (0x7FC0, 0xFFC0):                    # LoROM, HiROM header locations
+            f.seek(base + hdr)
+            h = f.read(0x20)
+            if len(h) < 0x20:
+                continue
+            mapmode = h[0x15]
+            comp = h[0x1C] | (h[0x1D] << 8)
+            chk = h[0x1E] | (h[0x1F] << 8)
+            if chk and (comp ^ chk) == 0xFFFF and 0x20 <= mapmode <= 0x3F:
+                return True
+    return False
 
 
 def _is_mod(filepath):
