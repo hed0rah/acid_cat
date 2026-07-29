@@ -6,6 +6,11 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.85.0] - 2026-07-29
+
+### Fixed
+- **Key detection now reads the mode from a quality-before-letter name.** Many sample packs name chords `<quality>_<letter>` (e.g. `Pad_Access_min_C` = C minor, `Pad_Zenith_Maj7_C` = C major), which the letter-first filename patterns missed, so the bare-token fallback stored a bare major letter -- cataloguing C-minor content as C major and giving **wrong harmonic-compatibility results**. `parse_key_from_path` now reads min/maj (plus chord extensions like `min7`/`minadd9`) from a chord-quality token sitting beside the key letter, while still rejecting ordinary words that merely start with min/maj (`Minimal`, `Magic`). Found by dogfooding the MCP catalogue on a real chord library.
+
 ## [0.84.0] - 2026-07-29
 
 ### Changed
