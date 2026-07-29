@@ -44,6 +44,21 @@ def test_path_filename_bare_key():
     assert parse_key_from_path("/loops/kick_120_Am.wav") == "Am"
 
 
+def test_quality_before_letter_sets_mode():
+    # sample packs often name chords <quality>_<letter> ("min_C" = C minor), which
+    # the letter-first filename patterns miss -- the bare-token grab must read the
+    # mode from the adjacent chord-quality token, not silently return C major.
+    assert parse_key_from_path("/x/Pad_Access_min_C.wav") == "Cm"
+    assert parse_key_from_path("/x/Pad_Reeds_min7_C.wav") == "Cm"
+    assert parse_key_from_path("/x/Pad_Space_minadd9_C.wav") == "Cm"
+    assert parse_key_from_path("/x/Pad_Zenith_Maj7_C.wav") == "C"      # major stays bare
+    assert parse_key_from_path("/x/Pad_Adjective_Sus4_C.wav") == "C"   # sus = no mode
+    # must NOT misread ordinary words that merely start with min/maj
+    assert parse_key_from_path("/x/Minimal_Techno_C.wav") == "C"
+    assert parse_key_from_path("/x/C_Minimal_Loop.wav") == "C"
+    assert parse_key_from_path("/x/Magic_Bells_G.wav") == "G"
+
+
 def test_path_parent_folder_bare_key():
     # key in parent folder, not filename
     path = "/samples/PL_Hypnotize_03_126_A#/Drums/kick.wav"

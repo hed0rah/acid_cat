@@ -108,6 +108,25 @@ def parse_bare_key_token(token):
     return root + minor
 
 
+# chord-quality tokens that fix the mode of a bare key letter sitting beside them
+# (e.g. "min_C", "Maj7_C" -- quality-before-letter, which parse_key_from_filename's
+# letter-first patterns miss). Deliberately strict: min/maj plus an optional chord
+# extension and nothing else, so "Minimal"/"Magic" don't read as a mode.
+_MODE_MIN_TOKEN = re.compile(r"^min(or)?(add)?\d*$", re.I)
+_MODE_MAJ_TOKEN = re.compile(r"^maj(or)?(add)?\d*$", re.I)
+
+
+def _mode_from_neighbour(tokens, i):
+    """'min'/'maj' implied by a chord-quality token immediately beside tokens[i]."""
+    for j in (i - 1, i + 1):
+        if 0 <= j < len(tokens):
+            if _MODE_MIN_TOKEN.match(tokens[j]):
+                return "min"
+            if _MODE_MAJ_TOKEN.match(tokens[j]):
+                return "maj"
+    return None
+
+
 def parse_key_from_path(filepath, max_parent_depth=3):
     """Robust key extraction across filename + parent folders.
 
@@ -139,12 +158,17 @@ def parse_key_from_path(filepath, max_parent_depth=3):
 
     token_re = re.compile(r"[_\-\.\s]+")
     for seg in segments:
-        for token in token_re.split(seg):
-            if not token:
-                continue
+        tokens = [t for t in token_re.split(seg) if t]
+        for i, token in enumerate(tokens):
             key = parse_bare_key_token(token)
-            if key is not None:
-                return key
+            if key is None:
+                continue
+            # parse_bare_key_token yields a bare major letter here (minor tokens
+            # like 'Am' are caught earlier by parse_key_from_filename). A chord-
+            # quality marker beside it fixes the mode: 'min_C' -> 'Cm'.
+            if not key.endswith("m") and _mode_from_neighbour(tokens, i) == "min":
+                return key + "m"
+            return key
     return None
 
 
