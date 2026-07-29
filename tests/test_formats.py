@@ -56,6 +56,21 @@ _MAGIC = {
 }
 
 
+def test_audio_container_table_is_single_source():
+    # carve and locate both derive their audio-container constants from the one
+    # table in sniff (Tier-2 dedup). Pin that they stay wired to it and consistent,
+    # so nobody re-hardcodes a copy that can drift.
+    from acidcat.commands import carve
+    from acidcat.core import locate
+    assert carve._EXT is sniffmod.AUDIO_CONTAINER_EXT
+    assert locate._CONTAINER_MAGICS is sniffmod.AUDIO_CONTAINER_MAGICS
+    assert set(locate._AUDIO_CONTAINER_FMTS) == set(sniffmod.AUDIO_CONTAINERS)
+    assert set(sniffmod.AUDIO_CONTAINERS) <= sniffmod.KNOWN_FORMATS
+    # the scan magics are exactly the distinct leading magics, de-duped in order
+    assert sniffmod.AUDIO_CONTAINER_MAGICS == tuple(
+        dict.fromkeys(m for m, _e in sniffmod.AUDIO_CONTAINERS.values()))
+
+
 def test_repair_set_matches_live_dispatch():
     # derive the repair-capable set by probing constraints.repairer_for with a real
     # magic per format; it must equal _REPAIR exactly. Catches both the omission
