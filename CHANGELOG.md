@@ -6,6 +6,11 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.84.0] - 2026-07-29
+
+### Changed
+- **The audio-container format table is now defined once** in `core/sniff.py` (`AUDIO_CONTAINERS`: id -> magic + file extension). `carve` (naming a carved region) and `locate` (which magics to sweep, which sniffed ids to accept) both derive from it instead of each keeping their own copy, so the two can no longer drift apart. Behavior is unchanged; a test pins the wiring.
+
 ## [0.83.0] - 2026-07-29
 
 ### Added

@@ -40,6 +40,30 @@ KNOWN_FORMATS = frozenset({
     "snd", "snesrom", "vag", "vital", "wav", "wii", "wt", "xm", "xpm", "xpn", "xtd",
 })
 
+# audio container formats that carry a carvable/recoverable payload: format id ->
+# (leading magic to sweep for, natural file extension for a carved region). The one
+# definition `locate` (which magics to scan and which sniffed formats to accept)
+# and `carve` (how to name a carved region) both read, so the two cannot drift.
+# A hit is always re-confirmed with sniff_bytes, so the magic here is a coarse
+# scan pattern, not the identification (RIFF and ID3 each cover several formats).
+AUDIO_CONTAINERS = {
+    "wav":  (b"RIFF", "wav"),
+    "rf64": (b"RF64", "wav"),
+    "aiff": (b"FORM", "aiff"),
+    "aifc": (b"FORM", "aiff"),
+    "8svx": (b"FORM", "8svx"),
+    "flac": (b"fLaC", "flac"),
+    "ogg":  (b"OggS", "ogg"),
+    "sf2":  (b"RIFF", "sf2"),
+    "mp3":  (b"ID3",  "mp3"),
+}
+
+# distinct leading magics of the audio containers, in first-seen order (the scan
+# patterns for locate's signature sweep); and the id set locate accepts.
+AUDIO_CONTAINER_MAGICS = tuple(dict.fromkeys(m for m, _ext in AUDIO_CONTAINERS.values()))
+AUDIO_CONTAINER_FMTS = frozenset(AUDIO_CONTAINERS)
+AUDIO_CONTAINER_EXT = {fid: ext for fid, (_m, ext) in AUDIO_CONTAINERS.items()}
+
 
 def sniff_bytes(head):
     """Classify the first bytes of a file (pass at least 16).

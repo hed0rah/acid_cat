@@ -31,7 +31,12 @@ import struct
 
 from acidcat.core import audioscan
 from acidcat.core import framescan
-from acidcat.core.sniff import sniff_bytes
+# container magics whose payload can be audio, and the ids we accept -- both from
+# the one audio-container table in core/sniff (shared with carve). Each hit is
+# still confirmed with sniff_bytes, so a stray "RIFF" in noise is rejected.
+from acidcat.core.sniff import (sniff_bytes,
+                                AUDIO_CONTAINER_FMTS as _AUDIO_CONTAINER_FMTS,
+                                AUDIO_CONTAINER_MAGICS as _CONTAINER_MAGICS)
 
 MODES = ("strict", "normal", "aggressive")
 
@@ -40,12 +45,6 @@ _NORMAL_BLOB_MIN = 0.45           # headerless blobs need this confidence in 'no
 _CONTAINER_CONF = 0.9             # a validated container is a strong recovery
 _COALESCE_GAP = 32 * 1024        # merge headerless blob fragments within this gap
                                  # (a quiet passage inside a file is still one file)
-
-# container magics whose payload can be audio; each is confirmed with sniff_bytes
-# so a stray "RIFF" in noise is rejected, not trusted.
-_CONTAINER_MAGICS = (b"RIFF", b"RF64", b"FORM", b"fLaC", b"OggS", b"ID3")
-_AUDIO_CONTAINER_FMTS = {"wav", "rf64", "aiff", "aifc", "8svx", "flac", "ogg",
-                         "sf2", "mp3"}
 
 
 _RIFF_MIN = 12                    # a RIFF/FORM smaller than its own header is corrupt

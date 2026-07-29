@@ -34,6 +34,8 @@ import sys
 from acidcat.core import bytefields as bf
 from acidcat.core.anomalies import _declared_end, _rf64_end
 from acidcat.core.riff import iter_chunks
+# the one audio-container table (shared with locate): format id -> file extension
+from acidcat.core.sniff import AUDIO_CONTAINER_EXT as _EXT
 
 _ENDIAN = {"be": ">", "le": "<", "both": "both"}
 
@@ -77,11 +79,6 @@ def register(subparsers):
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Suppress the summary line on stderr.")
     p.set_defaults(func=run)
-
-
-# natural file extension for a carved region, by detected container format
-_EXT = {"wav": "wav", "rf64": "wav", "aiff": "aiff", "aifc": "aiff", "8svx": "8svx",
-        "flac": "flac", "ogg": "ogg", "sf2": "sf2", "mp3": "mp3"}
 
 
 def _parse_records(text):
