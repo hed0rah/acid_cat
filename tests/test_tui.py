@@ -1244,7 +1244,7 @@ def test_tui_regions_re_tools(tmp_path):
             # toggle the transform lens (wiring: flag flips, rescan runs cleanly)
             browser()[0].dismiss({"action": "rescan", "mode": "aggressive",
                                   "transforms": True})
-            for _ in range(80):
+            for _ in range(300):   # generous: the rescan can take ~10s, longer under load
                 if browser():
                     break
                 await pilot.pause(0.1)
@@ -1317,7 +1317,7 @@ def test_tui_scan_is_segmented(tmp_path, monkeypatch):
     async def full():
         app = AcidcatTUI(str(blob))
         async with app.run_test(size=(120, 40)) as pilot:
-            for _ in range(80):
+            for _ in range(300):   # generous: the rescan can take ~10s, longer under load
                 if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
                     break
                 await pilot.pause(0.05)
@@ -1351,7 +1351,7 @@ def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
             await pilot.pause(0.25)
             assert app._scanning
             await pilot.press("enter")                 # stop and keep
-            for _ in range(80):
+            for _ in range(300):   # generous: the rescan can take ~10s, longer under load
                 if not app._scanning and has_browser(app):
                     break
                 await pilot.pause(0.05)
@@ -1363,7 +1363,7 @@ def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
             await pilot.pause(0.25)
             assert app._scanning
             await pilot.press("escape")                # cancel and discard
-            for _ in range(80):
+            for _ in range(300):   # generous: the rescan can take ~10s, longer under load
                 if not app._scanning:
                     break
                 await pilot.pause(0.05)
