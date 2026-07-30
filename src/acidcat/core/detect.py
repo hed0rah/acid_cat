@@ -220,6 +220,63 @@ def improve_key_detection(detected_key, filename_key):
     return filename_key, 'filename'
 
 
+# ── Krumhansl-Schmuckler key finding ───────────────────────────────
+
+# Krumhansl-Kessler key profiles: per-pitch-class "fit" weights from the
+# probe-tone experiments, indexed from the tonic (index 0 = tonic). Major and
+# minor have different shapes, so correlating a piece's pitch-class distribution
+# against all 24 rotations names the key AND its mode -- which chroma argmax
+# (strongest single pitch) cannot.
+_KS_MAJOR = (6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88)
+_KS_MINOR = (6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17)
+_PITCH_CLASSES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+
+# minimum K-S correlation to trust an audio-derived key. A clear tonal passage
+# correlates ~0.8+; a weakly-tonal or ambiguous input (an isolated chord, a drum
+# loop) scores lower and its winning key is unreliable, so below this we emit no
+# key rather than a confident-sounding wrong one. A wrong key misroutes harmonic
+# search; "unknown" does not.
+KEY_CONF_MIN = 0.75
+
+
+def _pearson(a, b):
+    """Pearson correlation of two equal-length sequences; 0 when either is flat."""
+    n = len(a)
+    ma, mb = sum(a) / n, sum(b) / n
+    va = sum((x - ma) ** 2 for x in a)
+    vb = sum((y - mb) ** 2 for y in b)
+    if va == 0 or vb == 0:
+        return 0.0
+    cov = sum((a[i] - ma) * (b[i] - mb) for i in range(n))
+    return cov / (va ** 0.5 * vb ** 0.5)
+
+
+def estimate_key_ks(chroma12):
+    """Krumhansl-Schmuckler key finding over a 12-bin pitch-class distribution.
+
+    ``chroma12`` is 12 energies, one per pitch class starting at C (bin 0 = C,
+    as librosa's chroma is laid out), summed/averaged over time. Correlates it
+    against the major and minor profile rotated to each of the 12 tonics and
+    returns ``(key, confidence)`` -- key is 'C'/'C#'/... for major or 'Cm'/... for
+    minor, confidence is the winning Pearson correlation (0..1). Returns
+    ``(None, 0.0)`` for an empty or silent (flat/zero) distribution.
+
+    Pure stdlib, so it runs anywhere the 12-bin chroma is available."""
+    if not chroma12 or len(chroma12) != 12 or sum(chroma12) <= 0:
+        return None, 0.0
+    best_key, best_r = None, -2.0
+    for tonic in range(12):
+        maj = [_KS_MAJOR[(i - tonic) % 12] for i in range(12)]
+        minr = [_KS_MINOR[(i - tonic) % 12] for i in range(12)]
+        r_maj = _pearson(chroma12, maj)
+        if r_maj > best_r:
+            best_r, best_key = r_maj, _PITCH_CLASSES[tonic]
+        r_min = _pearson(chroma12, minr)
+        if r_min > best_r:
+            best_r, best_key = r_min, _PITCH_CLASSES[tonic] + "m"
+    return best_key, round(max(best_r, 0.0), 3)
+
+
 # ── Librosa-based estimation ───────────────────────────────────────
 
 def estimate_librosa_metadata(filepath):
@@ -272,19 +329,20 @@ def estimate_librosa_metadata(filepath):
         filename_bpm = parse_bpm_from_filename(filepath)
         final_bpm, bpm_source = validate_and_improve_bpm(detected_bpm, filename_bpm)
 
-        # Key. Chroma argmax tells us the strongest pitch class but
-        # NOT major vs minor mode -- and downstream code (camelot,
-        # find_compatible) treats a bare letter as major by
-        # convention. Emitting "A" for an A-minor file would route
-        # it to A major's harmonic neighbors, which is musically
-        # wrong. Refuse to guess; defer to filename parsing which
-        # carries mode explicitly.
-        #
-        # A future revision could correlate chroma_median against
-        # Krumhansl-Schmuckler major + minor templates and pick the
-        # higher correlation. For now we accept that without mode
-        # information we should not name a key.
-        detected_key = None
+        # Key. Correlate the piece's pitch-class distribution against the
+        # Krumhansl-Schmuckler major + minor profiles (estimate_key_ks): unlike
+        # chroma argmax, comparing the distribution *shape* against two templates
+        # names the mode (major vs minor), so we can emit a real key from audio.
+        # chroma_cqt is more tuning-robust than chroma_stft for key finding.
+        detected_key, detected_key_conf = None, 0.0
+        try:
+            chroma = librosa.feature.chroma_cqt(y=y, sr=sr)         # 12 x frames, bin 0 = C
+            profile = [float(x) for x in chroma.mean(axis=1)]
+            detected_key, detected_key_conf = estimate_key_ks(profile)
+            if detected_key_conf < KEY_CONF_MIN:                    # too ambiguous to trust
+                detected_key = None
+        except Exception:
+            pass
 
         filename_key = parse_key_from_filename(filepath)
         final_key, key_source = improve_key_detection(detected_key, filename_key)
@@ -299,6 +357,7 @@ def estimate_librosa_metadata(filepath):
             "filename_key": filename_key,
             "detected_bpm": detected_bpm,
             "detected_key": detected_key,
+            "detected_key_confidence": detected_key_conf,
         }
 
     except Exception:

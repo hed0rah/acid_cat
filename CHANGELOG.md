@@ -6,6 +6,12 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.87.0] - 2026-07-29
+
+### Added
+- **Audio key detection (Krumhansl-Schmuckler).** acidcat can now hear a key from the audio, not just parse it from filenames. `detect.estimate_key_ks` correlates a track's 12-bin pitch-class distribution (librosa chroma) against the Krumhansl-Kessler major and minor key profiles across all 24 keys and names the winner -- so unlike chroma argmax it identifies the *mode* (major vs minor). Wired into the librosa `--deep` path (`estimate_librosa_metadata`), filling in a key for unlabeled tonal material; filename keys stay authoritative when present. Pure-stdlib core (correlation over 12 bins), so the key finder itself needs no numpy.
+- Results are confidence-gated (`KEY_CONF_MIN`, default 0.75): below the threshold acidcat emits no key rather than a confident-sounding wrong one. Strongest on harmonically-rich content (pads, chords, melodic loops); **sparse bass-dominant or percussive loops are unreliable** (sub-bass/octave artifacts smear the chromagram) and are usually gated out. Future refinement: better-tuned profiles (Temperley / Albrecht-Shanahan) and harmonic-percussive separation.
+
 ## [0.86.0] - 2026-07-29
 
 ### Fixed
