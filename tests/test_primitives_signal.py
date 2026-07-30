@@ -1,8 +1,10 @@
-"""The shared signal primitives (Phase-0 dedup of 5 hand-rolled entropy copies)."""
+"""The shared signal primitives (Phase-0 dedup of hand-rolled entropy + coherence)."""
+import array
 import math
 import os
 
-from acidcat.core.primitives.signal import byte_counts, byte_entropy, entropy_from_counts
+from acidcat.core.primitives.signal import (byte_counts, byte_entropy,
+                                            entropy_from_counts, pcm_coherence)
 
 
 def test_byte_counts():
@@ -40,3 +42,26 @@ def test_entropy_from_counts():
     got = entropy_from_counts([ones, total - ones], total)
     p = ones / total
     assert abs(got - (-p * math.log2(p) - (1 - p) * math.log2(1 - p))) < 1e-12
+
+
+def _pcm(samples):
+    return array.array("h", samples).tobytes()
+
+
+def test_pcm_coherence():
+    # too few samples -> zero autocorr, regardless of content
+    assert pcm_coherence(_pcm([1000, -1000]), min_len=256) == (0.0, 0, 0.0)
+    # a smooth ramp (adjacent samples close) is highly coherent
+    ramp = _pcm(list(range(-8000, 8000, 4)) * 2)
+    r, peak, rms = pcm_coherence(ramp, min_peak=100)
+    assert r > 0.99 and peak >= 100 and rms > 0
+    # peak gate: below min_peak -> autocorr 0, but peak/rms still reported honestly
+    quiet = _pcm([5, -5] * 500)
+    r2, peak2, _ = pcm_coherence(quiet, min_peak=1000)
+    assert r2 == 0.0 and peak2 == 5
+    # matches the old inline formula exactly on a real-ish signal
+    sig = _pcm([int(500 * math.sin(i / 20)) for i in range(4000)])
+    s = array.array("h"); s.frombytes(sig); w = s[:12000]
+    m = sum(w) / len(w); var = sum((x - m) ** 2 for x in w) / len(w) or 1
+    cov = sum((w[k] - m) * (w[k + 1] - m) for k in range(len(w) - 1)) / (len(w) - 1)
+    assert abs(pcm_coherence(sig, min_peak=0)[0] - cov / var) < 1e-12

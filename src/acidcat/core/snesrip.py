@@ -20,9 +20,10 @@ table or their tuning/loop metadata (that lives in the ARAM directory we skip).
         ...  # s["pcm"] is 16-bit mono PCM; samples.py wraps it to WAV
 """
 
-import array
+
 
 from acidcat.core import brr
+from acidcat.core.primitives import signal
 
 # a 512-byte copier (SMC) header offsets everything; strip it before scanning.
 _COPIER = 512
@@ -33,24 +34,10 @@ def _strip_copier(data):
 
 
 def _coherence(pcm, min_peak):
-    """(autocorr, peak, rms) over the first stretch of a decoded sample. autocorr
-    ~1 is coherent audio, ~0 is noise. peak and rms are loudness: peak alone is
-    fooled by a lone spike over near-silence, so rms (sustained energy, the sqrt of
-    the variance we already compute) is the real gate separating a sample from a
-    quiet false positive -- the ROM does not mark where samples are, so this is a
-    detector threshold, not audio post-processing."""
-    s = array.array("h")
-    s.frombytes(pcm)
-    if len(s) < 256:
-        return 0.0, 0, 0.0
-    w = s[:12000]
-    peak = max(abs(x) for x in w)
-    if peak < min_peak:
-        return 0.0, peak, 0.0
-    m = sum(w) / len(w)
-    var = sum((x - m) ** 2 for x in w) / len(w) or 1
-    cov = sum((w[k] - m) * (w[k + 1] - m) for k in range(len(w) - 1)) / (len(w) - 1)
-    return cov / var, peak, var ** 0.5
+    # (autocorr, peak, rms): mean-centered lag-1 autocorr + loudness gates. rms
+    # separates a sustained sample from a lone spike over near-silence. Shared with
+    # n64rip via primitives.signal (BRR samples can be short, so no length floor).
+    return signal.pcm_coherence(pcm, min_peak)
 
 
 def _run_length(data, start, max_blocks):

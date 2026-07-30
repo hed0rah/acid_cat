@@ -26,6 +26,7 @@ import array
 import struct
 
 from acidcat.core import vadpcm
+from acidcat.core.primitives import signal
 
 _Z64 = b"\x80\x37\x12\x40"
 _V64 = b"\x37\x80\x40\x12"
@@ -67,18 +68,9 @@ def find_codebooks(data):
 
 
 def _coherence(pcm, min_peak):
-    s = array.array("h")
-    s.frombytes(pcm)
-    if len(s) < 6000:
-        return 0.0
-    w = s[:12000]
-    peak = max(abs(x) for x in w)
-    if peak < min_peak:
-        return 0.0
-    m = sum(w) / len(w)
-    var = sum((x - m) ** 2 for x in w) / len(w) or 1
-    cov = sum((w[k] - m) * (w[k + 1] - m) for k in range(len(w) - 1)) / (len(w) - 1)
-    return cov / var                                   # ~1 = coherent audio, ~0 = noise
+    # mean-centered lag-1 autocorrelation (~1 = coherent audio, ~0 = noise), with
+    # a peak gate and this recovery's 6000-sample floor. Shared with snesrip.
+    return signal.pcm_coherence(pcm, min_peak, min_len=6000)[0]
 
 
 def _audiotable_regions(data, win=0x1000, thresh=0.985):
