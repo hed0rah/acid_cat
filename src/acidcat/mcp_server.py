@@ -13,6 +13,7 @@ strictly the JSON-RPC channel; the server logs warnings to stderr.
 """
 
 import argparse
+import asyncio
 import contextlib
 import importlib.util
 import json
@@ -206,11 +207,24 @@ class ToolError(Exception):
 TOOLS = []
 
 
+def _nullable_optionals(schema):
+    """Let every non-required scalar-typed property also accept null. LLM clients
+    routinely fill unused optional args with null rather than omitting them; the
+    framework's input validation would otherwise reject a well-meant null before
+    the handler (which treats null as absent via .get()) ever runs."""
+    required = set(schema.get("required", []))
+    for pname, spec in schema.get("properties", {}).items():
+        t = spec.get("type")
+        if pname not in required and isinstance(t, str) and t != "null":
+            spec["type"] = [t, "null"]
+    return schema
+
+
 def _tool(name, description, input_schema, handler, annotations):
     TOOLS.append({
         "name": name,
         "description": description,
-        "input_schema": input_schema,
+        "input_schema": _nullable_optionals(input_schema),
         "handler": handler,
         "annotations": annotations,
     })
@@ -1435,8 +1449,15 @@ def _build_app():
         # tool-execution failures come back as a CallToolResult with isError so
         # the client and model see them as errors, not as a successful payload
         # that happens to hold an "error" string.
+        #
+        # dispatch is synchronous and does blocking work (SQLite fan-out, and for
+        # find_similar/analyze the numpy/librosa stack). Run it off the event-loop
+        # thread: on Windows the numpy path deadlocks the proactor loop if run
+        # inline, and blocking the loop stalls the stdio pipe regardless. The
+        # cached fan-out connections are opened check_same_thread=False for exactly
+        # this cross-thread use.
         try:
-            result = dispatch(name, arguments or {})
+            result = _jsonable(await asyncio.to_thread(dispatch, name, arguments or {}))
         except ToolError as e:
             return mcp_types.CallToolResult(
                 content=[mcp_types.TextContent(
@@ -1509,11 +1530,57 @@ def _run_http(host, port, json_response):
     uvicorn.run(star, host=host, port=port, log_level="warning")
 
 
+def _jsonable(o):
+    """Coerce numpy scalars/arrays (nested) to plain Python types. The analysis
+    tools return librosa/numpy values (e.g. numpy.float32), which the MCP response
+    serializer (pydantic) cannot serialize -- an unsanitized value crashes the
+    whole connection, not just the one call. Only numpy types are touched."""
+    if isinstance(o, dict):
+        return {k: _jsonable(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_jsonable(v) for v in o]
+    if type(o).__module__ == "numpy":
+        try:
+            return o.item() if getattr(o, "ndim", None) == 0 else o.tolist()
+        except Exception:
+            return str(o)
+    return o
+
+
 def _warn_legacy_db():
     legacy = acidpaths.legacy_global_db_path()
     if os.path.isfile(legacy):
         print(f"acidcat-mcp: legacy v0.4 DB at {legacy} is ignored. "
               f"Remove with: rm {legacy}*", file=sys.stderr)
+
+
+def _warm_analysis_stack():
+    """Pre-import the analysis C extensions before the stdio event loop starts.
+
+    numpy/librosa's first import deadlocks the asyncio stdio server on Windows
+    (the proactor loop stalls while OpenBLAS/numba initialize), even when the
+    import is deferred to a worker thread -- so the analysis tools (find_similar,
+    analyze_sample, detect_bpm_key) hang the first time they run. Importing here,
+    before the loop starts, turns those in-tool imports into cache hits. No-op when
+    the analysis extra is not installed; best-effort otherwise."""
+    if importlib.util.find_spec("numpy"):
+        try:
+            import numpy as np
+            np.linalg.norm(np.ones((2, 2)))          # spin up OpenBLAS off the loop
+        except Exception:
+            pass
+    if importlib.util.find_spec("librosa"):
+        try:
+            import numpy as np
+            import librosa
+            # importing librosa is not enough: its first *analysis* triggers numba
+            # JIT compilation, which deadlocks the loop just like the import does.
+            # Run a tiny analysis on a synthetic signal to force the JIT off-loop.
+            y = np.zeros(2048, dtype=np.float32)
+            librosa.feature.mfcc(y=y, sr=22050, n_mfcc=4)
+            librosa.beat.beat_track(y=y, sr=22050)
+        except Exception:
+            pass
 
 
 def main(argv=None):
@@ -1548,7 +1615,7 @@ def main(argv=None):
     if args.transport == "http":
         _run_http(args.host, args.port, args.json_response)
     else:
-        import asyncio
+        _warm_analysis_stack()   # heavy C-ext imports deadlock inside the loop
         asyncio.run(_run_stdio())
 
 

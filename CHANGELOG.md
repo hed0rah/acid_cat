@@ -6,6 +6,12 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.86.0] - 2026-07-29
+
+### Fixed
+- **The analysis MCP tools now work over stdio.** `find_similar`, `detect_bpm_key`, and `analyze_sample` hung or crashed the connection when called through the stdio server -- the interface an LLM actually uses. Three causes, all fixed: (1) numpy's first *import* deadlocks the asyncio stdio loop on Windows, so the analysis stack is now pre-warmed (numpy + a librosa JIT warm-up) before the loop starts; (2) tool dispatch runs off the event-loop thread so blocking librosa work can't stall the pipe; (3) analysis tools returned `numpy.float32` values the response serializer could not encode, crashing the whole connection -- results are now coerced to plain Python types. Trade-off: stdio server startup is a few seconds slower (warming librosa) when the `[analysis]` extra is installed.
+- **`search_samples` (and every tool) now tolerate `null` for optional arguments.** LLM clients routinely send null for unused optionals; the framework's schema validation rejected them before the handler ran. Optional params are now declared nullable centrally. Found by dogfooding the MCP catalogue.
+
 ## [0.85.0] - 2026-07-29
 
 ### Fixed

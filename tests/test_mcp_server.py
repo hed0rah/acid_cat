@@ -565,3 +565,44 @@ class TestInferKindHelper:
 
     def test_ambiguous(self):
         assert mcp_server.infer_kind(1.5, 0) == "any"
+
+
+# ── stdio robustness: serialization + nullable optionals ────────────────────
+
+def test_jsonable_coerces_numpy():
+    """The analysis tools return numpy scalars/arrays; the MCP response serializer
+    cannot serialize those, so a leak crashes the whole connection. _jsonable must
+    coerce them (nested) to plain Python types while leaving everything else."""
+    np = pytest.importorskip("numpy")
+    out = mcp_server._jsonable({
+        "a": np.float32(1.5),
+        "b": [np.int64(3), {"c": np.float64(2.0)}],
+        "d": np.array([1.0, 2.0], dtype=np.float32),
+        "e": "plain", "f": 7, "g": None,
+    })
+    assert out["a"] == 1.5 and isinstance(out["a"], float)
+    assert out["b"] == [3, {"c": 2.0}]
+    assert out["d"] == [1.0, 2.0]
+    assert out["e"] == "plain" and out["f"] == 7 and out["g"] is None
+    # result must be JSON-serializable with no custom encoder
+    json.dumps(out)
+
+
+def test_nullable_optionals_accepts_null():
+    """Non-required scalar props must also accept null (LLM clients send null for
+    unused optionals); required props are untouched."""
+    schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "key": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "limit": {"type": "integer"},
+        },
+        "required": ["path"],
+    }
+    out = mcp_server._nullable_optionals(schema)
+    assert out["properties"]["path"]["type"] == "string"           # required: unchanged
+    assert out["properties"]["key"]["type"] == ["string", "null"]   # optional: nullable
+    assert out["properties"]["limit"]["type"] == ["integer", "null"]
+    assert out["properties"]["tags"]["type"] == ["array", "null"]   # optional array: nullable too
