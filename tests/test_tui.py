@@ -522,7 +522,7 @@ def test_load_survives_a_walker_exception(tmp_path, monkeypatch):
 
     def boom(*a, **k):
         raise struct.error("crafted file")
-    monkeypatch.setattr(tui_app, "walk_file", boom)
+    monkeypatch.setattr(tui_app.app, "walk_file", boom)
 
     async def scenario():
         app = AcidcatTUI(str(orig))
@@ -707,7 +707,7 @@ def test_undo_capped_by_bytes(tmp_path, monkeypatch):
     from acidcat.tui_app import AcidcatTUI
     from textual.widgets import Tree, Input
 
-    monkeypatch.setattr(tui_app, "_UNDO_BYTES_CAP", 1)   # any snapshot busts it
+    monkeypatch.setattr(tui_app.app, "_UNDO_BYTES_CAP", 1)   # any snapshot busts it
     orig = tmp_path / "cap.wav"
     shutil.copyfile("data/samples/Drum_Loop.wav", orig)
 
@@ -798,7 +798,7 @@ def test_hex_text_offsets_and_empty(tmp_path):
 
 def test_fuzzy_matcher():
     pytest.importorskip("textual")           # _fuzzy lives in tui_app (imports rich)
-    from acidcat.tui_app import _fuzzy
+    from acidcat.tui_app.render import _fuzzy
     assert _fuzzy("sr", "sample_rate")          # subsequence
     assert _fuzzy("SMPL", "smpl")               # case-insensitive
     assert _fuzzy("", "anything")               # empty query matches all
@@ -1279,7 +1279,7 @@ def test_tui_large_blob_browsed_in_place(tmp_path, monkeypatch):
     import acidcat.tui_app as tapp
     from acidcat.tui_app import AcidcatTUI, RegionsScreen
 
-    monkeypatch.setattr(tapp, "_LARGE_FILE", 8192)   # force the large path
+    monkeypatch.setattr(tapp.app, "_LARGE_FILE", 8192)   # force the large path
     blob = tmp_path / "disk.img"
     _blob_with_two_wavs(blob)
     before = blob.read_bytes()
@@ -1310,7 +1310,7 @@ def test_tui_scan_is_segmented(tmp_path, monkeypatch):
     import acidcat.tui_app as tapp
     from acidcat.tui_app import AcidcatTUI, RegionsScreen
 
-    monkeypatch.setattr(tapp, "_SCAN_SEG", 4096)      # many segments for a small blob
+    monkeypatch.setattr(tapp.app, "_SCAN_SEG", 4096)      # many segments for a small blob
     blob = tmp_path / "disk.img"
     _blob_with_two_wavs(blob)
 
@@ -1335,9 +1335,9 @@ def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
     import acidcat.tui_app as tapp
     from acidcat.tui_app import AcidcatTUI, RegionsScreen
 
-    monkeypatch.setattr(tapp, "_SCAN_SEG", 4096)
-    orig = tapp.locatemod.locate
-    monkeypatch.setattr(tapp.locatemod, "locate",     # slow enough to act mid-scan
+    monkeypatch.setattr(tapp.app, "_SCAN_SEG", 4096)
+    orig = tapp.app.locatemod.locate
+    monkeypatch.setattr(tapp.app.locatemod, "locate",     # slow enough to act mid-scan
                         lambda *a, **k: (time.sleep(0.15) or orig(*a, **k)))
     blob = tmp_path / "disk.img"
     _blob_with_two_wavs(blob)
