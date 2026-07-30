@@ -61,7 +61,7 @@ def test_audio_container_table_is_single_source():
     # table in sniff (Tier-2 dedup). Pin that they stay wired to it and consistent,
     # so nobody re-hardcodes a copy that can drift.
     from acidcat.commands import carve
-    from acidcat.core import locate
+    from acidcat.core.forensics import locate
     assert carve._EXT is sniffmod.AUDIO_CONTAINER_EXT
     assert locate._CONTAINER_MAGICS is sniffmod.AUDIO_CONTAINER_MAGICS
     assert set(locate._AUDIO_CONTAINER_FMTS) == set(sniffmod.AUDIO_CONTAINERS)

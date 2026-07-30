@@ -369,7 +369,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # the other; both structured is the crafted-artifact tell.
     if fmt_label and (fmt_label.startswith("RIFF/WAVE") or "AIFF" in fmt_label):
         try:
-            from acidcat.core import lsb as _lsb
+            from acidcat.core.forensics import lsb as _lsb
             de = _lsb.dual_endian(filepath, fmt_label, chunks)
             if de and de["flagged"]:
                 findings.append({"severity": "notice", "offset": 0,

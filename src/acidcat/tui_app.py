@@ -31,15 +31,15 @@ from textual.widgets import (
 )
 
 from acidcat.core.walk import walk_file, Unsupported
-from acidcat.core import anomalies as ac_anom
-from acidcat.core import locate as locatemod
-from acidcat.core import transforms as transformsmod
+from acidcat.core.forensics import anomalies as ac_anom
+from acidcat.core.forensics import locate as locatemod
+from acidcat.core.forensics import transforms as transformsmod
 from acidcat.core.codecs import cdxa as cdxamod
 from acidcat.core.codecs import vag as vagmod
 from acidcat.core.containers import iso9660 as isomod
-from acidcat.core import audioscan as audioscanmod
+from acidcat.core.forensics import audioscan as audioscanmod
 from acidcat.core.write import writer
-from acidcat.core import viz
+from acidcat.core.forensics import viz
 from acidcat.commands.carve import _EXT as _CARVE_EXT
 from acidcat.util import play
 from acidcat.core.write.edits import EditError

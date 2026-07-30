@@ -18,7 +18,7 @@ It is deliberately gated: transforms are tried only on the *suspicious* windows
 reads at most `read_cap` -- a focused tool, not a whole-disk sweep.
 """
 
-from acidcat.core.audioscan import (DEFAULT_STEP, DEFAULT_WINDOW,
+from acidcat.core.forensics.audioscan import (DEFAULT_STEP, DEFAULT_WINDOW,
                                     audio_score, window_features)
 
 _READ_CAP = 16 * 1024 * 1024

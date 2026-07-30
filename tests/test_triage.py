@@ -3,7 +3,7 @@
 import os
 import struct
 
-from acidcat.core import triage
+from acidcat.core.forensics import triage
 from acidcat.core.walk import walk_file, Unsupported
 
 

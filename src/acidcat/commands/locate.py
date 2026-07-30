@@ -20,8 +20,8 @@ the bytes -- reported null, with common candidates).
 import json
 import sys
 
-from acidcat.core import audioscan
-from acidcat.core import locate as locatemod
+from acidcat.core.forensics import audioscan
+from acidcat.core.forensics import locate as locatemod
 from acidcat.util.stdin import is_stdin_target
 
 _PUBLIC_KEYS = ("kind", "format", "offset", "end", "length", "confidence",
@@ -137,7 +137,7 @@ def run(args):
 
     recs = locatemod.locate(data, mode=args.mode)
     if args.transforms:
-        from acidcat.core import transforms
+        from acidcat.core.forensics import transforms
         recs = sorted(recs + transforms.find_transformed_audio(data),
                       key=lambda r: r["offset"])
     if args.analyze:

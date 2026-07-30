@@ -3,7 +3,7 @@ third `locate` engine: MPEG audio found by frame-sync cadence, not magic."""
 
 import random
 
-from acidcat.core import framescan, locate
+from acidcat.core.forensics import framescan, locate
 
 
 def _frame():

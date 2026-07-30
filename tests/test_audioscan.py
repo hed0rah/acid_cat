@@ -7,7 +7,7 @@ import math
 import random
 import struct
 
-from acidcat.core import audioscan
+from acidcat.core.forensics import audioscan
 
 
 def _noise(n, seed=1):

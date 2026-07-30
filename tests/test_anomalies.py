@@ -3,7 +3,7 @@ import io
 import struct
 import zipfile
 
-from acidcat.core import anomalies
+from acidcat.core.forensics import anomalies
 from acidcat.core.walk import walk_file
 
 
@@ -59,7 +59,7 @@ def test_trailing_junk_flagged_without_polyglot(tmp_path):
 def test_lsb_clean_vs_stego(tmp_path):
     import math
     import random
-    from acidcat.core import lsb
+    from acidcat.core.forensics import lsb
 
     def wav(samples):
         pcm = b"".join(struct.pack("<h", max(-32768, min(32767, int(s)))) for s in samples)
@@ -185,7 +185,7 @@ def test_junk_all_zero_not_flagged(tmp_path):
 
 def test_entropy_helper_discriminates():
     import random
-    from acidcat.core.anomalies import _entropy_note
+    from acidcat.core.forensics.anomalies import _entropy_note
     from acidcat.core.primitives.signal import byte_entropy
     rnd = random.Random(7)
     cipher = bytes(rnd.getrandbits(8) for _ in range(600))

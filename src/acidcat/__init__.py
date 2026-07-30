@@ -35,7 +35,8 @@ See docs/format_internals.md for the formats acidcat walks.
 __version__ = "0.90.0"
 
 # dissection namespaces
-from acidcat.core import probe, viz  # noqa: E402,F401
+from acidcat.core import probe  # noqa: E402,F401
+from acidcat.core.forensics import viz
 
 # structural walking
 from acidcat.core.walk import walk_file  # noqa: E402
@@ -45,7 +46,7 @@ from acidcat.core.walk.base import Unsupported  # noqa: E402,F401
 from acidcat.core.write.constraints import (  # noqa: E402,F401
     analyze, repair, Report, Violation,
 )
-from acidcat.core.anomalies import scan as anomalies_scan  # noqa: E402,F401
+from acidcat.core.forensics.anomalies import scan as anomalies_scan  # noqa: E402,F401
 
 # metadata read/write + the brand theme: public entry points so tools built on
 # acidcat use these instead of reaching into core/commands internals.

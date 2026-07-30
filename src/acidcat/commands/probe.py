@@ -21,7 +21,7 @@ import os
 import sys
 
 from acidcat.core import probe as pr
-from acidcat.core import viz
+from acidcat.core.forensics import viz
 from acidcat.core.mapped import map_file
 from acidcat.tui_theme import BYTE_CLASS
 

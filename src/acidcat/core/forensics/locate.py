@@ -29,8 +29,8 @@ bytes or walks a container -- that is the next stage in the pipe.
 
 import struct
 
-from acidcat.core import audioscan
-from acidcat.core import framescan
+from acidcat.core.forensics import audioscan
+from acidcat.core.forensics import framescan
 # container magics whose payload can be audio, and the ids we accept -- both from
 # the one audio-container table in core/sniff (shared with carve). Each hit is
 # still confirmed with sniff_bytes, so a stray "RIFF" in noise is rejected.

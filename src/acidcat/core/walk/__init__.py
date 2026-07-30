@@ -105,7 +105,7 @@ def walk_file(filepath, deep=False):
         # have not written a walker for) is still recognized and its chunk grid
         # surfaced, instead of a flat rejection.
         try:
-            from acidcat.core import triage
+            from acidcat.core.forensics import triage
             generic = triage.generic_walk(filepath)
         except Exception:
             generic = None

@@ -24,8 +24,10 @@ import re
 # is merged on top: its `canon` rules are tried FIRST (a user rule can override a
 # built-in first-match), and its `chunk_signatures` are appended (adding tools).
 
-_DATA_FILE = os.path.join(os.path.dirname(__file__), "data",
-                          "provenance_signatures.json")
+# signatures live under core/data/; this module sits in core/forensics/, so walk
+# up one level to reach the core package directory
+_CORE_DIR = os.path.dirname(os.path.dirname(__file__))
+_DATA_FILE = os.path.join(_CORE_DIR, "data", "provenance_signatures.json")
 _USER_FILE = os.path.join(os.path.expanduser("~"), ".acidcat",
                           "provenance_signatures.json")
 

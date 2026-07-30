@@ -81,7 +81,7 @@ def mark(text, color, bold=False):
 def byte_color(b):
     """Brand hex for a byte's binvis class -- composes core.viz.byte_class with
     BYTE_CLASS. Lazy-imports viz so importing the theme stays cheap."""
-    from acidcat.core import viz
+    from acidcat.core.forensics import viz
     return BYTE_CLASS[viz.byte_class(b)[1]]
 
 

@@ -110,7 +110,7 @@ def test_cmd_diff(tmp_path, capsys):
 # ── viz primitives ─────────────────────────────────────────────────
 
 def test_windowed_entropy_uniform_vs_random():
-    from acidcat.core import viz
+    from acidcat.core.forensics import viz
     zeros = viz.windowed_entropy(b"\x00" * 4096, 8)
     assert max(zeros) == 0.0                     # a constant byte = 0 entropy
     varied = viz.windowed_entropy(bytes(range(256)) * 16, 8)
@@ -118,14 +118,14 @@ def test_windowed_entropy_uniform_vs_random():
 
 
 def test_hilbert_grid_shape():
-    from acidcat.core import viz
+    from acidcat.core.forensics import viz
     grid, side = viz.hilbert_grid(bytes(range(256)) * 4, order=4)
     assert side == 16 and len(grid) == 16 and len(grid[0]) == 16
     assert any(cell is not None for row in grid for cell in row)
 
 
 def test_byte_class():
-    from acidcat.core import viz
+    from acidcat.core.forensics import viz
     assert viz.byte_class(0x00)[0] == "."
     assert viz.byte_class(0xFF)[0] == "#"
     assert viz.byte_class(ord("A"))[0] == "o"

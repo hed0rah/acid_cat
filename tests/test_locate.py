@@ -9,7 +9,7 @@ import random
 import struct
 import wave
 
-from acidcat.core import locate
+from acidcat.core.forensics import locate
 
 
 def _noise(n, seed=1):
@@ -161,5 +161,5 @@ def test_invalid_mode_raises():
 
 
 def audioscan_window():
-    from acidcat.core import audioscan
+    from acidcat.core.forensics import audioscan
     return audioscan.DEFAULT_WINDOW

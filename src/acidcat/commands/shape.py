@@ -95,7 +95,7 @@ def _full_fingerprint(path, want_anomalies):
     summary = next((c["summary"] for c in chunks
                     if str(c["id"]).strip() in _HEADER_IDS), "")
     if want_anomalies:
-        from acidcat.core import anomalies
+        from acidcat.core.forensics import anomalies
         try:
             findings = anomalies.scan(path, label, chunks, warns) or []
         except Exception:

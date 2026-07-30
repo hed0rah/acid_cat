@@ -21,8 +21,8 @@ import json
 import os
 import sys
 
-from acidcat.core import anomalies as anomaliesmod
-from acidcat.core import lsb as lsbmod
+from acidcat.core.forensics import anomalies as anomaliesmod
+from acidcat.core.forensics import lsb as lsbmod
 from acidcat.core.walk import Unsupported, walk_file
 
 # --full emits raw region bytes for chunks that have decoded fields; cap the

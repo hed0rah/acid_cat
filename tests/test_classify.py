@@ -5,7 +5,7 @@ import struct
 
 import pytest
 
-from acidcat.core import audioscan
+from acidcat.core.forensics import audioscan
 
 
 def _varied_spu(n=300):
