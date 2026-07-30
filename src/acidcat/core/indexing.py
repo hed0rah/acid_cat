@@ -54,6 +54,10 @@ def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
                      quiet=False, force=False, jobs=None):
     walk_start = time.time()
     feature_queue = []          # (filepath, path_key) to feature-extract in parallel
+    cur_feat_version = None
+    if do_features:
+        from acidcat.core.features import FEATURE_SET_VERSION
+        cur_feat_version = FEATURE_SET_VERSION
     # ensure the query-layer expression indexes exist (existing DBs never get
     # them via _apply_schema, which returns early at the current version).
     try:
@@ -87,6 +91,10 @@ def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
                 old_mtime, old_size = existing
                 if old_mtime == st.st_mtime and old_size == st.st_size:
                     idx.touch_last_seen(conn, norm, walk_start)
+                    # metadata unchanged, but top up features if missing or stale
+                    # (e.g. after a FEATURE_SET_VERSION change) without re-parsing.
+                    if do_features and idx.feature_version(conn, norm) != cur_feat_version:
+                        feature_queue.append((filepath, norm))
                     skipped += 1
                     seen_paths += 1
                     since_commit += 1
@@ -505,7 +513,7 @@ def _extract_and_store_features(conn, filepath, path_key, quiet=False):
     feats = extract_audio_features(filepath)
     if feats is None:
         return
-    idx.upsert_features(conn, path_key, feats, version=1)
+    idx.upsert_features(conn, path_key, feats)
 
 
 # ── parallel feature extraction ─────────────────────────────────────
@@ -572,7 +580,7 @@ def _extract_features_parallel(conn, queue, quiet=False, jobs=None):
     with ctx.Pool(workers, initializer=_feature_worker_init) as pool:
         for path_key, feats in pool.imap_unordered(_feature_worker, queue, chunksize=1):
             if feats is not None:
-                idx.upsert_features(conn, path_key, feats, version=1)
+                idx.upsert_features(conn, path_key, feats)
             done += 1
             since_commit += 1
             if since_commit >= _COMMIT_EVERY_N_FILES:

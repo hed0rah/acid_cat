@@ -154,3 +154,35 @@ def _args(lib, target, *, paths_only=False, kind=None, kind_filter=True):
     return _Args(target=target, num=5, kind=kind, kind_filter=kind_filter,
                  registry=lib["registry"], output_format="table",
                  output=None, paths_only=paths_only)
+
+
+def test_find_similar_excludes_stale_feature_version(indexed_library):
+    """A feature row at an older FEATURE_SET_VERSION lives in a different feature
+    space and must be invisible to similarity -- not silently mixed in."""
+    from acidcat.core import index as idx
+    from acidcat.core.features import FEATURE_SET_VERSION
+    libs = _libs(indexed_library["registry"])
+    # mark the click (the nearest match) as stale
+    db = dict(libs[0])["db_path"]
+    conn = idx.open_db(db)
+    conn.execute("UPDATE features SET features_version = ? WHERE path = ?",
+                 (FEATURE_SET_VERSION - 1, indexed_library["click"]))
+    conn.commit(); conn.close()
+
+    feats, meta = search.resolve_target_features(indexed_library["hat"], libs)
+    result = search.find_similar(libs, feats, meta, n=5,
+                                 exclude_path=indexed_library["hat"])
+    paths = [r["path"] for r in result["results"]]
+    assert indexed_library["click"] not in paths          # stale-version row excluded
+
+
+def test_upsert_features_stores_current_version(tmp_path):
+    from acidcat.core import index as idx
+    from acidcat.core.features import FEATURE_SET_VERSION
+    conn = idx.open_db(str(tmp_path / "t.db"))
+    conn.execute("INSERT INTO samples (path, scan_root, format, mtime, size, "
+                 "indexed_at, last_seen_at) VALUES ('p','r','wav',1,1,1,1)")
+    idx.upsert_features(conn, "p", {"spectral_centroid_mean": 1.0})   # no explicit version
+    assert idx.feature_version(conn, "p") == FEATURE_SET_VERSION
+    assert idx.feature_version(conn, "absent") is None
+    conn.close()

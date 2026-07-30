@@ -197,6 +197,7 @@ def resolve_target_features(path, libs):
     (None, None) if it is not indexed anywhere. meta carries duration +
     acid_beats for kind inference. Mirrors resolve_reference: index-first, and
     the caller decides whether to fall back to a live extract."""
+    from acidcat.core.features import FEATURE_SET_VERSION
     for cand in (acidpaths.normalize(path), path):
         for lib in libs:
             try:
@@ -205,7 +206,10 @@ def resolve_target_features(path, libs):
                 continue
             try:
                 feats = idx.get_features(conn, cand)
-                if feats is None:
+                # only trust cached features at the current version; a stale-version
+                # target must be re-extracted live so it shares the candidates'
+                # feature space (the caller falls back to a live extract on None).
+                if feats is None or idx.feature_version(conn, cand) != FEATURE_SET_VERSION:
                     continue
                 row = conn.execute(
                     "SELECT duration, acid_beats FROM samples WHERE path = ?",
@@ -247,16 +251,21 @@ def find_similar(libs, target_features, target_meta=None, *, n=5, kind=None,
         raise ValueError("no usable features for target")
     dims = len(tv)
 
+    from acidcat.core.features import FEATURE_SET_VERSION
     exclude = acidpaths.normalize(exclude_path) if exclude_path else None
-    kind_where = ""
+    # only compare vectors of the current feature-set version: a stale (e.g.
+    # different analysis rate) vector lives in a different feature space and its
+    # cosine against current vectors is meaningless. Stale rows are simply invisible
+    # to similarity until re-featured.
+    where = " WHERE f.features_version = ?"
     if effective_kind == "loop":
-        kind_where = " WHERE (s.acid_beats > 0 OR s.duration >= 2.0)"
+        where += " AND (s.acid_beats > 0 OR s.duration >= 2.0)"
     elif effective_kind == "one_shot":
-        kind_where = (" WHERE ((s.acid_beats IS NULL OR s.acid_beats = 0) "
-                      "AND (s.duration IS NULL OR s.duration < 1.0))")
+        where += (" AND ((s.acid_beats IS NULL OR s.acid_beats = 0) "
+                  "AND (s.duration IS NULL OR s.duration < 1.0))")
     sql = ("SELECT f.path, f.feature_vec, f.features_json, s.bpm, s.key, "
            "s.duration, s.format, s.acid_beats "
-           "FROM features f JOIN samples s ON s.path = f.path" + kind_where)
+           "FROM features f JOIN samples s ON s.path = f.path" + where)
 
     # deepest-root-first so dedup keeps the most-specific library's row
     # (libs may be sqlite3.Row, which has no .get())
@@ -273,7 +282,7 @@ def find_similar(libs, target_features, target_meta=None, *, n=5, kind=None,
         except Exception:
             continue
         try:
-            rows = conn.execute(sql).fetchall()
+            rows = conn.execute(sql, (FEATURE_SET_VERSION,)).fetchall()
         except Exception:
             rows = []
         finally:
