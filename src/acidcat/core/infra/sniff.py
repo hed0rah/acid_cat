@@ -21,7 +21,6 @@ MOD has no leading signature (its magic is at offset 1080), so ``sniff``
 confirms it from disk; ``sniff_bytes`` cannot classify a MOD from a head.
 """
 
-from acidcat.core.formats import mp3 as mp3mod
 from acidcat.core.codecs import ncw as ncwmod
 
 # containers an ID3v2 tag is known to wrap; the tag then does not make
@@ -146,15 +145,19 @@ def sniff_bytes(head):
         return "xm"
     if head[:4] == b"IMPM":
         return "it"
-    if head[:3] == b"ID3" or (len(head) >= 4
-                              and mp3mod.decode_frame_header(head[:4]) is not None):
+    if head[:3] == b"ID3":
         return "mp3"
+    if len(head) >= 4:
+        from acidcat.core.formats import mp3 as mp3mod
+        if mp3mod.decode_frame_header(head[:4]) is not None:
+            return "mp3"
     return None
 
 
 def _id3_wraps_other_container(filepath):
     """True when the leading ID3v2 tag is a wrapper around a different
     known container rather than the tag of an MPEG stream."""
+    from acidcat.core.formats import mp3 as mp3mod
     hdr = mp3mod.read_id3v2(filepath)
     if not hdr:
         return False  # "ID3" magic but an unreadable header; treat as an MP3 attempt
@@ -379,6 +382,7 @@ def _is_mpc_snd(filepath):
 
 
 def _free_format_mp3(filepath, head):
+    from acidcat.core.formats import mp3 as mp3mod
     hdr = mp3mod.decode_frame_header(head[:4], allow_free=True)
     if hdr is None or not hdr.get("free_format"):
         return False
