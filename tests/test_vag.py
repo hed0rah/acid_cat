@@ -10,7 +10,7 @@ import wave
 
 import pytest
 
-from acidcat.core import vag
+from acidcat.core.codecs import vag
 
 
 def _vag_file(rate, name, body):

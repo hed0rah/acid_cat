@@ -11,7 +11,7 @@ the sample rate (not stored per frame like DSP-ADPCM).
 Handles the standard linear-scale types (2 and 3). AHX (type 4, MPEG) and
 encrypted ADX are out of scope and raise.
 
-    from acidcat.core import adx
+    from acidcat.core.codecs import adx
     pcm, info = adx.decode(open("bgm.adx","rb").read())
 """
 

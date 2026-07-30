@@ -353,7 +353,7 @@ def classify(data, cap=32768):
 
     Returns {top, is_codec, uncertain, candidates:[{label, confidence, codec, ...}]}
     sorted most-confident first. Never raises."""
-    from acidcat.core import vag
+    from acidcat.core.codecs import vag
     b = data[:cap]
     cands = []
 

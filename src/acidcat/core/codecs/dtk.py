@@ -8,7 +8,7 @@ whose high nibble is a left sample and low nibble a right sample. Unlike DSP-ADP
 the four predictor coefficient pairs are fixed (the same family as CD-XA), and
 the sample is (nibble << 12) >> scale plus the predictor (matching Dolphin).
 
-    from acidcat.core import dtk
+    from acidcat.core.codecs import dtk
     pcm, info = dtk.decode(open("bgm.adp","rb").read())
 """
 

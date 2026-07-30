@@ -17,7 +17,7 @@ Two fidelity notes matched to the RSP (not the SDK C tool): the accumulator
 Reference: N64 SDK `vdecode.c` (vdecodeframe) / `vpredictor.c` (inner_product);
 depp/skelly64 VADPCM writeup.
 
-    from acidcat.core import vadpcm
+    from acidcat.core.codecs import vadpcm
     pcm = vadpcm.decode(frames, book_coefs, order, npredictors)   # 16-bit mono PCM
 """
 

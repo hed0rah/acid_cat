@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from acidcat.core import adx
+from acidcat.core.codecs import adx
 
 
 def _adx_file(frame_data, ch=1, rate=44100, samples=32, hp=500, enc=2, blk=18):

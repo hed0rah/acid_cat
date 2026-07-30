@@ -1640,18 +1640,18 @@ class TestVitalWalker:
 class TestNcwWalker:
     def _ncw(self, ch=2, bits=24, rate=48000, n=44100):
         import struct as _s
-        from acidcat.core.ncw import MAGIC
+        from acidcat.core.codecs.ncw import MAGIC
         return (MAGIC + b"\x31\x01\x00\x00" + _s.pack("<HHII", ch, bits, rate, n)
                 + b"\x00" * 40)
 
     def test_parse_ncw_header(self):
-        from acidcat.core.ncw import parse_header
+        from acidcat.core.codecs.ncw import parse_header
         h = parse_header(self._ncw())
         assert h == {"channels": 2, "bits": 24, "sample_rate": 48000,
                      "num_samples": 44100}
 
     def test_ncw_bad_params_rejected(self):
-        from acidcat.core.ncw import parse_header, MAGIC
+        from acidcat.core.codecs.ncw import parse_header, MAGIC
         import struct as _s
         # bits=7 is invalid -> not trusted as NCW
         bad = MAGIC + b"\x00" * 4 + _s.pack("<HHII", 2, 7, 48000, 100) + b"\x00" * 40
@@ -1744,7 +1744,7 @@ class TestReviewHardening:
         assert parse_vital(b'{"synth_version":"1"}') is not None
 
     def test_ncw_absurd_num_samples_rejected(self):
-        from acidcat.core.ncw import parse_header, MAGIC
+        from acidcat.core.codecs.ncw import parse_header, MAGIC
         bad = (MAGIC + b"\x00" * 4
                + struct.pack("<HHII", 2, 24, 48000, 0xFFFFFFFF) + b"\x00" * 40)
         assert parse_header(bad) is None

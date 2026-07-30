@@ -34,8 +34,8 @@ from acidcat.core.walk import walk_file, Unsupported
 from acidcat.core import anomalies as ac_anom
 from acidcat.core import locate as locatemod
 from acidcat.core import transforms as transformsmod
-from acidcat.core import cdxa as cdxamod
-from acidcat.core import vag as vagmod
+from acidcat.core.codecs import cdxa as cdxamod
+from acidcat.core.codecs import vag as vagmod
 from acidcat.core import iso9660 as isomod
 from acidcat.core import audioscan as audioscanmod
 from acidcat.core import writer

@@ -25,7 +25,7 @@ normalized off the ROM magic (z64/n64/v64).
 import array
 import struct
 
-from acidcat.core import vadpcm
+from acidcat.core.codecs import vadpcm
 from acidcat.core.primitives import signal
 
 _Z64 = b"\x80\x37\x12\x40"

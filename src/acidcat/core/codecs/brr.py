@@ -19,7 +19,7 @@ coefficients are the standard integer forms (15/16, 61/32-15/16, 115/64-13/16).
 
 Reference: fullsnes (Nocash) S-DSP notes; DMV27 snesbrr decoder.
 
-    from acidcat.core import brr
+    from acidcat.core.codecs import brr
     pcm = brr.decode(block_bytes)                    # 16-bit mono PCM (little-endian)
 """
 

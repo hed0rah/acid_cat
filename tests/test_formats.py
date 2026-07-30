@@ -82,7 +82,8 @@ def test_repair_set_matches_live_dispatch():
 
 def test_convert_set_matches_live_dispatch():
     # convert.run() branches on these predicates; probe them the same way.
-    from acidcat.core import ncw as ncwmod, sf2 as sf2mod, svx as svxmod
+    from acidcat.core import sf2 as sf2mod, svx as svxmod
+    from acidcat.core.codecs import ncw as ncwmod
     from acidcat.core import bitwig as bwmod
     def convertible(fid, m):
         return (m[:4] == ncwmod.MAGIC or svxmod.is_8svx(m) or sf2mod.is_sf2(m)

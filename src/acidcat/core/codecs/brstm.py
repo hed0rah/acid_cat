@@ -11,13 +11,13 @@ decodes as one continuous DSP stream once its blocks are gathered.
 BRSTM is the Wii/GameCube music workhorse (first-party titles, RVL SDK). Only
 the DSP-ADPCM codec (type 2) is handled -- the PCM types are vanishingly rare.
 
-    from acidcat.core import brstm
+    from acidcat.core.codecs import brstm
     pcm, info = brstm.decode(open("bgm.brstm","rb").read())   # interleaved 16-bit PCM
 """
 
 import struct
 
-from acidcat.core import dsp
+from acidcat.core.codecs import dsp
 from acidcat.core.primitives.pcm import interleave_stereo
 
 MAGIC = b"RSTM"

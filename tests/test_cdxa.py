@@ -9,7 +9,7 @@ import struct
 
 import pytest
 
-from acidcat.core import cdxa
+from acidcat.core.codecs import cdxa
 
 
 def _xa_sector(file, chan, coding, payload):

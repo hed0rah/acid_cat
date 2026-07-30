@@ -9,13 +9,13 @@ continuous DSP stream across all blocks.
 
 Used by HAL's GameCube titles (Chibi-Robo, Kirby, Smash Bros) for music.
 
-    from acidcat.core import hps
+    from acidcat.core.codecs import hps
     pcm, info = hps.decode(open("song.hps","rb").read())   # interleaved 16-bit PCM
 """
 
 import struct
 
-from acidcat.core import dsp
+from acidcat.core.codecs import dsp
 from acidcat.core.primitives.pcm import interleave_stereo
 
 MAGIC = b" HALPST\x00"

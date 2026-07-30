@@ -22,7 +22,7 @@ confirms it from disk; ``sniff_bytes`` cannot classify a MOD from a head.
 """
 
 from acidcat.core import mp3 as mp3mod
-from acidcat.core import ncw as ncwmod
+from acidcat.core.codecs import ncw as ncwmod
 
 # containers an ID3v2 tag is known to wrap; the tag then does not make
 # the file an MP3.
@@ -177,7 +177,7 @@ def sniff(filepath):
         return "cue"
     # ADX opens with 0x8000 (weak); confirm via the (c)CRI marker before the audio
     if fmt is None and head[:2] == b"\x80\x00":
-        from acidcat.core import adx
+        from acidcat.core.codecs import adx
         if adx.is_adx(filepath):
             return "adx"
     # disc images carry their magic past the sniff head: Wii at 0x18, GameCube at

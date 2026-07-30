@@ -18,7 +18,7 @@ import os
 import struct
 import zipfile
 
-from acidcat.core import ncw as ncwmod
+from acidcat.core.codecs import ncw as ncwmod
 from acidcat.core import sf2 as sf2mod
 from acidcat.core import svx as svxmod
 from acidcat.core import tracker as tkmod
@@ -431,7 +431,8 @@ def _cdxa_named(filepath):
     """ISO 9660-aware extraction: named XA tracks from .STR/.XA movies and SPU
     sound banks from .VB/.BD, standalone .VAG, or any file whose content is a
     strong SPU-ADPCM match. Returns True if it yielded anything."""
-    from acidcat.core import cdxa, iso9660, vag
+    from acidcat.core import iso9660
+    from acidcat.core.codecs import cdxa, vag
     got = False
     files = list(iso9660.walk(filepath))
     by_upper = {e["path"].upper(): e for e in files}     # sibling-header lookup
@@ -497,7 +498,8 @@ _VAB_HDR_EXT = {".VB": ".VH", ".BD": ".HD"}
 def _vab_sizes(filepath, ent, by_upper):
     """The per-sample byte sizes from a bank's sibling VAB header (.VH/.HD), or
     None if there is no matching header or it does not parse."""
-    from acidcat.core import iso9660, vag
+    from acidcat.core import iso9660
+    from acidcat.core.codecs import vag
     up = ent["path"].upper()
     dot = up.rfind(".")
     hext = _VAB_HDR_EXT.get(up[dot:]) if dot >= 0 else None
@@ -517,7 +519,7 @@ def _cdxa_samples(filepath):
     filesystem, yields named .STR tracks and .VB/.VAG sound banks. Without one,
     falls back to decoding the raw XA channel and splitting it on silence.
     Reads via seeks, so a multi-hundred-MB disc is never slurped."""
-    from acidcat.core import cdxa
+    from acidcat.core.codecs import cdxa
     info0 = cdxa.detect_cd_image(filepath)
     if not info0 or not info0.get("xa"):
         return
@@ -562,7 +564,7 @@ def _cue_samples(cue_path):
 
 def _hps_samples(data):
     """HAL PCM Stream (.hps): decode the DSP-ADPCM stream to one WAV."""
-    from acidcat.core import hps
+    from acidcat.core.codecs import hps
     pcm, info = hps.decode(data)
     yield {"name": "stream", "wav": _wav(pcm, info["rate"], channels=info["channels"]),
            "note": f"{info['frames'] / info['rate']:.0f}s "
@@ -572,7 +574,7 @@ def _hps_samples(data):
 
 def _adx_samples(data):
     """CRI ADX: decode to one WAV."""
-    from acidcat.core import adx
+    from acidcat.core.codecs import adx
     pcm, info = adx.decode(data)
     yield {"name": "stream", "wav": _wav(pcm, info["rate"], channels=info["channels"]),
            "note": f"{info['frames'] / info['rate']:.0f}s "
@@ -582,7 +584,8 @@ def _adx_samples(data):
 def _gcm_samples(filepath):
     """A GameCube disc image: walk the filesystem and decode each audio file --
     HAL .hps streams and CRI .adx. Reads via seeks, never slurps the disc."""
-    from acidcat.core import gcm, hps, adx, dtk
+    from acidcat.core import gcm
+    from acidcat.core.codecs import hps, adx, dtk
     for ent in gcm.walk(filepath):
         p = ent["path"].lower()
         try:
@@ -608,7 +611,7 @@ def _gcm_samples(filepath):
 
 def _brstm_samples(data):
     """BRSTM (RSTM): decode the DSP-ADPCM stream to one WAV."""
-    from acidcat.core import brstm
+    from acidcat.core.codecs import brstm
     pcm, info = brstm.decode(data)
     yield {"name": "stream", "wav": _wav(pcm, info["rate"], channels=info["channels"]),
            "note": f"{info['frames'] / info['rate']:.0f}s "
@@ -620,7 +623,8 @@ def _wiidisc_samples(filepath):
     """A Wii disc image: decrypt the data partition, walk it, and decode each
     BRSTM stream. Needs the crypto extra (pip install acidcat[crypto]); decrypts
     clusters on demand, never slurping the disc."""
-    from acidcat.core import wiidisc, brstm
+    from acidcat.core import wiidisc
+    from acidcat.core.codecs import brstm
     try:
         disc = wiidisc.WiiDisc(filepath)
     except wiidisc.WiiError as e:
@@ -676,7 +680,7 @@ def _snesrom_samples(filepath):
 
 def _vag_samples(data):
     """PS1 .VAG: a 48-byte header then SPU-ADPCM. One mono sample per file."""
-    from acidcat.core import vag as vagmod
+    from acidcat.core.codecs import vag as vagmod
     info = vagmod.parse_vag(data)
     pcm = vagmod.decode_spu(info["data"])
     yield {"name": info["name"] or "sample", "wav": _wav(pcm, info["rate"]),

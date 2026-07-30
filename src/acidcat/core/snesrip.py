@@ -22,7 +22,7 @@ table or their tuning/loop metadata (that lives in the ARAM directory we skip).
 
 
 
-from acidcat.core import brr
+from acidcat.core.codecs import brr
 from acidcat.core.primitives import signal
 
 # a 512-byte copier (SMC) header offsets everything; strip it before scanning.

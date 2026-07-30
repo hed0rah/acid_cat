@@ -5,7 +5,7 @@ import struct
 
 import pytest
 
-from acidcat.core import ncw
+from acidcat.core.codecs import ncw
 
 _BLK = 512
 

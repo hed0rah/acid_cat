@@ -6,7 +6,8 @@ import struct
 
 import pytest
 
-from acidcat.core import dsp, gcm, hps
+from acidcat.core import gcm
+from acidcat.core.codecs import dsp, hps
 
 
 def test_dsp_decode_exact():

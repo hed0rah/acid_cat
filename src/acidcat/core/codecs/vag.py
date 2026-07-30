@@ -10,7 +10,7 @@ bytes = a 1-byte (shift, filter) header + a 1-byte loop/end flag + 14 bytes of
 28 nibbles. Mono. A standalone .VAG prepends a 48-byte header (magic "VAGp",
 big-endian sample rate and data size, a 16-byte name).
 
-    from acidcat.core import vag
+    from acidcat.core.codecs import vag
     info = vag.parse_vag(open("hit.vag","rb").read())
     pcm = vag.decode_spu(info["data"])          # 16-bit mono PCM
 """

@@ -15,9 +15,9 @@ import os
 import struct
 import sys
 
-from acidcat.core import adpcm
+from acidcat.core.codecs import adpcm
 from acidcat.core import bitwig as bwmod
-from acidcat.core import ncw as ncwmod
+from acidcat.core.codecs import ncw as ncwmod
 from acidcat.core import sf2 as sf2mod
 from acidcat.core import svx as svxmod
 from acidcat.core.midi_write import notes_to_smf

@@ -10,7 +10,7 @@ It underlies almost all GameCube/Wii audio: standalone .dsp, HAL's .hps streams,
 BRSTM/BFSTM, .ast, and many game containers -- they differ in how they wrap the
 frames and where the coefficients live, not in the codec.
 
-    from acidcat.core import dsp
+    from acidcat.core.codecs import dsp
     h = dsp.parse_dsp_header(data)           # standalone .dsp
     pcm = dsp.decode(data[0x60:], h["coefs"], h["hist1"], h["hist2"], h["samples"])
 """
