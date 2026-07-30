@@ -15,7 +15,8 @@ the caller adds color. No third-party imports.
                                   lives in the theme, not here)
 """
 
-import math
+
+from acidcat.core.primitives.signal import byte_counts, entropy_from_counts
 
 # dot bit within a 2x4 braille cell, indexed [row 0..3][col 0..1]
 _DOTS = ((0x01, 0x08), (0x02, 0x10), (0x04, 0x20), (0x40, 0x80))
@@ -65,27 +66,11 @@ def braille_line(values, width=72, height=8, vmin=None, vmax=None, fill=False):
     return _dot_rows(dots, width, height)
 
 
-def byte_counts(data):
-    counts = [0] * 256
-    for b in data:
-        counts[b] += 1
-    return counts
-
-
 def byte_histogram(data, width=128, height=6):
     """Braille bar chart of the byte distribution. Flat top = encrypted/
     compressed; peaks = structure."""
     counts = byte_counts(data)
     return braille_line(counts, width=width, height=height, vmin=0, fill=True)
-
-
-def _shannon(counts, total):
-    h = 0.0
-    for c in counts:
-        if c:
-            p = c / total
-            h -= p * math.log2(p)
-    return h
 
 
 def windowed_entropy(data, windows=72):
@@ -100,7 +85,7 @@ def windowed_entropy(data, windows=72):
         hi = max(lo + 1, (i + 1) * n // windows)
         seg = data[lo:hi]
         counts = byte_counts(seg)
-        out.append(_shannon(counts, len(seg)))
+        out.append(entropy_from_counts(counts, len(seg)))
     return out
 
 

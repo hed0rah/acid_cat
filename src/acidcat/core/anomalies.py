@@ -13,6 +13,8 @@ Framed as detection, not exploitation: acidcat says what looks off and where.
 import os
 import struct
 
+from acidcat.core.primitives.signal import byte_entropy
+
 # second-format magics worth flagging when appended after an audio container
 _MAGICS = [
     (b"PK\x03\x04", "ZIP local header"),
@@ -42,27 +44,12 @@ _CAVITY = {"PADDING": "FLAC PADDING", "FREE": "MP4 free box", "SKIP": "MP4 skip 
 _CAVITY_PAYLOAD_SIZE = {"PADDING", "JUNK", "PAD"}
 
 
-def _entropy(blob):
-    """Shannon byte-entropy of blob, 0..8 bits/byte. ~8 means the bytes are
-    indistinguishable from random -- encrypted or compressed. Cheap to compute
-    over a region we already have in memory, and a strong tell on a cavity: a
-    payload that is ciphertext reads near 8, structured data well below."""
-    if not blob:
-        return 0.0
-    import math
-    counts = [0] * 256
-    for b in blob:
-        counts[b] += 1
-    n = len(blob)
-    return -sum((c / n) * math.log2(c / n) for c in counts if c)
-
-
 def _entropy_note(blob):
     """A short characterization for a suspicious blob, or '' when unremarkable.
     Only fires on a payload-sized region so a few random bytes don't cry wolf."""
     if len(blob) < 64:
         return ""
-    h = _entropy(blob)
+    h = byte_entropy(blob)
     if h >= 7.2:
         return f"; entropy {h:.1f}/8 (encrypted or compressed payload)"
     return ""

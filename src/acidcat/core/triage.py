@@ -17,10 +17,10 @@ random or non-container data still falls through to "unrecognized." The chunk
 list it produces is also the starting point for writing the real walker.
 """
 
-import math
 import os
 import struct
-from collections import Counter
+
+from acidcat.core.primitives.signal import byte_entropy
 
 from acidcat.core.walk.base import _f
 
@@ -52,14 +52,6 @@ def _walk_grid(b, total, start, endian):
         pos = end
     tiled = bool(chunks) and abs(pos - total) <= _TILE_SLACK
     return chunks, tiled
-
-
-def _entropy(b):
-    if not b:
-        return 0.0
-    c = Counter(b)
-    n = len(b)
-    return -sum((v / n) * math.log2(v / n) for v in c.values())
 
 
 def generic_walk(filepath):
@@ -96,7 +88,7 @@ def generic_walk(filepath):
     audio = [t for t in tags if t in _AUDIO_TAGS]
     biggest = max(chunks, key=lambda c: c[2])
     seg = b[biggest[1] + 8: biggest[1] + 8 + min(biggest[2], 65536)]
-    H = _entropy(seg)
+    H = byte_entropy(seg)
     payload = "compressed/encrypted" if H > 6.5 else "raw/structured"
 
     conf = 0.4 + (0.3 if tiled else 0.0) + (0.3 if audio else 0.0)
