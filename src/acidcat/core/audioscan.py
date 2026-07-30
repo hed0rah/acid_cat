@@ -38,6 +38,8 @@ numpy `analysis` extra.
 import math
 import struct
 
+from acidcat.core.primitives.signal import entropy_from_counts
+
 # ---- tunables (first-cut, derived from the class profiles above; a labeled
 # corpus pass is expected to refine these) -------------------------------------
 
@@ -71,26 +73,6 @@ _SIGNED = tuple(b - 256 if b > 127 else b for b in range(256))
 
 def _clamp01(x):
     return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
-
-
-def _entropy(win):
-    """Shannon entropy (bits/byte, 0..8) of a window's byte values."""
-    n = len(win)
-    if n == 0:
-        return 0.0
-    counts = [0] * 256
-    for b in win:
-        counts[b] += 1
-    return _entropy_from_counts(counts, n)
-
-
-def _entropy_from_counts(counts, n):
-    h = 0.0
-    for c in counts:
-        if c:
-            p = c / n
-            h -= p * math.log2(p)
-    return h
 
 
 # text/code tell: bytes in the printable ASCII band (+ tab/newline/return)
@@ -187,7 +169,7 @@ def window_features(win):
     counts = [0] * 256
     for b in win:
         counts[b] += 1
-    entropy = _entropy_from_counts(counts, n)
+    entropy = entropy_from_counts(counts, n)
     printable, hist_tv = _distribution(counts, n)
 
     # float PCM: high byte-entropy (mantissa) hides it from the integer path

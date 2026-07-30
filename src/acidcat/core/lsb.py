@@ -10,19 +10,11 @@ This only sees payloads written into the sample LSBs; echo/phase/spread-spectrum
 stego have no byte-level signature and are out of scope (say so, do not fake it).
 """
 
-import math
 import struct
 
+from acidcat.core.primitives.signal import entropy_from_counts
+
 _MAX_PCM = 16 * 1024 * 1024  # cap the bytes we scan, so a huge file stays snappy
-
-
-def _bit_entropy(ones, total):
-    if total <= 0:
-        return 0.0
-    p = ones / total
-    if p <= 0.0 or p >= 1.0:
-        return 0.0
-    return -p * math.log2(p) - (1 - p) * math.log2(1 - p)
 
 
 def entropy_windows(pcm, sample_width, windows=64):
@@ -41,7 +33,7 @@ def entropy_windows(pcm, sample_width, windows=64):
     for w in range(windows):
         seg = lows[w * per:(w + 1) * per]
         ones = sum(b & 1 for b in seg)
-        out.append(round(_bit_entropy(ones, len(seg)), 3))
+        out.append(round(entropy_from_counts([ones, len(seg) - ones], len(seg)), 3))
     return out
 
 

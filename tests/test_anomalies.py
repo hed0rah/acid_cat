@@ -185,11 +185,12 @@ def test_junk_all_zero_not_flagged(tmp_path):
 
 def test_entropy_helper_discriminates():
     import random
-    from acidcat.core.anomalies import _entropy, _entropy_note
+    from acidcat.core.anomalies import _entropy_note
+    from acidcat.core.primitives.signal import byte_entropy
     rnd = random.Random(7)
     cipher = bytes(rnd.getrandbits(8) for _ in range(600))
     text = b"the quick brown fox " * 40
-    assert _entropy(cipher) > 7.2 and _entropy(text) < 5.0
+    assert byte_entropy(cipher) > 7.2 and byte_entropy(text) < 5.0
     assert "encrypted or compressed" in _entropy_note(cipher)
     assert _entropy_note(text) == ""            # structured: silent
     assert _entropy_note(cipher[:40]) == ""     # under 64 B: silent
