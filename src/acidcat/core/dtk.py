@@ -12,7 +12,7 @@ the sample is (nibble << 12) >> scale plus the predictor (matching Dolphin).
     pcm, info = dtk.decode(open("bgm.adp","rb").read())
 """
 
-from acidcat.core.primitives.pcm import PS_ADPCM_FILTER, clip16, signed_nibble
+from acidcat.core.primitives.pcm import PS_ADPCM_FILTER, clip16, interleave_stereo, signed_nibble
 
 
 _FRAME = 32
@@ -48,7 +48,4 @@ def decode(data, rate=_RATE):
             left.append(lv)
             right.append(rv)
     n = min(len(left), len(right))
-    inter = array.array("h", bytes(4 * n))
-    inter[0::2] = left[:n]
-    inter[1::2] = right[:n]
-    return inter.tobytes(), {"channels": 2, "rate": rate, "frames": n}
+    return interleave_stereo(left, right), {"channels": 2, "rate": rate, "frames": n}

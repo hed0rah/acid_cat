@@ -21,7 +21,7 @@ NotImplementedError rather than emit an unverified guess.
 import os
 import struct
 
-from acidcat.core.primitives.pcm import PS_ADPCM_FILTER, clip16, signed_nibble
+from acidcat.core.primitives.pcm import PS_ADPCM_FILTER, clip16, interleave_stereo, signed_nibble
 
 SECTOR = 2352                       # Mode1/Mode2 raw sector (with sync + headers)
 _SYNC = b"\x00" + b"\xff" * 10 + b"\x00"     # 12-byte sector sync mark
@@ -150,11 +150,7 @@ def decode_sectors(payloads, stereo):
             c0 += a
             c1 += b
         if stereo:
-            n = min(len(c0), len(c1))
-            inter = array.array("h", bytes(4 * n))
-            inter[0::2] = array.array("h", c0[:n])
-            inter[1::2] = array.array("h", c1[:n])
-            out += inter
+            out.frombytes(interleave_stereo(c0, c1))
         else:
             out += array.array("h", c0)
     return out.tobytes()

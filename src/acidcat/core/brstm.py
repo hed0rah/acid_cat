@@ -18,6 +18,7 @@ the DSP-ADPCM codec (type 2) is handled -- the PCM types are vanishingly rare.
 import struct
 
 from acidcat.core import dsp
+from acidcat.core.primitives.pcm import interleave_stereo
 
 MAGIC = b"RSTM"
 _DSP_ADPCM = 2
@@ -83,10 +84,7 @@ def decode(data):
         pcm = pcms[0][:n * 2]
     else:
         import array
-        inter = array.array("h", bytes(4 * n))
         left = array.array("h"); left.frombytes(pcms[0][:n * 2])
         right = array.array("h"); right.frombytes(pcms[1][:n * 2])
-        inter[0::2] = left
-        inter[1::2] = right
-        pcm = inter.tobytes()
+        pcm = interleave_stereo(left, right)
     return pcm, {"channels": ch, "rate": h["rate"], "frames": n}

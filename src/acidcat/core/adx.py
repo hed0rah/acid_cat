@@ -18,7 +18,7 @@ encrypted ADX are out of scope and raise.
 import math
 import struct
 
-from acidcat.core.primitives.pcm import clip16
+from acidcat.core.primitives.pcm import clip16, interleave_stereo
 
 _MAGIC = 0x8000
 
@@ -104,8 +104,5 @@ def decode(data):
     if ch == 1:
         pcm = outs[0][:n].tobytes()
     else:
-        inter = array.array("h", bytes(4 * n))
-        inter[0::2] = outs[0][:n]
-        inter[1::2] = outs[1][:n]
-        pcm = inter.tobytes()
+        pcm = interleave_stereo(outs[0][:n], outs[1][:n])
     return pcm, {"channels": ch, "rate": rate, "frames": n}
