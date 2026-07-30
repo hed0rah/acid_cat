@@ -26,7 +26,7 @@ def run(args):
     if not require("librosa", "numpy", group="analysis"):
         return 1
 
-    from acidcat.core.features import extract_audio_features
+    from acidcat.core.analysis.features import extract_audio_features
 
     target = args.target
     quiet = getattr(args, 'quiet', False)

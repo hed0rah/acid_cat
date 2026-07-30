@@ -19,7 +19,7 @@ import json
 import math
 import os
 
-from acidcat.core import camelot
+from acidcat.core.analysis import camelot
 from acidcat.core import index as idx
 from acidcat.core import paths as acidpaths
 
@@ -197,7 +197,7 @@ def resolve_target_features(path, libs):
     (None, None) if it is not indexed anywhere. meta carries duration +
     acid_beats for kind inference. Mirrors resolve_reference: index-first, and
     the caller decides whether to fall back to a live extract."""
-    from acidcat.core.features import FEATURE_SET_VERSION
+    from acidcat.core.analysis.features import FEATURE_SET_VERSION
     for cand in (acidpaths.normalize(path), path):
         for lib in libs:
             try:
@@ -237,7 +237,7 @@ def find_similar(libs, target_features, target_meta=None, *, n=5, kind=None,
     carries path/bpm/key/duration/format/library_label/similarity plus population
     stats (percentile_rank, similarity_above_mean). Raises ValueError when the
     target has no usable vector or kind is invalid."""
-    from acidcat.core import features as feat
+    from acidcat.core.analysis import features as feat
 
     target_meta = target_meta or {}
     target_kind = infer_kind(target_meta.get("duration"),
@@ -251,7 +251,7 @@ def find_similar(libs, target_features, target_meta=None, *, n=5, kind=None,
         raise ValueError("no usable features for target")
     dims = len(tv)
 
-    from acidcat.core.features import FEATURE_SET_VERSION
+    from acidcat.core.analysis.features import FEATURE_SET_VERSION
     exclude = acidpaths.normalize(exclude_path) if exclude_path else None
     # only compare vectors of the current feature-set version: a stale (e.g.
     # different analysis rate) vector lives in a different feature space and its

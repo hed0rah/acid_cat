@@ -24,7 +24,7 @@ import threading
 import time
 
 from acidcat import __version__
-from acidcat.core import camelot
+from acidcat.core.analysis import camelot
 from acidcat.core import query_sql
 from acidcat.core import search
 from acidcat.core import index as idx
@@ -575,7 +575,7 @@ def find_similar(args):
     if target_feats is None:                      # not indexed: live extract
         if not _librosa_available():
             return _analysis_unavailable()
-        from acidcat.core.features import extract_audio_features
+        from acidcat.core.analysis.features import extract_audio_features
         target_feats = extract_audio_features(path)
         if target_feats is None:
             raise ToolError(f"could not extract features from {path}")
@@ -595,7 +595,7 @@ def analyze_sample(args):
     path = _require_path(args)
     if not _librosa_available():
         return _analysis_unavailable()
-    from acidcat.core.features import extract_audio_features
+    from acidcat.core.analysis.features import extract_audio_features
     feats = extract_audio_features(path)
     if feats is None:
         raise ToolError(f"could not extract features from {path}")
@@ -606,7 +606,7 @@ def detect_bpm_key(args):
     path = _require_path(args)
     if not _librosa_available():
         return _analysis_unavailable()
-    from acidcat.core.detect import estimate_librosa_metadata
+    from acidcat.core.analysis.detect import estimate_librosa_metadata
     est = estimate_librosa_metadata(path) or {}
     return {
         "path": path,
@@ -696,7 +696,7 @@ def reindex_features(args):
     _evict()                                    # cached readers rebuild after the write
     if not _librosa_available():
         return _analysis_unavailable()
-    from acidcat.core.features import extract_audio_features
+    from acidcat.core.analysis.features import extract_audio_features
 
     limit = args.get("limit")
     target_label = args.get("library")  # optional: scope to one library

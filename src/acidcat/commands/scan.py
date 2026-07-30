@@ -194,7 +194,7 @@ def run(args):
 
             # optional ML features
             if do_features:
-                from acidcat.core.features import extract_audio_features
+                from acidcat.core.analysis.features import extract_audio_features
                 if not quiet:
                     print(f"  [features] {os.path.basename(filepath)}...", file=sys.stderr)
                 feats = extract_audio_features(filepath)
@@ -203,7 +203,7 @@ def run(args):
 
             # fallback BPM/key via librosa
             if do_fallback and not row.get("bpm"):
-                from acidcat.core.detect import estimate_librosa_metadata
+                from acidcat.core.analysis.detect import estimate_librosa_metadata
                 estimates = estimate_librosa_metadata(filepath)
                 if estimates.get("estimated_bpm") is not None:
                     row["bpm"] = estimates["estimated_bpm"]

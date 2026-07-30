@@ -65,7 +65,7 @@ def run(args):
         from acidcat.util.deps import require
         if not require("librosa", "numpy", group="analysis"):
             return 1
-        from acidcat.core.features import extract_audio_features
+        from acidcat.core.analysis.features import extract_audio_features
         target_feats = extract_audio_features(target)
         if target_feats is None:
             print(f"acidcat similar: could not extract features from {target}",

@@ -56,7 +56,7 @@ def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
     feature_queue = []          # (filepath, path_key) to feature-extract in parallel
     cur_feat_version = None
     if do_features:
-        from acidcat.core.features import FEATURE_SET_VERSION
+        from acidcat.core.analysis.features import FEATURE_SET_VERSION
         cur_feat_version = FEATURE_SET_VERSION
     # ensure the query-layer expression indexes exist (existing DBs never get
     # them via _apply_schema, which returns early at the current version).
@@ -274,7 +274,7 @@ def _from_wav(filepath, row, do_deep=False):
     decoder since the 2026-07-10 unification): one walk fills a semantic
     ctx dict; the legacy core/riff parse is no longer run here."""
     from acidcat.util.midi import midi_note_to_pitch_class
-    from acidcat.core.detect import parse_key_from_path, parse_bpm_from_filename
+    from acidcat.core.analysis.detect import parse_key_from_path, parse_bpm_from_filename
     from acidcat.core.walk.wav import inspect_wav
 
     ctx = {}
@@ -327,7 +327,7 @@ def _from_wav(filepath, row, do_deep=False):
 def _from_aiff(filepath, row, do_deep=False):
     """AIFF/AIFC row extraction, driven by the inspect walker (the single
     AIFF decoder since the 2026-07-10 unification)."""
-    from acidcat.core.detect import parse_key_from_path, parse_bpm_from_filename
+    from acidcat.core.analysis.detect import parse_key_from_path, parse_bpm_from_filename
     from acidcat.util.midi import midi_note_to_pitch_class
     from acidcat.core.walk.aiff import inspect_aiff
 
@@ -439,7 +439,7 @@ def _from_preset(filepath, row):
 
 def _from_tagged(filepath, row, do_deep=False):
     from acidcat.core.tagged import parse_tagged
-    from acidcat.core.detect import parse_key_from_path, parse_bpm_from_filename
+    from acidcat.core.analysis.detect import parse_key_from_path, parse_bpm_from_filename
 
     meta = parse_tagged(filepath)
     if meta is None:
@@ -489,7 +489,7 @@ def _coerce_bpm(v):
 
 def _fill_from_librosa(filepath, row):
     try:
-        from acidcat.core.detect import estimate_librosa_metadata
+        from acidcat.core.analysis.detect import estimate_librosa_metadata
     except ImportError:
         return
     est = estimate_librosa_metadata(filepath) or {}
@@ -505,7 +505,7 @@ def _fill_from_librosa(filepath, row):
 
 def _extract_and_store_features(conn, filepath, path_key, quiet=False):
     try:
-        from acidcat.core.features import extract_audio_features
+        from acidcat.core.analysis.features import extract_audio_features
     except ImportError:
         if not quiet:
             print("  [features] librosa not installed; skipping", file=sys.stderr)
@@ -537,7 +537,7 @@ def _feature_worker(item):
     never raise (a crash would take down the pool), so failures return None."""
     filepath, path_key = item
     try:
-        from acidcat.core.features import extract_audio_features
+        from acidcat.core.analysis.features import extract_audio_features
         return path_key, extract_audio_features(filepath)
     except Exception:
         return path_key, None
@@ -557,7 +557,7 @@ def _extract_features_parallel(conn, queue, quiet=False, jobs=None):
     back). Falls back to in-process serial for a tiny queue or jobs==1, where the
     spawn + librosa cold-start per worker would cost more than it saves."""
     try:
-        from acidcat.core.features import extract_audio_features  # noqa: F401
+        from acidcat.core.analysis.features import extract_audio_features  # noqa: F401
     except ImportError:
         if not quiet:
             print("  [features] librosa not installed; skipping", file=sys.stderr)

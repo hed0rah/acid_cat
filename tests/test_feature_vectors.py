@@ -8,7 +8,7 @@ import struct
 import pytest
 
 from acidcat.core import index as idx
-from acidcat.core import features as feat
+from acidcat.core.analysis import features as feat
 from acidcat.core import search
 
 

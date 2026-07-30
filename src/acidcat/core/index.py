@@ -243,7 +243,7 @@ def _migrate_v3(conn, cur):
     # features gains a packed float32 similarity vector; backfill it from the
     # existing JSON (parse once, no librosa re-extraction) so old rows are
     # searchable immediately. ADD COLUMN is guarded for a legacy partial state.
-    from acidcat.core import features as feat
+    from acidcat.core.analysis import features as feat
     cur.execute(
         "CREATE TABLE IF NOT EXISTS features (path TEXT PRIMARY KEY, "
         "features_json TEXT, feature_vec BLOB, features_version INTEGER, "
@@ -467,7 +467,7 @@ def upsert_features(conn, path, features, version=None):
     and re-derivation; the BLOB is what find_similar unpacks for fast, numpy
     vectorized scoring. `version` defaults to the current FEATURE_SET_VERSION so
     stale vectors are detectable after the feature set changes."""
-    from acidcat.core import features as feat
+    from acidcat.core.analysis import features as feat
     if version is None:
         version = feat.FEATURE_SET_VERSION
     payload = json.dumps(features, default=str)

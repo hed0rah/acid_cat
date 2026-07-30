@@ -15,8 +15,8 @@ from acidcat.core.aiff import is_aiff
 from acidcat.core.midi import is_midi
 from acidcat.core.serum import is_serum_preset
 from acidcat.core.tagged import is_tagged_format
-from acidcat.core.detect import estimate_librosa_metadata
-from acidcat.core.features import extract_audio_features
+from acidcat.core.analysis.detect import estimate_librosa_metadata
+from acidcat.core.analysis.features import extract_audio_features
 from acidcat.core.formats import output
 from acidcat.util.midi import midi_note_to_name, midi_note_to_pitch_class
 from acidcat.util.stdin import is_stdin_target, stdin_to_tempfile

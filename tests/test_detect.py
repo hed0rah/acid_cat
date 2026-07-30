@@ -2,7 +2,7 @@
 
 import pytest
 
-from acidcat.core.detect import (
+from acidcat.core.analysis.detect import (
     parse_bare_key_token,
     parse_key_from_path,
     parse_key_from_filename,
@@ -45,7 +45,7 @@ def test_path_filename_bare_key():
 
 
 def test_krumhansl_schmuckler_key_finding():
-    from acidcat.core.detect import estimate_key_ks
+    from acidcat.core.analysis.detect import estimate_key_ks
     idx = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6,
            "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
 
@@ -147,7 +147,7 @@ class TestLibrosaKeyDetection:
         monkeypatch.setattr(librosa.beat, "tempo",
                              lambda *_a, **_k: np.array([120.0]))
 
-        from acidcat.core.detect import estimate_librosa_metadata
+        from acidcat.core.analysis.detect import estimate_librosa_metadata
         # path with no key hint, so filename parser returns None and we
         # see only the chroma-derived detected_key
         result = estimate_librosa_metadata(
