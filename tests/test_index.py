@@ -8,9 +8,9 @@ import time
 import pytest
 
 from acidcat.commands import index as index_cmd
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
 
 
 def _make_riff_wav(sample_rate=44100, channels=1, bits=16, num_samples=4,
@@ -92,7 +92,7 @@ class TestWavRowExtraction:
         # since the 2026-07 unification the WAV row comes from the inspect
         # walker's ctx (one decoder); verified row-identical to the retired
         # core/riff path over a 2,328-file corpus before the switch
-        from acidcat.core.indexing import _from_wav
+        from acidcat.core.catalogue.indexing import _from_wav
         rate, ch, bits = 44100, 1, 16
         align = ch * bits // 8
         fmt = b"fmt " + struct.pack("<I", 16) + struct.pack(
@@ -119,7 +119,7 @@ class TestWavRowExtraction:
     def test_aiff_walker_backed_row(self, tmp_path):
         # AIFF row also comes from the inspect walker's ctx since the
         # unification; craft a loop with COMM + NAME/AUTH + basc
-        from acidcat.core.indexing import _from_aiff
+        from acidcat.core.catalogue.indexing import _from_aiff
 
         def ck(cid, payload):
             return (cid + struct.pack(">I", len(payload)) + payload
@@ -148,7 +148,7 @@ class TestWavRowExtraction:
     def test_unset_smpl_root_falls_back_to_filename(self, tmp_path):
         # smpl root 0 is the documented unset sentinel; the filename token
         # fallback must still engage through the walker-backed path
-        from acidcat.core.indexing import _from_wav
+        from acidcat.core.catalogue.indexing import _from_wav
         p = tmp_path / "pad_Am_140bpm.wav"
         p.write_bytes(_make_riff_wav(smpl_root_key=0))
         row = _from_wav(str(p), {})
@@ -526,7 +526,7 @@ class TestFTSCommitBudget:
         for i in range(20):
             (lib / f"s{i:02d}.wav").write_bytes(wav_bytes)
 
-        from acidcat.core import index as _idx
+        from acidcat.core.catalogue import index as _idx
         real_open = _idx.open_db
         commit_count = {"n": 0}
 
@@ -1056,7 +1056,7 @@ class TestTaggedGenrePopulatesTags:
         lib.mkdir()
         (lib / "track.mp3").write_bytes(b"\x00" * 64)
 
-        monkeypatch.setattr("acidcat.core.indexing._sniff_format", lambda p: "mp3")
+        monkeypatch.setattr("acidcat.core.catalogue.indexing._sniff_format", lambda p: "mp3")
         monkeypatch.setattr(
             "acidcat.core.tagged.parse_tagged",
             lambda p: {"format_type": "mp3", "genre": "House",
@@ -1093,7 +1093,7 @@ class TestRemoveRootLikeEscape:
 # ── parallel feature extraction: worker-count logic + serial fallback ───────
 
 def test_resolve_jobs():
-    from acidcat.core import indexing
+    from acidcat.core.catalogue import indexing
     import os as _os
     # explicit jobs, clamped to the number of files
     assert indexing._resolve_jobs(8, 100) == 8
@@ -1106,7 +1106,7 @@ def test_resolve_jobs():
 
 
 def test_feature_worker_init_pins_blas(monkeypatch):
-    from acidcat.core import indexing
+    from acidcat.core.catalogue import indexing
     monkeypatch.delenv("OPENBLAS_NUM_THREADS", raising=False)
     indexing._feature_worker_init()
     assert os.environ["OPENBLAS_NUM_THREADS"] == "1"
@@ -1116,6 +1116,6 @@ def test_feature_worker_init_pins_blas(monkeypatch):
 def test_feature_worker_never_raises(tmp_path):
     """A worker must return (path_key, None) on any failure, never raise -- a
     raising worker would take down the whole pool."""
-    from acidcat.core import indexing
+    from acidcat.core.catalogue import indexing
     key, feats = indexing._feature_worker((str(tmp_path / "does_not_exist.wav"), "k"))
     assert key == "k" and feats is None

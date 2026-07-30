@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from acidcat.core import paths
+from acidcat.core.catalogue import paths
 
 
 class TestNormalize:

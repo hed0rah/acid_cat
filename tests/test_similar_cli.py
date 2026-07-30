@@ -6,10 +6,10 @@ import time
 
 import pytest
 
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
-from acidcat.core import search
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
+from acidcat.core.catalogue import search
 from acidcat.commands import similar
 
 
@@ -159,7 +159,7 @@ def _args(lib, target, *, paths_only=False, kind=None, kind_filter=True):
 def test_find_similar_excludes_stale_feature_version(indexed_library):
     """A feature row at an older FEATURE_SET_VERSION lives in a different feature
     space and must be invisible to similarity -- not silently mixed in."""
-    from acidcat.core import index as idx
+    from acidcat.core.catalogue import index as idx
     from acidcat.core.analysis.features import FEATURE_SET_VERSION
     libs = _libs(indexed_library["registry"])
     # mark the click (the nearest match) as stale
@@ -177,7 +177,7 @@ def test_find_similar_excludes_stale_feature_version(indexed_library):
 
 
 def test_upsert_features_stores_current_version(tmp_path):
-    from acidcat.core import index as idx
+    from acidcat.core.catalogue import index as idx
     from acidcat.core.analysis.features import FEATURE_SET_VERSION
     conn = idx.open_db(str(tmp_path / "t.db"))
     conn.execute("INSERT INTO samples (path, scan_root, format, mtime, size, "

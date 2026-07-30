@@ -632,7 +632,7 @@ class TestInspectSerum:
         # the walker fills a ctx dict (raw values, tags kept as a list) that
         # the scan path reads since the unification
         from acidcat.core.walk.serum import inspect_serum
-        from acidcat.core.indexing import _from_serum
+        from acidcat.core.catalogue.indexing import _from_serum
         meta = (b'{"presetName": "Growl X", "presetAuthor": "u", '
                 b'"presetDescription": "nasty", "tags": ["bass", "growl"]}')
         p = tmp_path / "g.serumpreset"

@@ -20,8 +20,8 @@ import math
 import os
 
 from acidcat.core.analysis import camelot
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
 
 _KEY_RELATIONS = ("same key", "relative", "perfect fourth", "perfect fifth")
 _KEY_RANK = {"same key": 0, "relative": 1, "perfect fifth": 2, "perfect fourth": 3}
@@ -60,7 +60,7 @@ def resolve_reference(path, libs):
         if row:
             return dict(row), "index", lib["label"]
     try:                                        # not indexed: parse it directly
-        from acidcat.core import indexing
+        from acidcat.core.catalogue import indexing
         st = os.stat(path)
         r = indexing._extract_for_index(path, os.path.dirname(path) or ".",
                                         st.st_mtime, st.st_size, 0.0, quiet=True)

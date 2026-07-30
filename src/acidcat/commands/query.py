@@ -11,10 +11,10 @@ import os
 import sqlite3
 import sys
 
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import query_sql
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import query_sql
+from acidcat.core.catalogue import registry as reg
 from acidcat.core.formats import output
 
 
@@ -161,7 +161,7 @@ def _scope_libraries(libs, scopes):
 def _run_compatible(args, libs):
     """--compatible-with: resolve the reference's key/BPM/kind, then fan out for
     harmonically- and tempo-compatible samples via core.search."""
-    from acidcat.core import search
+    from acidcat.core.catalogue import search
     ref = args.compatible_with
     if not os.path.exists(ref):
         print(f"acidcat query: --compatible-with file not found: {ref}",

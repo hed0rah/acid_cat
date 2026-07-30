@@ -7,9 +7,9 @@ import time
 import pytest
 
 from acidcat import mcp_server
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
 
 
 @pytest.fixture
@@ -260,8 +260,8 @@ class TestFindCompatible:
         # samples in the BPM tolerance regardless of key, including
         # tonal samples that are musically nonsensical to layer with
         # drums. Now we restrict to also-keyless rows.
-        from acidcat.core import paths as acidpaths
-        from acidcat.core import index as idx
+        from acidcat.core.catalogue import paths as acidpaths
+        from acidcat.core.catalogue import index as idx
 
         a_root = two_lib_setup["lib_a_root"]
         db_a = acidpaths.central_db_path_for(a_root, "A")
@@ -299,7 +299,7 @@ class TestFindCompatible:
 class TestFindSimilar:
     def _seed_features(self, two_lib_setup):
         """Add stub feature vectors so find_similar has something to score."""
-        from acidcat.core import paths as acidpaths
+        from acidcat.core.catalogue import paths as acidpaths
 
         # P_KICK: loop (acid_beats=4 in the seed). P_HAT: one_shot.
         # P_SYNTH: loop (8s, no acid_beats but duration >= 2.0).

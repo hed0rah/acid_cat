@@ -9,9 +9,9 @@ import sqlite3
 import sys
 import time
 
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
 from acidcat.core.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
@@ -415,7 +415,7 @@ def _from_preset(filepath, row):
     """Index a synth/DAW preset's metadata (Bitwig, Native Instruments, Vital).
     Reads a bounded prefix (all preset metadata lives near the start), normalizes
     via core.preset_meta, and maps into the preset columns + tags."""
-    from acidcat.core import preset_meta
+    from acidcat.core.catalogue import preset_meta
     with open(filepath, "rb") as f:
         data = f.read(min(row["size"], 8 * 1024 * 1024))
     meta = preset_meta.extract(data)

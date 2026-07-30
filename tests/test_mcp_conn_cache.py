@@ -3,7 +3,7 @@
 import threading
 
 import acidcat.mcp_server as M
-from acidcat.core import index as idx
+from acidcat.core.catalogue import index as idx
 
 
 def test_cached_conn_reuse_and_evict(tmp_path):

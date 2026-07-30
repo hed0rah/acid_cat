@@ -22,10 +22,10 @@ import os
 import sys
 import time
 
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
-from acidcat.core.indexing import (
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
+from acidcat.core.catalogue.indexing import (
     walk_and_upsert, _refuses_as_root, _count_audio_in_subtree,
     _discover_candidates, _resolve_unique_label,
 )

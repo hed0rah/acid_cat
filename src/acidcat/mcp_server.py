@@ -25,11 +25,11 @@ import time
 
 from acidcat import __version__
 from acidcat.core.analysis import camelot
-from acidcat.core import query_sql
-from acidcat.core import search
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import query_sql
+from acidcat.core.catalogue import search
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
 
 
 # ── server config ─────────────────────────────────────────────────
@@ -644,7 +644,7 @@ def reindex(args):
             f"register it first via register_library."
         )
 
-    from acidcat.core.indexing import walk_and_upsert
+    from acidcat.core.catalogue.indexing import walk_and_upsert
 
     if not os.path.isdir(lib["root_path"]):
         raise ToolError(
@@ -879,7 +879,7 @@ def discover_libraries(args):
     the LLM call this with dry_run=true first to preview, then false to
     actually register.
     """
-    from acidcat.core import indexing as index_cmd
+    from acidcat.core.catalogue import indexing as index_cmd
 
     root = _require_path(args, field="root")
     min_samples = int(args.get("min_samples") or 20)
@@ -953,7 +953,7 @@ def discover_libraries(args):
 
     # optionally walk + extract features per registered library
     if with_features:
-        from acidcat.core.indexing import walk_and_upsert
+        from acidcat.core.catalogue.indexing import walk_and_upsert
         for entry in registered:
             cand = entry["root"]
             rconn = reg.open_registry(_REGISTRY_PATH)

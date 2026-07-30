@@ -22,7 +22,7 @@ import os
 import sqlite3
 import time
 
-from acidcat.core import paths
+from acidcat.core.catalogue import paths
 
 
 REGISTRY_SCHEMA_VERSION = 1

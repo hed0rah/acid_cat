@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from acidcat.core import paths, registry as reg
+from acidcat.core.catalogue import paths, registry as reg
 
 
 @pytest.fixture
@@ -170,7 +170,7 @@ class TestRegisterReattach:
     def test_reattach_populates_stats_from_existing_db(self, reg_conn, tmp_path):
         """Forget + re-register should pick up sample_count from the DB
         that's still on disk, not leave it NULL."""
-        from acidcat.core import index as idx
+        from acidcat.core.catalogue import index as idx
 
         root = _mkroot(tmp_path, "lib_re")
         db_path = paths.central_db_path_for(root, "lib_re")

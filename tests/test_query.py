@@ -7,9 +7,9 @@ import time
 import pytest
 
 from acidcat.commands import query as query_cmd
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
 
 
 class _Args:

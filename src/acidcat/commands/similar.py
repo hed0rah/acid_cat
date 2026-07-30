@@ -11,9 +11,9 @@ is not indexed. Fans out across every registered library.
 import os
 import sys
 
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
-from acidcat.core import search
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
+from acidcat.core.catalogue import search
 from acidcat.core.formats import output
 
 _FIELDS = ["path", "similarity", "percentile_rank", "bpm", "key", "duration",

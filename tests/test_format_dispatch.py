@@ -8,7 +8,7 @@ import struct
 
 import pytest
 
-from acidcat.core.indexing import _sniff_format
+from acidcat.core.catalogue.indexing import _sniff_format
 
 
 def _wav_bytes():

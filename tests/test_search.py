@@ -2,7 +2,7 @@
 kind, keyless handling, half/double-time). Exercised over a temp index so the
 CLI `query --compatible-with` and the MCP find_compatible tool share coverage."""
 
-from acidcat.core import search, index as idx
+from acidcat.core.catalogue import search, index as idx
 
 
 def _libs(tmp_path, rows):
