@@ -451,12 +451,25 @@ def unpack_vector(blob, dims=None):
     return list(struct.unpack("<%df" % n, blob))
 
 
-def upsert_features(conn, path, features, version=1):
+def feature_version(conn, path):
+    """The FEATURE_SET_VERSION stored for `path`, or None if it has no features.
+    Lets callers tell current-version rows from stale ones (e.g. re-feature only
+    the stale after a feature-set change)."""
+    row = conn.execute(
+        "SELECT features_version FROM features WHERE path = ?", (path,)
+    ).fetchone()
+    return row["features_version"] if row is not None else None
+
+
+def upsert_features(conn, path, features, version=None):
     """Store librosa features as a JSON blob plus the packed similarity vector
     (core.features.FEATURE_KEYS order). The JSON keeps the full dict for display
     and re-derivation; the BLOB is what find_similar unpacks for fast, numpy
-    vectorized scoring."""
+    vectorized scoring. `version` defaults to the current FEATURE_SET_VERSION so
+    stale vectors are detectable after the feature set changes."""
     from acidcat.core import features as feat
+    if version is None:
+        version = feat.FEATURE_SET_VERSION
     payload = json.dumps(features, default=str)
     vec_blob = pack_vector(feat.vector_from_features(features))
     conn.execute(

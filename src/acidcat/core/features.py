@@ -33,7 +33,14 @@ FEATURE_KEYS = (
     "tonnetz_mean", "tonnetz_std",
 )
 
-FEATURE_SET_VERSION = 2   # 1 = pre-vector JSON only; 2 = adds the FEATURE_KEYS vector
+FEATURE_SET_VERSION = 3   # 1 = pre-vector JSON only; 2 = adds the FEATURE_KEYS
+                          # vector (native-rate analysis); 3 = analysis resampled
+                          # to 22050 Hz (values differ from 2 -> not comparable).
+
+# feature extraction is done at this fixed rate regardless of the file's rate
+# (see FEATURE_SET_VERSION note): the MIR standard, and it decouples timbre
+# comparison from source sample rate.
+ANALYSIS_SR = 22050
 
 FEATURE_DIMS = len(FEATURE_KEYS)
 
@@ -76,17 +83,25 @@ def extract_audio_features(filepath):
         return None
 
     try:
-        y, sr = librosa.load(filepath, sr=None, mono=True)
+        # Analyze at a fixed 22050 Hz (the MIR standard: Nyquist 11025 covers all
+        # musically relevant content). Every transform below scales with the sample
+        # count, so resampling from 44.1k/96k is a big speedup at no cost to the
+        # timbral features -- but it changes their VALUES, which is why this is
+        # gated behind FEATURE_SET_VERSION (find_similar only compares same-version
+        # vectors, so old native-rate vectors are ignored, not silently mixed).
+        sr_native = librosa.get_samplerate(filepath)      # header read, for reporting
+        y, sr = librosa.load(filepath, sr=ANALYSIS_SR, mono=True)
 
         if len(y) < 256:
             return None
 
         features = {}
 
-        # Basic properties
+        # Basic properties -- report the file's TRUE rate/length, not the analysis
+        # rate, so the metadata view is honest about the source.
         features['duration_sec'] = len(y) / sr
-        features['sample_rate'] = sr
-        features['audio_length_samples'] = len(y)
+        features['sample_rate'] = sr_native
+        features['audio_length_samples'] = int(round(features['duration_sec'] * sr_native))
 
         # One magnitude STFT, shared by the spectral features that use it. Each of
         # these recomputed its own identical STFT before; feeding S= is

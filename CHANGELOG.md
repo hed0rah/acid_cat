@@ -6,6 +6,15 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.90.0] - 2026-07-30
+
+### Changed
+- **Audio features are now analyzed at a fixed 22050 Hz.** Feature extraction previously ran at each file's native rate, which (a) left high-rate files slow and (b) made vectors from different sample rates incomparable -- a 96kHz file's spectral centroid is computed over a different frequency range than a 44.1kHz file's, so their cosine was meaningless. Resampling every file to the MIR-standard 22050 Hz gives a **uniform, comparable feature space** and a speed win (~1.6x on 44.1kHz, ~3.3x on 96kHz). The reported `sample_rate` still shows the file's true native rate.
+- **Feature vectors are versioned properly now.** `find_similar` only compares vectors of the current `FEATURE_SET_VERSION` (bumped to 3), so an old vector is invisible to similarity rather than silently mixed into a different feature space, and a stale reference is re-extracted live. `index --features` auto-refreshes stale/missing features on unchanged files (no `--force` needed).
+
+### Upgrading
+- **Re-run `acidcat index <DIR> --features` on any library you use for similarity search** to re-derive vectors at the new analysis rate. Until you do, `find_similar` treats the old vectors as stale and returns nothing for that library. Re-featuring is much faster now (see 0.88.0/0.89.0).
+
 ## [0.89.0] - 2026-07-30
 
 ### Changed
