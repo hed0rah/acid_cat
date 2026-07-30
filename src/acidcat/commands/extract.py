@@ -15,7 +15,7 @@ import json
 import os
 import sys
 
-from acidcat.core import samples as smod
+from acidcat.core.extract import samples as smod
 from acidcat.util.stdin import is_stdin_target, stdin_to_tempfile
 
 

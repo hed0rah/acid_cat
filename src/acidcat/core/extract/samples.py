@@ -652,7 +652,7 @@ def _n64rom_samples(filepath):
     N64 games each wrap VADPCM differently, so this finds the codebooks + audiotable
     by structure and pairs them by coherence rather than parsing a bank. Rate is
     approximate (22050; the real rate lives in the game-specific bank we skip)."""
-    from acidcat.core import n64rip
+    from acidcat.core.extract import n64rip
     with open(filepath, "rb") as f:
         data = f.read()
     for s in n64rip.recover(data):
@@ -667,7 +667,7 @@ def _snesrom_samples(filepath):
     carries no codebook, so an end-flag-terminated run of valid blocks that decodes
     to coherent audio is a sample -- found without parsing the game's sample table.
     Rate is the S-DSP native 32000 Hz (per-note pitch lives in the ARAM directory)."""
-    from acidcat.core import snesrip
+    from acidcat.core.extract import snesrip
     with open(filepath, "rb") as f:
         data = f.read()
     for s in snesrip.recover(data):

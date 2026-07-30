@@ -75,7 +75,7 @@ def test_decode_first_nibble():
 
 def test_extract_wires_brstm(tmp_path):
     from acidcat.core.infra import sniff as sniffmod
-    from acidcat.core import samples as smod
+    from acidcat.core.extract import samples as smod
     import wave, io
 
     f = tmp_path / "bgm.brstm"

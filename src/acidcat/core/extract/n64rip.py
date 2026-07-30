@@ -17,7 +17,7 @@ This is "PhotoRec for audio" applied to an N64 ROM: it does not reconstruct
 instrument names or the bank tree, it rescues the raw samples. Byte order is
 normalized off the ROM magic (z64/n64/v64).
 
-    from acidcat.core import n64rip
+    from acidcat.core.extract import n64rip
     for s in n64rip.recover(rom_bytes):
         open(s["name"] + ".wav", "wb").write(s["wav"])   # (samples.py wraps to WAV)
 """

@@ -55,7 +55,7 @@ def register(subparsers):
 def _matrix():
     """Build [{id, label, inspect, extract, convert, repair}] over every format
     with any capability, read from the live registries."""
-    from acidcat.core import samples
+    from acidcat.core.extract import samples
     from acidcat.core.walk import _WALKERS
 
     labels = {fid: lbl for fid, (lbl, _fn) in _WALKERS.items()}

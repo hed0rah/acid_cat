@@ -5,7 +5,7 @@ codebook scan."""
 import array
 import struct
 
-from acidcat.core import n64rip
+from acidcat.core.extract import n64rip
 
 
 def test_is_n64_rom():

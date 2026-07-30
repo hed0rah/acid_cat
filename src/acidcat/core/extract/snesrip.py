@@ -15,7 +15,7 @@ sample is entirely self-describing. So we recover without any container:
 "PhotoRec for audio" on a SNES ROM: it rescues the samples, not the instrument
 table or their tuning/loop metadata (that lives in the ARAM directory we skip).
 
-    from acidcat.core import snesrip
+    from acidcat.core.extract import snesrip
     for s in snesrip.recover(rom_bytes):
         ...  # s["pcm"] is 16-bit mono PCM; samples.py wraps it to WAV
 """

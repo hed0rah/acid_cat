@@ -6,7 +6,7 @@ import wave
 
 import pytest
 
-from acidcat.core import samples as smod
+from acidcat.core.extract import samples as smod
 
 
 def _make_mod(pcm_bytes=20):

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import acidcat.core.infra.sniff as sniffmod
 from acidcat.commands import formats
-from acidcat.core import samples
+from acidcat.core.extract import samples
 from acidcat.core.walk import _WALKERS
 
 
