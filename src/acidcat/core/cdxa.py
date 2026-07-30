@@ -21,6 +21,8 @@ NotImplementedError rather than emit an unverified guess.
 import os
 import struct
 
+from acidcat.core.primitives.pcm import PS_ADPCM_FILTER, clip16, signed_nibble
+
 SECTOR = 2352                       # Mode1/Mode2 raw sector (with sync + headers)
 _SYNC = b"\x00" + b"\xff" * 10 + b"\x00"     # 12-byte sector sync mark
 _XA_DATA = 24                       # audio payload offset: 12 sync + 4 header + 8 subheader
@@ -30,7 +32,6 @@ _SUBMODE_AUDIO = 0x04               # subheader submode bit: this is an audio se
 
 # CD-XA ADPCM filter coefficients (f0, f1), scaled by 1/64. Filters 0-3 are the
 # XA set; 4 appears in some implementations. Matches ffmpeg's xa_adpcm_table.
-_XA_FILTER = ((0, 0), (60, 0), (115, -52), (98, -55), (122, -60))
 
 
 def detect_cd_image(path):
@@ -89,13 +90,8 @@ def xa_streams(path):
             for k, v in sectors.items()}
 
 
-def _sign_nibble(n):
-    n &= 0x0F
-    return n - 16 if n >= 8 else n
 
 
-def _clip16(s):
-    return -32768 if s < -32768 else (32767 if s > 32767 else s)
 
 
 def _decode_group(blk, state, stereo):
@@ -112,10 +108,10 @@ def _decode_group(blk, state, stereo):
         sh = 12 - (h & 0x0F)
         if sh < 0:
             sh = 3                       # ranges 13..15 are invalid; clamp
-        f0, f1 = _XA_FILTER[min(h >> 4, 4)]
+        f0, f1 = PS_ADPCM_FILTER[min(h >> 4, 4)]
         for j in range(28):
-            t = _sign_nibble(data[i + j * 4])
-            s = _clip16((t << sh) + ((a1 * f0 + a2 * f1 + 32) >> 6))
+            t = signed_nibble(data[i + j * 4])
+            s = clip16((t << sh) + ((a1 * f0 + a2 * f1 + 32) >> 6))
             a2, a1 = a1, s
             c0.append(s)
         # high-nibble plane -> chan1 (stereo) or continues chan0 (mono)
@@ -123,17 +119,17 @@ def _decode_group(blk, state, stereo):
         sh = 12 - (h & 0x0F)
         if sh < 0:
             sh = 3
-        f0, f1 = _XA_FILTER[min(h >> 4, 4)]
+        f0, f1 = PS_ADPCM_FILTER[min(h >> 4, 4)]
         if stereo:
             for j in range(28):
-                t = _sign_nibble(data[i + j * 4] >> 4)
-                s = _clip16((t << sh) + ((b1 * f0 + b2 * f1 + 32) >> 6))
+                t = signed_nibble(data[i + j * 4] >> 4)
+                s = clip16((t << sh) + ((b1 * f0 + b2 * f1 + 32) >> 6))
                 b2, b1 = b1, s
                 c1.append(s)
         else:
             for j in range(28):
-                t = _sign_nibble(data[i + j * 4] >> 4)
-                s = _clip16((t << sh) + ((a1 * f0 + a2 * f1 + 32) >> 6))
+                t = signed_nibble(data[i + j * 4] >> 4)
+                s = clip16((t << sh) + ((a1 * f0 + a2 * f1 + 32) >> 6))
                 a2, a1 = a1, s
                 c0.append(s)
     state[0], state[1], state[2], state[3] = a1, a2, b1, b2

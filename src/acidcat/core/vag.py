@@ -17,13 +17,14 @@ big-endian sample rate and data size, a 16-byte name).
 
 import struct
 
+from acidcat.core.primitives.pcm import PS_ADPCM_FILTER, clip16, signed_nibble
+
 VAG_MAGIC = b"VAGp"
 _VAG_HEADER = 0x30                   # 48-byte .VAG header; ADPCM data follows
 _BLOCK = 16                          # SPU-ADPCM block: 2 header + 14 data bytes
 
 # SPU-ADPCM filter coefficients (f0, f1), scaled by 1/64 -- the same five pairs
-# CD-XA uses (core/cdxa._XA_FILTER).
-_FILTER = ((0, 0), (60, 0), (115, -52), (98, -55), (122, -60))
+# CD-XA and DTK use (core/primitives/pcm.PS_ADPCM_FILTER).
 
 # loop/end flag byte (block[1]) bits
 FLAG_LOOP_END = 0x01                 # last block of a loop / end of sample
@@ -50,13 +51,8 @@ def parse_vag(data):
     return {"version": version, "rate": rate or 44100, "name": name, "data": body}
 
 
-def _sign_nibble(n):
-    n &= 0x0F
-    return n - 16 if n >= 8 else n
 
 
-def _clip16(s):
-    return -32768 if s < -32768 else (32767 if s > 32767 else s)
 
 
 def decode_spu(data, stop_on_end=True):
@@ -72,12 +68,12 @@ def decode_spu(data, stop_on_end=True):
         shift = blk[0] & 0x0F
         if shift > 12:
             shift = 9                    # invalid shift; SPU treats 13..15 as 9
-        f0, f1 = _FILTER[min(blk[0] >> 4, 4)]
+        f0, f1 = PS_ADPCM_FILTER[min(blk[0] >> 4, 4)]
         flag = blk[1]
         for i in range(14):
             for nib in (blk[2 + i] & 0x0F, blk[2 + i] >> 4):     # low nibble first
-                t = _sign_nibble(nib)
-                s = _clip16((t << (12 - shift)) + ((p1 * f0 + p2 * f1 + 32) >> 6))
+                t = signed_nibble(nib)
+                s = clip16((t << (12 - shift)) + ((p1 * f0 + p2 * f1 + 32) >> 6))
                 p2, p1 = p1, s
                 out.append(s)
         if stop_on_end and (flag & FLAG_LOOP_END) and not (flag & FLAG_LOOP):

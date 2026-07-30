@@ -14,6 +14,8 @@ Output is signed 16-bit little-endian, interleaved for stereo.
 
 import struct
 
+from acidcat.core.primitives.pcm import clip16
+
 _IMA_STEP = [
     7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45,
     50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230,
@@ -25,8 +27,6 @@ _IMA_STEP = [
 _IMA_INDEX = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8]
 
 
-def _clip16(v):
-    return -32768 if v < -32768 else 32767 if v > 32767 else v
 
 
 def _ima_step(nib, pred, idx):
@@ -40,7 +40,7 @@ def _ima_step(nib, pred, idx):
         diff += step
     if nib & 8:
         diff = -diff
-    pred = _clip16(pred + diff)
+    pred = clip16(pred + diff)
     idx += _IMA_INDEX[nib]
     return pred, (0 if idx < 0 else 88 if idx > 88 else idx)
 
@@ -121,7 +121,7 @@ def _t256(x):
 def _ms_nibble(nib, s1, s2, c1, c2, delta):
     pred = _t256(s1 * c1 + s2 * c2)
     pred += (nib - 16 if nib & 8 else nib) * delta         # sign-extend the nibble
-    pred = _clip16(pred)
+    pred = clip16(pred)
     delta = (_MS_ADAPT[nib] * delta) >> 8
     return pred, (16 if delta < 16 else delta)
 

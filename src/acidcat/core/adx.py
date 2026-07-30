@@ -18,6 +18,8 @@ encrypted ADX are out of scope and raise.
 import math
 import struct
 
+from acidcat.core.primitives.pcm import clip16
+
 _MAGIC = 0x8000
 
 
@@ -64,8 +66,6 @@ def _coefs(highpass, rate):
     return int(c * 8192.0), int(-(c * c) * 4096.0)
 
 
-def _clip16(s):
-    return -32768 if s < -32768 else (32767 if s > 32767 else s)
 
 
 def decode(data):
@@ -94,7 +94,7 @@ def decode(data):
                 byte = data[base + (i >> 1)]
                 nib = (byte >> 4) if (i & 1) == 0 else (byte & 0x0F)
                 s = nib - 16 if nib >= 8 else nib
-                samp = _clip16(s * scale + ((coef1 * p1 + coef2 * p2) >> 12))
+                samp = clip16(s * scale + ((coef1 * p1 + coef2 * p2) >> 12))
                 p2, p1 = p1, samp
                 oc.append(samp)
             hist[c] = [p1, p2]

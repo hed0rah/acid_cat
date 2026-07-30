@@ -12,20 +12,18 @@ the sample is (nibble << 12) >> scale plus the predictor (matching Dolphin).
     pcm, info = dtk.decode(open("bgm.adp","rb").read())
 """
 
+from acidcat.core.primitives.pcm import PS_ADPCM_FILTER, clip16, signed_nibble
+
+
 _FRAME = 32
 _SAMPLES = 28
 _RATE = 48000                        # DTK streams at a fixed 48 kHz on GameCube
 # fixed predictor coefficient pairs (f0, f1), scaled by 1/64
-_COEF = ((0, 0), (0x3C, 0), (0x73, -0x34), (0x62, -0x37))
+_COEF = PS_ADPCM_FILTER[:4]
 
 
-def _sx4(n):
-    n &= 0x0F
-    return n - 16 if n >= 8 else n
 
 
-def _clip16(s):
-    return -32768 if s < -32768 else (32767 if s > 32767 else s)
 
 
 def decode(data, rate=_RATE):
@@ -42,9 +40,9 @@ def decode(data, rate=_RATE):
         cr0, cr1 = _COEF[fr]
         for i in range(_SAMPLES):
             b = data[off + 4 + i]
-            ln, rn = _sx4(b >> 4), _sx4(b & 0x0F)
-            lv = _clip16(((ln << 12) >> shl) + ((cl0 * l1 + cl1 * l2 + 0x20) >> 6))
-            rv = _clip16(((rn << 12) >> shr) + ((cr0 * r1 + cr1 * r2 + 0x20) >> 6))
+            ln, rn = signed_nibble(b >> 4), signed_nibble(b & 0x0F)
+            lv = clip16(((ln << 12) >> shl) + ((cl0 * l1 + cl1 * l2 + 0x20) >> 6))
+            rv = clip16(((rn << 12) >> shr) + ((cr0 * r1 + cr1 * r2 + 0x20) >> 6))
             l2, l1 = l1, lv
             r2, r1 = r1, rv
             left.append(lv)
