@@ -22,6 +22,7 @@ import os
 import struct
 
 from acidcat.core.primitives.pcm import PS_ADPCM_FILTER, clip16, interleave_stereo, signed_nibble
+from acidcat.core.primitives.wavio import pcm_wav
 
 SECTOR = 2352                       # Mode1/Mode2 raw sector (with sync + headers)
 _SYNC = b"\x00" + b"\xff" * 10 + b"\x00"     # 12-byte sector sync mark
@@ -217,12 +218,8 @@ def decode_stream(path, key=None):
 
 def write_wav(pcm, info, out_path):
     """Write interleaved 16-bit PCM to a WAV file using decode_stream's info."""
-    import wave
-    with wave.open(out_path, "wb") as w:
-        w.setnchannels(info["channels"])
-        w.setsampwidth(2)
-        w.setframerate(info["rate"])
-        w.writeframes(pcm)
+    with open(out_path, "wb") as f:
+        f.write(pcm_wav(pcm, info["rate"], info["channels"]))
 
 
 def split_gaps(pcm, info, thresh=25, min_gap_s=1.5, min_song_s=5.0):

@@ -14,16 +14,15 @@ Bitwig multisample, RX2, BFD .bfdlac -- need specimens and/or codec work; see th
 `extract` command's roadmap. Read-only on the source.
 """
 
-import io
 import os
 import struct
-import wave
 import zipfile
 
 from acidcat.core import ncw as ncwmod
 from acidcat.core import sf2 as sf2mod
 from acidcat.core import svx as svxmod
 from acidcat.core import tracker as tkmod
+from acidcat.core.primitives.wavio import pcm_wav
 from acidcat.core.sniff import sniff
 from acidcat.core.walk.base import Unsupported
 
@@ -35,13 +34,7 @@ class SampleError(Exception):
 
 
 def _wav(frames, rate, channels=1, sampwidth=2):
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(channels)
-        w.setsampwidth(sampwidth)
-        w.setframerate(rate or _TRACKER_RATE)
-        w.writeframes(frames)
-    return buf.getvalue()
+    return pcm_wav(frames, rate or _TRACKER_RATE, channels, sampwidth)
 
 
 def _s8_to_wav(raw, rate):

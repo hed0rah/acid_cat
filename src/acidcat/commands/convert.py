@@ -11,11 +11,9 @@
   as the NCW path.
 """
 
-import io
 import os
 import struct
 import sys
-import wave
 
 from acidcat.core import adpcm
 from acidcat.core import bitwig as bwmod
@@ -23,6 +21,7 @@ from acidcat.core import ncw as ncwmod
 from acidcat.core import sf2 as sf2mod
 from acidcat.core import svx as svxmod
 from acidcat.core.midi_write import notes_to_smf
+from acidcat.core.primitives.wavio import pcm_wav
 
 
 def _safe_name(name, idx, ext="wav"):
@@ -154,13 +153,7 @@ def _run_svx(path, data, args):
 
 
 def _pcm16_wav(frames, rate, channels):
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(channels)
-        w.setsampwidth(2)
-        w.setframerate(rate or 44100)
-        w.writeframes(frames)
-    return buf.getvalue()
+    return pcm_wav(frames, rate or 44100, channels)
 
 
 def _looks_audio(pcm):

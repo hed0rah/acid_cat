@@ -1036,7 +1036,7 @@ class AcidcatTUI(App):
         self.run_worker(lambda: self._extract_disc_work(entries, outdir), thread=True)
 
     def _extract_disc_work(self, entries, outdir):
-        import wave
+        from acidcat.core.primitives.wavio import pcm_wav
         try:
             os.makedirs(outdir, exist_ok=True)
             n = 0
@@ -1046,11 +1046,8 @@ class AcidcatTUI(App):
                     continue
                 pcm, info = r
                 base = ent["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
-                with wave.open(os.path.join(outdir, f"{n:04d}_{base}.wav"), "wb") as w:
-                    w.setnchannels(info["channels"])
-                    w.setsampwidth(2)
-                    w.setframerate(info["rate"])
-                    w.writeframes(pcm)
+                with open(os.path.join(outdir, f"{n:04d}_{base}.wav"), "wb") as f:
+                    f.write(pcm_wav(pcm, info["rate"], info["channels"]))
                 n += 1
             self.call_from_thread(self.notify, f"extracted {n} file(s) -> {outdir}")
         except Exception as e:

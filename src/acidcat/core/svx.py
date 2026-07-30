@@ -13,9 +13,9 @@ by successively-halved copies; we render the high octave (oneShot + repeat),
 which is the sample the file is actually about.
 """
 
-import io
 import struct
-import wave
+
+from acidcat.core.primitives.wavio import pcm_wav
 
 MAGIC = b"FORM"
 
@@ -132,10 +132,4 @@ def to_wav(info, samples):
         rate = 8000                                   # unusable header rate; pick a sane default
         info["rate_defaulted"] = True
     frames = b"".join(struct.pack("<h", s * 256) for s in samples)
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(rate)
-        w.writeframes(frames)
-    return buf.getvalue()
+    return pcm_wav(frames, rate)
