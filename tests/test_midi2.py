@@ -4,7 +4,7 @@ The byte layouts are the spec's own worked examples: a MIDI 2.0 Note On is
 an 8-byte SMF2CLIP magic then a self-delimiting big-endian UMP stream."""
 import struct
 
-from acidcat.core import ump
+from acidcat.core.formats import ump
 
 
 def _w(*words):

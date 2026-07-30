@@ -8,12 +8,12 @@ Supports WAV, AIFF, MIDI, Serum, MP3, FLAC, OGG, and M4A files.
 import os
 import sys
 
-from acidcat.core.riff import (
+from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
-from acidcat.core.aiff import is_aiff
-from acidcat.core.midi import is_midi
-from acidcat.core.serum import is_serum_preset
+from acidcat.core.formats.aiff import is_aiff
+from acidcat.core.formats.midi import is_midi
+from acidcat.core.formats.serum import is_serum_preset
 from acidcat.core.tagged import is_tagged_format
 from acidcat.core.analysis.detect import estimate_librosa_metadata
 from acidcat.core.analysis.features import extract_audio_features

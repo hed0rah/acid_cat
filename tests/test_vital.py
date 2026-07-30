@@ -2,7 +2,7 @@
 loader accepts -- an unknown top-level key, and bytes trailing the JSON value."""
 import json
 
-from acidcat.core import vital as vitalmod
+from acidcat.core.formats import vital as vitalmod
 from acidcat.core.walk import vital
 
 

@@ -9,7 +9,7 @@ format-agnostic.
 """
 
 from acidcat.core.write import countrepair, flacrepair
-from acidcat.core import mp4 as mp4mod
+from acidcat.core.formats import mp4 as mp4mod
 from acidcat.core.write import mp4repair, structure
 from acidcat.core.write.constraints import (COUNT, OFFSET, SIZE, ZERO, Report, Repairer,
                                       Violation)

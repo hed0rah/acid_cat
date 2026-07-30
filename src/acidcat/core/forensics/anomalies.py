@@ -231,7 +231,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # surface (a Vorbis-only player hears only its stream, etc.).
     if fmt_label and fmt_label.startswith("Ogg"):
         try:
-            from acidcat.core import ogg as _ogg
+            from acidcat.core.formats import ogg as _ogg
             with open(filepath, "rb") as f:
                 # clamped: read(N) pre-allocates N bytes (see core/midi.py)
                 ogg_data = f.read(min(16 * 1024 * 1024,
@@ -253,7 +253,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # the box size grown, so no chunk offset points at it and the audio is intact).
     if fmt_label and fmt_label.startswith("MP4"):
         try:
-            from acidcat.core import mp4 as _mp4
+            from acidcat.core.formats import mp4 as _mp4
             fsz = os.path.getsize(filepath)
             # header-only top-level scan: total mdat payload, and locate moov,
             # which on non-faststart files (most ffmpeg/Apple output) sits at EOF,

@@ -6,10 +6,10 @@ import csv
 import os
 import sys
 
-from acidcat.core.riff import (
+from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
-from acidcat.core.aiff import is_aiff
+from acidcat.core.formats.aiff import is_aiff
 from acidcat.core.tagged import is_tagged_format
 from acidcat.util.midi import midi_note_to_name
 from acidcat.util.csv_helpers import safe_basename_for_csv

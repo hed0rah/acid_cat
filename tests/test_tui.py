@@ -90,7 +90,7 @@ def test_synchsafe_codec():
 
 def test_float80_codec():
     from acidcat.core.infra.fieldcodec import encode_value, decode_value, enc_size
-    from acidcat.core.aiff import _parse_ieee_extended
+    from acidcat.core.formats.aiff import _parse_ieee_extended
     assert enc_size("float80") == 10
     # standard sample rates round-trip through the 80-bit extended format
     for hz in (8000, 22050, 44100, 48000, 96000):

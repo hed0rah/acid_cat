@@ -4,7 +4,7 @@ plus the audio-frame region. Block iteration lives in core/flac.py."""
 import os
 import struct
 
-from acidcat.core import flac as flacmod
+from acidcat.core.formats import flac as flacmod
 from acidcat.core.walk.base import _PAYLOAD_CAP, _bu16, _bu32, _f
 
 def _flac_streaminfo(b):

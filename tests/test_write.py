@@ -291,12 +291,12 @@ def test_bitwig_meta_splice():
     data = (b"BtWg0003000200" + field(b"creator", b"relo")
             + field(b"tags", b"old"))
     out, applied = edits.edit_bitwig(data, {"creator": "me", "tags": "a b c"})
-    m = __import__("acidcat.core.bitwig", fromlist=["parse_meta"]).parse_meta(out)
+    m = __import__("acidcat.core.formats.bitwig", fromlist=["parse_meta"]).parse_meta(out)
     assert m["creator"] == "me" and m["tags"] == "a b c"
 
 
 def test_ni_nksf_roundtrip():
-    from acidcat.core import ni
+    from acidcat.core.formats import ni
     data = open("data/test_formats/corpus/synth/New_Init_2.nksf", "rb").read() \
         if __import__("os").path.exists("data/test_formats/corpus/synth/New_Init_2.nksf") else None
     if data is None:
@@ -308,7 +308,7 @@ def test_ni_nksf_roundtrip():
 
 def test_ni_hsin_roundtrip():
     import os
-    from acidcat.core import ni
+    from acidcat.core.formats import ni
     p = "data/test_formats/corpus/synth/nicecombo.nmsv"
     if not os.path.exists(p):
         import pytest as _pt; _pt.skip("corpus nmsv not present")
@@ -352,7 +352,7 @@ def test_bitwig_write_reenabled_cli(tmp_path):
     fmt, new_data, applied = _edit(str(p), {"creator": "new"})
     assert "Bitwig" in fmt and "experimental" in fmt
     assert applied == [("creator", "old", "new")]
-    from acidcat.core.bitwig import parse_meta
+    from acidcat.core.formats.bitwig import parse_meta
     assert parse_meta(new_data)["creator"] == "new"
 
 

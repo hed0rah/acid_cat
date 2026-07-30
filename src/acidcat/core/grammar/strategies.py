@@ -18,9 +18,9 @@ never drift between the two. Span lives in core/riff for the same reason.
 
 import os
 
-from acidcat.core import riff
-from acidcat.core import flac as flacmod
-from acidcat.core.riff import PAYLOAD_CAP
+from acidcat.core.formats import riff
+from acidcat.core.formats import flac as flacmod
+from acidcat.core.formats.riff import PAYLOAD_CAP
 
 Span = riff.Span  # re-exported for callers that name the type
 

@@ -12,7 +12,7 @@ pass endian="little" for a native-endian capture.
 
 Reference: MMA M2-104-UM, UMP & MIDI 2.0 Protocol v1.1.2.
 
-    from acidcat.core import ump
+    from acidcat.core.formats import ump
     for off, words, msg in ump.iter_ump(data):   # big-endian by default
         print(msg["kind"], msg)
 """

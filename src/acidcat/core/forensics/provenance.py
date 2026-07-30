@@ -217,7 +217,7 @@ def _structural(label, chunks, data):
         if lame:
             out.append(lame)
     try:
-        from acidcat.core import sf2 as sf2mod
+        from acidcat.core.formats import sf2 as sf2mod
         if sf2mod.is_sf2(data):
             info = sf2mod.parse_sf2(data)
             if info.get("sf3"):

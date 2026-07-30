@@ -1,11 +1,11 @@
-"""tests for acidcat.core.riff and the WAV walker behaviors that
+"""tests for acidcat.core.formats.riff and the WAV walker behaviors that
 replaced the legacy parse_riff/get_duration parsers."""
 
 import struct
 import time
 
 import pytest
-from acidcat.core.riff import iter_chunks, get_riff_info, effective_acid_beats
+from acidcat.core.formats.riff import iter_chunks, get_riff_info, effective_acid_beats
 from acidcat.core.walk.wav import inspect_wav
 
 

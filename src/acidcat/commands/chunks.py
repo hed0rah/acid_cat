@@ -5,7 +5,7 @@ acidcat chunks -- walk RIFF chunks in a file, showing offsets and parsed fields.
 import os
 import sys
 
-from acidcat.core.riff import iter_chunks, get_riff_info
+from acidcat.core.formats.riff import iter_chunks, get_riff_info
 from acidcat.core.infra.render import output
 
 

@@ -21,7 +21,7 @@ MOD has no leading signature (its magic is at offset 1080), so ``sniff``
 confirms it from disk; ``sniff_bytes`` cannot classify a MOD from a head.
 """
 
-from acidcat.core import mp3 as mp3mod
+from acidcat.core.formats import mp3 as mp3mod
 from acidcat.core.codecs import ncw as ncwmod
 
 # containers an ID3v2 tag is known to wrap; the tag then does not make
@@ -319,7 +319,7 @@ def _is_snes_rom(filepath):
 
 
 def _is_mod(filepath):
-    from acidcat.core import tracker as tkmod
+    from acidcat.core.formats import tracker as tkmod
     try:
         with open(filepath, "rb") as f:
             return tkmod.is_mod(f.read(1084))
@@ -328,7 +328,7 @@ def _is_mod(filepath):
 
 
 def _is_s3m(filepath):
-    from acidcat.core import tracker as tkmod
+    from acidcat.core.formats import tracker as tkmod
     try:
         with open(filepath, "rb") as f:
             return tkmod.is_s3m(f.read(48))

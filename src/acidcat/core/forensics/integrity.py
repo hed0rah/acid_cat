@@ -14,7 +14,7 @@ read). Reads are capped, so a huge file is sampled, not slurped.
 
 import struct
 
-from acidcat.core import mp4 as mp4mod
+from acidcat.core.formats import mp4 as mp4mod
 
 _SCAN_CAP = 8 * 1024 * 1024        # bytes of PCM to sample for the bit-depth read
 

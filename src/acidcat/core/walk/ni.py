@@ -4,7 +4,7 @@ Container parsing lives in core/ni.py."""
 
 import os
 
-from acidcat.core import ni as nimod
+from acidcat.core.formats import ni as nimod
 from acidcat.core.walk.base import Unsupported as _Unsupported
 from acidcat.core.walk.base import _f
 

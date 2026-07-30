@@ -52,7 +52,7 @@ from acidcat.core.forensics.anomalies import scan as anomalies_scan  # noqa: E40
 # acidcat use these instead of reaching into core/commands internals.
 from acidcat.core.write.edits import edit_metadata, EditError  # noqa: E402,F401
 from acidcat.core.tagged import read_tags  # noqa: E402,F401
-from acidcat.core.mp3 import read_id3v2, list_id3v2_frames  # noqa: E402,F401
+from acidcat.core.formats.mp3 import read_id3v2, list_id3v2_frames  # noqa: E402,F401
 from acidcat import tui_theme  # noqa: E402,F401
 
 # ``walk`` is the public name; ``walk_file`` stays as an alias.

@@ -19,9 +19,9 @@ import struct
 import zipfile
 
 from acidcat.core.codecs import ncw as ncwmod
-from acidcat.core import sf2 as sf2mod
-from acidcat.core import svx as svxmod
-from acidcat.core import tracker as tkmod
+from acidcat.core.formats import sf2 as sf2mod
+from acidcat.core.formats import svx as svxmod
+from acidcat.core.formats import tracker as tkmod
 from acidcat.core.primitives.wavio import pcm_wav
 from acidcat.core.infra.sniff import sniff
 from acidcat.core.walk.base import Unsupported

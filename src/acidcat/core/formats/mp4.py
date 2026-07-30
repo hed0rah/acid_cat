@@ -14,7 +14,7 @@ and the iTunes tags under udta > meta > ilst.
 import math
 import struct
 
-from acidcat.core.mp3 import ID3V1_GENRES
+from acidcat.core.formats.mp3 import ID3V1_GENRES
 
 _CONTAINERS = {
     b"moov", b"trak", b"edts", b"mdia", b"minf", b"dinf", b"stbl",

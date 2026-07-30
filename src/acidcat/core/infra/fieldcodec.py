@@ -16,10 +16,10 @@ write.
 
 import struct
 
-from acidcat.core.mp3 import (_CHANNEL_MODES as _MP3_CHANMODE,
+from acidcat.core.formats.mp3 import (_CHANNEL_MODES as _MP3_CHANMODE,
                               _EMPHASIS as _MP3_EMPHASIS,
                               _VERSION as _MP3_VERSION, _LAYER as _MP3_LAYER)
-from acidcat.core.aiff import (_LOOP_MODES as _AIFF_LOOP_MODES,
+from acidcat.core.formats.aiff import (_LOOP_MODES as _AIFF_LOOP_MODES,
                                _AES_RATES, _AES_EMPHASIS)
 
 # orders below exist so that tie breaks toward the format's native endianness;
@@ -101,7 +101,7 @@ def _float80_encode(text):
 
 
 def _float80_decode(b):
-    from acidcat.core.aiff import _parse_ieee_extended
+    from acidcat.core.formats.aiff import _parse_ieee_extended
     f = _parse_ieee_extended(bytes(b))
     return int(f) if f == int(f) else f
 
@@ -202,7 +202,7 @@ def _mpeg_ctx(container):
 
 
 def _mpeg_bitrate_map(container):
-    from acidcat.core.mp3 import (_LAYER, _BR_V1_L1, _BR_V1_L2, _BR_V1_L3,
+    from acidcat.core.formats.mp3 import (_LAYER, _BR_V1_L1, _BR_V1_L2, _BR_V1_L3,
                                   _BR_V2_L1, _BR_V2_L23)
     vid, lid = _mpeg_ctx(container)
     layer, is_v1 = _LAYER.get(lid), vid == 0b11
@@ -218,7 +218,7 @@ def _mpeg_bitrate_map(container):
 
 
 def _mpeg_samplerate_map(container):
-    from acidcat.core.mp3 import _SAMPLE_RATES
+    from acidcat.core.formats.mp3 import _SAMPLE_RATES
     vid, _lid = _mpeg_ctx(container)
     return {i: r for i, r in enumerate(_SAMPLE_RATES.get(vid, ())) if r > 0}
 

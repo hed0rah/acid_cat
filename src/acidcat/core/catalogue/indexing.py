@@ -12,10 +12,10 @@ import time
 from acidcat.core.catalogue import index as idx
 from acidcat.core.catalogue import paths as acidpaths
 from acidcat.core.catalogue import registry as reg
-from acidcat.core.riff import (
+from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
-from acidcat.core.mp3 import decode_frame_header
+from acidcat.core.formats.mp3 import decode_frame_header
 from acidcat.core.tagged import is_tagged_format
 
 

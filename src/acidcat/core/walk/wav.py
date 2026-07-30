@@ -3,7 +3,7 @@
 import os
 import struct
 
-from acidcat.core.riff import iter_chunks
+from acidcat.core.formats.riff import iter_chunks
 from acidcat.core.infra.vocab import (WAVE_FORMAT_TAGS as _FORMAT_TAGS,
                                 WAV_SPEAKER_POSITIONS as _SPEAKER_POSITIONS,
                                 KSDATAFORMAT_TAIL as _KSDATAFORMAT_TAIL)

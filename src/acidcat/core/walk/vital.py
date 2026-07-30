@@ -3,7 +3,7 @@ in deep mode, the synth structure and modulation matrix."""
 
 import os
 
-from acidcat.core import vital as vitalmod
+from acidcat.core.formats import vital as vitalmod
 from acidcat.core.walk.base import Unsupported as _Unsupported
 from acidcat.core.walk.base import _f
 

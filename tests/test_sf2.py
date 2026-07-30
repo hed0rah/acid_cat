@@ -3,7 +3,7 @@ import struct
 
 import pytest
 
-from acidcat.core import sf2
+from acidcat.core.formats import sf2
 
 
 def _riff(form, *chunks):

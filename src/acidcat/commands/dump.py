@@ -10,7 +10,7 @@ import json
 import os
 import sys
 
-from acidcat.core.riff import iter_chunks
+from acidcat.core.formats.riff import iter_chunks
 
 
 def register(subparsers):

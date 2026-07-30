@@ -9,7 +9,7 @@ and see a dangling (past-EOF) pointer flagged. Parsing lives in core/tracker."""
 import os
 import struct
 
-from acidcat.core import tracker as tk
+from acidcat.core.formats import tracker as tk
 from acidcat.core.walk.base import Unsupported, _f
 
 _SAMPLE_CAP = 400        # samples to list

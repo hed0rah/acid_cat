@@ -14,7 +14,7 @@ Reference: MMA M2-116-U (MIDI Clip File) v1.0; M2-104-UM (UMP) v1.1.2.
 
 import os
 
-from acidcat.core import ump
+from acidcat.core.formats import ump
 from acidcat.core.walk.base import _f
 
 MAGIC = b"SMF2CLIP"

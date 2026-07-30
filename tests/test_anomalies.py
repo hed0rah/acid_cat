@@ -358,7 +358,7 @@ def test_id3_extended_header_zero_padding_not_flagged(tmp_path):
 
 def test_mp4_trkn_decodes_to_index_total(tmp_path):
     # trkn/disk should decode to "index/total", not a raw byte count
-    from acidcat.core.mp4 import parse_ilst
+    from acidcat.core.formats.mp4 import parse_ilst
     payload = struct.pack(">I", 0) + struct.pack(">I", 0) + struct.pack(">HHHH", 0, 3, 12, 0)
     trkn = _mp4_box(b"trkn", _mp4_box(b"data", payload))
     meta = _mp4_box(b"meta", bytes(4) + _mp4_box(b"ilst", trkn))

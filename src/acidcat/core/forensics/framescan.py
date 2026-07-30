@@ -15,7 +15,7 @@ this is the headerless case. Free-format frames (length measured, not derived)
 are skipped in v1.
 """
 
-from acidcat.core.mp3 import decode_frame_header
+from acidcat.core.formats.mp3 import decode_frame_header
 
 _MIN_FRAMES = 12                 # a chain this long is a stream, not chance
 _MAX_STREAMS = 4096

@@ -10,9 +10,9 @@ treat every preset the same way:
 for bytes that are not a recognized preset.
 """
 
-from acidcat.core import bitwig as bwmod
-from acidcat.core import ni as nimod
-from acidcat.core import vital as vitalmod
+from acidcat.core.formats import bitwig as bwmod
+from acidcat.core.formats import ni as nimod
+from acidcat.core.formats import vital as vitalmod
 
 
 def _split_tags(s):

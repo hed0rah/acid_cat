@@ -4,7 +4,7 @@ parapointer tables (byte = value << 4), and per-sample memseg xref to the PCM.
 The fixture is synthesized here from the documented layout -- no real module."""
 import struct
 
-from acidcat.core import tracker as tk
+from acidcat.core.formats import tracker as tk
 from acidcat.core.infra.sniff import sniff
 from acidcat.core.walk import tracker as wtk
 

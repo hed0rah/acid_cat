@@ -25,7 +25,7 @@ moves a byte of mdat -- so it is even safer than a size-cascade rewrite.
 
 import struct
 
-from acidcat.core import mp4 as mp4mod
+from acidcat.core.formats import mp4 as mp4mod
 
 
 class Mp4RepairError(ValueError):

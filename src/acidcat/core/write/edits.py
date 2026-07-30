@@ -138,7 +138,7 @@ def edit_bitwig(data, changes):
 def edit_ni(data, changes):
     """Edit NI preset metadata. Dispatches by container: nksf (RIFF/msgpack),
     ksd (zlib/XML), hsin (Massive/Absynth, cascading frame sizes)."""
-    from acidcat.core import ni
+    from acidcat.core.formats import ni
     try:
         if ni.is_ni_nksf(data):
             return ni.edit_nksf(data, changes)
@@ -179,7 +179,7 @@ def _audio_digest(data):
         h.update(mv[min(pos, len(data)):])
         return "flac", h.hexdigest()
     if len(data) >= 12 and data[4:8] == b"ftyp":
-        from acidcat.core import mp4 as mp4mod
+        from acidcat.core.formats import mp4 as mp4mod
         found = False
         for b in mp4mod.iter_boxes(data):
             if b["depth"] == 0 and b["type"] == b"mdat" and not b["truncated"]:
@@ -187,7 +187,7 @@ def _audio_digest(data):
                 found = True
         return "mp4", h.hexdigest() if found else None
     if data[:4] == b"OggS":
-        from acidcat.core import ogg as oggmod
+        from acidcat.core.formats import ogg as oggmod
         return "ogg", tuple((p["serial"], p["granule"], p["data_len"])
                             for p in oggmod.iter_pages(data)
                             if p["granule"] != 0)

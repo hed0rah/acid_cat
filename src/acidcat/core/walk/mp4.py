@@ -5,7 +5,7 @@ box tree, with the stsd sample entries and their codec-config boxes
 import os
 import struct
 
-from acidcat.core import mp4 as mp4mod
+from acidcat.core.formats import mp4 as mp4mod
 from acidcat.core.walk.base import _f
 
 _CODEC_NAMES = {"mp4a": "AAC", "alac": "Apple Lossless", "Opus": "Opus",

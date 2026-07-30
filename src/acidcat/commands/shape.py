@@ -69,13 +69,13 @@ def _fast_fingerprint(path):
     ids = ""
     try:
         if fmt == "wav":
-            from acidcat.core.riff import iter_chunks
+            from acidcat.core.formats.riff import iter_chunks
             ids = _ids(c for c, _, _ in iter_chunks(path))
         elif fmt in ("aiff", "aifc"):
-            from acidcat.core.aiff import iter_chunks
+            from acidcat.core.formats.aiff import iter_chunks
             ids = _ids(c for c, _, _ in iter_chunks(path))
         elif fmt == "flac":
-            from acidcat.core.flac import iter_metadata_blocks
+            from acidcat.core.formats.flac import iter_metadata_blocks
             ids = _ids(b[1] for b in iter_metadata_blocks(path))
     except Exception:
         pass

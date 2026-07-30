@@ -33,7 +33,7 @@ import sys
 
 from acidcat.core.infra import bytefields as bf
 from acidcat.core.forensics.anomalies import _declared_end, _rf64_end
-from acidcat.core.riff import iter_chunks
+from acidcat.core.formats.riff import iter_chunks
 # the one audio-container table (shared with locate): format id -> file extension
 from acidcat.core.infra.sniff import AUDIO_CONTAINER_EXT as _EXT
 
