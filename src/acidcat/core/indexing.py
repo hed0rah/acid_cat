@@ -51,8 +51,9 @@ _COMMIT_EVERY_N_FILES = 100
 
 
 def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
-                     quiet=False, force=False):
+                     quiet=False, force=False, jobs=None):
     walk_start = time.time()
+    feature_queue = []          # (filepath, path_key) to feature-extract in parallel
     # ensure the query-layer expression indexes exist (existing DBs never get
     # them via _apply_schema, which returns early at the current version).
     try:
@@ -119,7 +120,9 @@ def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
                 idx.upsert_tags(conn, row["path"], row_tags, replace=True)
 
             if do_features:
-                _extract_and_store_features(conn, filepath, row["path"], quiet=quiet)
+                # defer extraction: collect now, run the whole set in parallel
+                # after the walk (the CPU-bound librosa work is what we scale).
+                feature_queue.append((filepath, row["path"]))
 
             seen_paths += 1
             since_commit += 1
@@ -135,6 +138,13 @@ def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
     # prune_missing (symlink loop, permission error) must not roll
     # back the trailing batch of upserts.
     conn.commit()
+
+    # feature extraction runs after the metadata walk so the whole file set can
+    # be spread across a process pool (see _extract_features_parallel).
+    if feature_queue:
+        _extract_features_parallel(conn, feature_queue, quiet=quiet, jobs=jobs)
+        conn.commit()
+
     pruned = idx.prune_missing(conn, scan_root, walk_start)
     idx.record_scan_root(conn, scan_root, seen_paths, walk_start)
     conn.commit()
@@ -496,6 +506,81 @@ def _extract_and_store_features(conn, filepath, path_key, quiet=False):
     if feats is None:
         return
     idx.upsert_features(conn, path_key, feats, version=1)
+
+
+# ── parallel feature extraction ─────────────────────────────────────
+# Feature extraction is CPU-bound librosa work and embarrassingly parallel across
+# files, but the SQLite writes are single-connection -- so worker processes only
+# EXTRACT, and the main process does every upsert. Workers are module-level so
+# they pickle under the spawn start method (the default on Windows/macOS).
+
+def _feature_worker_init():
+    """Pin each worker to single-threaded BLAS. Without this, N worker processes
+    each spin up OpenBLAS/MKL thread pools and oversubscribe the cores, so more
+    workers get *slower*. Parallelism comes from the process count instead. Set
+    before the worker's first librosa/numpy import (this runs before any task)."""
+    for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+        os.environ[var] = "1"
+
+
+def _feature_worker(item):
+    """(path_key, features-or-None) for one file. Runs in a worker process; must
+    never raise (a crash would take down the pool), so failures return None."""
+    filepath, path_key = item
+    try:
+        from acidcat.core.features import extract_audio_features
+        return path_key, extract_audio_features(filepath)
+    except Exception:
+        return path_key, None
+
+
+def _resolve_jobs(jobs, n_items):
+    """Worker count: an explicit `jobs`, else cpu_count-1 (leave one core free),
+    clamped to the number of files. 1 means run serially in-process."""
+    if jobs is None:
+        jobs = max(1, (os.cpu_count() or 2) - 1)
+    return max(1, min(jobs, n_items))
+
+
+def _extract_features_parallel(conn, queue, quiet=False, jobs=None):
+    """Extract features for every (filepath, path_key) in `queue` and upsert them.
+    Runs a process pool (workers extract, main process upserts as results stream
+    back). Falls back to in-process serial for a tiny queue or jobs==1, where the
+    spawn + librosa cold-start per worker would cost more than it saves."""
+    try:
+        from acidcat.core.features import extract_audio_features  # noqa: F401
+    except ImportError:
+        if not quiet:
+            print("  [features] librosa not installed; skipping", file=sys.stderr)
+        return
+    n = len(queue)
+    workers = _resolve_jobs(jobs, n)
+    # each spawned worker pays a one-time librosa/numba cold start (seconds); only
+    # worth it when there is enough work to amortize it across the pool.
+    if workers <= 1 or n < 2 * workers:
+        for filepath, path_key in queue:
+            _extract_and_store_features(conn, filepath, path_key, quiet=quiet)
+        return
+
+    import multiprocessing as mp
+    ctx = mp.get_context("spawn")
+    done = 0
+    since_commit = 0
+    if not quiet:
+        print(f"  [features] extracting {n} files on {workers} workers...", file=sys.stderr)
+    with ctx.Pool(workers, initializer=_feature_worker_init) as pool:
+        for path_key, feats in pool.imap_unordered(_feature_worker, queue, chunksize=1):
+            if feats is not None:
+                idx.upsert_features(conn, path_key, feats, version=1)
+            done += 1
+            since_commit += 1
+            if since_commit >= _COMMIT_EVERY_N_FILES:
+                conn.commit()
+                since_commit = 0
+            if not quiet and (done % 50 == 0 or done == n):
+                print(f"  [features] {done}/{n}", file=sys.stderr)
+    conn.commit()
 
 
 def _refuses_as_root(path):

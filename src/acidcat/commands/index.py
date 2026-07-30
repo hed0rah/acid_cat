@@ -51,6 +51,9 @@ def register(subparsers):
                         "preserves tags, descriptions, and features.")
     p.add_argument("--features", action="store_true",
                    help="Extract librosa audio features during indexing.")
+    p.add_argument("--jobs", "-j", type=int, default=None,
+                   help="Worker processes for feature extraction (default: "
+                        "CPU count - 1; 1 = serial).")
     p.add_argument("--deep", action="store_true",
                    help="Use librosa for BPM/key when metadata is absent.")
     p.add_argument("--import-tags", dest="import_tags",
@@ -242,6 +245,7 @@ def run(args):
             do_deep=args.deep,
             quiet=quiet,
             force=getattr(args, "force", False),
+            jobs=getattr(args, "jobs", None),
         )
 
         if args.import_tags:

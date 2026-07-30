@@ -1088,3 +1088,34 @@ class TestRemoveRootLikeEscape:
         left = [r["path"] for r in conn.execute("SELECT path FROM samples")]
         assert left == ["t/myXsamples/b.wav"]
         conn.close()
+
+
+# ── parallel feature extraction: worker-count logic + serial fallback ───────
+
+def test_resolve_jobs():
+    from acidcat.core import indexing
+    import os as _os
+    # explicit jobs, clamped to the number of files
+    assert indexing._resolve_jobs(8, 100) == 8
+    assert indexing._resolve_jobs(8, 3) == 3          # never more workers than files
+    assert indexing._resolve_jobs(1, 100) == 1
+    assert indexing._resolve_jobs(999, 5) == 5
+    # default: cpu_count - 1, at least 1, clamped to files
+    default = indexing._resolve_jobs(None, 10_000)
+    assert default == max(1, (_os.cpu_count() or 2) - 1)
+
+
+def test_feature_worker_init_pins_blas(monkeypatch):
+    from acidcat.core import indexing
+    monkeypatch.delenv("OPENBLAS_NUM_THREADS", raising=False)
+    indexing._feature_worker_init()
+    assert os.environ["OPENBLAS_NUM_THREADS"] == "1"
+    assert os.environ["OMP_NUM_THREADS"] == "1"
+
+
+def test_feature_worker_never_raises(tmp_path):
+    """A worker must return (path_key, None) on any failure, never raise -- a
+    raising worker would take down the whole pool."""
+    from acidcat.core import indexing
+    key, feats = indexing._feature_worker((str(tmp_path / "does_not_exist.wav"), "k"))
+    assert key == "k" and feats is None
