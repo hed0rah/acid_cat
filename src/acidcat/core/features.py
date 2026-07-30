@@ -88,16 +88,21 @@ def extract_audio_features(filepath):
         features['sample_rate'] = sr
         features['audio_length_samples'] = len(y)
 
-        # Spectral features
-        spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+        # One magnitude STFT, shared by the spectral features that use it. Each of
+        # these recomputed its own identical STFT before; feeding S= is
+        # bit-identical (verified) and drops the redundant transforms.
+        S = np.abs(librosa.stft(y))
+
+        # Spectral features (from the shared STFT)
+        spectral_centroids = librosa.feature.spectral_centroid(S=S, sr=sr)[0]
         features['spectral_centroid_mean'] = np.mean(spectral_centroids)
         features['spectral_centroid_std'] = np.std(spectral_centroids)
 
-        spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
+        spectral_rolloff = librosa.feature.spectral_rolloff(S=S, sr=sr)[0]
         features['spectral_rolloff_mean'] = np.mean(spectral_rolloff)
         features['spectral_rolloff_std'] = np.std(spectral_rolloff)
 
-        spectral_bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)[0]
+        spectral_bandwidth = librosa.feature.spectral_bandwidth(S=S, sr=sr)[0]
         features['spectral_bandwidth_mean'] = np.mean(spectral_bandwidth)
         features['spectral_bandwidth_std'] = np.std(spectral_bandwidth)
 
@@ -122,19 +127,24 @@ def extract_audio_features(filepath):
         features['mel_mean'] = np.mean(mel_spectrogram)
         features['mel_std'] = np.std(mel_spectrogram)
 
-        # Tempo and rhythm
-        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-        tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr)
+        # Tempo. Use the tempo estimator directly rather than full beat tracking:
+        # beat_track adds a ~1.5s dynamic-programming beat search whose beat
+        # positions we discard, and its tempo is bit-identical to this. This is
+        # the single biggest cost in the extractor (~75% of per-file time).
+        tempo = librosa.feature.tempo(y=y, sr=sr)
         features['tempo_librosa'] = float(np.atleast_1d(tempo)[0])
-        features['beat_count'] = len(beats)
+        # beat_count is display-only (not in the similarity vector); estimate it
+        # from tempo x duration instead of paying for beat positions we discard.
+        features['beat_count'] = int(round(
+            features['tempo_librosa'] * features['duration_sec'] / 60.0))
 
-        # RMS energy
+        # RMS energy (kept time-domain: rms(S=) differs slightly from rms(y=))
         rms = librosa.feature.rms(y=y)[0]
         features['rms_mean'] = np.mean(rms)
         features['rms_std'] = np.std(rms)
 
-        # Spectral contrast
-        contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
+        # Spectral contrast (from the shared STFT)
+        contrast = librosa.feature.spectral_contrast(S=S, sr=sr)
         features['spectral_contrast_mean'] = np.mean(contrast)
         features['spectral_contrast_std'] = np.std(contrast)
 

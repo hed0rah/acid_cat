@@ -6,6 +6,11 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.88.0] - 2026-07-30
+
+### Changed
+- **Feature extraction is ~3x faster, with identical feature vectors.** `features.extract_audio_features` spent ~75% of its time in `librosa.beat.beat_track`'s dynamic-programming beat search, but only the tempo goes in the similarity vector -- so it now calls the tempo estimator directly (bit-identical tempo) and estimates the display-only `beat_count` from tempo x duration. It also computes one magnitude STFT and shares it across the spectral-centroid/rolloff/bandwidth/contrast features instead of recomputing four identical transforms. The similarity vectors are unchanged to storage precision, so existing indexes stay valid (no re-featuring needed). ~1.5s/file -> ~0.5s/file.
+
 ## [0.87.0] - 2026-07-29
 
 ### Added
