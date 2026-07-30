@@ -7,7 +7,7 @@ import os
 import sys
 
 from acidcat.core.analysis.detect import estimate_librosa_metadata
-from acidcat.core.infra.formats import output
+from acidcat.core.infra.render import output
 from acidcat.util.csv_helpers import safe_basename_for_csv
 
 
