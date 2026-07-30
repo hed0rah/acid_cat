@@ -22,7 +22,7 @@ def two_lib_setup(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
     registry_path = str(tmp_path / "registry.db")
-    monkeypatch.setattr(mcp_server, "_REGISTRY_PATH", registry_path)
+    monkeypatch.setattr(mcp_server.handlers, "_REGISTRY_PATH", registry_path)
 
     lib_a_root_dir = tmp_path / "libA"
     lib_a_root_dir.mkdir()
@@ -536,13 +536,13 @@ class TestDescribeSample:
 
 class TestAnalysisDegrades:
     def test_analyze_sample_no_librosa(self, two_lib_setup, monkeypatch):
-        monkeypatch.setattr(mcp_server, "_librosa_available", lambda: False)
+        monkeypatch.setattr(mcp_server.handlers, "_librosa_available", lambda: False)
         r = mcp_server.dispatch("analyze_sample",
                                 {"path": two_lib_setup["P_HAT"]})
         assert "error" in r
 
     def test_detect_bpm_key_no_librosa(self, two_lib_setup, monkeypatch):
-        monkeypatch.setattr(mcp_server, "_librosa_available", lambda: False)
+        monkeypatch.setattr(mcp_server.handlers, "_librosa_available", lambda: False)
         r = mcp_server.dispatch("detect_bpm_key",
                                 {"path": two_lib_setup["P_HAT"]})
         assert "error" in r
