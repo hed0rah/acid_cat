@@ -3,7 +3,7 @@
 import io
 import wave
 
-from acidcat.core import cue
+from acidcat.core.containers import cue
 
 
 def test_cue_single_bin(tmp_path):

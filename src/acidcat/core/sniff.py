@@ -183,11 +183,11 @@ def sniff(filepath):
     # disc images carry their magic past the sniff head: Wii at 0x18, GameCube at
     # 0x1C. Wii is checked first (its partitions are encrypted; distinct magic).
     if fmt is None:
-        from acidcat.core import wiidisc
+        from acidcat.core.containers import wiidisc
         if wiidisc.is_wii(filepath):
             return "wii"
     if fmt is None:
-        from acidcat.core import gcm
+        from acidcat.core.containers import gcm
         if gcm.is_gcm(filepath):
             return "gcm"
     # an N64 .ctl audio bank opens with the weak 2-byte 0x4231 ('B1') revision;

@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from acidcat.core import gcm
+from acidcat.core.containers import gcm
 from acidcat.core.codecs import dsp, hps
 
 

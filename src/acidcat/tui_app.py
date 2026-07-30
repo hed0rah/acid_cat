@@ -36,7 +36,7 @@ from acidcat.core import locate as locatemod
 from acidcat.core import transforms as transformsmod
 from acidcat.core.codecs import cdxa as cdxamod
 from acidcat.core.codecs import vag as vagmod
-from acidcat.core import iso9660 as isomod
+from acidcat.core.containers import iso9660 as isomod
 from acidcat.core import audioscan as audioscanmod
 from acidcat.core import writer
 from acidcat.core import viz

@@ -431,7 +431,7 @@ def _cdxa_named(filepath):
     """ISO 9660-aware extraction: named XA tracks from .STR/.XA movies and SPU
     sound banks from .VB/.BD, standalone .VAG, or any file whose content is a
     strong SPU-ADPCM match. Returns True if it yielded anything."""
-    from acidcat.core import iso9660
+    from acidcat.core.containers import iso9660
     from acidcat.core.codecs import cdxa, vag
     got = False
     files = list(iso9660.walk(filepath))
@@ -498,7 +498,7 @@ _VAB_HDR_EXT = {".VB": ".VH", ".BD": ".HD"}
 def _vab_sizes(filepath, ent, by_upper):
     """The per-sample byte sizes from a bank's sibling VAB header (.VH/.HD), or
     None if there is no matching header or it does not parse."""
-    from acidcat.core import iso9660
+    from acidcat.core.containers import iso9660
     from acidcat.core.codecs import vag
     up = ent["path"].upper()
     dot = up.rfind(".")
@@ -551,7 +551,7 @@ def _cdxa_samples(filepath):
 def _cue_samples(cue_path):
     """A .cue sheet: extract each CD-DA (Red Book) audio track to a WAV -- raw
     16-bit little-endian stereo PCM at 44100 Hz, straight off the audio track."""
-    from acidcat.core import cue as cuemod
+    from acidcat.core.containers import cue as cuemod
     for t in cuemod.audio_tracks(cue_path):
         with open(t["file"], "rb") as f:
             f.seek(t["start"])
@@ -584,7 +584,7 @@ def _adx_samples(data):
 def _gcm_samples(filepath):
     """A GameCube disc image: walk the filesystem and decode each audio file --
     HAL .hps streams and CRI .adx. Reads via seeks, never slurps the disc."""
-    from acidcat.core import gcm
+    from acidcat.core.containers import gcm
     from acidcat.core.codecs import hps, adx, dtk
     for ent in gcm.walk(filepath):
         p = ent["path"].lower()
@@ -623,7 +623,7 @@ def _wiidisc_samples(filepath):
     """A Wii disc image: decrypt the data partition, walk it, and decode each
     BRSTM stream. Needs the crypto extra (pip install acidcat[crypto]); decrypts
     clusters on demand, never slurping the disc."""
-    from acidcat.core import wiidisc
+    from acidcat.core.containers import wiidisc
     from acidcat.core.codecs import brstm
     try:
         disc = wiidisc.WiiDisc(filepath)

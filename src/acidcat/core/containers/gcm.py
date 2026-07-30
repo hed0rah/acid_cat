@@ -6,7 +6,7 @@ the FST itself -- a flat array of 12-byte entries (file or directory) plus a
 trailing string table. Directories store the index one past their last child,
 so the tree is walked by index ranges, not nesting.
 
-    from acidcat.core import gcm
+    from acidcat.core.containers import gcm
     for f in gcm.walk("game.iso"):
         print(f["path"], f["offset"], f["size"])
 """

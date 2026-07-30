@@ -12,7 +12,7 @@ resets per file) and single-.bin (all tracks in one file at cumulative MSF
 offsets). Each audio track's byte range runs from its INDEX 01 to the next
 track's start (or end of file).
 
-    from acidcat.core import cue
+    from acidcat.core.containers import cue
     for t in cue.parse("game.cue"):
         print(t["num"], t["type"], t["file"])
 """

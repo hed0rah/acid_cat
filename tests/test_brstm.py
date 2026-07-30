@@ -7,7 +7,7 @@ import struct
 
 import pytest
 
-from acidcat.core import wiidisc
+from acidcat.core.containers import wiidisc
 from acidcat.core.codecs import brstm
 
 

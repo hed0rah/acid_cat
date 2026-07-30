@@ -11,7 +11,7 @@ logical image (header + FST), so the walk mirrors core/gcm.py once decrypted.
 The AES needs `cryptography`, which is an optional extra to keep the base
 install dependency-light:  pip install acidcat[crypto]
 
-    from acidcat.core import wiidisc
+    from acidcat.core.containers import wiidisc
     disc = wiidisc.WiiDisc("game.iso")
     for f in disc.files():
         if f["path"].endswith(".brstm"):

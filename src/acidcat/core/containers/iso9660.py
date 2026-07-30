@@ -10,7 +10,7 @@ the PlayStation case), raw Mode1/2352 (offset 16), and cooked 2048-byte images.
 The volume descriptor at logical block 16 carries "CD001"; that anchors both the
 sector geometry and the root directory.
 
-    from acidcat.core import iso9660
+    from acidcat.core.containers import iso9660
     for f in iso9660.walk("game.bin"):
         print(f["path"], f["lba"], f["size"])
     data = iso9660.read_file("game.bin", entry)
