@@ -22,6 +22,7 @@ import struct
 import zipfile
 from collections import Counter
 
+from acidcat.core.primitives.zipio import zip_data_offset
 from acidcat.core.walk.base import Unsupported as _Unsupported
 from acidcat.core.walk.base import _f
 
@@ -44,11 +45,7 @@ def _data_offset(z, zi):
     """Absolute file offset of a zip entry's data (past the local file header):
     the entry's real on-disk bytes, so a STORED program carves to the literal
     .xpm (a DEFLATED one carves to its raw deflate stream)."""
-    z.fp.seek(zi.header_offset)
-    hdr = z.fp.read(30)
-    n = int.from_bytes(hdr[26:28], "little")
-    m = int.from_bytes(hdr[28:30], "little")
-    return zi.header_offset + 30 + n + m
+    return zip_data_offset(z, zi)
 
 
 # ---- .mpcpattern (JSON sequence) -----------------------------------------

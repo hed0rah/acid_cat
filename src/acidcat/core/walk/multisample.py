@@ -16,21 +16,17 @@ import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 
+from acidcat.core.primitives.zipio import zip_data_offset
 from acidcat.core.walk.base import _f
 
 _ZONE_CAP = 48                                   # don't flood the view on big kits
 
 
 def _data_offset(z, zi):
-    """Absolute file offset of a zip entry's data (past the local file header).
-    ZipInfo.header_offset points at the PK local header, not the payload, so a
-    chunk that means to be the entry's bytes -- a STORED sample, so `carve`
-    yields the literal WAV/FLAC -- must start here, not at header_offset."""
-    z.fp.seek(zi.header_offset)
-    hdr = z.fp.read(30)
-    n = int.from_bytes(hdr[26:28], "little")
-    m = int.from_bytes(hdr[28:30], "little")
-    return zi.header_offset + 30 + n + m
+    """Absolute file offset of a zip entry's data (past the local file header):
+    a STORED sample carves to the literal WAV/FLAC, so the region starts here,
+    not at header_offset."""
+    return zip_data_offset(z, zi)
 
 
 def _read_entry(z, name):
