@@ -20,8 +20,8 @@ repair here" rather than guessing.
 import os
 import sys
 
-from acidcat.core import constraints, writer
-from acidcat.core.repairers import AudioGuardError
+from acidcat.core.write import constraints, writer
+from acidcat.core.write.repairers import AudioGuardError
 
 
 def register(subparsers):

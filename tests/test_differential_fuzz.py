@@ -16,8 +16,8 @@ import random
 
 from conftest import _make_riff_wav
 
-from acidcat.core import structure
-from acidcat.core.structure import StructError
+from acidcat.core.write import structure
+from acidcat.core.write.structure import StructError
 from acidcat.core.walk import walk_file
 from acidcat.core.walk.base import Unsupported
 

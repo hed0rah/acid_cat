@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from acidcat.core import edit_aiff, edit_riff, edits
+from acidcat.core.write import edit_aiff, edit_riff, edits
 from acidcat.commands.write import _strip
 
 WAV = "data/samples/Drum_Loop.wav"

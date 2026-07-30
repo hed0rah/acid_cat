@@ -75,7 +75,7 @@ def test_repair_set_matches_live_dispatch():
     # derive the repair-capable set by probing constraints.repairer_for with a real
     # magic per format; it must equal _REPAIR exactly. Catches both the omission
     # class (flac was missing) and any over-claim.
-    from acidcat.core import constraints
+    from acidcat.core.write import constraints
     derived = {fid for fid, m in _MAGIC.items() if constraints.repairer_for(m)}
     assert derived == formats._REPAIR
 

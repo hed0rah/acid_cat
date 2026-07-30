@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 from acidcat.core import cover as covermod
-from acidcat.core import edits, writer
+from acidcat.core.write import edits, writer
 
 _EXT = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif",
         "image/webp": "webp"}

@@ -8,10 +8,10 @@ guards the audio, so every verb above it (repair today, validate/audit next) is
 format-agnostic.
 """
 
-from acidcat.core import countrepair, flacrepair
+from acidcat.core.write import countrepair, flacrepair
 from acidcat.core import mp4 as mp4mod
-from acidcat.core import mp4repair, structure
-from acidcat.core.constraints import (COUNT, OFFSET, SIZE, ZERO, Report, Repairer,
+from acidcat.core.write import mp4repair, structure
+from acidcat.core.write.constraints import (COUNT, OFFSET, SIZE, ZERO, Report, Repairer,
                                       Violation)
 
 

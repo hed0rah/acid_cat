@@ -17,7 +17,7 @@ violation, 2 on a usage error.
 import os
 import sys
 
-from acidcat.core import constraints
+from acidcat.core.write import constraints
 
 _EXTS = (".wav", ".rf64", ".bwf", ".aif", ".aiff", ".aifc", ".sf2", ".sf3",
          ".m4a", ".mp4", ".mov", ".m4b", ".flac")

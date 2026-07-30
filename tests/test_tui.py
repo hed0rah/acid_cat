@@ -1123,7 +1123,7 @@ def test_tui_validate_repair_flow(tmp_path):
     import asyncio
     import shutil
     from acidcat.tui_app import AcidcatTUI, ValidateScreen
-    from acidcat.core import constraints
+    from acidcat.core.write import constraints
 
     orig = tmp_path / "broken.wav"
     shutil.copyfile("data/samples/Drum_Loop.wav", orig)

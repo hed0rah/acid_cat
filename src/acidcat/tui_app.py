@@ -38,11 +38,11 @@ from acidcat.core.codecs import cdxa as cdxamod
 from acidcat.core.codecs import vag as vagmod
 from acidcat.core.containers import iso9660 as isomod
 from acidcat.core import audioscan as audioscanmod
-from acidcat.core import writer
+from acidcat.core.write import writer
 from acidcat.core import viz
 from acidcat.commands.carve import _EXT as _CARVE_EXT
 from acidcat.util import play
-from acidcat.core.edits import EditError
+from acidcat.core.write.edits import EditError
 from acidcat.commands.write import _edit as _write_edit, _strip as _write_strip
 
 
@@ -215,11 +215,11 @@ def text_field_for(profile, field_name):
     else None. These must NOT be same-length byte-patched -- a longer title
     shifts the file -- so the editor re-serializes via the metadata engine."""
     if profile == "WAV":
-        from acidcat.core.edit_riff import _INFO_TAGS
+        from acidcat.core.write.edit_riff import _INFO_TAGS
         rev = {v.decode("latin1").strip(): k for k, v in _INFO_TAGS.items()}
         return rev.get(field_name)
     if profile == "AIFF":
-        from acidcat.core.edit_aiff import _AIFF_TEXT
+        from acidcat.core.write.edit_aiff import _AIFF_TEXT
         rev = {v.decode("latin1").strip(): k for k, v in _AIFF_TEXT.items()}
         return rev.get(field_name)
     if profile == "tagged":
@@ -2170,7 +2170,7 @@ class AcidcatTUI(App):
         if not self.work:
             self.notify("open a file first (o)", severity="warning")
             return
-        from acidcat.core import constraints
+        from acidcat.core.write import constraints
         with open(self.work, "rb") as f:
             data = f.read()
         report = constraints.analyze(data)
@@ -2185,8 +2185,8 @@ class AcidcatTUI(App):
         self.push_screen(ValidateScreen(report), after)
 
     def _do_repair(self):
-        from acidcat.core import constraints
-        from acidcat.core.repairers import AudioGuardError
+        from acidcat.core.write import constraints
+        from acidcat.core.write.repairers import AudioGuardError
         with open(self.work, "rb") as f:
             data = f.read()
         try:

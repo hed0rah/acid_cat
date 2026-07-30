@@ -9,7 +9,7 @@ FORM size = file - 8). Malformed files are refused rather than guessed.
 
 import struct
 
-from acidcat.core.edits import EditError
+from acidcat.core.write.edits import EditError
 
 # field -> AIFF text chunk id (raw text, not null-terminated, not pascal)
 _AIFF_TEXT = {

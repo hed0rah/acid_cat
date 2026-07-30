@@ -1,7 +1,7 @@
 """tests for the DAW-clip -> MIDI writer and convert command."""
 
 import struct
-from acidcat.core.midi_write import notes_to_smf, _vlq
+from acidcat.core.write.midi_write import notes_to_smf, _vlq
 
 
 def _note_ons(smf):

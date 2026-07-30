@@ -19,7 +19,8 @@ import json
 import os
 import sys
 
-from acidcat.core import anomalies, constraints, integrity, provenance
+from acidcat.core import anomalies, integrity, provenance
+from acidcat.core.write import constraints
 from acidcat.core.mapped import map_file
 from acidcat.core.walk import walk_file
 from acidcat.core.walk.base import Unsupported

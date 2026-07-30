@@ -10,7 +10,7 @@ modified copy instead. `--dry-run` prints the field-level diff and writes nothin
 import os
 import sys
 
-from acidcat.core import writer, edits
+from acidcat.core.write import writer, edits
 
 
 def register(subparsers):
@@ -65,10 +65,10 @@ def _strip(path):
         # vital keys are cleared to "", not deleted; say so in the report
         return ("Vital preset", new, [a[0] + " (cleared)" for a in applied])
     if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
-        from acidcat.core import edit_riff
+        from acidcat.core.write import edit_riff
         return ("WAV",) + edit_riff.strip_wav(data)
     if head[:4] == b"FORM" and head[8:12] in (b"AIFF", b"AIFC"):
-        from acidcat.core import edit_aiff
+        from acidcat.core.write import edit_aiff
         return ("AIFF",) + edit_aiff.strip_aiff(data)
     tagged = (head[:4] == b"fLaC" or head[:3] == b"ID3" or head[:4] == b"OggS"
               or head[4:8] == b"ftyp"

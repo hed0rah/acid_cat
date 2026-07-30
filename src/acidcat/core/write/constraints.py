@@ -95,7 +95,7 @@ class Repairer:
 # walkers that may import back here in future).
 
 def _repairers():
-    from acidcat.core.repairers import (CountRepairer, FlacRepairer, IffRepairer,
+    from acidcat.core.write.repairers import (CountRepairer, FlacRepairer, IffRepairer,
                                         Mp4OffsetRepairer)
     return (IffRepairer(), Mp4OffsetRepairer(), FlacRepairer(), CountRepairer())
 

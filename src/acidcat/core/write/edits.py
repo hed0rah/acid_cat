@@ -49,12 +49,12 @@ def edit_metadata(path, changes):
         return EditResult("NI preset (experimental)", *edit_ni(data, changes))
     if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
         try:
-            from acidcat.core import edit_riff
+            from acidcat.core.write import edit_riff
         except ImportError:
             raise EditError("WAV editing is not available in this build")
         return EditResult("WAV", *edit_riff.edit_wav(data, changes))
     if head[:4] == b"FORM" and head[8:12] in (b"AIFF", b"AIFC"):
-        from acidcat.core import edit_aiff
+        from acidcat.core.write import edit_aiff
         return EditResult("AIFF", *edit_aiff.edit_aiff(data, changes))
     tagged = (head[:4] == b"fLaC" or head[:3] == b"ID3" or head[:4] == b"OggS"
               or head[4:8] == b"ftyp"

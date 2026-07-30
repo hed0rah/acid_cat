@@ -5,8 +5,8 @@ import struct
 
 import pytest
 
-from acidcat.core import writer, edits, edit_riff
-from acidcat.core.edit_riff import _iter_chunks
+from acidcat.core.write import writer, edits, edit_riff
+from acidcat.core.write.edit_riff import _iter_chunks
 
 
 # ── helpers ────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ def test_atomic_write_readback_detects_mismatch(tmp_path, monkeypatch):
 def test_aiff_edit_clear_odd_and_unicode():
     # clearing a chunk, inserting an odd-length utf-8 value (pad byte), and
     # keeping metadata ahead of SSND -- the thin spots in AIFF edit coverage
-    from acidcat.core import edit_aiff
+    from acidcat.core.write import edit_aiff
 
     def ck(cid, payload):
         return (cid + struct.pack(">I", len(payload)) + payload
@@ -271,7 +271,7 @@ def test_wav_smpl_root_note():
 
 
 def test_aiff_edit_preserves_audio_big_endian():
-    from acidcat.core import edit_aiff
+    from acidcat.core.write import edit_aiff
     def bc(cid, p):
         return cid + struct.pack(">I", len(p)) + p + (b"\x00" if len(p) % 2 else b"")
     body = b"AIFF" + bc(b"COMM", b"\x00" * 18) + bc(b"SSND", b"\x01" * 7)
@@ -284,7 +284,7 @@ def test_aiff_edit_preserves_audio_big_endian():
 
 
 def test_bitwig_meta_splice():
-    from acidcat.core import edits
+    from acidcat.core.write import edits
     def field(key, val):
         return (struct.pack(">I", len(key)) + key + b"\x08"
                 + struct.pack(">I", len(val)) + val)
@@ -327,7 +327,7 @@ def test_wav_edit_preserves_trailing_bytes_outside_riff():
     """MED-2: bytes after the RIFF container are preserved and NOT folded into
     the recomputed riff_size."""
     import struct
-    from acidcat.core import edit_riff
+    from acidcat.core.write import edit_riff
 
     def _chunk(cid, p):
         return cid + struct.pack("<I", len(p)) + p + (b"\x00" if len(p) % 2 else b"")
@@ -360,7 +360,7 @@ def test_ni_write_routes_not_refused(tmp_path):
     # an NI hsin-magic file no longer hits the blanket refusal; it reaches edit_ni
     # (which will raise its own specific error on a stub, not the "not enabled" one)
     from acidcat.commands.write import _edit
-    from acidcat.core import edits
+    from acidcat.core.write import edits
     p = tmp_path / "x.nmsv"
     p.write_bytes(b"\x00" * 12 + b"hsin" + b"\x00" * 64)
     try:

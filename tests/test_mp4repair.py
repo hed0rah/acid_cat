@@ -4,7 +4,7 @@ import struct
 
 import pytest
 
-from acidcat.core import mp4repair as R
+from acidcat.core.write import mp4repair as R
 
 
 def _box(btype, payload):

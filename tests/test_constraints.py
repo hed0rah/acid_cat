@@ -2,10 +2,10 @@
 analyze (read-only) vs apply split, and format-agnostic dispatch."""
 import struct
 
-from acidcat.core import constraints as C
-from acidcat.core import structure
-from acidcat.core.constraints import OFFSET, SIZE, ZERO
-from acidcat.core.repairers import IffRepairer, Mp4OffsetRepairer
+from acidcat.core.write import constraints as C
+from acidcat.core.write import structure
+from acidcat.core.write.constraints import OFFSET, SIZE, ZERO
+from acidcat.core.write.repairers import IffRepairer, Mp4OffsetRepairer
 
 
 def _wav(payload=b"\x00" * 64):
@@ -104,7 +104,7 @@ def test_offset_violation_kind_from_mp4(tmp_path):
                    _box(b"minf", _box(b"stbl", stbl)))))
 
     probe = ftyp + tree([0, 0]) + _box(b"mdat", bytes(20))
-    from acidcat.core import mp4repair
+    from acidcat.core.write import mp4repair
     ms = mp4repair._find_boxes(probe)["mdat"]
     ps = ms["offset"] + ms["hdr"]
     data = ftyp + tree([8, 18]) + _box(b"mdat", bytes(20))   # broken: before mdat

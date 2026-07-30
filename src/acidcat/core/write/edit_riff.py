@@ -8,7 +8,7 @@ fmt before data. RF64/BW64 and malformed files are refused rather than guessed.
 
 import struct
 
-from acidcat.core.edits import EditError
+from acidcat.core.write.edits import EditError
 from acidcat.util.midi import NOTES
 
 # field -> INFO sub-chunk id

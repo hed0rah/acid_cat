@@ -1,7 +1,7 @@
 """FLAC structural repair: the metadata-block last-flag and PADDING zero-fill,
 witnessed by the audio frame sync and the spec, through the constraint framework."""
-from acidcat.core import constraints as C
-from acidcat.core import flacrepair as F
+from acidcat.core.write import constraints as C
+from acidcat.core.write import flacrepair as F
 
 
 def _blk(last, btype, body):
