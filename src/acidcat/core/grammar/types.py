@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 # value->label tables live in the core-owned vocab module, not in a walker,
 # so the grammar layer no longer depends on a walker's internals.
-from acidcat.core.vocab import TABLES
+from acidcat.core.infra.vocab import TABLES
 
 _STRUCT_CODES = {1: "B", 2: "H", 4: "I", 8: "Q"}
 
@@ -166,16 +166,16 @@ class Codec(Type):
     name: str
 
     def __post_init__(self):
-        from acidcat.core.fieldcodec import _CODECS
+        from acidcat.core.infra.fieldcodec import _CODECS
         if self.name not in _CODECS:
             raise ValueError(f"unknown codec {self.name!r}")
 
     def length(self, payload=None, pos=None, ctx=None):
-        from acidcat.core.fieldcodec import enc_size
+        from acidcat.core.infra.fieldcodec import enc_size
         return enc_size(self.name)
 
     def decode(self, payload, pos, ctx):
-        from acidcat.core.fieldcodec import decode_value, enc_size
+        from acidcat.core.infra.fieldcodec import decode_value, enc_size
         n = enc_size(self.name)
         b = payload[pos:pos + n]
         if len(b) != n:

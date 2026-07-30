@@ -31,11 +31,11 @@ import base64
 import os
 import sys
 
-from acidcat.core import bytefields as bf
+from acidcat.core.infra import bytefields as bf
 from acidcat.core.forensics.anomalies import _declared_end, _rf64_end
 from acidcat.core.riff import iter_chunks
 # the one audio-container table (shared with locate): format id -> file extension
-from acidcat.core.sniff import AUDIO_CONTAINER_EXT as _EXT
+from acidcat.core.infra.sniff import AUDIO_CONTAINER_EXT as _EXT
 
 _ENDIAN = {"be": ">", "le": "<", "both": "both"}
 

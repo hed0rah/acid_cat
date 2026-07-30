@@ -45,7 +45,7 @@ def test_edit_profile_routing(tmp_path):
 
 
 def test_field_abs_addressing():
-    from acidcat.core.fieldcodec import _field_abs
+    from acidcat.core.infra.fieldcodec import _field_abs
     # default base is chunk offset + 8 (RIFF/AIFF id+size header)
     chunk = {"offset": 0x30}
     assert _field_abs(chunk, {"off": 4, "len": 2}) == 0x30 + 8 + 4
@@ -78,7 +78,7 @@ def test_tagged_text_field_mapping():
 
 
 def test_synchsafe_codec():
-    from acidcat.core.fieldcodec import encode_value, decode_value, enc_size
+    from acidcat.core.infra.fieldcodec import encode_value, decode_value, enc_size
     assert enc_size("synchsafe") == 4
     assert encode_value("synchsafe", "35") == b"\x00\x00\x00\x23"
     assert decode_value("synchsafe", b"\x00\x00\x00\x23") == 35
@@ -89,7 +89,7 @@ def test_synchsafe_codec():
 
 
 def test_float80_codec():
-    from acidcat.core.fieldcodec import encode_value, decode_value, enc_size
+    from acidcat.core.infra.fieldcodec import encode_value, decode_value, enc_size
     from acidcat.core.aiff import _parse_ieee_extended
     assert enc_size("float80") == 10
     # standard sample rates round-trip through the 80-bit extended format
@@ -107,7 +107,7 @@ def test_all_walker_enc_annotations_verify():
     caught here (the TUI would also safely reject it, but annotating is pointless
     if it never verifies)."""
     from acidcat.core.walk import walk_file, Unsupported
-    from acidcat.core.fieldcodec import (encode_value, _field_abs, parse_bitfield,
+    from acidcat.core.infra.fieldcodec import (encode_value, _field_abs, parse_bitfield,
                                          bitfield_extract, parse_bitsmap, _BITMAPS,
                                          parse_bitsdyn, _DYNMAPS)
     fixtures = [
@@ -171,7 +171,7 @@ def test_walker_enc_verified_against_bytes():
     editing. format_tag stores a hex-string value, so enc/raw is what makes it
     value-editable at all."""
     from acidcat.core.walk import walk_file
-    from acidcat.core.fieldcodec import encode_value, _field_abs
+    from acidcat.core.infra.fieldcodec import encode_value, _field_abs
     _fmt, chunks, _w = walk_file("data/samples/Drum_Loop.wav", deep=True)
     fmtc = next(c for c in chunks if c["id"].strip() == "fmt")
     f = next(fl for fl in fmtc["fields"] if fl["name"] == "format_tag")
@@ -182,7 +182,7 @@ def test_walker_enc_verified_against_bytes():
 
 
 def test_infer_enc_roundtrip_and_encode():
-    from acidcat.core.fieldcodec import infer_enc, encode_value
+    from acidcat.core.infra.fieldcodec import infer_enc, encode_value
     # sample_rate 44100 stored little-endian u32 -> infer <I, re-encode 69
     assert infer_enc(44100, b"\x44\xac\x00\x00") == "<I"
     assert encode_value("<I", "69") == b"\x45\x00\x00\x00"
@@ -400,7 +400,7 @@ def test_undo_reverts_edit(tmp_path):
 
 
 def test_resolve_bitsmap():
-    from acidcat.core.fieldcodec import resolve_bitsmap
+    from acidcat.core.infra.fieldcodec import resolve_bitsmap
     assert resolve_bitsmap("mpeg_chanmode", "mono") == 0b11       # by label
     assert resolve_bitsmap("mpeg_chanmode", "STEREO") == 0b00     # case-insensitive
     assert resolve_bitsmap("mpeg_chanmode", "1") == 1             # by raw index
@@ -630,7 +630,7 @@ def test_infer_enc_endianness_preference():
     """Endian-symmetric bytes (a zero, a palindrome) round-trip both ways, so
     the tie must break toward the format's native byte order or a later write
     would encode the new value with the wrong one."""
-    from acidcat.core.fieldcodec import infer_enc
+    from acidcat.core.infra.fieldcodec import infer_enc
     assert infer_enc(0, b"\x00\x00\x00\x00") == "<I"
     assert infer_enc(0, b"\x00\x00\x00\x00", prefer_be=True) == ">I"
     assert infer_enc(257, b"\x01\x01", prefer_be=True) == ">H"

@@ -20,7 +20,7 @@ from acidcat.core.grammar.helpers import (_HELPERS, _NOTEFUNCS,
                                           _RELATIONS, _SUMMARIES)
 from acidcat.core.grammar.model import (BitGroup, Helper, NoteFunc, NoteLocal,
                                         Switch)
-from acidcat.core.fieldcodec import bitfield_extract
+from acidcat.core.infra.fieldcodec import bitfield_extract
 from acidcat.core.grammar.strategies import STRATEGIES
 
 

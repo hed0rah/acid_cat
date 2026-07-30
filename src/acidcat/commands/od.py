@@ -10,7 +10,7 @@ Complements `inspect --hex` (a value-first table); this is a bytes-first layout.
 
 import sys
 
-from acidcat.core.mapped import map_file
+from acidcat.core.infra.mapped import map_file
 from acidcat.core.walk import walk_file
 from acidcat.core.walk.base import Unsupported
 

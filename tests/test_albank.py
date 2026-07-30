@@ -31,7 +31,7 @@ def _make_ctl():
 
 
 def test_sniff_albank(tmp_path):
-    from acidcat.core import sniff
+    from acidcat.core.infra import sniff
     f = tmp_path / "bank.ctl"
     f.write_bytes(_make_ctl())
     assert sniff.sniff(str(f)) == "albank"

@@ -22,7 +22,7 @@ import sys
 import pytest
 
 from conftest import SAMPLE_WAV, _make_riff_wav
-from acidcat.core import fieldcodec
+from acidcat.core.infra import fieldcodec
 from acidcat.core.grammar import interpret
 from acidcat.core.grammar.formats.wav import WAVE
 from acidcat.core.walk import walk_file
@@ -152,7 +152,7 @@ def test_ctx_keys_covers_walker(path):
     descriptor field at construction). Self-maintaining across the corpus,
     which exercises smpl/acid/cue/fact chunks a hermetic file does not."""
     from acidcat.core.walk.wav import inspect_wav
-    from acidcat.core.vocab import CTX_KEYS
+    from acidcat.core.infra.vocab import CTX_KEYS
     ctx = {}
     inspect_wav(path, ctx=ctx)  # non-WAV degrades to an empty ctx (passes)
     missing = set(ctx) - set(CTX_KEYS)
@@ -297,7 +297,7 @@ def test_adpcm_variant_matches_walker(tmp_path):
 def test_extensible_variant_matches_walker(tmp_path):
     """WAVEFORMATEXTENSIBLE (tag 0xFFFE): decode helper #2 -- GUID sub_format,
     channel_mask NoteFlags, and the later-field-wins ctx override, byte-exact."""
-    from acidcat.core.vocab import KSDATAFORMAT_TAIL
+    from acidcat.core.infra.vocab import KSDATAFORMAT_TAIL
     sub = struct.pack("<H", 1) + KSDATAFORMAT_TAIL           # PCM subtype, std tail
     ext = struct.pack("<HI", 16, 0x3) + sub                 # valid_bits, mask=FL|FR
     fmt_payload = (struct.pack("<HHIIHH", 0xFFFE, 2, 44100, 176400, 4, 16)

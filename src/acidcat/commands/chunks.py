@@ -6,7 +6,7 @@ import os
 import sys
 
 from acidcat.core.riff import iter_chunks, get_riff_info
-from acidcat.core.formats import output
+from acidcat.core.infra.formats import output
 
 
 def register(subparsers):

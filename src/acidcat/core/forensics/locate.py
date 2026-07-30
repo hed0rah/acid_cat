@@ -34,7 +34,7 @@ from acidcat.core.forensics import framescan
 # container magics whose payload can be audio, and the ids we accept -- both from
 # the one audio-container table in core/sniff (shared with carve). Each hit is
 # still confirmed with sniff_bytes, so a stray "RIFF" in noise is rejected.
-from acidcat.core.sniff import (sniff_bytes,
+from acidcat.core.infra.sniff import (sniff_bytes,
                                 AUDIO_CONTAINER_FMTS as _AUDIO_CONTAINER_FMTS,
                                 AUDIO_CONTAINER_MAGICS as _CONTAINER_MAGICS)
 

@@ -15,7 +15,7 @@ from acidcat.core.catalogue import index as idx
 from acidcat.core.catalogue import paths as acidpaths
 from acidcat.core.catalogue import query_sql
 from acidcat.core.catalogue import registry as reg
-from acidcat.core.formats import output
+from acidcat.core.infra.formats import output
 
 
 DEFAULT_FIELDS = [

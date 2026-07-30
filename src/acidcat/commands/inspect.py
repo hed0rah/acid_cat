@@ -353,7 +353,7 @@ def run(args):
     # silently runs unsandboxed) if the requested isolation cannot run here.
     sandbox_profile = None
     if getattr(args, "sandbox", False):
-        from acidcat.core import sandbox as _sb
+        from acidcat.core.infra import sandbox as _sb
         try:
             sandbox_profile = _sb.resolve_profile(getattr(args, "sandbox_profile", "auto"))
         except _sb.SandboxUnavailable as e:
@@ -370,7 +370,7 @@ def run(args):
                 continue
             try:
                 if sandbox_profile:
-                    from acidcat.core import sandbox as _sb
+                    from acidcat.core.infra import sandbox as _sb
                     try:
                         fmt_label, chunks, file_warns = _sb.run_walk(
                             filepath, deep, profile=sandbox_profile,

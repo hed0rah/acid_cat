@@ -7,7 +7,7 @@ import struct
 
 import pytest
 
-from acidcat.core.sniff import sniff, sniff_bytes
+from acidcat.core.infra.sniff import sniff, sniff_bytes
 from acidcat.core.walk import emu, walk_file
 from acidcat.core.walk.base import Unsupported
 

@@ -64,7 +64,7 @@ def test_loop_points():
 
 
 def test_extract_wires_vag(tmp_path):
-    from acidcat.core import sniff as sniffmod
+    from acidcat.core.infra import sniff as sniffmod
     from acidcat.core import samples as smod
 
     body = _block(0x00, 0x00, [0x11] * 14) * 4

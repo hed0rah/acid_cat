@@ -4,7 +4,7 @@ import os
 import struct
 
 from acidcat.core.riff import iter_chunks
-from acidcat.core.vocab import (WAVE_FORMAT_TAGS as _FORMAT_TAGS,
+from acidcat.core.infra.vocab import (WAVE_FORMAT_TAGS as _FORMAT_TAGS,
                                 WAV_SPEAKER_POSITIONS as _SPEAKER_POSITIONS,
                                 KSDATAFORMAT_TAIL as _KSDATAFORMAT_TAIL)
 from acidcat.core.walk.base import (

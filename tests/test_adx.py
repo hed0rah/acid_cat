@@ -54,7 +54,7 @@ def test_unsupported_type_raises():
 
 
 def test_extract_wires_adx(tmp_path):
-    from acidcat.core import sniff as sniffmod
+    from acidcat.core.infra import sniff as sniffmod
     from acidcat.core import samples as smod
     import wave, io
 

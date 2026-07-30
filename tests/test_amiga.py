@@ -2,7 +2,7 @@
 
 import struct
 
-from acidcat.core import sniff as sniffmod
+from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import walk_file
 
 

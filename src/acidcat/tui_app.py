@@ -68,7 +68,7 @@ _SCAN_SEG = 16 * 1024 * 1024         # scan a blob in segments: live progress + 
 # bit-field encodings) lives in core/fieldcodec.py so the CLI and tests share
 # it without a textual dependency; names are re-exported here for existing
 # importers.
-from acidcat.core.fieldcodec import (  # noqa: F401
+from acidcat.core.infra.fieldcodec import (  # noqa: F401
     _BE_FMTS, _BITMAPS, _CODECS, _DYNMAPS, _field_abs, _resolve_in_map,
     bitfield_apply, bitfield_extract, decode_value, enc_size, encode_value,
     infer_enc, parse_bitfield, parse_bitsdyn, parse_bitsmap, resolve_bitsmap,

@@ -22,7 +22,7 @@ import pytest
 from conftest import _make_riff_wav
 from acidcat.commands import audit, od
 from acidcat.commands import probe as probe_cmd
-from acidcat.core.mapped import map_file
+from acidcat.core.infra.mapped import map_file
 
 _DATA_SIZE = 48 * 1024 * 1024
 # well below the 48 MB file (and the ~96 MB the old f.read() path peaked at),

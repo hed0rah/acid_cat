@@ -11,7 +11,7 @@ in this package, and add one registry entry below.
 
 import os
 
-from acidcat.core import sniff as sniffmod
+from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import (
     aiff, akai, albank, amiga, bfdlac, bitwig, gf1pat, emu, flac, fxp, krz, labx, midi, midi2, mp3,
     mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,

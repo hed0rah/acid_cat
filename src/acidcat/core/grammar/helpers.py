@@ -11,7 +11,7 @@ coefficient block and the WAVEFORMATEXTENSIBLE GUID sub-format.
 
 import struct
 
-from acidcat.core.vocab import KSDATAFORMAT_TAIL, WAVE_FORMAT_TAGS
+from acidcat.core.infra.vocab import KSDATAFORMAT_TAIL, WAVE_FORMAT_TAGS
 from acidcat.core.walk.base import _f
 from acidcat.util.midi import midi_note_to_name
 

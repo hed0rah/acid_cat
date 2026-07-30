@@ -17,7 +17,7 @@ from acidcat.core.serum import is_serum_preset
 from acidcat.core.tagged import is_tagged_format
 from acidcat.core.analysis.detect import estimate_librosa_metadata
 from acidcat.core.analysis.features import extract_audio_features
-from acidcat.core.formats import output
+from acidcat.core.infra.formats import output
 from acidcat.util.midi import midi_note_to_name, midi_note_to_pitch_class
 from acidcat.util.stdin import is_stdin_target, stdin_to_tempfile
 
@@ -69,7 +69,7 @@ def _detect_format(filepath):
         return "tagged"
     # any other structural format the walkers recognize gets a walker-backed
     # summary instead of a mis-parse; rf64 too (its walker is not the WAV one)
-    from acidcat.core import sniff as sniffmod
+    from acidcat.core.infra import sniff as sniffmod
     if sniffmod.sniff(filepath) not in (None, "wav"):
         return "walker"
     if _is_preset(filepath, ext):        # ext-only presets sniff may not catch

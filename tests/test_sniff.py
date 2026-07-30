@@ -2,7 +2,7 @@
 
 import struct
 
-from acidcat.core.sniff import sniff, sniff_bytes
+from acidcat.core.infra.sniff import sniff, sniff_bytes
 
 
 def _pad(b, n=16):

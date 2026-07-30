@@ -4,7 +4,7 @@ the per-keygroup zone sample references.
 The fixture is synthesized here from the documented IFF layout -- no real pack."""
 import struct
 
-from acidcat.core.sniff import sniff
+from acidcat.core.infra.sniff import sniff
 from acidcat.core.walk import akai
 from acidcat.core.walk.base import Unsupported
 
@@ -37,7 +37,7 @@ def _make_akp(tmp_path, name="Test Prog", keygroups=(("Kick", 0, 63),
 
 def test_akp_sniffs_by_riff_form():
     assert sniff  # imported ok
-    from acidcat.core.sniff import sniff_bytes
+    from acidcat.core.infra.sniff import sniff_bytes
     assert sniff_bytes(b"RIFF\x00\x00\x00\x00APRG") == "akp"
     assert sniff_bytes(b"RIFF\x00\x00\x00\x00WAVE") == "wav"   # unchanged
 

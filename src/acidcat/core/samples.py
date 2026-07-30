@@ -23,7 +23,7 @@ from acidcat.core import sf2 as sf2mod
 from acidcat.core import svx as svxmod
 from acidcat.core import tracker as tkmod
 from acidcat.core.primitives.wavio import pcm_wav
-from acidcat.core.sniff import sniff
+from acidcat.core.infra.sniff import sniff
 from acidcat.core.walk.base import Unsupported
 
 _TRACKER_RATE = 8363             # the conventional Amiga C-3 rate; modules pitch by playback

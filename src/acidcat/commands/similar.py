@@ -14,7 +14,7 @@ import sys
 from acidcat.core.catalogue import paths as acidpaths
 from acidcat.core.catalogue import registry as reg
 from acidcat.core.catalogue import search
-from acidcat.core.formats import output
+from acidcat.core.infra.formats import output
 
 _FIELDS = ["path", "similarity", "percentile_rank", "bpm", "key", "duration",
            "format", "library_label"]

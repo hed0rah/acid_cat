@@ -70,7 +70,7 @@ def test_hps_decode():
 
 def test_gcm_extract_wires(tmp_path):
     """A GameCube image sniffs as gcm and extract decodes its .hps to WAV."""
-    from acidcat.core import sniff as sniffmod
+    from acidcat.core.infra import sniff as sniffmod
     from acidcat.core import samples as smod
     import wave, io
 

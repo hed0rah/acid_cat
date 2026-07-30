@@ -5,7 +5,7 @@ The fixture is synthesized here from the documented layout -- no real module."""
 import struct
 
 from acidcat.core import tracker as tk
-from acidcat.core.sniff import sniff
+from acidcat.core.infra.sniff import sniff
 from acidcat.core.walk import tracker as wtk
 
 
