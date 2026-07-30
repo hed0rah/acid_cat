@@ -44,6 +44,30 @@ def test_path_filename_bare_key():
     assert parse_key_from_path("/loops/kick_120_Am.wav") == "Am"
 
 
+def test_krumhansl_schmuckler_key_finding():
+    from acidcat.core.detect import estimate_key_ks
+    idx = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6,
+           "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
+
+    def dist(*notes):
+        v = [0.1] * 12
+        for n in notes:
+            v[idx[n]] = 1.0
+        return v
+
+    # the mode-awareness that chroma argmax cannot do: same-ish energy, different
+    # templates -> major vs minor named correctly.
+    assert estimate_key_ks(dist("C", "E", "G"))[0] == "C"        # C major triad
+    assert estimate_key_ks(dist("C", "D#", "G"))[0] == "Cm"      # C minor triad
+    assert estimate_key_ks(dist("A", "C", "E"))[0] == "Am"       # A minor triad
+    assert estimate_key_ks(dist("G", "B", "D"))[0] == "G"        # G major triad
+    # confidence rises with clearer tonality, and silence/empty -> no key
+    assert estimate_key_ks([0.0] * 12) == (None, 0.0)
+    assert estimate_key_ks([]) == (None, 0.0)
+    key, conf = estimate_key_ks(dist("C", "E", "G"))
+    assert 0.0 < conf <= 1.0
+
+
 def test_quality_before_letter_sets_mode():
     # sample packs often name chords <quality>_<letter> ("min_C" = C minor), which
     # the letter-first filename patterns miss -- the bare-token grab must read the
