@@ -6,6 +6,11 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [0.89.0] - 2026-07-30
+
+### Changed
+- **Feature extraction during indexing now runs in parallel.** `acidcat index --features` extracts librosa features across a process pool instead of one file at a time -- the CPU-bound work is embarrassingly parallel across files, while the SQLite writes stay on the single main-process connection. New `--jobs/-j` flag (default: CPU count - 1; `1` = serial). Workers are pinned to single-threaded BLAS so more workers don't oversubscribe the cores. Measured ~3.9x on 12 workers over a 104-file pack (small sets are capped by each worker's one-time librosa cold start; large libraries amortize it and scale toward the core count). Combined with 0.88.0, a library that took ~1.5s/file now indexes at a small fraction of that.
+
 ## [0.88.0] - 2026-07-30
 
 ### Changed
