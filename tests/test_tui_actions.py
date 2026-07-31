@@ -229,6 +229,33 @@ def test_request_quit_on_a_dirty_file_asks_first(wav):
     _drive(scenario)
 
 
+def test_audio_params_reject_a_lying_fmt_chunk(tmp_path):
+    """A corrupt fmt chunk yields arbitrary integers. They must not reach the
+    playback WAV header, whose byte_rate is a u32 -- an unclamped rate overflows
+    struct.pack and takes the player down mid-session."""
+    pytest.importorskip("textual")
+    from acidcat.tui_app import AcidcatTUI
+
+    # declared size 0xffffffff, and a fmt body that reads as rate ~2.9e9 / 44100-bit
+    bad = tmp_path / "lying.wav"
+    bad.write_bytes(b"RIFF\xff\xff\xff\xffWAVEfmt " + b"\x10\x00\x00\x00"
+                    + b"\x01\x00\x02\x00" + b"\x44\xac" * 8)
+
+    async def scenario():
+        app = AcidcatTUI(str(bad))
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            rate, ch, bits, _ = app._audio_params()
+            assert 1000 <= rate <= 768000, f"insane sample rate survived: {rate}"
+            assert 1 <= ch <= 64, f"insane channel count survived: {ch}"
+            assert bits in (8, 16, 24, 32, 64), f"insane bit depth survived: {bits}"
+            assert rate * ch * (bits // 8) <= 0xFFFFFFFF, "byte_rate overflows u32"
+            app.action_play()          # must not raise struct.error
+            await pilot.pause()
+
+    _drive(scenario)
+
+
 def test_search_prev_steps_backwards(wav):
     """`N` walks the search hits in reverse without falling off the list."""
     from acidcat.tui_app import AcidcatTUI

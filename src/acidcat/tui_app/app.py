@@ -1200,9 +1200,19 @@ class AcidcatTUI(App):
             play.stop(self._play)
             self._play = None
 
+    # bounds for a fmt/COMM chunk we are willing to believe. a corrupt header
+    # yields arbitrary integers, and they end up in a WAV header whose byte_rate
+    # field is a u32 -- so an unclamped rate overflows struct.pack and takes the
+    # player down. anything outside these ranges is garbage, not exotic audio.
+    _RATE_RANGE = (1000, 768000)          # 768 kHz covers the most extreme hi-res
+    _CH_RANGE = (1, 64)
+    _BITS_VALID = (8, 16, 24, 32, 64)
+
     def _audio_params(self):
         """(rate, channels, bits, floating) from the file's fmt/COMM chunk, or
-        sensible defaults for reinterpreting arbitrary bytes as PCM."""
+        sensible defaults for reinterpreting arbitrary bytes as PCM. Values a
+        corrupt header cannot be telling the truth about fall back to the
+        default rather than propagating into the playback WAV header."""
         rate, ch, bits, floating = 44100, 1, 16, False
         for c in self.chunks:
             if str(c.get("id", "")).strip() not in ("fmt", "COMM"):
@@ -1211,17 +1221,19 @@ class AcidcatTUI(App):
                 n, v = f.get("name", ""), f.get("value")
                 try:
                     if n == "sample_rate":
-                        rate = int(v) or rate
+                        lo, hi = self._RATE_RANGE
+                        rate = int(v) if lo <= int(v) <= hi else rate
                     elif n in ("channels", "num_channels"):
-                        ch = int(v) or ch
+                        lo, hi = self._CH_RANGE
+                        ch = int(v) if lo <= int(v) <= hi else ch
                     elif n == "bits_per_sample":
-                        bits = int(v) or bits
+                        bits = int(v) if int(v) in self._BITS_VALID else bits
                     elif n == "format_tag" and "float" in str(f.get("note", "")).lower():
                         floating = True
                 except (ValueError, TypeError):
                     pass
             break
-        return rate, ch, max(8, bits), floating
+        return rate, ch, bits, floating
 
     def action_help(self):
         self.push_screen(HelpScreen())
