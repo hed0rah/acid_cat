@@ -1,4 +1,4 @@
-# Recovery and rescue (PhotoRec for audio)
+# Recovery and rescue
 
 Four verbs turn acidcat into a forensic recovery tool for audio: find audio in a
 raw blob, cut it out, pull samples out of a bank, and make an odd codec playable.

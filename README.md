@@ -121,7 +121,7 @@ the whole RIFF-to-BWF-to-RF64-to-Wave64 family.
 | `acidcat query [flags]` | Filter the global index by bpm/key/tag/text |
 | `acidcat query --compatible-with FILE` | Find samples that mix with FILE: harmonic key (Camelot) + compatible tempo (incl. half/double-time) |
 | `acidcat convert FILE [-o OUT]` | Export/transcode: `.bwclip` -> MIDI, NCW -> WAV (single file or a directory), SF2/SF3 -> a folder of samples, 8SVX -> WAV; `--to-pcm` decodes an ADPCM or mistagged WAV to plain playable 16-bit PCM (`--codec ima` to force it) |
-| `acidcat locate BLOB [--mode strict\|normal\|aggressive] [--analyze] [--transforms] [-v]` | "PhotoRec for audio": find the audio regions in a raw blob or disk image (containers, signatureless raw PCM, headerless MP3 streams) and report them; never writes. `--analyze` infers PCM geometry, `--transforms` finds audio hidden under XOR/rotate/nibble-swap, `-v` shows the evidence. Pipe `--json` into `carve --batch` |
+| `acidcat locate BLOB [--mode strict\|normal\|aggressive] [--analyze] [--transforms] [-v]` | Find the audio regions in a raw blob or disk image (containers, signatureless raw PCM, headerless MP3 streams) and report them; never writes. `--analyze` infers PCM geometry, `--transforms` finds audio hidden under XOR/rotate/nibble-swap, `-v` shows the evidence. Pipe `--json` into `carve --batch` |
 | `acidcat extract BANK [-o DIR]` | Pull every embedded sample out of a known bank/module as its own WAV: MOD/XM/IT/S3M, Gravis `.pat`, 8SVX, NCW, SF2/SF3, Bitwig `.multisample`, Kurzweil `.krz`, E-mu `.e4b`/`.e5b`, MPC `.snd`. Also rips soundtracks off console disc images: PlayStation/CD-XA (`.bin`/`.img`), any `.cue` (CD-DA), GameCube `.iso` (HPS/ADX/DTK), Wii `.iso` (BRSTM, needs `[crypto]`), N64 `.z64/.n64/.v64` ROMs (container-agnostic VADPCM recovery), and SNES `.sfc/.smc` ROMs (container-agnostic BRR recovery). `--json` for a manifest |
 | `acidcat write FILE --set field=value` | Edit metadata in place, with a `_original` backup, `-o` copy, and `--dry-run`; custom frames via `txxx:NAME=value`; Bitwig/NI preset editing (experimental) |
 | `acidcat probe FILE read\|scan\|find\|strings\|hexdump\|diff\|entropy\|map ...` | Low-level byte dissection (RE-tool surface): typed read at an offset (`read fmt.sample_rate -t u32`), value scan, byte-pattern find, strings, hexdump, diff, plus `entropy` (Shannon curve + histogram) and `map` (binvis Hilbert byte-map). Addresses can be raw offsets or structural names (`chunk` / `chunk.field`) resolved through the walker |
@@ -196,7 +196,7 @@ Most commands accept `table`, `json`, and `csv` (default `table`, but
     # extract 50+ audio features to CSV
     acidcat features ~/Samples/Loops -n 500
 
-### Recovery / rescue (PhotoRec for audio)
+### Recovery / rescue
 
 Find audio in a raw blob, cut it out, and make odd codecs playable. Four verbs
 chain like coreutils: `locate` (find) -> `carve` (cut) -> `convert` (transcode),

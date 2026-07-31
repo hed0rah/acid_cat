@@ -22,7 +22,7 @@ A low-level audio and preset metadata tool. readelf/exiftool for audio.
 | `acidcat similar FILE` | sounds like FILE over the index (`index --features` first); `-n` `--kind` `--no-kind-filter` `--paths-only` |
 | `acidcat convert FILE` | export/transcode: bwclip -> MIDI, NCW/8SVX -> WAV, SF2/SF3 -> samples; `--to-pcm` decodes ADPCM/mistagged WAV to plain PCM (`--codec ima` forces it) |
 | `acidcat probe FILE read AT\|scan V\|find HEX\|strings\|hexdump AT\|diff F2` | byte dissection (RE surface): typed read, value scan, pattern find, strings, hexdump, diff; AT can be an offset or `chunk`/`chunk.field` |
-| `acidcat locate BLOB` | "PhotoRec for audio": find audio regions in a blob/disk image (containers + raw PCM + headerless MP3); `--mode`, `--analyze`, `--transforms`, `-v`. Pipe `-f json` to `carve --batch` |
+| `acidcat locate BLOB` | find audio regions in a blob/disk image (containers + raw PCM + headerless MP3); `--mode`, `--analyze`, `--transforms`, `-v`. Pipe `--json` to `carve --batch` |
 | `acidcat extract BANK` | pull every embedded sample out of a bank/module as WAVs (MOD/XM/IT/S3M, `.pat`, 8SVX, NCW, SF2/SF3, `.multisample`, `.krz`, `.e4b`/`.e5b`, `.snd`) |
 | `acidcat carve FILE --chunk ID\|--trailing\|--offset N\|--batch SRC` | extract a byte region (chunk / appended blob / range) to a file; `--batch` cuts every `locate` region into a dir |
 | `acidcat repair FILE` | fix stale sizes, offset tables, counts, pad bytes (audio untouched, keeps a backup) |
@@ -52,7 +52,7 @@ acidcat inspect FILE... [-f table|json] [--pretty] [--hex] [--frames]
 | `--full` | self-contained JSON dump (raw region bytes + absolute field offsets) |
 | `--anomalies` | forensic scan: trailing data, polyglots, cavities, size mismatches, LSB-stego notice |
 | `--verbose` | deep deconstruction (Bitwig device tree + parameters + notes, Vital modulation matrix, NI hsin FastLZ subtree) |
-| `-f json` | JSON output; multiple files become NDJSON (one record per line) |
+| `--json` | JSON output; multiple files become NDJSON (one record per line) |
 | `--color` | auto (TTY) / always / never; honors NO_COLOR |
 | multiple files | each under a `File:` banner |
 
@@ -91,7 +91,7 @@ acidcat inspect --pretty MyPatch.bwpreset
 acidcat inspect --only fmt --hex loop.wav
 
 # machine-readable, many files, into jq
-acidcat inspect -f json *.wav | jq -c '.chunks[].id'
+acidcat inspect --json *.wav | jq -c '.chunks[].id'
 
 # build a standalone interactive byte explorer for any file
 acidcat explore song.mp3 -o song.html
@@ -110,7 +110,7 @@ acidcat query --device Polysynth --category Reverb   # search preset metadata
 acidcat query --product Vital --creator someone
 ```
 
-## recovery / rescue (PhotoRec for audio)
+## recovery / rescue
 
 `locate` finds audio in a raw blob; `carve` cuts it out; `extract` unpacks a known
 bank; `convert --to-pcm` makes odd codecs playable. Full workflow in
@@ -122,7 +122,7 @@ acidcat locate disk.img --mode aggressive --analyze
 dd if=/dev/sdcard | acidcat locate -                 # straight off a device
 
 # the pipeline: locate every region, carve each into a directory
-acidcat locate disk.img -f json | acidcat carve disk.img --batch - -o recovered/
+acidcat locate disk.img --json | acidcat carve disk.img --batch - -o recovered/
 
 # pull every sample out of a sampler bank / tracker module
 acidcat extract kit.sf2 -o kit_samples/
