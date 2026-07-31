@@ -21,7 +21,7 @@ _FIELD_COLORS = (36, 32, 33, 35, 34, 31, 96, 92, 93, 95)
 def register(subparsers):
     p = subparsers.add_parser(
         "od", help="objdump-x-style annotated, colored hex dump of a file's structure")
-    p.add_argument("target")
+    p.add_argument("target", help="File to dump, or '-' for stdin.")
     p.add_argument("--color", choices=["auto", "always", "never"], default="auto")
     p.add_argument("--width", type=int, default=16, metavar="N",
                    help="max hex bytes shown per field before eliding (default 16)")
@@ -45,6 +45,16 @@ def _ascii(b):
 
 
 def run(args):
+    from acidcat.util.stdin import resolved_input
+    with resolved_input(args.target) as _p:
+        if _p is None:
+            print("acidcat od: no data on stdin", file=sys.stderr)
+            return 1
+        args.target = _p
+        return _run(args)
+
+
+def _run(args):
     path = args.target
     try:
         label, chunks, warns = walk_file(path)

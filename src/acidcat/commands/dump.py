@@ -16,7 +16,7 @@ from acidcat.commands._output import add_output_format_arg
 
 def register(subparsers):
     p = subparsers.add_parser("dump", help="Hex-dump a specific chunk from a WAV file.")
-    p.add_argument("target", help="Path to a WAV file.")
+    p.add_argument("target", help="Path to a WAV file, or '-' for stdin.")
     p.add_argument("chunks", nargs="+",
                    help="Chunk IDs to dump (e.g. acid smpl LIST). Case-insensitive.")
     p.add_argument("-b", "--bytes", type=int, default=64, help="Hex preview length in bytes.")
@@ -34,6 +34,16 @@ def _vlog(args, msg):
 
 
 def run(args):
+    from acidcat.util.stdin import resolved_input
+    with resolved_input(args.target) as _p:
+        if _p is None:
+            print("acidcat dump: no data on stdin", file=sys.stderr)
+            return 1
+        args.target = _p
+        return _run(args)
+
+
+def _run(args):
     filepath = args.target
     if not os.path.isfile(filepath):
         print(f"acidcat dump: {filepath}: No such file", file=sys.stderr)

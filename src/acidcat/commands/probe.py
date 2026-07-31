@@ -19,6 +19,7 @@ f32/f64); it is searched in both byte orders. HEX for find is a hex string
 
 import os
 import sys
+from acidcat.util.stdin import display_name
 
 from acidcat.core import probe as pr
 from acidcat.core.forensics import viz
@@ -30,7 +31,7 @@ def register(subparsers):
     p = subparsers.add_parser(
         "probe",
         help="Byte-level dissection: typed read, value scan, find, strings, hexdump, diff.")
-    p.add_argument("file", help="File to dissect.")
+    p.add_argument("file", help="File to dissect, or '-' for stdin.")
     sub = p.add_subparsers(dest="verb", metavar="VERB")
 
     r = sub.add_parser("read", help="Read AT as typed values (pwndbg x).")
@@ -90,6 +91,16 @@ def _byteorder(args, label):
 
 
 def run(args):
+    from acidcat.util.stdin import resolved_input
+    with resolved_input(args.file) as _p:
+        if _p is None:
+            print("acidcat probe: no data on stdin", file=sys.stderr)
+            return 1
+        args.file = _p
+        return _run(args)
+
+
+def _run(args):
     verb = getattr(args, "verb", None)
     if not verb:
         print("acidcat probe: pick a verb (read/scan/find/strings/hexdump/diff)",
@@ -190,7 +201,7 @@ def _dispatch(args, verb, path, data):
         if not ranges and la == lb:
             print("identical")
             return 0
-        print(f"{os.path.basename(path)} ({la:,}) vs {os.path.basename(args.other)} "
+        print(f"{display_name(path)} ({la:,}) vs {os.path.basename(args.other)} "
               f"({lb:,}): {len(ranges)} changed range(s)")
         for s, e in ranges:
             print(f"  0x{s:08x}..0x{e:08x}  ({e - s} bytes)")
@@ -203,7 +214,7 @@ def _dispatch(args, verb, path, data):
         # zero-copy windows into the map
         with memoryview(data) as view:
             ent = viz.windowed_entropy(view, max(8, args.width))
-            print(f"entropy  {os.path.basename(path)}  {len(data):,} bytes  (0 = uniform .. 8 = random)")
+            print(f"entropy  {display_name(path)}  {len(data):,} bytes  (0 = uniform .. 8 = random)")
             for line in viz.braille_line(ent, width=args.width, height=8, vmin=0, vmax=8):
                 print("  " + line)
             hi = sum(1 for e in ent if e >= 7.2)
@@ -222,7 +233,7 @@ def _dispatch(args, verb, path, data):
         with memoryview(data) as view:
             grid, side = viz.hilbert_grid(view, args.order)
         color = _use_color(args.no_color)
-        print(f"byte map  {os.path.basename(path)}  {len(data):,} bytes  "
+        print(f"byte map  {display_name(path)}  {len(data):,} bytes  "
               f"({side}x{side} Hilbert; adjacent cells are adjacent bytes)")
         for row in grid:
             cells = []

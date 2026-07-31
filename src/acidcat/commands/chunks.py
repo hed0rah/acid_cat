@@ -4,6 +4,7 @@ acidcat chunks -- walk RIFF chunks in a file, showing offsets and parsed fields.
 
 import os
 import sys
+from acidcat.util.stdin import display_name
 
 from acidcat.core.formats.riff import iter_chunks, get_riff_info
 from acidcat.commands._output import add_output_format_arg
@@ -12,7 +13,7 @@ from acidcat.core.infra.render import output
 
 def register(subparsers):
     p = subparsers.add_parser("chunks", help="Walk RIFF chunks in a WAV file.")
-    p.add_argument("target", help="Path to a WAV file.")
+    p.add_argument("target", help="Path to a WAV file, or '-' for stdin.")
     add_output_format_arg(p, only=("table", "json", "csv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("-q", "--quiet", action="store_true")
@@ -27,6 +28,16 @@ def _vlog(args, msg):
 
 
 def run(args):
+    from acidcat.util.stdin import resolved_input
+    with resolved_input(args.target) as _p:
+        if _p is None:
+            print("acidcat chunks: no data on stdin", file=sys.stderr)
+            return 1
+        args.target = _p
+        return _run(args)
+
+
+def _run(args):
     filepath = args.target
     if os.path.isdir(filepath):
         print(f"acidcat chunks: {filepath}: is a directory (expected a file)", file=sys.stderr)
@@ -37,7 +48,7 @@ def run(args):
 
     fmt_name = getattr(args, 'output_format', 'table')
 
-    _vlog(args, f"[chunks] file={os.path.basename(filepath)} "
+    _vlog(args, f"[chunks] file={display_name(filepath)} "
                 f"size={os.path.getsize(filepath)}")
 
     # Get RIFF container info
@@ -78,7 +89,7 @@ def run(args):
             stream = open(args.output, 'w', encoding='utf-8')
 
         stream.write(f"RIFF container: {riff_info['size']} bytes, type={riff_info['type']}\n")
-        stream.write(f"File: {os.path.basename(filepath)}\n\n")
+        stream.write(f"File: {display_name(filepath)}\n\n")
 
         # Raw chunk layout
         stream.write("Chunk Layout:\n")

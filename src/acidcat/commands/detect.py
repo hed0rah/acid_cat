@@ -5,6 +5,7 @@ acidcat detect -- estimate BPM/key using librosa analysis.
 import csv
 import os
 import sys
+from acidcat.util.stdin import display_name
 
 from acidcat.core.analysis.detect import estimate_librosa_metadata
 from acidcat.commands._output import add_output_format_arg
@@ -14,7 +15,7 @@ from acidcat.util.csv_helpers import safe_basename_for_csv
 
 def register(subparsers):
     p = subparsers.add_parser("detect", help="Estimate BPM and key using librosa.")
-    p.add_argument("target", help="WAV file or directory.")
+    p.add_argument("target", help="WAV file or directory, or '-' for stdin.")
     p.add_argument("-n", "--num", type=int, default=500, help="Max files to scan (for dirs).")
     p.add_argument("-q", "--quiet", action="store_true")
     add_output_format_arg(p, only=("table", "json", "csv"))
@@ -25,11 +26,11 @@ def register(subparsers):
 def _detect_single(filepath, quiet=False):
     """Run detection on a single file, return dict."""
     if not quiet:
-        print(f"  [detect] {os.path.basename(filepath)}...", file=sys.stderr)
+        print(f"  [detect] {display_name(filepath)}...", file=sys.stderr)
 
     result = estimate_librosa_metadata(filepath)
     return {
-        "filename": os.path.basename(filepath),
+        "filename": display_name(filepath),
         "bpm": result.get("estimated_bpm"),
         "key": result.get("estimated_key"),
         "duration_sec": result.get("duration_sec"),
@@ -43,6 +44,16 @@ def _detect_single(filepath, quiet=False):
 
 
 def run(args):
+    from acidcat.util.stdin import resolved_input
+    with resolved_input(args.target) as _p:
+        if _p is None:
+            print("acidcat detect: no data on stdin", file=sys.stderr)
+            return 1
+        args.target = _p
+        return _run(args)
+
+
+def _run(args):
     target = args.target
     quiet = getattr(args, 'quiet', False)
     fmt_name = getattr(args, 'output_format', 'table')
