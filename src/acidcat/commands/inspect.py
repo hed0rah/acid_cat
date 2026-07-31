@@ -20,6 +20,7 @@ selection, and rendering.
 import json
 import os
 import sys
+from acidcat.util.color import add_color_arg, color_enabled
 
 from acidcat.core.forensics import anomalies as anomaliesmod
 from acidcat.commands._output import add_output_format_arg
@@ -70,9 +71,7 @@ def register(subparsers):
                    help="Forensic scan: flag trailing data past the container, "
                         "appended-format magic (polyglots), structural size "
                         "mismatches, and control bytes smuggled into text fields.")
-    p.add_argument("--color", choices=["auto", "always", "never"], default="auto",
-                   help="Colorize table output: auto (default, when stdout is a "
-                        "TTY), always, or never. Respects the NO_COLOR env var.")
+    add_color_arg(p)
     p.add_argument("-v", "--verbose", action="store_true")
     # experimental: parse untrusted input in a resource-limited worker so a
     # memory/CPU-bomb file takes down only the worker. Linux only; --sandbox
@@ -121,16 +120,6 @@ _ANSI = {
 _RESET = "\033[0m"
 
 
-def _color_enabled(args):
-    # explicit always/never win; NO_COLOR governs auto only.
-    mode = getattr(args, "color", "auto")
-    if mode == "never":
-        return False
-    if mode == "always":
-        return True
-    if os.environ.get("NO_COLOR"):
-        return False
-    return sys.stdout.isatty()
 
 
 class _Paint:
@@ -166,7 +155,7 @@ def _render_pretty(filepath, fmt_label, chunks, file_warns, args):
     """A clean, human-friendly view of the decoded tags/metadata: section per
     chunk, aligned key/value, no byte offsets. Made for presets and tagged
     files (Bitwig, Vital, Serum, MP4 tags, WAV/FLAC/MP3 metadata)."""
-    p = _Paint(_color_enabled(args))
+    p = _Paint(color_enabled(args))
     size = os.path.getsize(filepath)
     print(p("id", os.path.basename(filepath)))
     print(p("dim", f"{fmt_label}, {_human_size(size)}"))
@@ -195,7 +184,7 @@ def _render_pretty(filepath, fmt_label, chunks, file_warns, args):
 
 def _render_anomalies(findings, args):
     """Print the forensic findings from `--anomalies` under the main dump."""
-    p = _Paint(_color_enabled(args))
+    p = _Paint(color_enabled(args))
     role = {"alert": "warn", "warn": "warn", "notice": "dim"}
     print()
     if not findings:
@@ -211,7 +200,7 @@ def _render_anomalies(findings, args):
 
 def _render_table(filepath, fmt_label, chunks, file_warns, args, total=None):
     file_size = os.path.getsize(filepath)
-    p = _Paint(_color_enabled(args))
+    p = _Paint(color_enabled(args))
     if total is not None and total != len(chunks):
         count = f"showing {len(chunks)} of {total} chunks"
     else:

@@ -9,6 +9,7 @@ Complements `inspect --hex` (a value-first table); this is a bytes-first layout.
 """
 
 import sys
+from acidcat.util.color import add_color_arg, color_enabled
 
 from acidcat.core.infra.mapped import map_file
 from acidcat.core.walk import walk_file
@@ -22,14 +23,12 @@ def register(subparsers):
     p = subparsers.add_parser(
         "od", help="objdump-x-style annotated, colored hex dump of a file's structure")
     p.add_argument("target", help="File to dump, or '-' for stdin.")
-    p.add_argument("--color", choices=["auto", "always", "never"], default="auto")
+    add_color_arg(p)
     p.add_argument("--width", type=int, default=16, metavar="N",
                    help="max hex bytes shown per field before eliding (default 16)")
     p.set_defaults(func=run)
 
 
-def _use_color(mode):
-    return mode == "always" or (mode == "auto" and sys.stdout.isatty())
 
 
 def _c(code, text, on):
@@ -61,7 +60,7 @@ def _run(args):
     except Unsupported as e:
         print(f"acidcat od: {path}: {e}", file=sys.stderr)
         return 2
-    on = _use_color(args.color)
+    on = color_enabled(args)
     # mmap, not f.read(): od only slices small header/field/preview runs, and
     # a mapped file serves those without loading multi-GB payloads into RAM
     data, close = map_file(path)

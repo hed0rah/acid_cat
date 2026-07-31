@@ -45,36 +45,53 @@ def _iter_paths(inputs):
 
 
 def _check(path, quiet):
-    """Return (checked, ok): checked is False for a skipped/unreadable file."""
+    """Return (checked, ok, error): checked is False for a skipped or unreadable
+    file; error is True only when the file could not be read (I/O error), as
+    opposed to being a format acidcat does not structurally model (a clean skip)."""
     try:
         with open(path, "rb") as f:
             data = f.read()
     except OSError as e:
         print(f"acidcat validate: {path}: {e}", file=sys.stderr)
-        return False, True
+        return False, True, True
     report = constraints.analyze(data)
     if report is None:
-        return False, True                      # not a structurally-modeled container
+        return False, True, False               # not a structurally-modeled container
     base = os.path.basename(path)
     if not report.violations:
         if not quiet:
             print(f"OK    {base}  [{report.label}]")
-        return True, True
+        return True, True, False
     print(f"FAIL  {base}  [{report.label}]  {len(report.violations)} issue(s)")
     for v in report.violations:
         mark = "" if v.repairable else "  (no witness)"
         print(f"        {v.describe()}{mark}")
-    return True, False
+    return True, False, False
 
 
 def run(args):
-    checked = failed = 0
-    for path in _iter_paths(args.inputs):
-        did, ok = _check(path, args.quiet)
-        if did:
-            checked += 1
-            if not ok:
-                failed += 1
+    # grep/diff exit-code family: 0 = every checked file is consistent,
+    # 1 = some file has a violation (ran fine), 2 = a named input could not be
+    # accessed (a real error). a file inside a walked directory that is missing
+    # or unreadable is a skip, not a hard error.
+    checked = failed = errors = 0
+    for inp in args.inputs:
+        if not os.path.exists(inp):
+            print(f"acidcat validate: {inp}: No such file or directory",
+                  file=sys.stderr)
+            errors += 1
+            continue
+        named = not os.path.isdir(inp)
+        for path in _iter_paths([inp]):
+            did, ok, error = _check(path, args.quiet)
+            if error and named:
+                errors += 1
+            if did:
+                checked += 1
+                if not ok:
+                    failed += 1
+    if errors:
+        return 2
     if checked == 0:
         print("acidcat validate: no structurally-modeled files to check",
               file=sys.stderr)

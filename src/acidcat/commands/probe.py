@@ -20,6 +20,7 @@ f32/f64); it is searched in both byte orders. HEX for find is a hex string
 import os
 import sys
 from acidcat.util.stdin import display_name
+from acidcat.util.color import add_color_arg, color_enabled
 
 from acidcat.core import probe as pr
 from acidcat.core.forensics import viz
@@ -69,7 +70,7 @@ def register(subparsers):
                         help="Hilbert byte-class map (binvis): the file's shape at a glance.")
     mp.add_argument("--order", "-o", type=int, default=5,
                     help="Grid is 2^order per side (default 5 = 32x32).")
-    mp.add_argument("--no-color", action="store_true", help="Glyphs instead of color blocks.")
+    add_color_arg(mp, deprecated_no_color=True)
 
     p.set_defaults(func=run)
 
@@ -78,8 +79,6 @@ def _rgb(hexc):
     return int(hexc[1:3], 16), int(hexc[3:5], 16), int(hexc[5:7], 16)
 
 
-def _use_color(no_color):
-    return (not no_color) and sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 
 
 def _byteorder(args, label):
@@ -232,7 +231,7 @@ def _dispatch(args, verb, path, data):
         # memoryview for the same int-iteration reason as entropy/strings
         with memoryview(data) as view:
             grid, side = viz.hilbert_grid(view, args.order)
-        color = _use_color(args.no_color)
+        color = color_enabled(args)
         print(f"byte map  {display_name(path)}  {len(data):,} bytes  "
               f"({side}x{side} Hilbert; adjacent cells are adjacent bytes)")
         for row in grid:
