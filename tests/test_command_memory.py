@@ -108,7 +108,7 @@ def test_probe_entropy_and_map_on_mapped_file(tmp_path, capsys):
     p.write_bytes(_make_riff_wav(num_samples=256))
     assert probe_cmd.run(SimpleNamespace(file=str(p), verb="entropy", width=32)) == 0
     assert probe_cmd.run(SimpleNamespace(
-        file=str(p), verb="map", order=3, no_color=True)) == 0
+        file=str(p), verb="map", order=3, color="never")) == 0
     capsys.readouterr()
 
 

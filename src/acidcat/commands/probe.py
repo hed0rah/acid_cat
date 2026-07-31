@@ -68,7 +68,8 @@ def register(subparsers):
 
     mp = sub.add_parser("map",
                         help="Hilbert byte-class map (binvis): the file's shape at a glance.")
-    mp.add_argument("--order", "-o", type=int, default=5,
+    # no -o short form: -o is "output file" everywhere else in acidcat
+    mp.add_argument("--order", type=int, default=5,
                     help="Grid is 2^order per side (default 5 = 32x32).")
     add_color_arg(mp, deprecated_no_color=True)
 
