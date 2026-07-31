@@ -8,9 +8,10 @@ acidcat reserves three words so a flag never means two things:
                       ``--json`` / ``--csv`` shorthands, choices from the
                       render registry so they never drift.
 
-``-f`` / ``--format`` was historically the output-rendering flag on many
-commands; it still works there but warns, and now belongs to the file-format
-axis. Add it to a command with ``add_output_format_arg(parser)``.
+``-f`` was historically the short output-rendering flag on many commands; it
+still works but warns. ``--format`` (long) is reserved for the file-format axis
+and never selects rendering. Add the standard flags with
+``add_output_format_arg(parser)``.
 """
 
 import argparse
@@ -54,8 +55,9 @@ def add_output_format_arg(parser, default="table", only=None, deprecated_f=True)
             "--csv", dest="output_format", action="store_const", const="csv",
             help="Render as CSV (shorthand for --output-format csv).")
     if deprecated_f:
+        # -f (short only) is the transitional bridge for the old output spelling.
+        # --format is deliberately NOT added: it belongs to the file-format axis.
         parser.add_argument(
-            "-f", "--format", dest="output_format",
-            action=_DeprecatedOutputFormat, choices=choices, metavar="FMT",
-            help=argparse.SUPPRESS)
+            "-f", dest="output_format", action=_DeprecatedOutputFormat,
+            choices=choices, metavar="FMT", help=argparse.SUPPRESS)
     return parser

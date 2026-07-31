@@ -12,6 +12,7 @@ import sqlite3
 import sys
 
 from acidcat.core.catalogue import index as idx
+from acidcat.commands._output import add_output_format_arg
 from acidcat.core.catalogue import paths as acidpaths
 from acidcat.core.catalogue import query_sql
 from acidcat.core.catalogue import registry as reg
@@ -70,9 +71,7 @@ def register(subparsers):
                    help="With --compatible-with, override the inferred sample "
                         "kind filter (loop / one_shot / any).")
     p.add_argument("--limit", type=int, default=50, help="Max rows (default 50).")
-    p.add_argument("-f", "--output-format", dest="output_format",
-                   default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("--paths-only", action="store_true",
                    help="Print bare paths, one per line.")

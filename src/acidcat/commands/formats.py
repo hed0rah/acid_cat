@@ -7,7 +7,7 @@ the live tables and prints one row per format with a tick under each capability.
 
     acidcat formats                 # the whole matrix
     acidcat formats sf2             # just one format's row
-    acidcat formats -f json         # machine-readable, for piping
+    acidcat formats --json         # machine-readable, for piping
 
 Inspect and Extract are read straight from their registries (walk._WALKERS and
 samples.EXTRACTABLE), so they never drift. Convert and Repair dispatch on magic

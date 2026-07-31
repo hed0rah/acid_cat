@@ -8,7 +8,7 @@ never writes: locate reports, `carve` extracts.
 
     acidcat locate disk.img                         # a table of regions
     acidcat locate disk.img --analyze               # + inferred PCM geometry per blob
-    acidcat locate doom.cdi -f json | acidcat carve doom.cdi --batch -   # the pipeline
+    acidcat locate doom.cdi --json | acidcat carve doom.cdi --batch -   # the pipeline
     dd if=/dev/sdcard | acidcat locate - --mode aggressive
 
 A record's offset/length is exactly a `carve` range; the records go to stdout,

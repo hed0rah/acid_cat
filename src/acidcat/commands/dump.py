@@ -1,7 +1,7 @@
 """
 acidcat dump -- hex-dump a specific RIFF chunk from a WAV file.
 
-Default output is a human-friendly hex preview. `-f json` emits a machine
+Default output is a human-friendly hex preview. `--json` emits a machine
 readable list that composes with jq and other tools.
 """
 
@@ -11,6 +11,7 @@ import os
 import sys
 
 from acidcat.core.formats.riff import iter_chunks
+from acidcat.commands._output import add_output_format_arg
 
 
 def register(subparsers):
@@ -19,8 +20,7 @@ def register(subparsers):
     p.add_argument("chunks", nargs="+",
                    help="Chunk IDs to dump (e.g. acid smpl LIST). Case-insensitive.")
     p.add_argument("-b", "--bytes", type=int, default=64, help="Hex preview length in bytes.")
-    p.add_argument("-f", "--format", default="hex", choices=["hex", "json"],
-                   help="Output format (default: hex). json emits full hex payloads.")
+    add_output_format_arg(p, default="hex", only=("hex", "json"))
     p.add_argument("--write", help="Write raw chunk payloads to this directory.")
     p.add_argument("-q", "--quiet", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -43,7 +43,7 @@ def run(args):
     wanted = {c.upper().ljust(4)[:4] for c in args.chunks}
     preview_len = getattr(args, 'bytes', 64)
     outdir = getattr(args, 'write', None)
-    fmt_name = getattr(args, 'format', 'hex')
+    fmt_name = getattr(args, 'output_format', 'hex')
     base = os.path.basename(filepath)
 
     _vlog(args, f"[dump] wanted={sorted(wanted)} preview={preview_len}B fmt={fmt_name}")

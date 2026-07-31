@@ -26,7 +26,7 @@ from acidcat.util.stdin import is_stdin_target, stdin_to_tempfile
 def _vlog(args, msg):
     """Emit a diagnostic line to stderr when -v is set and -q is not.
 
-    Keeps stdout clean so `acidcat info ... -f json | jq` stays pipe-friendly.
+    Keeps stdout clean so `acidcat info ... --json | jq` stays pipe-friendly.
     """
     if getattr(args, "verbose", False) and not getattr(args, "quiet", False):
         print(msg, file=sys.stderr)

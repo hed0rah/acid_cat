@@ -22,13 +22,14 @@ TYPED fields (decoded value out) -- surgical RE:
     acidcat carve FILE --field sample_rate                 # a walker field, by name
 
 --at ANCHORS an offset so you don't hand-count: an absolute address, end[-N],
-find:STR|0xHEX[+N], or chunk:ID[+N] (any walked format). --format picks the
-output shape: raw (default for ranges) / value (default when typed) / hex / c /
-py / b64.
+find:STR|0xHEX[+N], or chunk:ID[+N] (any walked format). --encoding picks how the
+carved bytes are serialized: raw (default for ranges) / value (default when
+typed) / hex / c / py / b64.
 """
 
 import base64
 import os
+import argparse
 import sys
 
 from acidcat.core.infra import bytefields as bf
@@ -70,8 +71,12 @@ def register(subparsers):
                         "(@OFF accepts any --at expression).")
     p.add_argument("--field", metavar="NAME",
                    help="Print a walker-decoded field by name (as shown by inspect).")
-    p.add_argument("--format", choices=("raw", "value", "hex", "c", "py", "b64"),
-                   help="Output shape (default: raw for ranges, value when typed).")
+    p.add_argument("--encoding", choices=("raw", "value", "hex", "c", "py", "b64"),
+                   help="How to serialize carved bytes: raw|value|hex|c|py|b64 "
+                        "(default: raw for ranges, value when typed).")
+    p.add_argument("--format", dest="encoding",
+                   choices=("raw", "value", "hex", "c", "py", "b64"),
+                   help=argparse.SUPPRESS)          # deprecated alias for --encoding
     p.add_argument("--batch", metavar="SRC",
                    help="Extract many regions: read `locate` records (JSON or TSV) "
                         "from SRC ('-' = stdin) and carve each from TARGET into -o DIR.")
@@ -239,7 +244,7 @@ def _run_typed(args, filepath, size):
         f.seek(start)
         blob = f.read(length)
 
-    fmt = args.format or "value"
+    fmt = args.encoding or "value"
     if fmt != "value":                                   # raw/hex/c/py/b64 of the bytes
         out = _fmt_bytes(blob, fmt)
         if out is None:
@@ -284,7 +289,7 @@ def _run_struct(args, filepath, size):
         if name != "_":
             rows.append((name, tspec, base + pos, val))
         pos += bf.type_size(parsed, seg)
-    if args.format == "value":
+    if args.encoding == "value":
         _emit("\n".join(str(v) for _, _, _, v in rows), args.output)
     else:
         width = max((len(n) for n, _, _, _ in rows), default=4)
@@ -348,12 +353,12 @@ def run(args):
         blob = f.read(length)
 
     # non-raw text formats for a plain range (hex/c/py/b64)
-    if args.format and args.format not in ("raw",):
-        out = _fmt_bytes(blob, args.format)
+    if args.encoding and args.encoding not in ("raw",):
+        out = _fmt_bytes(blob, args.encoding)
         if out is not None:
             _emit(out, args.output)
             if not args.quiet:
-                print(f"carved {len(blob):,} bytes from 0x{start:08x} ({args.format})",
+                print(f"carved {len(blob):,} bytes from 0x{start:08x} ({args.encoding})",
                       file=sys.stderr)
             return 0
 

@@ -6,7 +6,7 @@ decoded field breakdown per known chunk (with byte offsets), and any
 spec violations it noticed along the way. `--hex` adds the raw bytes
 next to each decoded field. `--frames` adds a per-element deep dump
 (every MPEG frame for MP3, every event for MIDI). `--color` syntax-
-highlights the table (auto/always/never, respects NO_COLOR). `-f json`
+highlights the table (auto/always/never, respects NO_COLOR). `--json`
 emits the same structure for machines.
 
 Supports WAV/RIFF, RF64, AIFF/AIFC, Standard MIDI Files, Xfer Serum
@@ -62,7 +62,7 @@ def register(subparsers):
                    help="Hide these chunk ids (comma-separated). Applied after "
                         "--only.")
     p.add_argument("--full", action="store_true",
-                   help="Emit a self-contained structural dump (implies -f json): "
+                   help="Emit a self-contained structural dump (implies --json): "
                         "each chunk with its raw region bytes and every field's "
                         "absolute byte offset, so `acidcat explore` can render a "
                         "standalone HTML explorer for the file.")

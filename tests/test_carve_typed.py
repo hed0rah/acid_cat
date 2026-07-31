@@ -10,7 +10,7 @@ class _Args:
         d = {"target": None, "offset": None, "length": None, "end": None,
              "trailing": False, "chunk": None, "raw": False, "output": None,
              "quiet": True, "at": None, "type": None, "count": 1,
-             "endian": "be", "struct": None, "field": None, "format": None, "batch": None}
+             "endian": "be", "struct": None, "field": None, "encoding": None, "batch": None}
         d.update(kw)
         for k, v in d.items():
             setattr(self, k, v)
@@ -75,13 +75,13 @@ def test_field_unknown_lists_available(tmp_path, capsys):
 
 def test_format_hex(tmp_path, capsys):
     p = _bfdc(tmp_path)
-    carve.run(_Args(target=p, offset="0", length="4", format="hex"))
+    carve.run(_Args(target=p, offset="0", length="4", encoding="hex"))
     assert capsys.readouterr().out.strip() == "42 46 44 43"      # "BFDC"
 
 
 def test_format_py(tmp_path, capsys):
     p = _bfdc(tmp_path)
-    carve.run(_Args(target=p, offset="0", length="4", format="py"))
+    carve.run(_Args(target=p, offset="0", length="4", encoding="py"))
     assert capsys.readouterr().out.strip() == "b'BFDC'"
 
 
