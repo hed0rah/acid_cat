@@ -704,9 +704,19 @@ _PATH_EXTRACTORS = {"multisample": _multisample_samples, "krz": _krz_samples,
 EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 
 
+# a malformed bank raises its own parser's error (Sf2Error, NcwError, SvxError
+# are unrelated classes), and struct.error is the classic short-read signal.
+# iter_samples promises SampleError, so they are converted at this boundary
+# rather than leaking a parser's private exception type to the CLI as a
+# traceback. Deliberately narrow: a KeyError or IndexError is a bug in us and
+# must stay loud.
+_MALFORMED = (sf2mod.Sf2Error, ncwmod.NcwError, svxmod.SvxError, struct.error)
+
+
 def iter_samples(filepath, fmt=None):
     """Yield {name, wav (bytes), note, ext?} for each embedded sample. Raises
-    SampleError if the sniffed format has no extractor. Never modifies the file."""
+    SampleError if the sniffed format has no extractor, or if the file claims
+    that format but is too malformed to parse. Never modifies the file."""
     fmt = fmt or sniff(filepath)
     try:
         if fmt in _PATH_EXTRACTORS:
@@ -721,3 +731,5 @@ def iter_samples(filepath, fmt=None):
         yield from fn(data)
     except Unsupported as e:
         raise SampleError(str(e))
+    except _MALFORMED as e:
+        raise SampleError(f"{fmt or 'file'}: {e}")
