@@ -43,16 +43,17 @@ autocorrelation, byte distribution) and any tells (silence, DC offset, clipping)
     acidcat locate dump.bin --mode aggressive --analyze
     acidcat locate dump.bin -v                    # why each region was flagged
 
-Output shapes for piping: `-f table` (default), `-f json`, `-f tsv`.
+Output rendering for piping: `--output-format table` (default), `--json`, or
+`--output-format tsv`.
 
-    acidcat locate disk.img -f json | jq '.[] | select(.kind=="blob")'
+    acidcat locate disk.img --json | jq '.[] | select(.kind=="blob")'
 
 ## The pipeline: locate -> carve
 
 `carve --batch` consumes `locate` records and cuts every region out to a
 directory. This is the "recover my audio" move:
 
-    acidcat locate disk.img -f json | acidcat carve disk.img --batch - -o recovered/
+    acidcat locate disk.img --json | acidcat carve disk.img --batch - -o recovered/
 
 `--batch` reads JSON or TSV records from a file or stdin (`-`), and writes each
 region to `recovered/NNNN_0xoffset_kind.ext`, naming the extension by detected
