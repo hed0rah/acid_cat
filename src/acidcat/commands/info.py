@@ -8,6 +8,7 @@ Supports WAV, AIFF, MIDI, Serum, MP3, FLAC, OGG, and M4A files.
 import os
 import sys
 
+from acidcat.commands._output import add_output_format_arg
 from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
@@ -34,8 +35,7 @@ def _vlog(args, msg):
 def register(subparsers):
     p = subparsers.add_parser("info", help="Show metadata for a single audio file.")
     p.add_argument("target", help="Path to an audio file (WAV, AIFF, MIDI, Serum preset).")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv"))
     p.add_argument("--deep", action="store_true",
                    help="Include librosa deep analysis (BPM/key detection + spectral features).")
     p.add_argument("-q", "--quiet", action="store_true", help="Suppress progress messages.")
@@ -496,7 +496,7 @@ def run(args):
         if getattr(args, 'output', None):
             stream = open(args.output, 'w', encoding='utf-8')
 
-        fmt_name = getattr(args, 'format', 'table')
+        fmt_name = getattr(args, 'output_format', 'table')
         output(rec, fmt=fmt_name, stream=stream)
 
         if stream is not sys.stdout:

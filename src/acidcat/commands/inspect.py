@@ -22,6 +22,7 @@ import os
 import sys
 
 from acidcat.core.forensics import anomalies as anomaliesmod
+from acidcat.commands._output import add_output_format_arg
 from acidcat.core.forensics import lsb as lsbmod
 from acidcat.core.walk import Unsupported, walk_file
 
@@ -43,8 +44,7 @@ def register(subparsers):
                         "per line).")
     p.add_argument("--hex", action="store_true", dest="show_hex",
                    help="Show raw bytes next to each decoded field.")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json"))
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Chunk table only, no per-chunk field detail.")
     p.add_argument("--pretty", action="store_true",
@@ -343,7 +343,7 @@ def run(args):
 
     deep = getattr(args, "frames", False) or getattr(args, "verbose", False)
     full = getattr(args, "full", False)
-    as_json = args.format == "json" or full  # --full is a JSON dump
+    as_json = args.output_format == "json" or full  # --full is a JSON dump
     multi = len(targets) > 1
     only = _parse_id_list(getattr(args, "only", None))
     exclude = _parse_id_list(getattr(args, "exclude", None))

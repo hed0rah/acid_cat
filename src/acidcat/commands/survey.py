@@ -8,6 +8,7 @@ import sys
 from collections import Counter, defaultdict
 
 from acidcat.core.formats.riff import iter_chunks
+from acidcat.commands._output import add_output_format_arg
 from acidcat.core.infra.render import output
 from acidcat.util.csv_helpers import safe_basename_for_csv
 
@@ -20,8 +21,7 @@ def register(subparsers):
     p.add_argument("--has", help="Only count files containing these chunk IDs (comma-separated).")
     p.add_argument("--examples", type=int, default=1,
                    help="Example file paths to store per chunk ID.")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.set_defaults(func=run)
 
@@ -90,7 +90,7 @@ def run(args):
             "example": examples[cid][0] if examples[cid] else "",
         })
 
-    fmt_name = getattr(args, 'format', 'table')
+    fmt_name = getattr(args, 'output_format', 'table')
     stream = sys.stdout
     out_path = getattr(args, 'output', None)
     if out_path:

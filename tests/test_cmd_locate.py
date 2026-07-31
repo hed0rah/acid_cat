@@ -25,7 +25,7 @@ def _tone_u8(n, period=40, amp=60):
 
 def _args(**kw):
     ns = types.SimpleNamespace(input=None, mode="normal", analyze=False, transforms=False,
-                               format="table", verbose=False, quiet=True)
+                               output_format="table", verbose=False, quiet=True)
     ns.__dict__.update(kw)
     return ns
 
@@ -46,7 +46,7 @@ def test_locate_table(tmp_path, capsys):
 
 def test_locate_json(tmp_path, capsys):
     p = _img(tmp_path, bytes(1024) + _wav() + bytes(1024))
-    rc = cmd.run(_args(input=p, format="json"))
+    rc = cmd.run(_args(input=p, output_format="json"))
     recs = json.loads(capsys.readouterr().out)
     assert rc == 0 and recs
     assert recs[0]["kind"] == "container" and recs[0]["format"] == "wav"
@@ -55,7 +55,7 @@ def test_locate_json(tmp_path, capsys):
 
 def test_locate_tsv(tmp_path, capsys):
     p = _img(tmp_path, bytes(1024) + _wav() + bytes(1024))
-    cmd.run(_args(input=p, format="tsv"))
+    cmd.run(_args(input=p, output_format="tsv"))
     out = capsys.readouterr().out.strip().splitlines()
     cols = out[0].split("\t")
     assert cols[0] == "0x00000400" and cols[2] == "container" and cols[3] == "wav"
@@ -71,7 +71,7 @@ def test_locate_no_extract_attribute():
 def test_locate_analyze_adds_geometry(tmp_path, capsys):
     # a headerless 8-bit tone -> aggressive keeps it -> --analyze infers geometry
     p = _img(tmp_path, bytes(2048) + _tone_u8(6000) + bytes(2048))
-    cmd.run(_args(input=p, mode="aggressive", analyze=True, format="json"))
+    cmd.run(_args(input=p, mode="aggressive", analyze=True, output_format="json"))
     recs = json.loads(capsys.readouterr().out)
     blob = next(r for r in recs if r["kind"] == "blob")
     g = blob["geometry"]
@@ -82,7 +82,7 @@ def test_locate_analyze_adds_geometry(tmp_path, capsys):
 def test_locate_stdin(tmp_path, capsys, monkeypatch):
     img = bytes(1024) + _wav() + bytes(1024)
     monkeypatch.setattr("sys.stdin", types.SimpleNamespace(buffer=io.BytesIO(img)))
-    rc = cmd.run(_args(input="-", format="json"))
+    rc = cmd.run(_args(input="-", output_format="json"))
     recs = json.loads(capsys.readouterr().out)
     assert rc == 0 and recs[0]["format"] == "wav"
 
@@ -95,7 +95,7 @@ def test_locate_mode_strict_drops_headerless(tmp_path, capsys):
 
 def test_locate_mode_aggressive_keeps_headerless(tmp_path, capsys):
     p = _img(tmp_path, bytes(2048) + _tone_u8(6000) + bytes(2048))
-    cmd.run(_args(input=p, mode="aggressive", format="json"))
+    cmd.run(_args(input=p, mode="aggressive", output_format="json"))
     recs = json.loads(capsys.readouterr().out)
     assert any(r["kind"] == "blob" for r in recs)
 
@@ -104,7 +104,7 @@ def test_locate_transforms_finds_xored_audio(tmp_path, capsys):
     # a tone XOR'd with 0x33 -- invisible to the plain scan, found by --transforms
     xored = bytes(b ^ 0x33 for b in _tone_u8(12000))
     p = _img(tmp_path, bytes(4096) + xored + bytes(4096))
-    cmd.run(_args(input=p, transforms=True, format="json"))
+    cmd.run(_args(input=p, transforms=True, output_format="json"))
     recs = json.loads(capsys.readouterr().out)
     assert any(r["kind"] == "transformed" and r["transform"].startswith("xor:")
                for r in recs)

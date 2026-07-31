@@ -14,14 +14,14 @@ import sys
 import time
 
 from acidcat.core import census as _census
+from acidcat.commands._output import add_output_format_arg
 
 
 def register(subparsers):
     p = subparsers.add_parser(
         "census", help="Chunk-ID histogram + open-question flags over a corpus.")
     p.add_argument("target", nargs="+", help="Directory tree(s) to scan.")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("--limit", type=int, help="Stop after N files opened.")
     p.add_argument("--top", type=int, default=60,
@@ -79,7 +79,7 @@ def run(args):
     if out_path:
         stream = open(out_path, "w", encoding="utf-8")
     try:
-        if args.format == "json":
+        if args.output_format == "json":
             json.dump(res, stream, indent=2)
             stream.write("\n")
         else:
@@ -88,7 +88,7 @@ def run(args):
         if stream is not sys.stdout:
             stream.close()
 
-    if not quiet and args.format != "json":
+    if not quiet and args.output_format != "json":
         print(f"\n[census] {res['files_opened']} files, "
               f"{res['riff_family_files']} RIFF-family, "
               f"{res['distinct_chunks']} distinct chunks, "

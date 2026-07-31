@@ -124,7 +124,7 @@ def test_command_runs_table_json_tsv(capsys):
     class A:
         format = None
     for shape in ("table", "json", "tsv"):
-        A.fmt_out = shape
+        A.output_format = shape
         assert formats.run(A) == 0
     out = capsys.readouterr().out
     assert out                                          # produced output for the last shape
@@ -132,7 +132,7 @@ def test_command_runs_table_json_tsv(capsys):
 
 def test_command_single_format_and_miss(capsys):
     class A:
-        format = "sf2"; fmt_out = "table"
+        format = "sf2"; output_format = "table"
     assert formats.run(A) == 0
     A.format = "nope-not-real"
     assert formats.run(A) == 1

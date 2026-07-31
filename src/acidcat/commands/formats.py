@@ -17,8 +17,11 @@ magic sample per format), so a stale entry fails the suite. Turning convert/repa
 into real format tables is the next housekeeping step.
 """
 
+import argparse
 import json
 import sys
+
+from acidcat.commands._output import add_output_format_arg
 
 # Convert and Repair have no format-keyed registry to read (they branch on magic
 # bytes in commands/convert.py and core/constraints.py), so these are listed here
@@ -47,8 +50,10 @@ def register(subparsers):
                         "support per format.")
     p.add_argument("format", nargs="?",
                    help="Show just this format id (as sniff/inspect report it).")
-    p.add_argument("-f", "--format-out", choices=("table", "json", "tsv"),
-                   default="table", dest="fmt_out", help="Output shape (default: table).")
+    add_output_format_arg(p, only=("table", "json", "tsv"), deprecated_f=False)
+    p.add_argument("--format-out", dest="output_format",
+                   choices=("table", "json", "tsv"),
+                   help=argparse.SUPPRESS)          # deprecated: use --output-format
     p.set_defaults(func=run)
 
 
@@ -99,10 +104,10 @@ def run(args):
                   f"(try `acidcat formats` for the list)", file=sys.stderr)
             return 1
 
-    if args.fmt_out == "json":
+    if args.output_format == "json":
         json.dump(rows, sys.stdout, indent=2)
         print()
-    elif args.fmt_out == "tsv":
+    elif args.output_format == "tsv":
         print("id\tlabel\t" + "\t".join(_CAPS))
         for r in rows:
             print(r["id"] + "\t" + r["label"] + "\t"

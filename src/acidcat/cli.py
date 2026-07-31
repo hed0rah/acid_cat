@@ -24,6 +24,7 @@ import os
 import sys
 
 from acidcat import __version__
+from acidcat.commands._output import add_output_format_arg
 from acidcat.commands import (
     info, scan, shape, od, chunks, survey, detect, features, similar, dump,
     index, query, inspect, convert, write, cover, explore, tui, carve, repair, validate, audit, probe,
@@ -104,7 +105,7 @@ def _try_bare_path(argv):
         # build a lightweight fallback parser that accepts the bare-path form
         fb = argparse.ArgumentParser(add_help=False)
         fb.add_argument("target")
-        fb.add_argument("-f", "--format", default="table")
+        add_output_format_arg(fb, only=("table", "json", "csv"))
         fb.add_argument("-o", "--output", default=None)
         fb.add_argument("-q", "--quiet", action="store_true")
         fb.add_argument("-v", "--verbose", action="store_true")

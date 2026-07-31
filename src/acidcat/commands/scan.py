@@ -9,6 +9,7 @@ import sys
 from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
+from acidcat.commands._output import add_output_format_arg
 from acidcat.core.formats.aiff import is_aiff
 from acidcat.core.tagged import is_tagged_format
 from acidcat.util.midi import midi_note_to_name
@@ -29,8 +30,7 @@ def register(subparsers):
     p.add_argument("-n", "--num", type=int, default=500, help="Max files to scan (default: 500).")
     p.add_argument("-q", "--quiet", action="store_true", help="Suppress console output.")
     p.add_argument("-v", "--verbose", action="store_true", help="Verbose output.")
-    p.add_argument("-f", "--format", default="csv", choices=["table", "json", "csv"],
-                   help="Output format (default: csv).")
+    add_output_format_arg(p, default="csv", only=("table", "json", "csv"))
     p.add_argument("--has", help="Filter: only WAV files containing these chunk IDs (comma-separated).")
     p.add_argument("--fallback", action="store_true",
                    help="Estimate BPM/key with librosa if no metadata found.")

@@ -7,6 +7,7 @@ import os
 import sys
 
 from acidcat.core.analysis.detect import estimate_librosa_metadata
+from acidcat.commands._output import add_output_format_arg
 from acidcat.core.infra.render import output
 from acidcat.util.csv_helpers import safe_basename_for_csv
 
@@ -16,8 +17,7 @@ def register(subparsers):
     p.add_argument("target", help="WAV file or directory.")
     p.add_argument("-n", "--num", type=int, default=500, help="Max files to scan (for dirs).")
     p.add_argument("-q", "--quiet", action="store_true")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.set_defaults(func=run)
 
@@ -45,7 +45,7 @@ def _detect_single(filepath, quiet=False):
 def run(args):
     target = args.target
     quiet = getattr(args, 'quiet', False)
-    fmt_name = getattr(args, 'format', 'table')
+    fmt_name = getattr(args, 'output_format', 'table')
 
     if os.path.isfile(target):
         rec = _detect_single(target, quiet)

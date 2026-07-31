@@ -1,5 +1,10 @@
-"""
-Output formatting: human-readable tables, JSON, and CSV.
+"""Output rendering -- turn result records into a chosen representation.
+
+One registry (RENDERERS) maps an output-format name to a renderer; ``output``
+dispatches through it and ``register_format`` adds a new one, so a format lights
+up in every command's ``--output-format`` choices at once. This is the "how it's
+rendered" axis -- distinct from a file's *format* (its container/codec) and from
+where output *goes* (a file via -o/--output, else stdout).
 """
 
 import csv
@@ -46,43 +51,81 @@ def format_csv_rows(rows, fieldnames, stream=None):
     writer.writerows(rows)
 
 
-def output(data, fmt="table", stream=None):
-    """
-    Dispatch to the right formatter.
+def _render_table(data, stream):
+    if isinstance(data, list):
+        for i, item in enumerate(data):
+            if i > 0:
+                stream.write("\n")
+            if isinstance(item, dict):
+                format_table(item, stream)
+            else:
+                stream.write(str(item) + "\n")
+    elif isinstance(data, dict):
+        format_table(data, stream)
+    else:
+        stream.write(str(data) + "\n")
 
-    Args:
-        data: dict (single record) or list of dicts (multiple records).
-        fmt: 'table', 'json', or 'csv'.
-        stream: writable file object.
+
+def _render_json(data, stream):
+    format_json(data, stream)
+
+
+def _delimited(data, stream, delimiter):
+    """CSV/TSV: union of keys across records, in first-seen order."""
+    if isinstance(data, dict):
+        data = [data]
+    if not (isinstance(data, list) and data):
+        return
+    keys, seen = [], set()
+    for row in data:
+        for k in row:
+            if k not in seen:
+                seen.add(k)
+                keys.append(k)
+    writer = csv.DictWriter(stream, fieldnames=keys, delimiter=delimiter,
+                            lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(data)
+
+
+def _render_csv(data, stream):
+    _delimited(data, stream, ",")
+
+
+def _render_tsv(data, stream):
+    _delimited(data, stream, "\t")
+
+
+# name -> renderer(data, stream). register_format() extends this, so a new format
+# appears in every command's --output-format choices at once.
+RENDERERS = {
+    "table": _render_table,
+    "json": _render_json,
+    "csv": _render_csv,
+    "tsv": _render_tsv,
+}
+
+
+def register_format(name, fn):
+    """Register a new output format: fn(data, stream) writes the rendering."""
+    RENDERERS[name] = fn
+
+
+def output_formats():
+    """The registered output-format names, in registration order."""
+    return tuple(RENDERERS)
+
+
+def output(data, fmt="table", stream=None):
+    """Render ``data`` (a dict or list of dicts) in ``fmt`` to ``stream``.
+
+    ``fmt`` is any registered output format (see output_formats()); the default
+    is the human-readable table. Raises ValueError on an unknown format.
     """
     if stream is None:
         stream = sys.stdout
-
-    if fmt == "json":
-        format_json(data, stream)
-    elif fmt == "csv":
-        if isinstance(data, list) and data:
-            all_keys = []
-            seen = set()
-            for row in data:
-                for k in row:
-                    if k not in seen:
-                        seen.add(k)
-                        all_keys.append(k)
-            format_csv_rows(data, all_keys, stream)
-        elif isinstance(data, dict):
-            format_csv_rows([data], list(data.keys()), stream)
-    else:
-        # table (default)
-        if isinstance(data, list):
-            for i, item in enumerate(data):
-                if i > 0:
-                    stream.write("\n")
-                if isinstance(item, dict):
-                    format_table(item, stream)
-                else:
-                    stream.write(str(item) + "\n")
-        elif isinstance(data, dict):
-            format_table(data, stream)
-        else:
-            stream.write(str(data) + "\n")
+    renderer = RENDERERS.get(fmt)
+    if renderer is None:
+        raise ValueError(f"unknown output format: {fmt!r} "
+                         f"(known: {', '.join(output_formats())})")
+    renderer(data, stream)

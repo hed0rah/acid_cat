@@ -21,6 +21,7 @@ import json
 import sys
 
 from acidcat.core.forensics import audioscan
+from acidcat.commands._output import add_output_format_arg
 from acidcat.core.forensics import locate as locatemod
 from acidcat.util.stdin import is_stdin_target
 
@@ -46,8 +47,7 @@ def register(subparsers):
                         "(XOR-byte / bit-rotate / nibble-swap) -- the CTF "
                         "obfuscation lens. The reported key is a candidate "
                         "(polarity/low-bits are ambiguous). Reads at most 16 MB.")
-    p.add_argument("-f", "--format", choices=("table", "json", "tsv"),
-                   default="table", help="Output shape (default: table).")
+    add_output_format_arg(p, only=("table", "json", "tsv"))
     p.add_argument("-v", "--verbose", action="store_true",
                    help="Show the evidence behind each region (entropy, "
                         "autocorrelation, distribution) and any debug tells "
@@ -143,10 +143,10 @@ def run(args):
     if args.analyze:
         _analyze(data, recs)
 
-    if args.format == "json":
+    if args.output_format == "json":
         json.dump([_public(r, args.verbose) for r in recs], sys.stdout, indent=2)
         sys.stdout.write("\n")
-    elif args.format == "tsv":
+    elif args.output_format == "tsv":
         _print_tsv(recs)
     else:
         _print_table(recs, args.verbose)

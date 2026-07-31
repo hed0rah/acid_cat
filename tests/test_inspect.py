@@ -497,7 +497,7 @@ class TestInspectMidi:
         p.write_bytes(b"MThd" + struct.pack(">I", 2)
                       + struct.pack(">HHH", 0, 1, 480)
                       + b"MTrk" + struct.pack(">I", len(_TRACK)) + _TRACK)
-        args = SimpleNamespace(target=str(p), show_hex=True, format="table",
+        args = SimpleNamespace(target=str(p), show_hex=True, output_format="table",
                                quiet=False, verbose=False)
         assert run(args) == 0  # must not blow up rendering hex
 
@@ -1159,7 +1159,7 @@ class TestInspectMp3:
 
 class TestRunCli:
     def _args(self, target, **kw):
-        base = dict(target=target, show_hex=False, format="table",
+        base = dict(target=target, show_hex=False, output_format="table",
                     quiet=False, verbose=False)
         base.update(kw)
         return SimpleNamespace(**base)
@@ -1181,7 +1181,7 @@ class TestRunCli:
     def test_json_output(self, tmp_path, capsys):
         import json
         path = _wav(tmp_path, _fmt(), _data())
-        assert run(self._args(path, format="json")) == 0
+        assert run(self._args(path, output_format="json")) == 0
         doc = json.loads(capsys.readouterr().out)
         assert doc["format"] == "RIFF/WAVE"
         assert [c["id"] for c in doc["chunks"]] == ["fmt ", "data"]
@@ -1254,7 +1254,7 @@ class TestRunCli:
     # ── multiple targets ────────────────────────────────────────────
 
     def _multi(self, targets, **kw):
-        base = dict(targets=list(targets), show_hex=False, format="table",
+        base = dict(targets=list(targets), show_hex=False, output_format="table",
                     quiet=False, verbose=False)
         base.update(kw)
         return SimpleNamespace(**base)
@@ -1276,7 +1276,7 @@ class TestRunCli:
         import json
         a = _wav(tmp_path, _fmt(), _data(), name="a.wav")
         b = _wav(tmp_path, _fmt(), _data(), name="b.wav")
-        assert run(self._multi([a, b], format="json")) == 0
+        assert run(self._multi([a, b], output_format="json")) == 0
         lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
         assert len(lines) == 2
         docs = [json.loads(l) for l in lines]  # each line parses on its own
@@ -1330,7 +1330,7 @@ class TestRunCli:
     def test_only_applies_to_ndjson(self, tmp_path, capsys):
         import json
         p = _wav(tmp_path, _fmt(), _data(), _acid())
-        assert run(self._args(p, only="acid", format="json")) == 0
+        assert run(self._args(p, only="acid", output_format="json")) == 0
         doc = json.loads(capsys.readouterr().out)
         assert [c["id"] for c in doc["chunks"]] == ["acid"]
         assert "_idx" not in doc["chunks"][0]  # helper key stays internal
@@ -1526,7 +1526,7 @@ class TestId3v1AndLame:
 
 class TestInspectFull:
     def _args(self, target, **kw):
-        base = dict(target=target, show_hex=False, format="table", quiet=False,
+        base = dict(target=target, show_hex=False, output_format="table", quiet=False,
                     verbose=False, full=True)
         base.update(kw)
         return SimpleNamespace(**base)
@@ -1534,7 +1534,7 @@ class TestInspectFull:
     def test_full_emits_json_with_raw_and_abs(self, tmp_path, capsys):
         import json
         p = _wav(tmp_path, _fmt(channels=2), _data())
-        assert run(self._args(p)) == 0          # --full implies json even w/ format=table
+        assert run(self._args(p)) == 0          # --full implies json even w/ output_format=table
         d = json.loads(capsys.readouterr().out)
         assert d["full"] is True
         fmt = next(c for c in d["chunks"] if c["id"] == "fmt ")
@@ -1708,7 +1708,7 @@ class TestPrettyMode:
         p = tmp_path / "t.bwpreset"
         p.write_bytes(b"BtWg0003000200" + meta(b"device_name", b"Conv")
                       + meta(b"tags", b"reverb wide"))
-        args = SimpleNamespace(target=str(p), format="table", show_hex=False,
+        args = SimpleNamespace(target=str(p), output_format="table", show_hex=False,
                                quiet=False, verbose=False, pretty=True,
                                color="never")
         assert run(args) == 0

@@ -6,14 +6,14 @@ import os
 import sys
 
 from acidcat.core.formats.riff import iter_chunks, get_riff_info
+from acidcat.commands._output import add_output_format_arg
 from acidcat.core.infra.render import output
 
 
 def register(subparsers):
     p = subparsers.add_parser("chunks", help="Walk RIFF chunks in a WAV file.")
     p.add_argument("target", help="Path to a WAV file.")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("-q", "--quiet", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -35,7 +35,7 @@ def run(args):
         print(f"acidcat chunks: {filepath}: No such file", file=sys.stderr)
         return 1
 
-    fmt_name = getattr(args, 'format', 'table')
+    fmt_name = getattr(args, 'output_format', 'table')
 
     _vlog(args, f"[chunks] file={os.path.basename(filepath)} "
                 f"size={os.path.getsize(filepath)}")
