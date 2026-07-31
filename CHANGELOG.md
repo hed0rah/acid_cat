@@ -6,6 +6,25 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+### Changed
+- **One word, one meaning across the CLI.** `--format` was doing three unrelated jobs -- picking output rendering, filtering by file type, and choosing a byte encoding -- so a flag's name no longer told you what it did. Each axis now owns a word, matching how every tool that handles both file formats and output formats disambiguates them (ffprobe `-f` vs `-of`, exiftool "file type" vs `-json`, tshark dissector vs `-T`): **format** = the file's container/codec, **output** (`-o`) = where bytes go, **output-format** = how records render, **encoding** = how carved bytes are serialized. Everyday rendering is `--json` / `--csv`; `--output-format` takes the full list. The old `-f json` spelling still works and warns, but `--format json` is now an error -- `--format` selects a file format. `carve --format` became `carve --encoding` (old flag kept, hidden); `formats --format-out` became `--output-format` (ditto).
+- **`detect` reports failure when it could not detect.** A missing analysis stack that the filename could not cover now exits 1 instead of printing all-nulls with exit 0, so `acidcat detect f && ...` cannot proceed on an empty answer. With librosa present, an undetectable file remains a legitimate exit 0.
+- **`validate` follows the grep/diff exit-code family end to end**: 0 = every checked file is consistent, 1 = a file has a violation (ran fine), 2 = a named input could not be accessed. Previously a missing named file was swallowed as 0, breaking `&&` chains. A missing file *inside* a walked directory is still a skip, not an error.
+- **`--color=auto|always|never` everywhere it applies.** `probe`'s odd `--no-color` boolean is now `--color` (old flag kept as a deprecated alias), and `inspect`/`od` share one implementation. `probe map` lost its `-o` short form for `--order`, since `-o` means "output file" in seventeen other places.
+
+### Added
+- **Pipe a file into the byte-analysis commands.** `chunks`, `dump`, `od`, `detect`, and `probe` now accept `-` (or piped stdin), joining `info`, `carve`, and `locate`: `cat track.wav | acidcat chunks -`. stdin is buffered so the byte-level parsers can still seek, and it is reported as `<stdin>` rather than a temp path.
+- **Output formats are a registry.** `render.register_format(name, fn)` adds a rendering to every command's `--output-format` at once, rather than editing fourteen call sites. `tsv` is registered alongside table/json/csv; csv and tsv now emit `\n` instead of `\r\n`, so they pipe cleanly.
+- **BPM/key from a filename now works without librosa.** That parsing is pure-Python regex but sat behind the librosa import gate, so a base install lost a zero-dependency capability. `tests/test_lean_install.py` pins the tier boundary: a static invariant that no `core/` module imports an optional stack at module level, plus checks that the core verbs run with those stacks blocked and a gated verb prints `pip install acidcat[analysis]` instead of a traceback.
+
+### Fixed
+- `detect --json` leaked the internal temp-file path into its `filename` field when reading from stdin.
+- `od` ignored the `NO_COLOR` environment variable (it checked only whether stdout was a TTY).
+- The TUI's metadata-save path referenced an unimported name -- a latent crash on the edit screen, surfaced by a static undefined-name sweep while splitting the module.
+
+### Internal
+- **The flat `core/` package is now organized by concern**, from 76 top-level modules to 3: `codecs/`, `containers/`, `formats/`, `walk/`, `forensics/`, `analysis/`, `catalogue/`, `write/`, `extract/`, `infra/`, `primitives/`. Duplicated primitives (entropy, PCM coherence, ADPCM sample math, stereo interleave, WAV emission, zip offsets) were extracted and shared. `mcp_server.py` (1623 lines) and `tui_app.py` (2732) were split into packages along their real seams. `infra/formats.py` became `infra/render.py`, ending a three-way name collision. Behaviour-preserving throughout: the public API is unchanged and the suite stayed green at every step.
+
 ## [0.90.0] - 2026-07-30
 
 ### Changed
