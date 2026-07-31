@@ -3,17 +3,14 @@
 How acidcat is wired together: the data flow from a file on disk to a query
 result on stdout or over MCP.
 
-Last updated: 2026-07-12 (v0.47.0). This is the deep per-module companion to the
-top-level ARCHITECTURE.md, which is the current high-level map. The per-library
-layout is unchanged since
-v0.5.0. The readelf-style `inspect` verb (v0.5.7) now covers 17 formats via
-from-scratch walkers in `core/walk/*` behind a registry; the v0.15.0 refactor
-moved the walkers out of `commands/inspect.py` and split the sniffer into
-`core/sniff.py` (inspect) and `core/indexing.py` (index). The high-level data-flow
-narrative below is current; the deepest per-module walk-throughs may still cite
-the pre-refactor file for a given walker.
+Last updated: 2026-07-31 (v1.0.0b1). This is the deep per-module companion to
+the top-level ARCHITECTURE.md, which is the current high-level map.
 
----
+The `inspect` verb covers 46 registered formats via from-scratch walkers in
+`core/walk/*` behind a registry. The 1.0 restructure organized the previously
+flat `core/` into eleven packages by concern -- the source tree map below is the
+current layout, and the package order there is the dependency direction. The
+per-library storage layout is unchanged since v0.5.0.
 
 ## High-level picture
 
@@ -29,13 +26,13 @@ the pre-refactor file for a given walker.
             └─┬──────────────┬──────────────┬──────────────┬─┘
               │              │              │              │
               ▼              ▼              ▼              ▼
-          core/riff.py   core/aiff.py   core/midi.py   core/serum.py
+          core/formats/riff.py   core/formats/aiff.py   core/formats/midi.py   core/formats/serum.py
          core/tagged.py  (mutagen wrap for mp3/flac/ogg/m4a)
                                        │
                                        ▼
             ┌───────────────────────────────────────────────┐
-            │  core/detect.py  (filename + librosa + verify)│
-            │  core/features.py  (optional feature vector)  │
+            │  core/analysis/detect.py  (filename + librosa + verify)│
+            │  core/analysis/features.py  (optional feature vector)  │
             └──────────┬────────────────────────────────────┘
                        │ upsert_sample / upsert_tags / upsert_features
                        ▼
@@ -58,7 +55,7 @@ the pre-refactor file for a given walker.
                        ▼
             ┌──────────────────┬────────────────────────────┐
             │  CLI transport   │  MCP transport             │
-            │  commands/*.py   │  mcp_server.py             │
+            │  commands/*.py   │  mcp_server/               │
             └──────────────────┴────────────────────────────┘
 ```
 
@@ -81,58 +78,63 @@ with the data via `--in-tree`). The registry is the only join point.
 ```
 src/acidcat/
   __main__.py            entrypoint (python -m acidcat)
-  cli.py                 argparse wiring + dispatch
-  commands/              user-facing command handlers (one per verb)
-    info.py              single-file metadata dump
-    scan.py              batch directory walk with CSV output
-    chunks.py            RIFF chunk walker
-    survey.py            chunk frequency counter
-    dump.py              hex-dump chunk payload
-    inspect.py           byte-level structural dump (rendering + CLI only)
-    explore.py           build the standalone HTML byte-explorer
-    write.py             in-place metadata edit (+ _original backup)
-    cover.py             extract/embed/remove cover art
-    convert.py           export a DAW clip's notes to a MIDI file
-    detect.py            librosa BPM/key estimator
-    features.py          feature extraction to CSV
-    similar.py           similarity + clustering over features CSV
-    search.py            legacy CSV text search
-    index.py             per-library index management + --discover walker
-    query.py             fan-out filter across registered libraries
-  core/                  reusable library layer
-    sniff.py             canonical magic-byte sniffer for the inspect path
-    walk/                from-scratch structural walkers, one per format,
-                         behind a registry (walk/__init__.py); wav, rf64,
-                         aiff, midi, rmid, mp3, flac, ogg, mp4, serum, fxp,
-                         rx2, bitwig, vital, ni, ncw + shared base.py
-    anomalies.py         forensic scan (--anomalies): trailing data, polyglots,
-                         cavities, size mismatches
-    lsb.py               LSB-entropy + dual-endianness analysis
-    riff.py              RIFF/WAV chunk parser (caps reads at 64KB)
-    aiff.py mp3.py mp4.py ogg.py flac.py ncw.py ni.py bitwig.py vital.py
-                         format parsers shared by the index/extract path
-    midi.py midi_write.py   MIDI meta parser + writer
-    serum.py preset_meta.py native preset parsers + metadata
-    tagged.py            mutagen wrapper (mp3/flac/ogg/m4a) + BOM strip
-    edit_riff.py edit_aiff.py edits.py writer.py   in-place metadata editors
-    cover.py             cover-art read/write across formats
-    detect.py            filename parsing + librosa + validation pipeline
-    features.py          librosa feature vector extractor
-    camelot.py           Camelot wheel math + enharmonic normalization
-    index.py             per-library SQLite schema, upsert, query
-    indexing.py          index-path sniffer (_sniff_format) + extract dispatch
-    paths.py             path normalize + central/in-tree DB layout + hash
-    registry.py          global registry table, no-overlap guard, fan-out
-    formats.py           output formatters (table/json/csv)
-  util/                  midi note helpers, csv shim, stdin, dep messages
+  cli.py                 argparse wiring, dispatch, bare-path fallback
+  commands/              one module per verb (26), thin over core/
+    info scan chunks survey od shape dump probe    read + report
+    inspect explore formats census                 structure + capability
+    carve locate extract convert                   recover + transcode
+    write cover repair validate audit              mutate + verify
+    detect features similar index query            analyse + catalogue
+    tui                                            launch the explorer
+    _output.py           the shared --output-format / --json wiring
+  core/                  the library layer, ordered by dependency
+    primitives/          leaves that import nothing of ours:
+                         signal (entropy, PCM coherence), pcm (clip16,
+                         signed_nibble, PS_ADPCM_FILTER, interleave),
+                         wavio (pcm_wav), zipio (zip_data_offset)
+    codecs/              coded samples -> linear PCM: adpcm adx brr brstm
+                         cdxa dsp dtk hps ncw vadpcm vag
+    containers/          disc images + filesystems: gcm wiidisc iso9660 cue
+    formats/             one parser per format: riff aiff flac mp3 mp4 ogg
+                         midi ump svx tracker sf2 ni serum vital bitwig cover
+    walk/                33 structural walkers behind a registry
+                         (walk/__init__.py), 46 registered format ids
+    write/               the constraint model and everything on it:
+                         structure constraints edits edit_riff edit_aiff
+                         repairers countrepair flacrepair mp4repair writer
+                         midi_write
+    forensics/           read-only measurement: audioscan locate framescan
+                         anomalies lsb transforms triage integrity
+                         provenance viz
+    extract/             pull audio out: samples n64rip snesrip
+    analysis/            the sound hat (librosa, lazy): detect features
+                         camelot
+    catalogue/           per-library SQLite: index indexing search query_sql
+                         registry preset_meta paths
+    infra/               plumbing: sniff render vocab sandbox mapped
+                         bytefields fieldcodec
+    grammar/             declarative descriptors -- parked, test oracle only
+    data/                json sidecars (provenance signatures)
+    probe.py tagged.py   the public API facade (acidcat.probe, read_tags)
+    census.py            standalone corpus survey
+  mcp_server/            handlers (tools + cached DB) / schema (registration)
+                         / transport (dispatch + stdio + HTTP)
+  tui_app/               render (byte + field helpers, edit profiles) /
+                         screens (11 modals + HexPane) / app (AcidcatTUI)
+  util/                  stdin buffering, colour policy, optional-dep gates,
+                         midi note helpers, csv shim
   explorer.py            JSON-to-HTML transform (feeds commands/explore.py)
-  mcp_server.py          MCP tool definitions + dispatch
 ```
+
+The package order above **is** the dependency direction: each may import the
+ones above it, never the reverse. Nothing in the lean core imports `analysis/`
+or `catalogue/`, which is what makes `pip install acidcat` (mutagen only) a
+working byte-dissection tool; `tests/test_lean_install.py` enforces it.
 
 Two hard rules keep the tree healthy:
 
 1. `commands/` depends on `core/`. `core/` never imports from `commands/`.
-2. Anything that holds a DB connection is in `core/index.py` or `mcp_server.py`.
+2. Anything that holds a DB connection is in `core/catalogue/index.py` or `mcp_server/handlers.py`.
    Command handlers receive a connection, they never manage one.
 
 ---
@@ -158,7 +160,7 @@ CREATE TABLE libraries (
 ```
 
 Two policy invariants are enforced at registration time by
-`core/registry.py:_assert_no_overlap`:
+`core/catalogue/registry.py:_assert_no_overlap`:
 
 1. **Mandatory labels.** Every library has a label, defaulted from
    `os.path.basename(root)` if the user did not pass `--label`. The
@@ -271,7 +273,7 @@ caller                  query API              registry        per-lib DBs
 Enharmonic expansion happens at the SQL boundary. If a user asks for `F`,
 the query layer expands that to the set of enharmonic spellings that exist
 in the DB and uses `IN` instead of `=`. This is why the
-`enharmonic_spellings` function in `core/camelot.py` exists as a public
+`enharmonic_spellings` function in `core/analysis/camelot.py` exists as a public
 helper.
 
 ---
@@ -301,9 +303,9 @@ def run(args):
 
 `cli.py` discovers command modules, calls `register()` on each, parses, and
 dispatches to `args.func(args)`. Output formatting goes through
-`core/formats.py` so every verb can emit table/json/csv on the same flag.
+`core/infra/render.py` so every verb can emit table/json/csv on the same flag.
 
-### MCP (mcp_server.py)
+### MCP (mcp_server/)
 
 Each tool is registered via `_tool(name, description, input_schema,
 handler, annotations)`. The handlers call into the same `core/` functions
@@ -528,9 +530,9 @@ use: feature extractor version, last global reindex timestamp, etc.
 
 ## Format detection dispatch
 
-The index/extract path uses `core/indexing.py:_sniff_format`, which reads the
+The index/extract path uses `core/catalogue/indexing.py:_sniff_format`, which reads the
 first 16 bytes and identifies the format (the inspect path has its own canonical
-sniffer, `core/sniff.py:sniff_bytes`, covering the full 17-format set). Extension
+sniffer, `core/infra/sniff.py:sniff_bytes`, covering the full 17-format set). Extension
 is the fallback, used only when the magic bytes are unrecognized:
 
 ```
@@ -553,9 +555,9 @@ could mis-route those files into the WAV parser and silently mis-tag.
 
 Adding a new format touches both paths:
 1. inspect: add `core/walk/<format>.py` returning `(chunks, warnings)`, register
-   it in `core/walk/__init__.py`, and add the magic to `core/sniff.py`.
+   it in `core/walk/__init__.py`, and add the magic to `core/infra/sniff.py`.
 2. index/extract (optional, for BPM/key/tag indexing): add a `core/<format>.py`
-   parser, extend `_sniff_format` in `core/indexing.py`, and route through
+   parser, extend `_sniff_format` in `core/catalogue/indexing.py`, and route through
    `_extract_for_index`.
 3. Add an `_info_<format>(filepath, args)` builder in `commands/info.py` if the
    format carries index-worthy metadata.
@@ -566,7 +568,7 @@ no index metadata, so they skip steps 2-3.
 
 ---
 
-## The validation pipeline (core/detect.py)
+## The validation pipeline (core/analysis/detect.py)
 
 The most subtle logic in the project, worth calling out because it's the
 difference between a library with plausible BPM/key values and a library
@@ -718,7 +720,7 @@ Add `commands/<verb>.py`. Implement `register(subparsers)` and
 
 ### New MCP tool
 
-Add a `_tool(...)` registration in `mcp_server.py`. The handler should
+Add a `_tool(...)` registration in `mcp_server/schema.py`. The handler should
 call into `core/` rather than duplicate logic. If the tool needs a new
 primitive that doesn't exist in `core/` yet, add the primitive to
 `core/` first and call it from both the MCP handler and any CLI

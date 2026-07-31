@@ -6,6 +6,21 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [1.0.0b1] - 2026-07-31
+
+The 1.0 beta. Nothing here changes what acidcat can do -- the verb list, the
+walker registry, the extractable formats, and the public API are identical to
+0.90.0, verified by diffing the live registries rather than by inspection. What
+changed is the shape: a `core/` that had grown to 75 loose modules is now eleven
+packages whose order is the dependency direction, which is what makes the
+install tiers real rather than a promise in the README. The CLI vocabulary was
+tightened so a flag name tells you what it does, and the interactive surface --
+previously the least-tested part of the tree -- is now fully covered.
+
+Breaking, with shims: `--format json` is an error (use `--json`); `--format` now
+selects a *file* format. `carve --format` became `carve --encoding`. The old
+spellings still work and warn.
+
 ### Changed
 - **One word, one meaning across the CLI.** `--format` was doing three unrelated jobs -- picking output rendering, filtering by file type, and choosing a byte encoding -- so a flag's name no longer told you what it did. Each axis now owns a word, matching how every tool that handles both file formats and output formats disambiguates them (ffprobe `-f` vs `-of`, exiftool "file type" vs `-json`, tshark dissector vs `-T`): **format** = the file's container/codec, **output** (`-o`) = where bytes go, **output-format** = how records render, **encoding** = how carved bytes are serialized. Everyday rendering is `--json` / `--csv`; `--output-format` takes the full list. The old `-f json` spelling still works and warns, but `--format json` is now an error -- `--format` selects a file format. `carve --format` became `carve --encoding` (old flag kept, hidden); `formats --format-out` became `--output-format` (ditto).
 - **`detect` reports failure when it could not detect.** A missing analysis stack that the filename could not cover now exits 1 instead of printing all-nulls with exit 0, so `acidcat detect f && ...` cannot proceed on an empty answer. With librosa present, an undetectable file remains a legitimate exit 0.

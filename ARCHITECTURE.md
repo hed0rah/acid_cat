@@ -6,7 +6,7 @@ see exactly what a file is, flag anomalies, and edit or repair its structure.
 Closer to readelf / 010 Editor / radare2's format layer than to exiftool, with
 some optional audio analysis (BPM/key via librosa).
 
-v0.47.0 · ~23k source LOC · ~11k test LOC · one hard dependency (`mutagen`);
+v1.0.0b1 · ~36k source LOC · ~19k test LOC · one hard dependency (`mutagen`);
 everything heavier is an optional, lazily imported extra, so `import acidcat`
 pulls only the stdlib core.
 
@@ -35,9 +35,9 @@ unchanged.
    data + one interpreter emitting the same field model. Opt-in, test-only,
    validated byte-for-byte against the walkers, which remain the oracle.
 4. **Analysis surface** -- `core/probe.py` (typed reads, value scan,
-   `fmt.sample_rate` addressing), `core/viz.py` (entropy, Hilbert byte-map),
-   `core/anomalies.py` (forensic checks), `core/constraints.py` +
-   `core/repairers.py` (validate / repair).
+   `fmt.sample_rate` addressing), `core/forensics/viz.py` (entropy, Hilbert byte-map),
+   `core/forensics/anomalies.py` (forensic checks), `core/write/constraints.py` +
+   `core/write/repairers.py` (validate / repair).
 5. **Index / DB / MCP** -- `core/{index,indexing,registry,search}.py` (per-library
    SQLite + FTS) and `mcp_server.py` (19 tools). A **consumer** of the core; the
    core never imports it, so it is cleanly severable.
@@ -59,7 +59,7 @@ unchanged.
 ## Invariants (the layering rules, all currently holding)
 
 - `commands/` depends on `core/`; `core/` never imports `commands/`.
-- DB connections live only in `core/index.py` and `core/registry.py`.
+- DB connections live only in `core/catalogue/index.py` and `core/catalogue/registry.py`.
 - The dissection core (walk, grammar, probe, viz, constraints, anomalies) imports
   nothing from the index / DB / MCP layer. The dependency arrow points inward only.
 
@@ -82,7 +82,7 @@ internal_docs/     design + review notes (gitignored, local-only)
 ## Where to go deeper
 
 - Field model + walker contract: `core/walk/base.py`
-- Add a format: teach `core/sniff.py` the magic, write `core/walk/<fmt>.py`, add one
+- Add a format: teach `core/infra/sniff.py` the magic, write `core/walk/<fmt>.py`, add one
   `_WALKERS` entry in `core/walk/__init__.py`
-- The enc-language: `core/fieldcodec.py`
+- The enc-language: `core/infra/fieldcodec.py`
 - The declarative engine and its design: `core/grammar/` + `internal_docs/grammar-engine-*.md`
