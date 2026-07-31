@@ -1,13 +1,12 @@
-"""Forensic recovery orchestration for `scan` -- the two engines, phases 2 and 3.
+"""Forensic recovery orchestration for `locate` -- the two engines, phases 2 and 3.
 
-Two independent engines find audio, the way `scan` is "PhotoRec for audio":
+Two independent engines find audio:
 
   * SIGNATURE sweep -- scan forward for validated container magics (RIFF/WAVE,
     FORM/AIFF/8SVX, fLaC, OggS...). Finds real files even when their PCM is
-    16-bit or compressed and the statistical detector can't see it. This is the
-    PhotoRec half.
-  * STATISTICAL pass -- core/audioscan locates signatureless raw PCM by its
-    structure. This is the half PhotoRec cannot do.
+    16-bit or compressed and the statistical detector can't see it.
+  * STATISTICAL pass -- core/forensics/audioscan locates signatureless raw PCM by
+    its structure, which a signature scan cannot find.
 
 A statistical hit that falls inside a container's real extent is part of that
 file, not a separate find. A hit that doesn't is a headerless blob -- but before
@@ -101,7 +100,7 @@ _AUDIO_GAP_TOL = 4096            # bridge small non-audio gaps between audio sub
 
 
 def signature_sweep(data):
-    """Find every validated audio container by magic (the PhotoRec engine).
+    """Find every validated audio container by magic (the signature engine).
     Returns container records sorted by offset, each with an ``extent`` (a
     trustworthy declared end, or None when the size is streaming/corrupt and must
     be resolved from the audio itself)."""

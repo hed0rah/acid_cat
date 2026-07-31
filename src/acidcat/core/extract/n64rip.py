@@ -13,8 +13,8 @@ structure, so we recover the audio without the container:
      coherent* audio (peak AND autocorrelation -- autocorrelation alone is fooled
      by silence), and decode with core/vadpcm.py.
 
-This is "PhotoRec for audio" applied to an N64 ROM: it does not reconstruct
-instrument names or the bank tree, it rescues the raw samples. Byte order is
+This is signatureless sample recovery applied to an N64 ROM: it does not
+reconstruct instrument names or the bank tree, it rescues the raw samples. Byte order is
 normalized off the ROM magic (z64/n64/v64).
 
     from acidcat.core.extract import n64rip

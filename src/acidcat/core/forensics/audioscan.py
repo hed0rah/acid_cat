@@ -1,11 +1,11 @@
-"""Statistical audio-blob detection -- the signatureless engine behind `scan`.
+"""Statistical audio-blob detection -- the signatureless engine behind `locate`.
 
-`scan` is "PhotoRec for audio." PhotoRec carves files by *signature* (magic
-headers/footers); raw PCM has no signature, so a signature carver walks straight
-past it. This module fills that gap: it finds raw audio in an unknown blob by its
-*statistical structure* -- the same smoothness (sample[n] ~= sample[n-1]) that
-lets DPCM/Fibonacci/BRR compress audio is what makes raw audio detectable.
-Compressibility and detectability are the same coin.
+Signature carving finds files by their magic (headers/footers); raw PCM has no
+magic, so a signature scan walks straight past it. This module fills that gap: it
+finds raw audio in an unknown blob by its *statistical structure* -- the same
+smoothness (sample[n] ~= sample[n-1]) that lets DPCM/Fibonacci/BRR compress audio
+is what makes raw audio detectable. Compressibility and detectability are the
+same coin.
 
 Phase 1 (this module) is the LOCATOR: a windowed pass that flags candidate audio
 regions. It is tuned for *recall* -- catch the audio, tolerate some false hits --

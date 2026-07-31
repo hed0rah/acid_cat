@@ -12,8 +12,9 @@ sample is entirely self-describing. So we recover without any container:
      alone is fooled by the silence/loop pads that pack a sample table);
   3. resync a byte at a time whenever a run doesn't terminate cleanly.
 
-"PhotoRec for audio" on a SNES ROM: it rescues the samples, not the instrument
-table or their tuning/loop metadata (that lives in the ARAM directory we skip).
+Signatureless sample recovery on a SNES ROM: it rescues the samples, not the
+instrument table or their tuning/loop metadata (that lives in the ARAM directory
+we skip).
 
     from acidcat.core.extract import snesrip
     for s in snesrip.recover(rom_bytes):

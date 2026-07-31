@@ -1,6 +1,6 @@
 """acidcat locate -- find the regions of a blob that are audio.
 
-The low-level primitive behind "PhotoRec for audio": scan an unknown blob (a disk
+The low-level primitive behind audio recovery: scan an unknown blob (a disk
 image, a chip dump, a proprietary file that embeds samples) with two engines --
 a signature sweep for known containers, and a statistical detector for
 signatureless raw PCM (core/locate.py) -- and REPORT the regions it finds. It
@@ -33,7 +33,7 @@ _PUBLIC_KEYS = ("kind", "format", "offset", "end", "length", "confidence",
 def register(subparsers):
     p = subparsers.add_parser(
         "locate",
-        help='Find audio regions in a blob or disk image ("PhotoRec for audio").')
+        help="Find audio regions in a blob or disk image (containers + raw PCM).")
     p.add_argument("input", help="File to scan, or '-' to read the blob from stdin.")
     p.add_argument("--mode", choices=locatemod.MODES, default="normal",
                    help="Forensics level: strict (validated containers only), "
