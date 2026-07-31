@@ -5,6 +5,7 @@ acidcat detect -- estimate BPM/key using librosa analysis.
 import csv
 import os
 import sys
+from acidcat.util import deps
 from acidcat.util.stdin import display_name
 
 from acidcat.core.analysis.detect import estimate_librosa_metadata
@@ -66,6 +67,13 @@ def _run(args):
         output(rec, fmt=fmt_name, stream=stream)
         if stream is not sys.stdout:
             stream.close()
+        # a missing analysis stack that the filename could not cover means the
+        # command could not do its job -- report failure so `detect f && ...`
+        # does not proceed on an empty answer. with librosa present, an
+        # undetectable file is a legitimate answer, not an error.
+        if (rec["bpm"] is None and rec["key"] is None
+                and not deps.available("librosa", "numpy")):
+            return 1
         return 0
 
     if os.path.isdir(target):

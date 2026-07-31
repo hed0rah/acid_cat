@@ -293,9 +293,23 @@ def estimate_librosa_metadata(filepath):
         import librosa
         import numpy as np
     except ImportError:
+        # no audio analysis available, but filename/path parsing is pure Python:
+        # still answer from the name rather than losing the capability entirely.
         from acidcat.util.deps import require
         require("librosa", "numpy", group="analysis")
-        return {}
+        fn_bpm = parse_bpm_from_filename(filepath)
+        fn_key = parse_key_from_path(filepath)
+        return {
+            "estimated_bpm": fn_bpm,
+            "estimated_key": fn_key,
+            "duration_sec": None,
+            "bpm_source": "filename" if fn_bpm is not None else None,
+            "key_source": "filename" if fn_key is not None else None,
+            "filename_bpm": fn_bpm,
+            "filename_key": fn_key,
+            "detected_bpm": None,
+            "detected_key": None,
+        }
 
     try:
         y, sr = librosa.load(filepath, sr=None, mono=True)

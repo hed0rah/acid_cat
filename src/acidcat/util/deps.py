@@ -1,6 +1,13 @@
 """optional dependency helpers."""
 
+import importlib.util
 import sys
+
+
+def available(*packages):
+    """True when every package is importable. Silent, and does not import them
+    (find_spec avoids paying librosa/numba's cold start just to probe)."""
+    return all(importlib.util.find_spec(p) is not None for p in packages)
 
 
 def require(*packages, group="analysis"):
