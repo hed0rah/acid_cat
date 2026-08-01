@@ -156,8 +156,9 @@ def test_inspect_points_at_the_raw_workflow(tmp_path, capsys):
     rc = main(["inspect", str(p)])
     err = capsys.readouterr().err
     assert rc == 1, "an unwalkable file is still a failure for inspect"
-    for verb in ("acidcat od", "acidcat locate", "acidcat probe", "acidcat audit"):
-        assert verb in err, f"no signpost to {verb}"
+    # the raw-byte verbs, plus the two escapes on inspect itself
+    for hint in ("acidcat od", "acidcat locate", "--force", "--format"):
+        assert hint in err, f"no signpost to {hint}"
 
 
 def test_inspect_signpost_quotes_awkward_filenames(tmp_path, capsys):

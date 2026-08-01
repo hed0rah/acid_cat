@@ -17,6 +17,7 @@ registry); this module is the CLI shell: argument parsing, chunk
 selection, and rendering.
 """
 
+import contextlib
 import json
 import os
 import sys
@@ -26,6 +27,7 @@ from acidcat.core.forensics import anomalies as anomaliesmod
 from acidcat.commands._output import add_output_format_arg
 from acidcat.core.forensics import lsb as lsbmod
 from acidcat.core.walk import Unsupported, walk_file
+from acidcat.util.region import add_region_args, scoped_file
 
 # --full emits raw region bytes for chunks that have decoded fields; cap the
 # hex so a huge header (embedded art) cannot bloat the dump without bound.
@@ -88,6 +90,19 @@ def register(subparsers):
                    help="--sandbox address-space cap in MB (default 2048).")
     p.add_argument("--sandbox-timeout", type=int, default=None, metavar="S",
                    help="--sandbox CPU/wall-clock cap in seconds (default 60).")
+    # reverse-engineering escapes: name the format yourself, scope to a region
+    # inside a bigger image, or just tell it to try.
+    p.add_argument("--format", metavar="FMT", dest="fmt_override",
+                   help="Parse as FMT regardless of the magic bytes (an odd or "
+                        "old variant of a format we do model often walks fine "
+                        "once dispatch stops depending on the header). "
+                        "`acidcat formats` lists the ids.")
+    p.add_argument("--force", action="store_true",
+                   help="On a file no walker claims, try every walker and report "
+                        "what each made of it -- chunk/field counts, whether the "
+                        "chunk ids are really at those offsets, and the walker's "
+                        "own complaint. Leads for --format, not identifications.")
+    add_region_args(p)
     p.set_defaults(func=run)
 
 
@@ -320,6 +335,89 @@ def _full_chunk(chunk, filepath):
     return c
 
 
+_MAGIC_COMPLAINT = ("magic", "not a zip", "does not parse", "unknown iq",
+                    "no .sigmf-meta", "spec says")
+
+
+def _forced_candidates(filepath, deep):
+    """Try every walker on a file none of them claims, and report what each one
+    made of it -- ranked, with its own complaints attached.
+
+    Deliberately NOT a single answer. Walkers assume their magic rather than
+    verifying it, so a forced parse readily invents structure: pointed at an
+    arbitrary blob, the MIDI walker reports an MThd chunk larger than the file
+    and the FLAC walker reports a 'fLaC' magic that is not there. Picking a
+    "winner" out of that would manufacture a false identification, which is
+    worse than refusing. So this surfaces the candidates as leads for --format
+    and lets the person decide.
+
+    Each row carries: the chunk/field counts, whether the claimed sizes fit
+    inside the real file (a parse claiming more bytes than exist is
+    self-refuting), and the first thing the walker itself complained about.
+    """
+    from acidcat.core.walk import _WALKERS
+
+    size = os.path.getsize(filepath)
+    rows = []
+    for fmt in _WALKERS:
+        try:
+            label, chunks, warns = walk_file(filepath, deep, fmt_override=fmt)
+        except Exception:
+            continue
+        if not chunks:
+            continue
+        fits = all(c.get("offset", 0) + c.get("size", 0) <= size for c in chunks)
+        ids_ok = all(str(c.get("id", "")).isprintable() for c in chunks)
+        # the check a walker cannot talk its way past: if it reports a 4-byte id
+        # at an offset, are those bytes actually there? A walker that assumes
+        # its magic (FLAC reporting 'fLaC' over 03 13 a0 e0) fails this while
+        # warning about nothing, which is exactly the silent fabrication that
+        # would otherwise rank first.
+        anchored = 0
+        for c in chunks:
+            cid = str(c.get("id", ""))
+            if len(cid) == 4 and cid.isprintable():
+                with open(filepath, "rb") as fh:
+                    fh.seek(c.get("offset", 0))
+                    if fh.read(4) == cid.encode("latin-1", "replace"):
+                        anchored += 1
+        complaint = next((w for w in warns
+                          if any(k in w.lower() for k in _MAGIC_COMPLAINT)), "")
+        rows.append({
+            "format": fmt, "label": label,
+            "chunks": len(chunks),
+            "fields": sum(len(c.get("fields") or []) for c in chunks),
+            "fits": fits, "ids_ok": ids_ok, "anchored": anchored,
+            "complaint": complaint or (warns[0] if warns else ""),
+        })
+    # rank: a self-consistent parse that the walker did not complain about is
+    # the strongest lead; a parse claiming bytes the file does not have is last
+    # anchored ids first: bytes on disk beat a walker's silence. a parse that
+    # invents its magic ranks below one that admits a problem but reads real ids.
+    rows.sort(key=lambda r: (r["anchored"], r["fits"], r["ids_ok"],
+                             r["fields"], r["chunks"]), reverse=True)
+    return rows
+
+
+def _print_forced_candidates(filepath, rows, paint):
+    base = os.path.basename(filepath)
+    arg = f'"{base}"' if any(c in base for c in ' \t&()+;') else base
+    print(f"no walker claims {base}. forced-parse candidates "
+          f"(hypotheses, not identifications):\n")
+    print(paint("dim", f"  {'format':12} {'chunks':>6} {'fields':>6} {'ids':>4}"
+                       f" {'sane':>5}  walker's own complaint"))
+    for r in rows[:10]:
+        sane = "yes" if (r["fits"] and r["ids_ok"]) else "NO"
+        ids = f"{r['anchored']}/{r['chunks']}"
+        note = r["complaint"][:46]
+        line = (f"  {r['format']:12} {r['chunks']:6} {r['fields']:6} {ids:>4}"
+                f" {sane:>5}  {note}")
+        print(line if r["anchored"] else paint("dim", line))
+    print(f"\n  none of these verified a magic number -- a walker parses at fixed"
+          f"\n  offsets whether or not the header is really its format. Follow one"
+          f"\n  up with:  acidcat inspect {arg} --format <id>")
+
+
 def run(args):
     # accept either the multi-file `targets` or the legacy single `target`
     targets = getattr(args, "targets", None)
@@ -351,10 +449,23 @@ def run(args):
         if not getattr(args, "quiet", False):
             print(f"[sandbox: {sandbox_profile}]", file=sys.stderr)
 
+    # --region/--offset scope every verb below to a range inside a bigger file,
+    # so a blob `locate` found in a disk image is walked directly instead of
+    # being carved out by hand first. The copies live until run() returns,
+    # because rendering re-reads the file after the walk (--hex).
+    regions = contextlib.ExitStack()
     try:
         for filepath in targets:
             if not os.path.isfile(filepath):
                 print(f"acidcat inspect: {filepath}: No such file", file=sys.stderr)
+                exit_code = 1
+                continue
+            source_path = filepath          # for messages: never leak the temp copy
+            try:
+                filepath, region_scope = regions.enter_context(
+                    scoped_file(args, filepath))
+            except (ValueError, OSError) as e:
+                print(f"acidcat inspect: {source_path}: {e}", file=sys.stderr)
                 exit_code = 1
                 continue
             try:
@@ -371,25 +482,38 @@ def run(args):
                         exit_code = 1
                         continue
                 else:
-                    fmt_label, chunks, file_warns = walk_file(filepath, deep)
+                    fmt_label, chunks, file_warns = walk_file(
+                        filepath, deep,
+                        fmt_override=getattr(args, "fmt_override", None))
+                    if region_scope:
+                        fmt_label = f"{fmt_label}  [region {region_scope}]"
             except Unsupported as e:
-                # "I have no walker for this" is the honest answer here -- but a
-                # dead end is not. Point at the verbs that work on raw bytes, so
-                # an unknown container is the start of the RE workflow rather
-                # than the end of it.
-                # quote the name so the suggestion is copy-pasteable: sample
-                # banks routinely have spaces and '+' in their filenames
-                base = os.path.basename(filepath)
-                arg = f'"{base}"' if any(c in base for c in ' \t&()+;') else base
-                print(f"acidcat inspect: {filepath}: {e}", file=sys.stderr)
-                print(f"  no structural walker, but the bytes are still yours:\n"
-                      f"    acidcat od {arg}            hex dump, no format needed\n"
-                      f"    acidcat locate {arg}        find embedded audio regions\n"
-                      f"    acidcat probe {arg} strings printable runs\n"
-                      f"    acidcat audit {arg}         entropy, anomalies, provenance",
-                      file=sys.stderr)
-                exit_code = 1
-                continue
+                if getattr(args, "force", False):
+                    rows = _forced_candidates(filepath, deep)
+                    if rows:
+                        _print_forced_candidates(
+                            filepath, rows, _Paint(color_enabled(args)))
+                        exit_code = 1     # still unidentified; these are leads
+                        continue
+                if True:
+                    # "I have no walker for this" is the honest answer here --
+                    # but a dead end is not. Point at the verbs that work on raw
+                    # bytes, so an unknown container starts the RE workflow
+                    # rather than ending it. Quote the name so the suggestion
+                    # survives a copy-paste: banks often have spaces and '+'.
+                    base = os.path.basename(source_path)
+                    arg = f'"{base}"' if any(c in base for c in ' \t&()+;') else base
+                    scoped = f" (region {region_scope})" if region_scope else ""
+                    print(f"acidcat inspect: {source_path}{scoped}: {e}",
+                          file=sys.stderr)
+                    print(f"  no structural walker, but the bytes are still yours:\n"
+                          f"    acidcat od {arg}                hex dump, no format needed\n"
+                          f"    acidcat locate {arg}            find embedded audio regions\n"
+                          f"    acidcat inspect {arg} --force   try every walker anyway\n"
+                          f"    acidcat inspect {arg} --format wav   parse as a known type",
+                          file=sys.stderr)
+                    exit_code = 1
+                    continue
             except Exception as e:  # a walker bug must not sink the whole run
                 print(f"acidcat inspect: {filepath}: {e.__class__.__name__}: {e}",
                       file=sys.stderr)
@@ -459,5 +583,7 @@ def run(args):
         except Exception:
             pass
         return exit_code
+    finally:
+        regions.close()
 
     return exit_code

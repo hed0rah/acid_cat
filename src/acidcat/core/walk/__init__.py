@@ -84,8 +84,12 @@ _WALKERS = {
 }
 
 
-def walk_file(filepath, deep=False):
+def walk_file(filepath, deep=False, fmt_override=None):
     """Sniff the magic and dispatch to the format walker.
+
+    ``fmt_override`` forces a walker by format id, skipping the sniff -- the
+    reverse-engineering case where you recognize a variant the sniffer does not
+    (an old RIFF dialect, a vendor container built on a format we model).
 
     Returns (fmt_label, chunks, file_warns); raises Unsupported for a
     file the walkers do not decode. Any other exception out of a walker
@@ -95,10 +99,22 @@ def walk_file(filepath, deep=False):
     walk degrades to zero chunks plus a walker-error warning instead of
     crashing on hostile input. ACIDCAT_WALKER_RAISE=1 (set by the test
     suite) re-raises so a walker bug stays a loud traceback in CI."""
-    fmt = sniffmod.sniff(filepath)
-    if fmt == "id3-wrapped":
-        raise Unsupported("ID3 tag wraps a non-MP3 container; not supported")
-    entry = _WALKERS.get(fmt)
+    if fmt_override:
+        # the caller says what this is. an old or odd variant of a format we do
+        # model often parses fine once dispatch stops depending on the magic --
+        # so a forced walker runs even when sniff disagrees, and its failures
+        # degrade to warnings like any other walk.
+        entry = _WALKERS.get(fmt_override)
+        if entry is None:
+            raise Unsupported(
+                f"no walker for {fmt_override!r} "
+                f"(known: {', '.join(sorted(_WALKERS))})")
+        fmt = fmt_override
+    else:
+        fmt = sniffmod.sniff(filepath)
+        if fmt == "id3-wrapped":
+            raise Unsupported("ID3 tag wraps a non-MP3 container; not supported")
+        entry = _WALKERS.get(fmt)
     if entry is None:
         # no specific walker: try generic structural triage before giving up, so
         # an unknown-but-chunked container (e.g. a proprietary audio format we
