@@ -42,17 +42,40 @@ def byte_counts(data):
     return counts
 
 
+# log2 of small integers, grown on demand. The forensic scan calls
+# entropy_from_counts once per window and every window is a 256-bin histogram,
+# so the naive form spends millions of calls taking log2 of the same handful of
+# small counts. Counts are integers, so they table exactly.
+_LOG2 = [0.0, 0.0]                       # log2(0) unused, log2(1) = 0
+
+
+def _log2_table(upto):
+    while len(_LOG2) <= upto:
+        _LOG2.append(math.log2(len(_LOG2)))
+    return _LOG2
+
+
 def entropy_from_counts(counts, total):
     """Shannon entropy (bits) of a symbol distribution given per-symbol ``counts``
-    and their ``total``. Zero counts contribute nothing; ``total <= 0`` -> 0.0."""
+    and their ``total``. Zero counts contribute nothing; ``total <= 0`` -> 0.0.
+
+    Uses the identity H = log2(N) - (1/N) * sum(c * log2(c)), which moves the
+    logarithm onto the integer counts so they can be looked up rather than
+    recomputed. Same result as summing -p*log2(p), without the float logs.
+    """
     if total <= 0:
         return 0.0
-    h = 0.0
+    tbl = _LOG2 if total < len(_LOG2) else _log2_table(total)
+    acc = 0.0
     for c in counts:
         if c:
-            p = c / total
-            h -= p * math.log2(p)
-    return h
+            acc += c * tbl[c]
+    # Shannon entropy is non-negative; a certain distribution (one symbol with
+    # every count) cancels to zero in exact arithmetic but lands a few ulp below
+    # it here, since c*log2(c)/c does not round back to log2(c). Clamp rather
+    # than hand a caller a negative "amount of information".
+    h = tbl[total] - acc / total
+    return h if h > 0.0 else 0.0
 
 
 def byte_entropy(data):

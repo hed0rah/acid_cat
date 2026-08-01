@@ -65,3 +65,33 @@ def test_pcm_coherence():
     m = sum(w) / len(w); var = sum((x - m) ** 2 for x in w) / len(w) or 1
     cov = sum((w[k] - m) * (w[k + 1] - m) for k in range(len(w) - 1)) / (len(w) - 1)
     assert abs(pcm_coherence(sig, min_peak=0)[0] - cov / var) < 1e-12
+
+
+def test_entropy_matches_the_direct_definition():
+    """entropy_from_counts moves the logarithm onto the integer counts so they
+    can be tabled. It must still equal -sum(p*log2 p) to floating-point noise."""
+    import math
+    import random
+    from acidcat.core.primitives.signal import entropy_from_counts
+
+    def direct(counts, total):
+        h = 0.0
+        for c in counts:
+            if c:
+                p = c / total
+                h -= p * math.log2(p)
+        return h
+
+    rng = random.Random(11)
+    for n in (16, 256, 1024, 4096):
+        counts = [0] * 256
+        for _ in range(n):
+            counts[rng.randrange(256)] += 1
+        assert abs(entropy_from_counts(counts, n) - direct(counts, n)) < 1e-9
+
+
+def test_entropy_edge_cases():
+    from acidcat.core.primitives.signal import entropy_from_counts
+    assert entropy_from_counts([0] * 256, 0) == 0.0        # no data
+    assert entropy_from_counts([64] + [0] * 255, 64) == 0.0  # one symbol: no surprise
+    assert abs(entropy_from_counts([4] * 256, 1024) - 8.0) < 1e-12  # uniform bytes

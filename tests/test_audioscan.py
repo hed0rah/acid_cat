@@ -202,3 +202,27 @@ def test_liveness_leaves_loud_audio_untouched():
     loud = bytes((int(100 * math.sin(i / 5.0)) + 128) & 0xFF for i in range(1024))
     feat = window_features(loud)
     assert feat["spread"] > 16.0, "a loud waveform should clear the liveness ramp"
+
+
+def test_autocorr_lags_matches_the_per_lag_form():
+    """The scan computes every lag in one pass, sharing the centred deviations.
+    It must agree with the straightforward per-lag computation exactly -- this is
+    a speed change, not a behaviour change."""
+    import random
+    from acidcat.core.forensics.audioscan import _autocorr, _autocorr_lags, LAGS
+    rng = random.Random(3)
+    samples = [rng.randint(-128, 127) for _ in range(1024)]
+    mean = sum(samples) / len(samples)
+    den = sum((s - mean) ** 2 for s in samples)
+    one_by_one = {L: _autocorr(samples, mean, den, L) for L in LAGS}
+    together = _autocorr_lags(samples, mean, den, LAGS)
+    for L in LAGS:
+        assert abs(one_by_one[L] - together[L]) < 1e-12, f"lag {L} diverged"
+
+
+def test_autocorr_lags_handles_a_flat_window():
+    """Zero variance must not divide by zero."""
+    from acidcat.core.forensics.audioscan import _autocorr_lags, LAGS
+    flat = [7] * 256
+    out = _autocorr_lags(flat, 7.0, 0.0, LAGS)
+    assert all(out[L] == 0.0 for L in LAGS)

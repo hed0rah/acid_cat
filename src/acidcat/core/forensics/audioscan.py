@@ -37,6 +37,7 @@ numpy `analysis` extra.
 
 import math
 import struct
+from operator import mul as _mul
 
 from acidcat.core.primitives.signal import entropy_from_counts
 
@@ -100,15 +101,31 @@ def _distribution(counts, n):
 
 
 def _autocorr(samples, mean, den, lag):
-    """Pearson autocorrelation at `lag` for a signed-sample sequence, given its
-    precomputed mean and denominator (sum of squared deviations)."""
-    n = len(samples)
-    if den <= 0.0 or lag >= n:
+    """Pearson autocorrelation at `lag`. Kept for callers outside the scan loop;
+    the hot path uses _autocorr_lags, which shares work across the lags."""
+    if den <= 0.0 or lag >= len(samples):
         return 0.0
-    num = 0.0
-    for i in range(n - lag):
-        num += (samples[i] - mean) * (samples[i + lag] - mean)
-    return num / den
+    dev = [s - mean for s in samples]
+    return sum(map(_mul, dev, dev[lag:])) / den
+
+
+def _autocorr_lags(samples, mean, den, lags):
+    """Every lag in one go: {lag: r}.
+
+    The scan spends most of its time here, so the shape matters. Two things the
+    naive form wastes: it recomputes (sample - mean) once per lag, and it runs
+    the multiply-accumulate as a Python loop. Centring once and letting
+    sum(map(mul, dev, dev[lag:])) do the accumulation in C turns four
+    interpreted passes into one list build plus four C-level reductions.
+    """
+    n = len(samples)
+    if den <= 0.0:
+        return {L: 0.0 for L in lags}
+    dev = [s - mean for s in samples]          # centre once, reuse per lag
+    out = {}
+    for lag in lags:
+        out[lag] = 0.0 if lag >= n else sum(map(_mul, dev, dev[lag:])) / den
+    return out
 
 
 _FLOAT_RANGE = 1.5               # audio floats live in [-1,1]; allow headroom
@@ -198,7 +215,7 @@ def window_features(win):
     for s in samples:
         d = s - mean
         den += d * d
-    ac = {L: _autocorr(samples, mean, den, L) for L in LAGS}
+    ac = _autocorr_lags(samples, mean, den, LAGS)
     # how far the window actually moves. autocorrelation is scale-free, so a
     # near-constant run (silence, padding, a sparse hole) correlates perfectly
     # and would otherwise outscore real audio -- see `liveness` in audio_score.
