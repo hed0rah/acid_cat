@@ -102,6 +102,11 @@ def register(subparsers):
                         "what each made of it -- chunk/field counts, whether the "
                         "chunk ids are really at those offsets, and the walker's "
                         "own complaint. Leads for --format, not identifications.")
+    p.add_argument("--resync", action="store_true",
+                   help="Recover chunk structure from a damaged container by "
+                        "scanning for plausible [id][size] records and keeping "
+                        "the ones that chain end-to-start. Finds what a corrupt "
+                        "size field or a smashed magic costs the normal walk.")
     add_region_args(p)
     p.set_defaults(func=run)
 
@@ -335,6 +340,43 @@ def _full_chunk(chunk, filepath):
     return c
 
 
+def _run_resync(filepath, paint, source_path=None):
+    """--resync: report the chunk grid still recoverable from a damaged container."""
+    from acidcat.core.forensics import resync as resyncmod
+
+    with open(filepath, "rb") as f:
+        data = f.read()
+    res = resyncmod.recover(data, known_only=True)
+    chain, recs = res["chain"], res["records"]
+    name = os.path.basename(source_path or filepath)
+    if not chain:
+        print(f"{name}: no recoverable chunk grid "
+              f"({len(recs)} isolated record(s) found)")
+        print(paint("dim",
+                    "  nothing chains end-to-start, so there is no surviving\n"
+                    "  structure to rebuild. If the payload is still in there,\n"
+                    "  `acidcat locate` finds it statistically instead."))
+        return 1
+    print(f"{name}: recovered {len(chain)} chunk(s) by resync "
+          f"[{res['endian']}-endian, {res['coverage']:.0%} of the file]")
+    print(paint("dim", f"  {'offset':>10}  {'id':6} {'size':>12}  conf  evidence"))
+    for r in chain:
+        ev = []
+        if r["known"]:
+            ev.append("known id")
+        if r["corroborated"]:
+            ev.append("chains onward")
+        print(f"  0x{r['offset']:08x}  {r['id']:6} {r['size']:>12,}  "
+              f"{r['confidence']:.2f}  {', '.join(ev) or '-'}")
+    print(paint("dim",
+                "\n  found by scanning for [id][size] records and keeping the ones\n"
+                "  that link end-to-start. Corroborated hypotheses, not a validated\n"
+                "  parse -- carve one out to work on it:\n"
+                f"    acidcat carve {name} --offset 0x{chain[0]['offset']:x} "
+                f"--length {chain[0]['size'] + 8}"))
+    return 0
+
+
 _MAGIC_COMPLAINT = ("magic", "not a zip", "does not parse", "unknown iq",
                     "no .sigmf-meta", "spec says")
 
@@ -467,6 +509,13 @@ def run(args):
             except (ValueError, OSError) as e:
                 print(f"acidcat inspect: {source_path}: {e}", file=sys.stderr)
                 exit_code = 1
+                continue
+            if getattr(args, "resync", False):
+                # a damaged container is exactly the case where the walk fails,
+                # so recovery runs instead of it rather than after it
+                rc = _run_resync(filepath, _Paint(color_enabled(args)),
+                                 source_path=source_path)
+                exit_code = exit_code or rc
                 continue
             try:
                 if sandbox_profile:
