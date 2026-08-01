@@ -162,3 +162,43 @@ def test_region_evidence_present():
     assert set(ev["autocorr"]) == set(audioscan.LAGS)
     assert 0.0 <= ev["entropy"] <= 8.0
     assert reg["windows"] >= 1
+
+
+def test_silence_does_not_outrank_real_audio():
+    """A near-constant run correlates perfectly, so before the liveness term it
+    scored 1.0 and pushed actual content down the list -- the top hits on a real
+    proprietary sample bank were all silence. Flat data is weak evidence (it is
+    equally consistent with padding or a sparse hole), so it must be damped
+    below genuine signal while still being reported in aggressive mode."""
+    import math
+    from acidcat.core.forensics.audioscan import window_features, audio_score
+
+    # near-silence as it really occurs: 16-bit LE samples dithering within a few
+    # LSBs of zero. A perfectly constant run is already caught by the entropy
+    # floor; this is the case that slipped past it, matching what a real
+    # proprietary bank contained (entropy ~2.8, ~13 distinct byte values).
+    import random
+    rng = random.Random(7)
+    v, buf = 0, bytearray()
+    for _ in range(768):
+        v = max(-6, min(6, v + rng.choice((-1, 0, 1))))
+        buf += (v & 0xFFFF).to_bytes(2, "little")
+    silence = bytes(buf)
+    # a smooth but live waveform: a sine sampled to 8-bit
+    live = bytes((int(64 * math.sin(i / 8.0)) + 128) & 0xFF for i in range(1024))
+
+    s_silence = audio_score(window_features(silence))
+    s_live = audio_score(window_features(live))
+    assert s_live > s_silence, (
+        f"silence ({s_silence:.3f}) must not outrank real audio ({s_live:.3f})")
+    # damped, not rejected outright -- aggressive mode still needs to see it
+    assert s_silence > 0.0, "flat regions should still be reported, just ranked low"
+
+
+def test_liveness_leaves_loud_audio_untouched():
+    """The damping must not cost recall on ordinary content."""
+    import math
+    from acidcat.core.forensics.audioscan import window_features, audio_score
+    loud = bytes((int(100 * math.sin(i / 5.0)) + 128) & 0xFF for i in range(1024))
+    feat = window_features(loud)
+    assert feat["spread"] > 16.0, "a loud waveform should clear the liveness ramp"

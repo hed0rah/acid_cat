@@ -49,6 +49,9 @@ _PEAK_FLOOR = 0.25                # low-lag autocorr below this reads as noise
 _PEAK_SPAN = 0.50                 # ... and saturates confidence PEAK_SPAN above the floor
 _STRUCT_SPAN = 0.30               # structure needed to clear code's monotone decay
 _ENTROPY_FLOOR = 2.0              # below this the window is ~constant, not a live blob
+_LIVE_FLOOR = 2.0                 # sample spread (8-bit std) at/below this is flat
+_LIVE_FULL = 16.0                 # ... and carries full weight from here up
+_LIVE_MIN = 0.25                  # floor on the damping, so flat regions still show
 
 # distribution gate (calibrated on a labeled corpus: real 8SVX audio vs code/
 # text/random/binary). autocorrelation already rejects random/compressed/binary
@@ -196,6 +199,10 @@ def window_features(win):
         d = s - mean
         den += d * d
     ac = {L: _autocorr(samples, mean, den, L) for L in LAGS}
+    # how far the window actually moves. autocorrelation is scale-free, so a
+    # near-constant run (silence, padding, a sparse hole) correlates perfectly
+    # and would otherwise outscore real audio -- see `liveness` in audio_score.
+    spread = (den / n) ** 0.5
 
     r1, r2, r4, r8 = ac[1], ac[2], ac[4], ac[8]
     peak = max(r1, r2)                                  # low-lag correlation strength
@@ -206,7 +213,7 @@ def window_features(win):
     structure = max(oscillate, sustain, periodic)
     return {"entropy": entropy, "autocorr": ac, "peak": peak,
             "structure": structure, "printable": printable,
-            "hist_tv": hist_tv, "n": n}
+            "hist_tv": hist_tv, "spread": spread, "n": n}
 
 
 def audio_score(feat):
@@ -221,7 +228,13 @@ def audio_score(feat):
     shape = _clamp01(feat["structure"] / _STRUCT_SPAN)
     dist = _clamp01((_PRINTABLE_HI - feat.get("printable", 0.0))
                     / (_PRINTABLE_HI - _PRINTABLE_LO))
-    return strength * shape * dist
+    # a window that barely moves is weak evidence either way: silence, padding
+    # and a sparse hole are all perfectly "smooth", so they saturate strength
+    # and shape and would rank above real audio. Damp rather than reject -- the
+    # region is still reported, it just stops crowding out actual content.
+    live = _LIVE_MIN + (1.0 - _LIVE_MIN) * _clamp01(
+        (feat.get("spread", _LIVE_FULL) - _LIVE_FLOOR) / (_LIVE_FULL - _LIVE_FLOOR))
+    return strength * shape * dist * live
 
 
 def scan(data, *, window=DEFAULT_WINDOW, step=DEFAULT_STEP,
