@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import errno
 import os
 import sys
 
@@ -127,6 +128,47 @@ def _try_bare_path(argv):
 
 
 def main(argv=None):
+    """Entry point. Wraps the dispatch so a closed pipe is a normal exit.
+
+    `acidcat od big.bin | head` closes stdout early; without this the
+    interpreter reports BrokenPipeError on shutdown and exits non-zero, which
+    makes every verb unsafe to pipe into a pager or `head`. Every other Unix
+    tool treats it as "the reader left" and stops quietly, so we do too.
+    """
+    try:
+        return _dispatch(argv)
+    except OSError as e:
+        if not _is_closed_pipe(e):
+            raise
+        # stop writing, and keep the interpreter's shutdown flush from raising
+        # again on the dead descriptor
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (OSError, ValueError):
+            pass
+        return 0
+    except KeyboardInterrupt:
+        print("\nacidcat: interrupted", file=sys.stderr)
+        return 130                      # the shell's convention for SIGINT
+
+
+def _is_closed_pipe(exc):
+    """True when an OSError means "the reader went away".
+
+    POSIX raises BrokenPipeError (EPIPE). Windows does not: writing to a pipe
+    whose reader has closed surfaces as a plain OSError with EINVAL, or
+    winerror 232 (ERROR_NO_DATA, "the pipe is being closed"). Matching only
+    BrokenPipeError would leave `acidcat od big.bin | head` printing a
+    traceback on Windows, which is where this tool mostly runs.
+    """
+    if isinstance(exc, BrokenPipeError):
+        return True
+    return (exc.errno in (errno.EPIPE, errno.EINVAL)
+            or getattr(exc, "winerror", None) == 232)
+
+
+def _dispatch(argv=None):
     # audio metadata is Unicode (UTF-8/UTF-16 tags), so emit UTF-8 regardless
     # of the platform default. Windows consoles and pipes default to cp1252 and
     # would raise UnicodeEncodeError on a non-Latin tag; replace stays a safety

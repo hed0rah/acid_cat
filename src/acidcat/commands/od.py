@@ -5,12 +5,24 @@ chunk/block header and each decoded field on its own line, the field's byte-run
 colored (cycling palette) and labeled with its name/value/note, so the structure
 is legible directly in the raw byte stream. Bulk audio payload is elided.
 
+Like od(1), it never refuses to show you bytes. A format it can walk gets the
+annotated layout; anything else -- a proprietary container, a carved region, a
+raw dump off a device -- falls back to a plain hex dump. Structure is a bonus,
+not a precondition.
+
+    acidcat od song.wav                       # annotated, by chunk and field
+    acidcat od unknown.bin                    # plain hex, no walker needed
+    acidcat od blob.img --offset 0x5d1000 --length 2048
+    acidcat od blob.img --at find:RIFF --length 64
+    acidcat locate blob.img --json | acidcat od blob.img --region 0
+
 Complements `inspect --hex` (a value-first table); this is a bytes-first layout.
 """
 
 import sys
 from acidcat.util.color import add_color_arg, color_enabled
 
+from acidcat.core.infra import bytefields as bf
 from acidcat.core.infra.mapped import map_file
 from acidcat.core.walk import walk_file
 from acidcat.core.walk.base import Unsupported
@@ -25,7 +37,23 @@ def register(subparsers):
     p.add_argument("target", help="File to dump, or '-' for stdin.")
     add_color_arg(p)
     p.add_argument("--width", type=int, default=16, metavar="N",
-                   help="max hex bytes shown per field before eliding (default 16)")
+                   help="hex bytes per line, and per field before eliding "
+                        "(default 16)")
+    # range selection -- same vocabulary as `carve`, so a region found by
+    # `locate` can be handed to either verb unchanged
+    p.add_argument("--offset", metavar="N",
+                   help="Start at this offset (0x.. or decimal). Forces the raw "
+                        "dump: a byte range has no chunk structure of its own.")
+    p.add_argument("--at", metavar="EXPR",
+                   help="Anchored start: 0xNN | end[-N] | find:STR|0xHEX[+N] | "
+                        "chunk:ID[+N].")
+    p.add_argument("--length", metavar="N",
+                   help="Number of bytes to dump from the start.")
+    p.add_argument("--end", metavar="N",
+                   help="End offset (exclusive), instead of --length.")
+    p.add_argument("--region", type=int, metavar="N",
+                   help="Dump the Nth region reported by `locate` (0-based); "
+                        "runs locate itself, so no piping is required.")
     p.set_defaults(func=run)
 
 
@@ -53,14 +81,93 @@ def run(args):
         return _run(args)
 
 
+def _size(path):
+    import os
+    return os.path.getsize(path)
+
+
+def _int(text, what):
+    try:
+        return int(text, 0)
+    except (ValueError, TypeError):
+        raise ValueError(f"{what}: not an offset/length: {text!r}")
+
+
+def _requested_range(args, path, size):
+    """(start, length) from --offset/--at/--length/--end/--region, or None when
+    the whole file was asked for. Raises ValueError on a bad expression."""
+    if args.region is not None:
+        from acidcat.core.forensics import locate as locatemod
+        with open(path, "rb") as f:
+            recs = locatemod.locate(f.read(), mode="normal")
+        if not recs:
+            raise ValueError("no regions located in this file")
+        if not 0 <= args.region < len(recs):
+            raise ValueError(f"--region {args.region} out of range "
+                             f"(locate found {len(recs)}: 0..{len(recs) - 1})")
+        r = recs[args.region]
+        return r["offset"], r["length"]
+
+    start = None
+    if args.at is not None:
+        start = bf.resolve_offset(args.at, path, size)
+    elif args.offset is not None:
+        start = _int(args.offset, "--offset")
+    if start is None and args.length is None and args.end is None:
+        return None
+    start = start or 0
+    if args.end is not None:
+        length = max(0, _int(args.end, "--end") - start)
+    elif args.length is not None:
+        length = _int(args.length, "--length")
+    else:
+        length = size - start
+    return start, length
+
+
+def _raw_dump(data, start, length, width, on, note):
+    """A plain hex dump of a byte range -- what od(1) does. Used when the file
+    has no walker, or when an explicit range was asked for."""
+    end = min(start + length, len(data))
+    print(_c("1", note, on))
+    for base in range(start, end, width):
+        row = data[base:min(base + width, end)]
+        print(f"  0x{base:08x}  {_hexcells(row):<{width * 3}} {_ascii(row)}")
+    return 0
+
+
 def _run(args):
     path = args.target
+    on = color_enabled(args)
     try:
-        label, chunks, warns = walk_file(path)
-    except Unsupported as e:
+        rng = _requested_range(args, path, _size(path))
+    except (ValueError, KeyError, OSError) as e:
         print(f"acidcat od: {path}: {e}", file=sys.stderr)
         return 2
-    on = color_enabled(args)
+
+    # an explicit byte range has no structure of its own -- dump it plainly
+    if rng is not None:
+        start, length = rng
+        data, close = map_file(path)
+        try:
+            return _raw_dump(data, start, length, args.width, on,
+                             f"{path}  0x{start:08x} .. 0x{start + length:08x}"
+                             f"  ({length:,} bytes)")
+        finally:
+            close()
+
+    try:
+        label, chunks, warns = walk_file(path)
+    except Unsupported:
+        # od never refuses to show bytes: no walker means a plain dump, not an
+        # error. `inspect` is where "I do not know this format" is the answer.
+        data, close = map_file(path)
+        try:
+            return _raw_dump(data, 0, len(data), args.width, on,
+                             f"{path}  {len(data):,} bytes  "
+                             f"(no structural walker -- raw dump)")
+        finally:
+            close()
     # mmap, not f.read(): od only slices small header/field/preview runs, and
     # a mapped file serves those without loading multi-GB payloads into RAM
     data, close = map_file(path)
