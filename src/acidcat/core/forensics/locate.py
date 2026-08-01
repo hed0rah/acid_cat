@@ -198,6 +198,28 @@ def _within(offset, extents):
     return False
 
 
+# a statistical hit is the same file as a container it mostly covers, even when
+# it starts a little before it. The detector works in windows, so a blob
+# routinely opens a few hundred bytes ahead of the header it belongs to -- an
+# offset-only test then reports the file twice, once as a container and once as
+# a redundant raw blob. Measured on a disk image of six real WAVs: 8 regions for
+# 6 files, both extras being blobs that overlapped a container they started
+# just before.
+_ABSORB_OVERLAP = 0.5
+
+
+def _mostly_within(start, end, extents, frac=_ABSORB_OVERLAP):
+    """True when at least `frac` of [start, end) is covered by one extent."""
+    span = end - start
+    if span <= 0:
+        return _within(start, extents)
+    for ext_start, ext_end in extents:
+        covered = min(end, ext_end) - max(start, ext_start)
+        if covered > 0 and covered / span >= frac:
+            return True
+    return False
+
+
 def _survives(rec, mode):
     if rec["kind"] == "stream":                          # structural, like a container
         return True
@@ -232,7 +254,7 @@ def locate(data, *, mode="normal", scan_kwargs=None):
                                                                if c["end"] > c["offset"]])]
 
     for region in regions:
-        if _within(region["start"], extents):
+        if _mostly_within(region["start"], region["end"], extents):
             continue                                  # part of a container/stream we found
         records.append({
             "kind": "blob", "format": None, "offset": region["start"],
