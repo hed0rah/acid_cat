@@ -95,31 +95,40 @@ def _int(text, what):
 
 def _requested_range(args, path, size):
     """(start, length) from --offset/--at/--length/--end/--region, or None when
-    the whole file was asked for. Raises ValueError on a bad expression."""
-    if args.region is not None:
+    the whole file was asked for. Raises ValueError on a bad expression.
+
+    Read through getattr so a programmatic caller (the TUI, a test, another
+    command) can pass a namespace carrying only the flags it cares about.
+    """
+    region = getattr(args, "region", None)
+    at = getattr(args, "at", None)
+    offset = getattr(args, "offset", None)
+    length_s = getattr(args, "length", None)
+    end_s = getattr(args, "end", None)
+    if region is not None:
         from acidcat.core.forensics import locate as locatemod
         with open(path, "rb") as f:
             recs = locatemod.locate(f.read(), mode="normal")
         if not recs:
             raise ValueError("no regions located in this file")
-        if not 0 <= args.region < len(recs):
-            raise ValueError(f"--region {args.region} out of range "
+        if not 0 <= region < len(recs):
+            raise ValueError(f"--region {region} out of range "
                              f"(locate found {len(recs)}: 0..{len(recs) - 1})")
-        r = recs[args.region]
+        r = recs[region]
         return r["offset"], r["length"]
 
     start = None
-    if args.at is not None:
-        start = bf.resolve_offset(args.at, path, size)
-    elif args.offset is not None:
-        start = _int(args.offset, "--offset")
-    if start is None and args.length is None and args.end is None:
+    if at is not None:
+        start = bf.resolve_offset(at, path, size)
+    elif offset is not None:
+        start = _int(offset, "--offset")
+    if start is None and length_s is None and end_s is None:
         return None
     start = start or 0
-    if args.end is not None:
-        length = max(0, _int(args.end, "--end") - start)
-    elif args.length is not None:
-        length = _int(args.length, "--length")
+    if end_s is not None:
+        length = max(0, _int(end_s, "--end") - start)
+    elif length_s is not None:
+        length = _int(length_s, "--length")
     else:
         length = size - start
     return start, length

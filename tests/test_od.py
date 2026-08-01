@@ -38,7 +38,14 @@ def test_od_color_always_emits_ansi(tmp_path, capsys):
     assert "\033[" in capsys.readouterr().out
 
 
-def test_od_unsupported_returns_2(tmp_path):
+def test_od_unwalkable_file_falls_back_to_a_raw_dump(tmp_path, capsys):
+    """Contract change: od used to exit 2 on a file it could not walk. It now
+    dumps the bytes anyway, like od(1) -- refusing was useless for exactly the
+    case the verb exists for (a proprietary container with no walker).
+    `inspect` is where "I do not know this format" remains the answer."""
     p = tmp_path / "x.txt"
     p.write_text("not audio")
-    assert od.run(_Args(str(p))) == 2
+    assert od.run(_Args(str(p))) == 0
+    out = capsys.readouterr().out
+    assert "raw dump" in out
+    assert "6e 6f 74" in out, "the bytes were not shown"
