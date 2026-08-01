@@ -144,3 +144,28 @@ def test_closed_pipe_exits_cleanly():
     assert "Traceback" not in text, text[:400]
     assert "Invalid argument" not in text, "the Windows EINVAL path leaked"
     assert producer.returncode == 0, f"exit {producer.returncode}: {text[:200]}"
+
+
+def test_inspect_points_at_the_raw_workflow(tmp_path, capsys):
+    """`inspect` refusing an unknown format is honest -- it has no walker. But a
+    dead end is not: an RE hitting a proprietary container needs to be told the
+    bytes are still reachable, not just which formats are supported."""
+    from acidcat.cli import main
+    p = tmp_path / "proprietary.ch1"
+    p.write_bytes(b"\x03\x13\xa0\xe0" + b"\x00" * 512)
+    rc = main(["inspect", str(p)])
+    err = capsys.readouterr().err
+    assert rc == 1, "an unwalkable file is still a failure for inspect"
+    for verb in ("acidcat od", "acidcat locate", "acidcat probe", "acidcat audit"):
+        assert verb in err, f"no signpost to {verb}"
+
+
+def test_inspect_signpost_quotes_awkward_filenames(tmp_path, capsys):
+    """Sample banks routinely have spaces and '+' in their names; an unquoted
+    suggestion would not survive a copy-paste."""
+    from acidcat.cli import main
+    p = tmp_path / "xA1_mute + wire.ch1"
+    p.write_bytes(b"\x03\x13\xa0\xe0" + b"\x00" * 512)
+    main(["inspect", str(p)])
+    err = capsys.readouterr().err
+    assert 'acidcat od "xA1_mute + wire.ch1"' in err, "the suggestion is unquoted"

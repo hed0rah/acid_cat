@@ -373,7 +373,21 @@ def run(args):
                 else:
                     fmt_label, chunks, file_warns = walk_file(filepath, deep)
             except Unsupported as e:
+                # "I have no walker for this" is the honest answer here -- but a
+                # dead end is not. Point at the verbs that work on raw bytes, so
+                # an unknown container is the start of the RE workflow rather
+                # than the end of it.
+                # quote the name so the suggestion is copy-pasteable: sample
+                # banks routinely have spaces and '+' in their filenames
+                base = os.path.basename(filepath)
+                arg = f'"{base}"' if any(c in base for c in ' \t&()+;') else base
                 print(f"acidcat inspect: {filepath}: {e}", file=sys.stderr)
+                print(f"  no structural walker, but the bytes are still yours:\n"
+                      f"    acidcat od {arg}            hex dump, no format needed\n"
+                      f"    acidcat locate {arg}        find embedded audio regions\n"
+                      f"    acidcat probe {arg} strings printable runs\n"
+                      f"    acidcat audit {arg}         entropy, anomalies, provenance",
+                      file=sys.stderr)
                 exit_code = 1
                 continue
             except Exception as e:  # a walker bug must not sink the whole run
