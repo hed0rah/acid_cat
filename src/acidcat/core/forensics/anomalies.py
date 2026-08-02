@@ -244,8 +244,12 @@ def scan(filepath, fmt_label, chunks, warns):
                                  "message": f"{len(serials)} logical bitstreams in "
                                             f"one Ogg; a single-codec player surfaces "
                                             f"only one (possible hidden stream)"})
-        except Exception:
-            pass
+        except Exception as e:
+            # a rule that crashed is not a rule that found nothing:
+            # swallowing this made a malformed structure look clean
+            findings.append({"severity": "warn", "offset": None,
+                             "rule": "check_failed",
+                             "message": f"the ogg_multistream check could not run ({type(e).__name__}); this file was NOT screened for it"})
 
     # 9. MP4 mdat coverage gap: bytes inside mdat that no sample references. Sum
     # every stsz sample size across tracks and compare to the mdat payload; an
@@ -311,8 +315,12 @@ def scan(filepath, fmt_label, chunks, warns):
                                      "message": f"{gap:,} bytes in mdat referenced by no "
                                                 f"sample (stsz sums {sample_bytes:,} of "
                                                 f"{mdat_payload:,}); possible cavity"})
-        except Exception:
-            pass
+        except Exception as e:
+            # a rule that crashed is not a rule that found nothing:
+            # swallowing this made a malformed structure look clean
+            findings.append({"severity": "warn", "offset": None,
+                             "rule": "check_failed",
+                             "message": f"the mp4_mdat_coverage check could not run ({type(e).__name__}); this file was NOT screened for it"})
 
     # 10. ID3v2 non-zero padding: the region after the last frame up to the tag's
     # declared size is spec'd to be zero; content there is a cavity (not trailing
@@ -360,8 +368,12 @@ def scan(filepath, fmt_label, chunks, warns):
                                             f"({len(pad):,} bytes after the last frame); "
                                             f"the padding region is spec'd to be zero"
                                             f"{_entropy_note(pad)}"})
-        except Exception:
-            pass
+        except Exception as e:
+            # a rule that crashed is not a rule that found nothing:
+            # swallowing this made a malformed structure look clean
+            findings.append({"severity": "warn", "offset": None,
+                             "rule": "check_failed",
+                             "message": f"the id3_padding check could not run ({type(e).__name__}); this file was NOT screened for it"})
 
     # 11. dual-endianness audio: 16-bit PCM engineered so BOTH the little-endian
     # and big-endian readings are structured audio (a WAV/AIFF twin that plays a
@@ -378,8 +390,12 @@ def scan(filepath, fmt_label, chunks, warns):
                                             f"are structured (LE autocorr {de['le']:.2f}, "
                                             f"BE {de['be']:.2f}); a cross-endian "
                                             f"audio+audio artifact"})
-        except Exception:
-            pass
+        except Exception as e:
+            # a rule that crashed is not a rule that found nothing:
+            # swallowing this made a malformed structure look clean
+            findings.append({"severity": "warn", "offset": None,
+                             "rule": "check_failed",
+                             "message": f"the dual_endian_pcm check could not run ({type(e).__name__}); this file was NOT screened for it"})
 
     # 12. RIFF/AIFF odd-chunk pad byte non-zero. The spec requires a single $00
     # pad after any odd-sized chunk; the walker skips it without checking. A

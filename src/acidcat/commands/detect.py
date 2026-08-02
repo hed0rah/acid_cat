@@ -100,7 +100,10 @@ def _run(args):
         if stream is not sys.stdout:
             stream.close()
         if not quiet:
-            print(f"\n[INFO] Detected BPM/key for {len(rows)} files.", file=sys.stderr)
+            cap_note = (f" (stopped at the -n {num} cap; more files remain)"
+                        if count >= num else "")
+            print(f"\n[INFO] Detected BPM/key for {len(rows)} files{cap_note}.",
+                  file=sys.stderr)
         return 0
 
     print(f"acidcat detect: {target}: No such file or directory", file=sys.stderr)

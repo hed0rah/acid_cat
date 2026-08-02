@@ -74,7 +74,7 @@ def run(args):
     # 1 = some file has a violation (ran fine), 2 = a named input could not be
     # accessed (a real error). a file inside a walked directory that is missing
     # or unreadable is a skip, not a hard error.
-    checked = failed = errors = 0
+    checked = failed = errors = unreadable = 0
     for inp in args.inputs:
         if not os.path.exists(inp):
             print(f"acidcat validate: {inp}: No such file or directory",
@@ -84,22 +84,30 @@ def run(args):
         named = not os.path.isdir(inp)
         for path in _iter_paths([inp]):
             did, ok, error = _check(path, args.quiet)
-            if error and named:
-                errors += 1
+            if error:
+                # Inside a directory walk an unreadable file used to be counted
+                # nowhere -- not checked, not failed, not an error -- so a run
+                # over a library with locked files printed "all N consistent"
+                # and exited 0. It is not a failure, but it is not a pass.
+                if named:
+                    errors += 1
+                else:
+                    unreadable += 1
             if did:
                 checked += 1
                 if not ok:
                     failed += 1
     if errors:
         return 2
+    skipped = f", {unreadable} unreadable (not checked)" if unreadable else ""
     if checked == 0:
-        print("acidcat validate: no structurally-modeled files to check",
-              file=sys.stderr)
-        return 0
+        print("acidcat validate: no structurally-modeled files to check"
+              + skipped, file=sys.stderr)
+        return 1 if unreadable else 0
     if failed:
         print(f"\n{failed} of {checked} file(s) have structural issues "
-              f"(fix with: acidcat repair)")
+              f"(fix with: acidcat repair){skipped}")
         return 1
     if not args.quiet:
-        print(f"\nall {checked} file(s) consistent")
-    return 0
+        print(f"\nall {checked} file(s) consistent{skipped}")
+    return 1 if unreadable else 0

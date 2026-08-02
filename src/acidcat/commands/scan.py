@@ -253,7 +253,11 @@ def run(args):
         writer.writeheader()
         writer.writerows(rows)
     if not quiet:
-        print(f"\n[INFO] Wrote metadata for {len(rows)} files to {output_csv}",
-              file=sys.stderr)
+        # a truncated run and a complete one must not print the same sentence:
+        # "500 files" reads as the library's size, not as where we stopped
+        cap_note = (f" (stopped at the -n {num} cap; more files remain)"
+                    if count >= num else "")
+        print(f"\n[INFO] Wrote metadata for {len(rows)} files to {output_csv}"
+              f"{cap_note}", file=sys.stderr)
 
     return 0

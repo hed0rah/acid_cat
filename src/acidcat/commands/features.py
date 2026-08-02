@@ -95,6 +95,9 @@ def run(args):
         writer.writeheader()
         writer.writerows(rows)
     if not quiet:
-        print(f"\n[INFO] Wrote features for {len(rows)} files to {out_path}", file=sys.stderr)
+        cap_note = (f" (stopped at the -n {num} cap; more files remain)"
+                    if count >= num else "")
+        print(f"\n[INFO] Wrote features for {len(rows)} files to {out_path}"
+              f"{cap_note}", file=sys.stderr)
 
     return 0

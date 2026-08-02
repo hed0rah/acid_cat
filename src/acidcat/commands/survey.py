@@ -44,6 +44,11 @@ def run(args):
     counts = Counter()
     examples = defaultdict(list)
     files_scanned = 0
+    # a .wav the chunk walker cannot read is not "not a WAV" -- for a specimen
+    # hunter it is the interesting case, and dropping it from the denominator
+    # made a directory of broken files report "no RIFF/WAV files found"
+    unparseable = 0
+    capped = False
 
     for root, _, files in os.walk(directory):
         for fn in files:
@@ -55,9 +60,11 @@ def run(args):
                 for cid, _, _ in iter_chunks(path):
                     ids.append(cid)
             except Exception:
+                unparseable += 1
                 continue
 
             if not ids:
+                unparseable += 1
                 continue
 
             if wanted:
@@ -77,6 +84,7 @@ def run(args):
             if not quiet and files_scanned % 200 == 0:
                 print(f"  [survey] {files_scanned} files...", file=sys.stderr)
             if files_scanned >= num:
+                capped = True
                 break
         if files_scanned >= num:
             break
@@ -97,9 +105,21 @@ def run(args):
         stream = open(out_path, 'w', encoding='utf-8')
 
     if fmt_name == "table":
-        stream.write(f"Chunk ID Survey -- {files_scanned} WAV files scanned\n\n")
+        note = f", {unparseable} unparseable" if unparseable else ""
+        if capped:
+            note += f" (stopped at the -n {num} cap -- more files remain)"
+        stream.write(f"Chunk ID Survey -- {files_scanned} WAV files scanned"
+                     f"{note}\n\n")
         if files_scanned == 0:
-            stream.write("  (no RIFF/WAV files found -- survey only processes .wav files)\n")
+            if unparseable:
+                # "none found" and "found, none readable" are different answers,
+                # and for a specimen hunter the second one is the interesting one
+                stream.write(f"  ({unparseable} .wav file(s) found, none readable "
+                             f"as RIFF -- try: acidcat classify DIR, or "
+                             f"acidcat inspect --resync FILE)\n")
+            else:
+                stream.write("  (no RIFF/WAV files found -- survey only "
+                             "processes .wav files)\n")
         for r in rows:
             stream.write(f"  {r['chunk_id']:6s} : {r['files']} files\n")
     else:
@@ -108,7 +128,10 @@ def run(args):
     if stream is not sys.stdout:
         stream.close()
     elif not quiet:
-        print(f"\n[INFO] Scanned {files_scanned} WAV file(s), {len(counts)} unique chunk ID(s).",
-              file=sys.stderr)
+        tail = f", {unparseable} unparseable" if unparseable else ""
+        if capped:
+            tail += f", stopped at the -n {num} cap"
+        print(f"\n[INFO] Scanned {files_scanned} WAV file(s), {len(counts)} "
+              f"unique chunk ID(s){tail}.", file=sys.stderr)
 
     return 0
