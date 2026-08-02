@@ -265,8 +265,8 @@ def audio_score(feat):
     return strength * shape * dist * live
 
 
-def _bulk_looks_float(np, data, window, step, count):
-    """Vectorized _looks_float, as a conservative pre-filter.
+def _bulk_looks_float(np, data, window, step, first, count):
+    """Vectorized _looks_float over windows [first, first+count).
 
     Returns a bool per window: False means the per-window probe would also have
     said no, so it can be skipped. A True is only a hint -- _looks_float still
@@ -279,13 +279,22 @@ def _bulk_looks_float(np, data, window, step, count):
     flt = np.frombuffer(data, dtype=np.float32, count=len(data) // 4)
     fstep = max(1, nf // 32)
     picks = np.arange(0, nf, fstep, dtype=np.int64)          # same indices
-    base = np.arange(count, dtype=np.int64) * (step // 4)
+    base = (np.arange(first, first + count, dtype=np.int64)) * (step // 4)
     idx = base[:, None] + picks[None, :]
     if idx[-1, -1] >= flt.size:
         return [True] * count
     inrange = np.abs(flt[idx]) <= _FLOAT_RANGE               # NaN -> False
     frac = inrange.sum(axis=1) / picks.size
     return frac >= _FLOAT_MIN_FRAC
+
+
+# Peak numpy allocation per batch. The vectorized path holds several
+# (windows x window) float64 arrays at once, so doing every window in one shot
+# costs ~46x the input -- 1.4 GB for a 32 MB file, and far worse for the sizes
+# `locate` is pointed at. Batching makes the memory flat in input size at no
+# measurable cost in speed, because each batch is still a big enough array for
+# numpy to amortize its per-call overhead.
+_BULK_BATCH_BYTES = 48 * 1024 * 1024
 
 
 def _bulk_features(data, window, step, count):
@@ -299,15 +308,32 @@ def _bulk_features(data, window, step, count):
     no independent opinion about what counts as audio.
 
     Worth 7x on a large blob, which is the difference between a 32 MB image
-    taking seconds and taking a quarter of a minute.
+    taking seconds and taking a quarter of a minute. Runs in batches so peak
+    memory is flat in input size -- see _BULK_BATCH_BYTES.
     """
     try:
         import numpy as np
-        from numpy.lib.stride_tricks import as_strided
     except Exception:
         return None
 
-    buf = np.frombuffer(data, dtype=np.uint8)
+    per_batch = max(1, _BULK_BATCH_BYTES // max(1, window * 8))
+    out = []
+    for first in range(0, count, per_batch):
+        nb = min(per_batch, count - first)
+        batch = _bulk_batch(np, data, window, step, first, nb)
+        if batch is None:
+            return None
+        out.extend(batch)
+    return out
+
+
+def _bulk_batch(np, data, window, step, first, count):
+    """One batch of windows, starting at window index `first`."""
+    from numpy.lib.stride_tricks import as_strided
+
+    at = first * step
+    span = (count - 1) * step + window
+    buf = np.frombuffer(data, dtype=np.uint8, count=span, offset=at)
     win = as_strided(buf, (count, window),
                      (step * buf.strides[0], buf.strides[0]))
 
@@ -346,7 +372,7 @@ def _bulk_features(data, window, step, count):
     # doing: as a per-window call it was ~23% of this function, 400k struct
     # unpacks. `v == v and -R <= v <= R` reduces to `abs(v) <= R` because a NaN
     # fails every comparison anyway.
-    maybe_float = _bulk_looks_float(np, data, window, step, count)
+    maybe_float = _bulk_looks_float(np, data, window, step, first, count)
 
     # windows above the entropy ceiling take the early-out, exactly as the
     # per-window path does, and float-looking windows are handed back to it
@@ -354,7 +380,7 @@ def _bulk_features(data, window, step, count):
     out = []
     for i in range(count):
         if not dead[i] and maybe_float[i]:
-            at = i * step
+            at = (first + i) * step
             chunk = data[at:at + window]
             if _looks_float(chunk):
                 out.append(window_features(chunk))

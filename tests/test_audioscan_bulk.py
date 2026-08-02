@@ -135,3 +135,54 @@ def test_short_input_skips_the_bulk_path():
     """Below the window count where vectorizing pays, the loop is used."""
     small = _sine(5000)
     assert A.scan(small) == _pure(small)
+
+
+def test_peak_memory_is_flat_in_input_size():
+    """Regression: the vectorized path first held every window's arrays at once,
+    which cost ~46x the input -- 1.4 GB for a 32 MB file, and an out-of-memory
+    at the sizes locate is pointed at. Batching made it flat. Asserted as a
+    ratio against a doubled input rather than an absolute, so the test does not
+    encode this machine's numbers."""
+    import tracemalloc
+    data = _noise(400_000) + _sine(400_000)
+
+    def peak(buf):
+        tracemalloc.start()
+        try:
+            A.scan(buf)
+            return tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+
+    original = A._BULK_BATCH_BYTES
+    try:
+        # a batch small enough that the test input spans several of them --
+        # at the shipping size these inputs would fit in one batch and the
+        # measurement would prove nothing
+        A._BULK_BATCH_BYTES = 512 * 1024
+        small = peak(data)
+        large = peak(data * 3)
+    finally:
+        A._BULK_BATCH_BYTES = original
+    # the retained feature dicts grow with input; the numpy arrays must not
+    assert large < small * 2.0, (
+        f"peak allocation tracked input size ({small} -> {large} for 3x the "
+        "bytes); the batch loop is not bounding numpy allocation")
+
+
+def test_batching_does_not_change_the_answer():
+    """Batch boundaries must be invisible: a window straddling one still gets
+    the same features, and the region set is unchanged."""
+    data = _noise(60_000) + _sine(120_000) + _noise(60_000)
+    ref = A.scan(data)
+    original = A._BULK_BATCH_BYTES
+    try:
+        for probe in (1, 3 * 1024, 64 * 1024, 1 << 30):   # 1 window/batch .. one batch
+            A._BULK_BATCH_BYTES = probe
+            got = A.scan(data)
+            assert [(r["start"], r["end"]) for r in got] == \
+                   [(r["start"], r["end"]) for r in ref], f"batch={probe}"
+            for a, b in zip(got, ref):
+                assert a["confidence"] == pytest.approx(b["confidence"], abs=1e-9)
+    finally:
+        A._BULK_BATCH_BYTES = original
