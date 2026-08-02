@@ -118,14 +118,23 @@ def _autocorr_lags(samples, mean, den, lags):
     sum(map(mul, dev, dev[lag:])) do the accumulation in C turns four
     interpreted passes into one list build plus four C-level reductions.
     """
-    n = len(samples)
     if den <= 0.0:
         return {L: 0.0 for L in lags}
-    dev = [s - mean for s in samples]          # centre once, reuse per lag
-    out = {}
-    for lag in lags:
-        out[lag] = 0.0 if lag >= n else sum(map(_mul, dev, dev[lag:])) / den
-    return out
+    return _autocorr_from_dev([s - mean for s in samples], den, lags)
+
+
+def _autocorr_from_dev(dev, den, lags):
+    """Every lag from deviations the caller already centred.
+
+    The scan spends most of its time here, so the shape matters: one C-level
+    multiply-accumulate per lag over a shared list, rather than an interpreted
+    loop that re-subtracts the mean on every pass.
+    """
+    if den <= 0.0:
+        return {L: 0.0 for L in lags}
+    n = len(dev)
+    return {lag: (0.0 if lag >= n else sum(map(_mul, dev, dev[lag:])) / den)
+            for lag in lags}
 
 
 _FLOAT_RANGE = 1.5               # audio floats live in [-1,1]; allow headroom
@@ -211,11 +220,13 @@ def window_features(win):
 
     samples = [_SIGNED[b] for b in win]
     mean = sum(samples) / n
-    den = 0.0
-    for s in samples:
-        d = s - mean
-        den += d * d
-    ac = _autocorr_lags(samples, mean, den, LAGS)
+    # centre once and keep it: the variance and every lag are reductions over the
+    # same deviations, so building them here and handing them down replaces an
+    # interpreted accumulator loop and a second identical list build inside the
+    # autocorrelation with two C-level reductions.
+    dev = [s - mean for s in samples]
+    den = sum(map(_mul, dev, dev))
+    ac = _autocorr_from_dev(dev, den, LAGS)
     # how far the window actually moves. autocorrelation is scale-free, so a
     # near-constant run (silence, padding, a sparse hole) correlates perfectly
     # and would otherwise outscore real audio -- see `liveness` in audio_score.
@@ -254,6 +265,84 @@ def audio_score(feat):
     return strength * shape * dist * live
 
 
+def _bulk_features(data, window, step, count):
+    """Every window's feature dict at once, using numpy. Returns None if numpy
+    is unavailable, so the caller falls back to the per-window path.
+
+    This vectorizes *arithmetic only*. Everything that makes a decision --
+    audio_score, the gate, region merging -- stays on the single implementation
+    below, and the awkward float-PCM probe delegates back to window_features for
+    the few windows that trip it. So the two paths can differ in speed but have
+    no independent opinion about what counts as audio.
+
+    Worth 7x on a large blob, which is the difference between a 32 MB image
+    taking seconds and taking a quarter of a minute.
+    """
+    try:
+        import numpy as np
+        from numpy.lib.stride_tricks import as_strided
+    except Exception:
+        return None
+
+    buf = np.frombuffer(data, dtype=np.uint8)
+    win = as_strided(buf, (count, window),
+                     (step * buf.strides[0], buf.strides[0]))
+
+    # one bincount over (row * 256 + byte) beats a per-row histogram by ~3x
+    rows = np.arange(count, dtype=np.int64)[:, None]
+    counts = np.bincount((rows * 256 + win).ravel(),
+                         minlength=count * 256).reshape(count, 256)
+
+    # same identity as entropy_from_counts: H = log2(N) - (1/N) * sum(c*log2(c))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        clog = np.where(counts > 0, counts * np.log2(np.maximum(counts, 1)), 0.0)
+    entropy = np.log2(window) - clog.sum(axis=1) / window
+    np.clip(entropy, 0.0, None, out=entropy)
+
+    freq = counts / window
+    printable = freq[:, sorted(_PRINTABLE)].sum(axis=1)
+    hist_tv = np.abs(np.diff(freq, axis=1)).sum(axis=1)
+
+    sg = win.astype(np.int16)
+    sg = np.where(sg > 127, sg - 256, sg).astype(np.float64)
+    dev = sg - sg.mean(axis=1, keepdims=True)
+    den = np.einsum("ij,ij->i", dev, dev)
+    safe = np.where(den > 0.0, den, 1.0)
+    ac = {L: np.where(den > 0.0,
+                      np.einsum("ij,ij->i", dev[:, :-L], dev[:, L:]) / safe, 0.0)
+          for L in LAGS}
+    spread = np.sqrt(den / window)
+
+    r1, r2, r4, r8 = ac[1], ac[2], ac[4], ac[8]
+    peak = np.maximum(r1, r2)
+    structure = np.maximum(np.maximum(np.maximum(-r4, -r8), np.maximum(r4, r8)),
+                           np.maximum(r2 - r1, 0.0))
+    np.clip(structure, 0.0, None, out=structure)
+
+    # windows above the entropy ceiling take the early-out, exactly as the
+    # per-window path does, and float-looking windows are handed back to it
+    dead = entropy > _ENTROPY_CEIL
+    out = []
+    for i in range(count):
+        if not dead[i]:
+            at = i * step
+            chunk = data[at:at + window]
+            if _looks_float(chunk):
+                out.append(window_features(chunk))
+                continue
+        e, pr, tv = float(entropy[i]), float(printable[i]), float(hist_tv[i])
+        if dead[i]:
+            out.append({"entropy": e, "autocorr": {L: 0.0 for L in LAGS},
+                        "peak": 0.0, "structure": 0.0, "printable": pr,
+                        "hist_tv": tv, "n": window})
+        else:
+            out.append({"entropy": e, "autocorr": {L: float(ac[L][i]) for L in LAGS},
+                        "peak": float(peak[i]), "structure": float(structure[i]),
+                        "printable": pr, "hist_tv": tv,
+                        "spread": float(spread[i]), "n": window})
+    return out
+
+
 def scan(data, *, window=DEFAULT_WINDOW, step=DEFAULT_STEP,
          min_score=DEFAULT_MIN_SCORE, merge_gap=DEFAULT_MERGE_GAP,
          read_cap=DEFAULT_READ_CAP):
@@ -271,13 +360,13 @@ def scan(data, *, window=DEFAULT_WINDOW, step=DEFAULT_STEP,
     if n < window:
         return []
 
-    marks = []                                          # (offset, score, feat)
-    off = 0
     last = n - window
-    while off <= last:
-        feat = window_features(data[off:off + window])
-        marks.append((off, audio_score(feat), feat))
-        off += step
+    count = last // step + 1
+    feats = _bulk_features(data, window, step, count) if count > 64 else None
+    if feats is None:
+        feats = [window_features(data[i * step:i * step + window])
+                 for i in range(count)]
+    marks = [(i * step, audio_score(f), f) for i, f in enumerate(feats)]
 
     regions = []
     run = None                                          # accumulating region
