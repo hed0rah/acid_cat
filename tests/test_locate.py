@@ -215,13 +215,18 @@ def test_oversize_input_reports_partial_statistical_coverage(tmp_path, capsys,
     audio from only part of it with nothing on screen saying so."""
     from acidcat.cli import main
     from acidcat.core.forensics import audioscan
+    from acidcat.core.forensics import framescan
     monkeypatch.setattr(audioscan, "DEFAULT_READ_CAP", 4096)
+    monkeypatch.setattr(framescan, "_READ_CAP", 4096)
     p = tmp_path / "big.img"
     p.write_bytes(bytes(9000))
     main(["locate", str(p)])
     err = capsys.readouterr().err
-    assert "statistical scan covers the first" in err
-    assert "found throughout" in err
+    # both bounded engines must name themselves -- an earlier version claimed
+    # streams were "found throughout" while the frame scan was capping too
+    assert "raw-audio scan covers the first" in err
+    assert "stream scan covers the first" in err
+    assert "container signatures are found throughout" in err
 
 
 def test_strict_mode_does_not_claim_partial_coverage(tmp_path, capsys,
@@ -229,8 +234,10 @@ def test_strict_mode_does_not_claim_partial_coverage(tmp_path, capsys,
     """strict skips the statistical pass entirely, so the caveat would be noise."""
     from acidcat.cli import main
     from acidcat.core.forensics import audioscan
+    from acidcat.core.forensics import framescan
     monkeypatch.setattr(audioscan, "DEFAULT_READ_CAP", 4096)
+    monkeypatch.setattr(framescan, "_READ_CAP", 1 << 40)
     p = tmp_path / "big.img"
     p.write_bytes(bytes(9000))
     main(["locate", str(p), "--mode", "strict"])
-    assert "statistical scan covers" not in capsys.readouterr().err
+    assert "raw-audio scan covers" not in capsys.readouterr().err

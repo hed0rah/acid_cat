@@ -135,15 +135,22 @@ def run(args):
         print("acidcat locate: no input bytes", file=sys.stderr)
         return 1
 
-    # The signature sweep and frame scan cover the whole buffer, but the
-    # statistical pass caps out. Saying so matters: without this, a 500 MB image
-    # reports containers from everywhere and raw audio only from the first half,
-    # and nothing on screen distinguishes "no raw audio there" from "never looked".
+    # Only the signature sweep is unbounded. The statistical pass and the frame
+    # scan each cap out, so on a large image they cover a prefix while containers
+    # are found everywhere -- and nothing on screen would distinguish "no raw
+    # audio there" from "never looked". Name the engines that stopped short
+    # rather than making a blanket claim about coverage.
     from acidcat.core.forensics.audioscan import DEFAULT_READ_CAP
+    from acidcat.core.forensics.framescan import _READ_CAP as FRAME_CAP
+    limited = []
     if args.mode != "strict" and len(data) > DEFAULT_READ_CAP:
-        print(f"acidcat locate: statistical scan covers the first "
-              f"{DEFAULT_READ_CAP // (1024 * 1024)} MB of "
-              f"{len(data) / (1024 * 1024):.0f} MB; containers and streams are "
+        limited.append(("raw-audio scan", DEFAULT_READ_CAP))
+    if len(data) > FRAME_CAP:
+        limited.append(("stream scan", FRAME_CAP))
+    for label, cap in limited:
+        print(f"acidcat locate: {label} covers the first "
+              f"{cap // (1024 * 1024)} MB of "
+              f"{len(data) / (1024 * 1024):.0f} MB; container signatures are "
               f"found throughout", file=sys.stderr)
 
     recs = locatemod.locate(data, mode=args.mode)
