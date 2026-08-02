@@ -15,13 +15,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # pyproject claims 3.9 through 3.13; test the ends and the middle
-        # rather than trusting the classifier. Windows is here because it is
-        # where this tool is actually developed and used, and because the
-        # path/pipe/encoding differences are real -- a closed-pipe bug that
-        # only reproduces on Windows has already been fixed once.
+        # pyproject claims 3.10 through 3.13; test the ends and the middle
+        # rather than trusting the classifier. 3.9 was claimed until CI proved
+        # `pip install acidcat[mcp]` (and therefore [all]) could not resolve on
+        # it -- mcp requires >=3.10 -- and 3.9 has been EOL since 2025-10.
+        # Windows is here because it is where this tool is developed and used,
+        # and because its path/pipe/encoding differences are real rather than
+        # theoretical: a closed-pipe bug and a hardcoded /tmp in a test have
+        # each already cost a fix.
         os: [ubuntu-latest]
-        python-version: ["3.9", "3.11", "3.13"]
+        python-version: ["3.10", "3.11", "3.13"]
         include:
           - os: windows-latest
             python-version: "3.13"

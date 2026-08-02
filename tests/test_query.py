@@ -115,10 +115,18 @@ def two_library_setup(tmp_path, monkeypatch):
 
 
 def _run(args):
-    """Run the query command capturing stdout to JSON."""
-    args.output_format = "json"
-    args.output = "/tmp/_acidcat_query_test.json"  # any tmp path
+    """Run the query command capturing stdout to JSON.
+
+    The scratch path comes from tempfile rather than a literal "/tmp/...":
+    that path exists under Git Bash on a developer's Windows box but not on a
+    Windows CI runner, so the hardcoded version passed locally and failed the
+    moment the suite ran anywhere else.
+    """
     import os
+    import tempfile
+    args.output_format = "json"
+    args.output = os.path.join(tempfile.gettempdir(),
+                               "_acidcat_query_test.json")
     if os.path.isfile(args.output):
         os.remove(args.output)
     rc = query_cmd.run(args)
