@@ -150,7 +150,7 @@ def test_batch_wrap_makes_headerless_regions_playable(tmp_path, capsys):
     img.write_bytes(bytes(1024) + payload)
     recs = [{"offset": 1024, "length": len(payload), "kind": "blob",
              "format": None,
-             "geometry": {"width": 2, "channels": 1, "endian": "le",
+             "geometry": {"width": 16, "channels": 1, "endian": "le",
                           "float": False, "rate": None,
                           "rate_candidates": [44100]}}]
     src = tmp_path / "regions.json"
@@ -190,7 +190,7 @@ def test_batch_wrap_honours_big_endian_geometry(tmp_path):
     src = tmp_path / "r.json"
     src.write_text(json.dumps([{"offset": 0, "length": len(payload),
                                 "kind": "blob", "format": None,
-                                "geometry": {"width": 2, "channels": 1,
+                                "geometry": {"width": 16, "channels": 1,
                                              "endian": "be", "rate": 44100}}]))
     out = tmp_path / "out"
     assert main(["carve", str(img), "--batch", str(src), "--wrap",
@@ -222,7 +222,7 @@ def test_batch_without_wrap_is_unchanged(tmp_path):
     src = tmp_path / "r.json"
     src.write_text(json.dumps([{"offset": 0, "length": 256, "kind": "blob",
                                 "format": None,
-                                "geometry": {"width": 2, "channels": 1,
+                                "geometry": {"width": 16, "channels": 1,
                                              "endian": "le", "rate": 44100}}]))
     out = tmp_path / "out"
     assert main(["carve", str(img), "--batch", str(src), "-o", str(out)]) == 0
@@ -237,8 +237,8 @@ def test_locate_records_carry_geometry_to_carve():
     from acidcat.commands.carve import _parse_records
     recs = _parse_records(json.dumps([{"offset": 0, "end": 16, "length": 16,
                                        "kind": "blob", "format": None,
-                                       "geometry": {"width": 2}}]))
-    assert recs[0]["geometry"] == {"width": 2}
+                                       "geometry": {"width": 16}}]))
+    assert recs[0]["geometry"] == {"width": 16}
 
 
 def test_hand_written_records_need_only_offset_and_length(tmp_path):
@@ -259,3 +259,39 @@ def test_a_record_with_neither_length_nor_end_is_a_clear_error(tmp_path):
     from acidcat.commands.carve import _parse_records
     with _pytest.raises(ValueError, match="neither"):
         _parse_records(json.dumps([{"offset": 8}]))
+
+
+def test_geometry_width_is_bits_not_bytes(tmp_path):
+    """Regression on a unit confusion I shipped for one commit. audioscan's
+    `width` is BITS throughout (analyze_geometry divides by 8 to get bytes), and
+    a version of --wrap tried to guess the unit -- which would have rendered a
+    genuine 8-bit region with a 64-bit header."""
+    import json
+    img = tmp_path / "d.img"
+    img.write_bytes(bytes(range(256)))
+    src = tmp_path / "r.json"
+    src.write_text(json.dumps([{"offset": 0, "length": 256, "kind": "blob",
+                                "format": None,
+                                "geometry": {"width": 8, "channels": 1,
+                                             "endian": None, "rate": 44100}}]))
+    out = tmp_path / "out"
+    assert main(["carve", str(img), "--batch", str(src), "--wrap",
+                 "-o", str(out)]) == 0
+    got = sorted(out.iterdir())[0]
+    assert got.suffix == ".wav"
+    assert _parse(got.read_bytes())[3] == 8, "8-bit geometry did not stay 8-bit"
+
+
+def test_tsv_and_json_record_paths_agree(tmp_path):
+    """`locate --analyze` emits geometry in both formats, so --wrap must work
+    from either. The TSV parser used to ignore those columns, which made the
+    two output formats silently non-interchangeable."""
+    import json
+    from acidcat.commands.carve import _parse_records
+    tsv = _parse_records("0x00000000\t256\tblob\traw-pcm\t0.91\t16\t1\tbe\n")
+    assert tsv[0]["geometry"] == {"width": 16, "channels": 1, "endian": "be"}
+    js = _parse_records(json.dumps([{"offset": 0, "length": 256, "kind": "blob",
+                                     "format": None,
+                                     "geometry": {"width": 16, "channels": 1,
+                                                  "endian": "be"}}]))
+    assert tsv[0]["geometry"] == js[0]["geometry"]

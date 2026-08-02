@@ -241,3 +241,40 @@ def test_strict_mode_does_not_claim_partial_coverage(tmp_path, capsys,
     p.write_bytes(bytes(9000))
     main(["locate", str(p), "--mode", "strict"])
     assert "raw-audio scan covers" not in capsys.readouterr().err
+
+
+def test_min_confidence_filters_and_says_what_it_withheld(tmp_path, capsys):
+    """`locate | carve --batch` should be a one-liner without jq in the middle.
+    But a filtered "nothing found" must not look like a genuine one, so the
+    count that was withheld goes to stderr."""
+    from acidcat.cli import main
+    import struct, math
+    # a tonal region (scores high) and noise (scores low)
+    tone = bytes((128 + int(90 * math.sin(2 * math.pi * i / 64))) & 0xFF
+                 for i in range(120_000))
+    rng = 1
+    noise = bytearray()
+    for _ in range(120_000):
+        rng = (1103515245 * rng + 12345) & 0x7FFFFFFF
+        noise.append((rng >> 16) & 0xFF)
+    p = tmp_path / "mix.img"
+    p.write_bytes(bytes(noise) + tone)
+
+    main(["locate", str(p), "--output-format", "tsv"])
+    all_rows = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+
+    main(["locate", str(p), "--output-format", "tsv", "--min-confidence", "0.99"])
+    cap = capsys.readouterr()
+    strict_rows = [l for l in cap.out.splitlines() if l.strip()]
+    assert len(strict_rows) < len(all_rows), "filter had no effect"
+    assert "not reported" in cap.err, "silently withheld regions"
+
+
+def test_min_confidence_zero_is_the_old_behaviour(tmp_path, capsys):
+    from acidcat.cli import main
+    p = tmp_path / "x.img"
+    p.write_bytes(bytes(9000))
+    main(["locate", str(p), "--output-format", "tsv"])
+    base = capsys.readouterr().out
+    main(["locate", str(p), "--output-format", "tsv", "--min-confidence", "0"])
+    assert capsys.readouterr().out == base

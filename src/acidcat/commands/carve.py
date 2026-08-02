@@ -40,6 +40,10 @@ from acidcat.core.infra.sniff import AUDIO_CONTAINER_EXT as _EXT
 
 _ENDIAN = {"be": ">", "le": "<", "both": "both"}
 
+# Sample rate is not recoverable from raw bytes. When --wrap has to write a
+# header anyway, this is the assumption it states rather than hides.
+_ASSUMED_RATE = 44100
+
 
 def register(subparsers):
     p = subparsers.add_parser(
@@ -134,9 +138,20 @@ def _parse_records(text):
         except ValueError:
             continue
         fmt = parts[3] if len(parts) >= 4 else None
+        # `locate --analyze --output-format tsv` appends width/channels/endian.
+        # Reading them here is what makes --wrap work from the TSV path too;
+        # without it the two output formats were not interchangeable.
+        geometry = None
+        if len(parts) >= 8:
+            try:
+                geometry = {"width": int(parts[5]), "channels": int(parts[6]),
+                            "endian": parts[7] or None}
+            except ValueError:
+                geometry = None
         out.append({"offset": off, "length": length,
                     "kind": parts[2] if len(parts) >= 3 else "region",
-                    "format": None if fmt in (None, "raw-pcm", "") else fmt})
+                    "format": None if fmt in (None, "raw-pcm", "") else fmt,
+                    "geometry": geometry})
     return out
 
 
@@ -180,8 +195,12 @@ def _run_batch(args, filepath, size):
         extra = []
         if skipped:
             extra.append(f"{skipped} out-of-range skipped")
-        if getattr(args, "wrap", False):
-            extra.append(f"{headered} headerless region(s) wrapped as WAV")
+        if getattr(args, "wrap", False) and headered:
+            chosen = getattr(args, "rate", None)
+            how = (f"at {chosen} Hz" if chosen
+                   else f"at an assumed {_ASSUMED_RATE} Hz -- pass --rate if "
+                        f"you know better")
+            extra.append(f"{headered} headerless region(s) wrapped as WAV {how}")
         print(f"carved {done} region(s) -> {args.output}"
               + (f" ({', '.join(extra)})" if extra else ""), file=sys.stderr)
     return 0
@@ -198,18 +217,20 @@ def _wrap_blob(blob, geometry, rate_override):
     from acidcat.commands.wrap import _swap
 
     geo = geometry or {}
+    # `width` is BITS throughout audioscan (analyze_geometry does width // 8 to
+    # get bytes). Guessing at the unit here would silently render a genuine
+    # 8-bit region as a 64-bit header.
     bits = geo.get("width")
-    bits = bits * 8 if bits in (1, 2, 3, 4, 8) else bits
     if bits not in (8, 16, 24, 32, 64):
         return None
     channels = geo.get("channels") or 1
     floating = bool(geo.get("float"))
-    # rate is playback metadata: it is not in the bytes, so analyze reports it
-    # as None with candidates. Take the caller's value, else the first candidate.
-    rate = rate_override or geo.get("rate")
-    if not rate:
-        cands = geo.get("rate_candidates") or []
-        rate = cands[0] if cands else 44100
+    # Rate is playback metadata -- it is not in the bytes, and analyze reports
+    # it as None with a candidate list. Taking candidates[0] would mean 8000 Hz,
+    # which is the least likely of them and would play everything five times too
+    # slow. There is no evidence to weigh here, so use the common default and
+    # let the caller override; the summary line says the rate was assumed.
+    rate = rate_override or geo.get("rate") or _ASSUMED_RATE
     if not 1 <= rate <= 768000 or channels < 1:
         return None
 

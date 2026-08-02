@@ -48,6 +48,12 @@ def register(subparsers):
                         "obfuscation lens. The reported key is a candidate "
                         "(polarity/low-bits are ambiguous). Reads at most 16 MB.")
     add_output_format_arg(p, only=("table", "json", "tsv"))
+    p.add_argument("--min-confidence", type=float, default=0.0, metavar="C",
+                   help="Only report regions at or above this confidence (0..1). "
+                        "A signature-matched container is 0.90; a statistical "
+                        "blob can be anything. Filtering here keeps "
+                        "`locate | carve --batch` a one-liner instead of "
+                        "needing jq in the middle.")
     p.add_argument("-v", "--verbose", action="store_true",
                    help="Show the evidence behind each region (entropy, "
                         "autocorrelation, distribution) and any debug tells "
@@ -160,6 +166,17 @@ def run(args):
                       key=lambda r: r["offset"])
     if args.analyze:
         _analyze(data, recs)
+
+    floor = getattr(args, "min_confidence", 0.0) or 0.0
+    if floor > 0:
+        kept = [r for r in recs if r["confidence"] >= floor]
+        dropped = len(recs) - len(kept)
+        recs = kept
+        # say what was withheld: a filtered "nothing found" and a genuine one
+        # must not look the same
+        if dropped and not args.quiet:
+            print(f"acidcat locate: {dropped} region(s) below confidence "
+                  f"{floor:g} not reported", file=sys.stderr)
 
     if args.output_format == "json":
         json.dump([_public(r, args.verbose) for r in recs], sys.stdout, indent=2)
