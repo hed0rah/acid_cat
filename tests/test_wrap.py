@@ -131,3 +131,131 @@ def test_the_recovery_pipeline_composes_over_stdio(tmp_path):
         input=carved.stdout, capture_output=True, env=env)
     assert wrapped.returncode == 0, wrapped.stderr
     assert _parse(wrapped.stdout)[4] == payload
+
+
+# ------------------------------------------- carve --batch --wrap (bulk QoL)
+
+def _wav_bytes(n_frames=64, rate=22050):
+    body = (b"fmt " + struct.pack("<I", 16)
+            + struct.pack("<HHIIHH", 1, 1, rate, rate * 2, 2, 16)
+            + b"data" + struct.pack("<I", n_frames * 2) + bytes(n_frames * 2))
+    return b"RIFF" + struct.pack("<I", len(body) + 4) + b"WAVE" + body
+
+
+def test_batch_wrap_makes_headerless_regions_playable(tmp_path, capsys):
+    """The bulk case: recovering 18 blobs should not mean 18 shell invocations."""
+    import json
+    payload = _pcm_le(list(range(-500, 500)))
+    img = tmp_path / "d.img"
+    img.write_bytes(bytes(1024) + payload)
+    recs = [{"offset": 1024, "length": len(payload), "kind": "blob",
+             "format": None,
+             "geometry": {"width": 2, "channels": 1, "endian": "le",
+                          "float": False, "rate": None,
+                          "rate_candidates": [44100]}}]
+    src = tmp_path / "regions.json"
+    src.write_text(json.dumps(recs))
+    out = tmp_path / "out"
+    assert main(["carve", str(img), "--batch", str(src), "--wrap",
+                 "-o", str(out)]) == 0
+    files = sorted(out.iterdir())
+    assert len(files) == 1 and files[0].suffix == ".wav", files
+    assert _parse(files[0].read_bytes())[4] == payload
+    assert "wrapped as WAV" in capsys.readouterr().err
+
+
+def test_batch_wrap_leaves_containers_alone(tmp_path):
+    """A carved container already has a header. Wrapping it would produce a
+    WAV inside a WAV, and the recovered file would no longer match the original."""
+    import json
+    original = _wav_bytes()
+    img = tmp_path / "d.img"
+    img.write_bytes(bytes(512) + original)
+    src = tmp_path / "r.json"
+    src.write_text(json.dumps([{"offset": 512, "length": len(original),
+                                "kind": "container", "format": "wav"}]))
+    out = tmp_path / "out"
+    assert main(["carve", str(img), "--batch", str(src), "--wrap",
+                 "-o", str(out)]) == 0
+    got = sorted(out.iterdir())[0]
+    assert got.read_bytes() == original, "a container was re-wrapped"
+
+
+def test_batch_wrap_honours_big_endian_geometry(tmp_path):
+    import json
+    samples = [0x0102, 0x0304, -2, 7]
+    payload = b"".join(struct.pack(">h", v) for v in samples)
+    img = tmp_path / "d.img"
+    img.write_bytes(payload)
+    src = tmp_path / "r.json"
+    src.write_text(json.dumps([{"offset": 0, "length": len(payload),
+                                "kind": "blob", "format": None,
+                                "geometry": {"width": 2, "channels": 1,
+                                             "endian": "be", "rate": 44100}}]))
+    out = tmp_path / "out"
+    assert main(["carve", str(img), "--batch", str(src), "--wrap",
+                 "-o", str(out)]) == 0
+    got = sorted(out.iterdir())[0].read_bytes()
+    assert _parse(got)[4] == b"".join(struct.pack("<h", v) for v in samples)
+
+
+def test_batch_wrap_falls_back_to_raw_without_geometry(tmp_path):
+    """No geometry means no defensible header, so write the bytes and say
+    nothing rather than invent a sample format."""
+    import json
+    img = tmp_path / "d.img"
+    img.write_bytes(bytes(range(256)))
+    src = tmp_path / "r.json"
+    src.write_text(json.dumps([{"offset": 0, "length": 256, "kind": "blob",
+                                "format": None}]))
+    out = tmp_path / "out"
+    assert main(["carve", str(img), "--batch", str(src), "--wrap",
+                 "-o", str(out)]) == 0
+    assert sorted(out.iterdir())[0].suffix == ".raw"
+
+
+def test_batch_without_wrap_is_unchanged(tmp_path):
+    """The flag is opt-in; existing pipelines must behave exactly as before."""
+    import json
+    img = tmp_path / "d.img"
+    img.write_bytes(bytes(range(256)))
+    src = tmp_path / "r.json"
+    src.write_text(json.dumps([{"offset": 0, "length": 256, "kind": "blob",
+                                "format": None,
+                                "geometry": {"width": 2, "channels": 1,
+                                             "endian": "le", "rate": 44100}}]))
+    out = tmp_path / "out"
+    assert main(["carve", str(img), "--batch", str(src), "-o", str(out)]) == 0
+    got = sorted(out.iterdir())[0]
+    assert got.suffix == ".raw" and got.read_bytes() == bytes(range(256))
+
+
+def test_locate_records_carry_geometry_to_carve():
+    """Regression: _parse_records dropped `geometry`, so --wrap silently
+    wrapped nothing even when locate --analyze had inferred it."""
+    import json
+    from acidcat.commands.carve import _parse_records
+    recs = _parse_records(json.dumps([{"offset": 0, "end": 16, "length": 16,
+                                       "kind": "blob", "format": None,
+                                       "geometry": {"width": 2}}]))
+    assert recs[0]["geometry"] == {"width": 2}
+
+
+def test_hand_written_records_need_only_offset_and_length(tmp_path):
+    """Regression: dict.get evaluates its default eagerly, so the old
+    `r.get("length", r["end"] - r["offset"])` raised KeyError on any record
+    carrying length but not end. locate always emits both, so this only bit
+    someone scripting their own regions -- which is a supported use."""
+    import json
+    from acidcat.commands.carve import _parse_records
+    recs = _parse_records(json.dumps([{"offset": 8, "length": 16}]))
+    assert recs == [{"offset": 8, "length": 16, "kind": "region",
+                     "format": None, "geometry": None}]
+
+
+def test_a_record_with_neither_length_nor_end_is_a_clear_error(tmp_path):
+    import json
+    import pytest as _pytest
+    from acidcat.commands.carve import _parse_records
+    with _pytest.raises(ValueError, match="neither"):
+        _parse_records(json.dumps([{"offset": 8}]))

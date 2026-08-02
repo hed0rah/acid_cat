@@ -80,6 +80,15 @@ def register(subparsers):
     p.add_argument("--batch", metavar="SRC",
                    help="Extract many regions: read `locate` records (JSON or TSV) "
                         "from SRC ('-' = stdin) and carve each from TARGET into -o DIR.")
+    p.add_argument("--wrap", action="store_true",
+                   help="With --batch: give headerless regions a WAV header "
+                        "using the geometry from `locate --analyze`, so they "
+                        "come out playable instead of as .raw. Containers "
+                        "already have their own header and are left alone.")
+    p.add_argument("--rate", type=int, metavar="HZ",
+                   help="With --wrap: sample rate for wrapped regions. Rate is "
+                        "playback metadata and is not recoverable from the "
+                        "bytes, so this overrides the guess.")
     p.add_argument("-o", "--output", help="Write here (default: stdout; a DIR for --batch).")
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Suppress the summary line on stderr.")
@@ -96,8 +105,25 @@ def _parse_records(text):
         import json
         d = json.loads(text)
         recs = d if isinstance(d, list) else d.get("regions", [])
-        return [{"offset": r["offset"], "length": r.get("length", r["end"] - r["offset"]),
-                 "kind": r.get("kind", "region"), "format": r.get("format")} for r in recs]
+        # geometry rides along when `locate --analyze` produced it; --wrap needs
+        # it, and dropping it here is why the two verbs could not compose.
+        # length is resolved the long way because dict.get evaluates its default
+        # eagerly -- `r.get("length", r["end"] - r["offset"])` raises KeyError on
+        # a record that has length and no end, which is a perfectly reasonable
+        # thing for someone scripting their own regions to write.
+        out = []
+        for r in recs:
+            length = r.get("length")
+            if length is None:
+                if "end" not in r:
+                    raise ValueError(
+                        f"region at offset {r.get('offset')} has neither "
+                        f"'length' nor 'end'")
+                length = r["end"] - r["offset"]
+            out.append({"offset": r["offset"], "length": length,
+                        "kind": r.get("kind", "region"), "format": r.get("format"),
+                        "geometry": r.get("geometry")})
+        return out
     out = []
     for line in text.splitlines():
         parts = line.split("\t")
@@ -125,7 +151,7 @@ def _run_batch(args, filepath, size):
         print(f"acidcat carve --batch: {e}", file=sys.stderr)
         return 2
     os.makedirs(args.output, exist_ok=True)
-    done = skipped = 0
+    done = skipped = headered = 0
     with open(filepath, "rb") as f:
         for i, r in enumerate(recs):
             off, length = r["offset"], r["length"]
@@ -135,15 +161,65 @@ def _run_batch(args, filepath, size):
             f.seek(off)
             blob = f.read(length)
             ext = _EXT.get(r.get("format")) or "raw"
+            # getattr: callers construct args objects programmatically, and a
+            # new flag must not break a script that predates it
+            want_wrap = getattr(args, "wrap", False)
+            wrapped = None
+            if want_wrap and ext == "raw":
+                wrapped = _wrap_blob(blob, r.get("geometry"),
+                                     getattr(args, "rate", None))
+                if wrapped is not None:
+                    blob, ext = wrapped, "wav"
             name = f"{i:04d}_0x{off:08x}_{r.get('kind', 'region')}.{ext}"
             with open(os.path.join(args.output, name), "wb") as g:
                 g.write(blob)
             done += 1
+            if want_wrap and wrapped is not None:
+                headered += 1
     if not args.quiet:
+        extra = []
+        if skipped:
+            extra.append(f"{skipped} out-of-range skipped")
+        if getattr(args, "wrap", False):
+            extra.append(f"{headered} headerless region(s) wrapped as WAV")
         print(f"carved {done} region(s) -> {args.output}"
-              + (f" ({skipped} out-of-range skipped)" if skipped else ""),
-              file=sys.stderr)
+              + (f" ({', '.join(extra)})" if extra else ""), file=sys.stderr)
     return 0
+
+
+def _wrap_blob(blob, geometry, rate_override):
+    """Give a headerless region a WAV header from the geometry `locate
+    --analyze` inferred, or None if there is nothing to go on.
+
+    Only raw blobs are touched. A carved container already has its own header
+    and wrapping it would produce a WAV containing a WAV.
+    """
+    from acidcat.util.play import _wav_wrap
+    from acidcat.commands.wrap import _swap
+
+    geo = geometry or {}
+    bits = geo.get("width")
+    bits = bits * 8 if bits in (1, 2, 3, 4, 8) else bits
+    if bits not in (8, 16, 24, 32, 64):
+        return None
+    channels = geo.get("channels") or 1
+    floating = bool(geo.get("float"))
+    # rate is playback metadata: it is not in the bytes, so analyze reports it
+    # as None with candidates. Take the caller's value, else the first candidate.
+    rate = rate_override or geo.get("rate")
+    if not rate:
+        cands = geo.get("rate_candidates") or []
+        rate = cands[0] if cands else 44100
+    if not 1 <= rate <= 768000 or channels < 1:
+        return None
+
+    block = channels * (bits // 8)
+    blob = blob[:len(blob) - (len(blob) % block)] if block else blob
+    if not blob:
+        return None
+    if geo.get("endian") == "be":
+        blob = _swap(blob, bits)
+    return _wav_wrap(blob, rate, channels, bits, 3 if floating else 1)
 
 
 def _int(text, what):
