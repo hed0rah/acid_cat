@@ -122,6 +122,12 @@ def run(args):
               f"{args.bits}-bit ({frames / args.rate:.3f} s) -> {args.output}",
               file=sys.stderr)
     else:
+        if sys.stdout.isatty():
+            # every other binary-emitting verb refuses this; dumping a WAV into
+            # a terminal garbles the session and teaches nothing
+            print("acidcat wrap: refusing to write a WAV to the terminal -- "
+                  "redirect it or use -o FILE", file=sys.stderr)
+            return 2
         sys.stdout.buffer.write(wav)
         sys.stdout.buffer.flush()
     return 0

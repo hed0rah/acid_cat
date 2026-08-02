@@ -309,6 +309,25 @@ def _resolve_range(args, filepath, size, typed_len=None):
 
 # ---- typed / struct / field modes ------------------------------------------
 
+def _write_out(blob, output, binary=True):
+    """Write to `output`; return an error message instead of raising.
+
+    An unwritable path used to escape as a raw OSError, which the CLI's
+    closed-pipe handler then mistook for "the reader went away" and turned into
+    a silent exit 0 -- a scripted carve reported success and wrote no file.
+    """
+    try:
+        if binary:
+            with open(output, "wb") as g:
+                g.write(blob)
+        else:
+            with open(output, "w", encoding="utf-8") as g:
+                g.write(blob)
+    except OSError as e:
+        return f"acidcat carve: {output}: {e.strerror or e}"
+    return None
+
+
 def _emit(text, output):
     if output:
         with open(output, "w", encoding="utf-8") as g:
@@ -345,10 +364,21 @@ def _run_typed(args, filepath, size):
     if fmt != "value":                                   # raw/hex/c/py/b64 of the bytes
         out = _fmt_bytes(blob, fmt)
         if out is None:
-            sys.stdout.buffer.write(blob)
+            # the range path already refuses this; --type ... --encoding raw
+            # reached the same write without the guard
+            if not args.output and sys.stdout.isatty():
+                print("acidcat carve: refusing to write binary to the terminal "
+                      "-- use -o FILE or --encoding hex", file=sys.stderr)
+                return 2
+            if args.output:
+                err = _write_out(blob, args.output)
+                if err:
+                    print(err, file=sys.stderr)
+                    return 1
+            else:
+                sys.stdout.buffer.write(blob)
             return 0
-        _emit(out, args.output)
-        return 0
+        return _emit(out, args.output)
 
     # decode value(s)
     lines = []
@@ -465,8 +495,10 @@ def run(args):
         return 2
 
     if args.output:
-        with open(args.output, "wb") as g:
-            g.write(blob)
+        err = _write_out(blob, args.output)
+        if err:
+            print(err, file=sys.stderr)
+            return 1
         if not args.quiet:
             print(f"carved {len(blob):,} bytes from 0x{start:08x} -> {args.output}",
                   file=sys.stderr)

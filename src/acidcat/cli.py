@@ -35,12 +35,11 @@ from acidcat.commands import (
 )
 from acidcat.util.stdin import is_stdin_target
 
-SUBCOMMANDS = {
-    "info", "scan", "shape", "od", "chunks", "survey", "detect", "features",
-    "similar", "dump", "index", "query", "inspect", "convert", "write", "cover",
-    "explore", "tui", "carve", "repair", "validate", "audit", "probe", "locate", "extract",
-    "formats", "classify",
-}
+# Filled from the parser once it is built. It used to be a hand-maintained
+# literal, which drifts the moment a verb is added: `census` and `wrap` were
+# both missing, so a directory of either name in the cwd shadowed the command
+# and `acidcat wrap ...` silently ran `scan` on the directory instead.
+SUBCOMMANDS = set()
 
 
 def _build_parser():
@@ -85,6 +84,9 @@ def _build_parser():
     # keep a handle to the subparser table so unrecognized arguments can be
     # reported against the chosen subcommand's usage, not the top-level one.
     parser._sub = subparsers
+    # derive the shadow-guard set from the parser itself, so adding a verb can
+    # never again leave it out
+    SUBCOMMANDS.update(subparsers.choices)
     return parser
 
 
@@ -98,6 +100,8 @@ def _try_bare_path(argv):
 
     # is the first positional arg a known subcommand?
     # note: "-" (stdin) starts with "-" but is a positional, not a flag
+    if not SUBCOMMANDS:                 # populate on first use
+        _build_parser()
     positionals = [a for a in argv if not a.startswith("-") or a == "-"]
     if not positionals:
         return None
@@ -168,6 +172,13 @@ def _is_closed_pipe(exc):
     """
     if isinstance(exc, BrokenPipeError):
         return True
+    # EINVAL is the Windows spelling of a dead pipe, but it is ALSO what an
+    # invalid output filename raises -- and treating that as "the reader left"
+    # made a failed `carve -o` exit 0 having written nothing. A failed file
+    # operation carries the path in .filename; a write to a broken stdout does
+    # not, so that is the discriminator.
+    if exc.filename is not None:
+        return False
     return (exc.errno in (errno.EPIPE, errno.EINVAL)
             or getattr(exc, "winerror", None) == 232)
 

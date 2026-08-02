@@ -79,6 +79,7 @@ def _signal_findings(path):
 
 
 def _gather(path, signal=False):
+    scanned = True
     # audit is the forensic verdict on untrusted input, so the file is mapped,
     # not slurped: peak memory must not scale with file size (and a size cap
     # would reject legitimate multi-GB RF64/BW64 files)
@@ -109,11 +110,18 @@ def _gather(path, signal=False):
             integ = integrity.analyze(label, chunks, data)
             if signal:
                 integ = integ + _signal_findings(path)
+            scanned = True
         except Unsupported:
+            # No walker for this format, so anomalies/provenance/integrity never
+            # ran. Their empty results are NOT negative findings, and printing
+            # them as "no concealed data" / "nothing flagged" / "clean" was a
+            # confident claim about a scan that did not happen -- on a file
+            # where `locate` can still find an embedded container.
             integ = []
+            scanned = False
         if report is not None and label is None:
             label = report.label
-        return label, report, findings, prov, integ
+        return label, report, findings, prov, integ, scanned
     finally:
         close()
 
@@ -121,7 +129,8 @@ def _gather(path, signal=False):
 def run(args):
     path = args.input
     try:
-        label, report, findings, prov, integ = _gather(path, getattr(args, "signal", False))
+        label, report, findings, prov, integ, scanned = _gather(
+            path, getattr(args, "signal", False))
     except OSError as e:
         print(f"acidcat audit: {path}: {e}", file=sys.stderr)
         return 1
@@ -138,6 +147,8 @@ def run(args):
             "forensics": [f for f in findings if f["rule"] not in _HIDDEN_RULES],
             "provenance": prov,
             "integrity": integ,
+            # so a consumer can tell "scanned, nothing found" from "never ran"
+            "scanned": scanned,
         }
         print(json.dumps(out, indent=2, default=str))
         return 0
@@ -160,7 +171,9 @@ def run(args):
     hidden = [f for f in findings if f["rule"] in _HIDDEN_RULES]
     other = [f for f in findings if f["rule"] not in _HIDDEN_RULES]
 
-    if not hidden:
+    if not scanned:
+        print("  HIDDEN      not scanned -- no walker for this format")
+    elif not hidden:
         print("  HIDDEN      no concealed or appended data")
     else:
         print(f"  HIDDEN      {len(hidden)} region(s)")
@@ -171,7 +184,11 @@ def run(args):
             if hint:
                 print(f"                  extract: {hint}")
 
-    if not other:
+    if not scanned:
+        print("  FORENSICS   not scanned -- no walker for this format")
+        print("                try: acidcat locate " +
+              os.path.basename(path) + "   (finds embedded audio regardless)")
+    elif not other:
         print("  FORENSICS   nothing else flagged")
     else:
         print(f"  FORENSICS   {len(other)} finding(s)")
@@ -210,6 +227,9 @@ def run(args):
     if alerts:
         bits.append(f"{alerts} forensic alert(s)")
     if not bits and not findings and (report is None or not vios):
-        bits.append("clean")
+        # "clean" is a claim about checks that ran. With no walker they did not,
+        # and the honest answer is that this verb had nothing to say -- `locate`
+        # still finds embedded containers in a format we cannot walk.
+        bits.append("clean" if scanned else "not analyzable -- no walker; try acidcat locate")
     print(f"\n  VERDICT: {', '.join(bits) if bits else 'no structural fixes; review findings'}")
     return 0
