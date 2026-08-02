@@ -46,10 +46,39 @@ def register(subparsers):
         "audit", help="Forensic verdict: structure + anomalies + provenance (read-only).")
     p.add_argument("input", help="File to audit.")
     p.add_argument("--json", action="store_true", help="Emit a machine-readable report.")
+    p.add_argument("--signal", action="store_true",
+                   help="Also analyze the decoded audio: bandwidth (is a WAV "
+                        "really a decoded MP3) and channel relationship (is "
+                        "stereo really dual-mono). Needs numpy and decodes the "
+                        "samples, so it is opt-in.")
     p.set_defaults(func=run)
 
 
-def _gather(path):
+def _signal_findings(path):
+    """Bandwidth and channel checks from the decoded samples.
+
+    Kept behind a flag and never fatal: these need numpy and a decode, and a
+    file we cannot decode is not an audit failure -- it just has no signal
+    evidence to add.
+    """
+    from acidcat.core.analysis import bandwidth, channels, pcm
+    try:
+        chans, rate = pcm.load(path)
+    except Exception:
+        return []
+    # only surface verdicts that say something is off. INTEGRITY counts what it
+    # lists as mismatches, so reporting a healthy "stereo" or "no-wall" here
+    # would turn every ordinary file into a finding.
+    clean = {"no-wall", "stereo"}
+    out = []
+    for check in (bandwidth.analyze(chans, rate), channels.analyze(chans, rate)):
+        if check and check["verdict"] not in clean:
+            out.append({"check": check["check"], "verdict": check["verdict"],
+                        "detail": check["detail"]})
+    return out
+
+
+def _gather(path, signal=False):
     # audit is the forensic verdict on untrusted input, so the file is mapped,
     # not slurped: peak memory must not scale with file size (and a size cap
     # would reject legitimate multi-GB RF64/BW64 files)
@@ -78,6 +107,8 @@ def _gather(path):
             # mmap serves as plain bytes -- no adaptation needed
             prov = provenance.identify(label, chunks, data)
             integ = integrity.analyze(label, chunks, data)
+            if signal:
+                integ = integ + _signal_findings(path)
         except Unsupported:
             integ = []
         if report is not None and label is None:
@@ -90,7 +121,7 @@ def _gather(path):
 def run(args):
     path = args.input
     try:
-        label, report, findings, prov, integ = _gather(path)
+        label, report, findings, prov, integ = _gather(path, getattr(args, "signal", False))
     except OSError as e:
         print(f"acidcat audit: {path}: {e}", file=sys.stderr)
         return 1
