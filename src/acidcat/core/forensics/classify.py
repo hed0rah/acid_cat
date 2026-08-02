@@ -28,6 +28,7 @@ from acidcat.core.infra import sniff as sniffmod
 SINGLE = "single"          # one file, a format we walk
 CONTAINER = "container"    # a bigger thing with recognizable files inside
 CHUNKED = "chunked"        # unknown format, but its chunk grid is readable
+UNWALKED = "unwalked"      # identified, audio-related, no walker written yet
 DAMAGED = "damaged"        # structure survives but the normal path cannot use it
 OPAQUE = "opaque"          # no structure we can see; may still hold raw audio
 FOREIGN = "foreign"        # identified, and not audio (a PDF in a sample pack)
@@ -61,6 +62,40 @@ _COMPRESSED_MAGICS = (
     (b"BZh", "bzip2 stream"),
     (b"\xfd7zXZ\x00", "xz stream"),
 )
+
+
+# Formats found in real preset libraries that we identify but do not yet walk.
+# "opaque" is the wrong answer for a file we can name: it sends the user to a
+# statistical scan when the honest reply is "that is a Reaktor ensemble, and no
+# walker exists for it". Every entry below was confirmed against specimens, not
+# guessed from the extension -- .ens, for instance, looked unsupported and turns
+# out to already walk as `ni`.
+_UNWALKED_MAGICS = (
+    (b"NRKT", "Reaktor instrument/ensemble"),
+    # Absynth banks carry the tag in four byte orders across versions
+    (b"MalC", "Absynth bank"),
+    (b"malc", "Absynth bank"),
+    (b"ClaM", "Absynth bank"),
+    (b"clam", "Absynth bank"),
+)
+
+# XML-backed formats (BFD3 grooves/palettes, assorted .preset files) are worth
+# separating from opaque binary: the user can simply read them.
+_XML_ROOTS = (b"<?xml", b"<root", b"<Root", b"<ROOT")
+
+
+def _unwalked(head):
+    """(detail, next_verb, short_label) for a format we can name but not parse."""
+    for magic, label in _UNWALKED_MAGICS:
+        if head.startswith(magic):
+            tag = magic.decode("ascii", "replace")
+            return f"{label} ({tag}) -- no walker yet", "od", label
+    stripped = head.lstrip(b"\xef\xbb\xbf \t\r\n")
+    for root in _XML_ROOTS:
+        if stripped.startswith(root):
+            return ("XML document -- readable as text, no walker needed",
+                    None, "XML document")
+    return None
 
 
 def _foreign(head):
@@ -111,7 +146,16 @@ def classify(path, *, deep=True):
                             f"{label} -- compressed; what is inside may be audio",
                             "extract", ev)
 
-    # 3. no magic we know, but is the structure readable anyway? Generic triage
+    # 3. a format we can name but do not parse. Checked before generic triage so
+    # a positive identification wins over "some chunk grid" -- a name tells the
+    # user what they are holding and that the gap is ours, not the file's.
+    named = _unwalked(head)
+    if named:
+        detail, nxt, label = named
+        ev["identified_as"] = label
+        return _verdict(UNWALKED, None, detail, nxt, ev)
+
+    # 4. no magic we know, but is the structure readable anyway? Generic triage
     # walks an unknown chunk grid, and a surprising number of "unsupported"
     # formats are just IFF under another name -- a Reason .sxt is FORM/CAT/DESC
     # and walks today without anyone having written a walker for it.
@@ -130,7 +174,7 @@ def classify(path, *, deep=True):
     if not deep:
         return _verdict(OPAQUE, None, "no magic at offset 0", "od", ev)
 
-    # 4. does it hold files? The signature sweep is 76 ms on 32 MB, so this is
+    # 5. does it hold files? The signature sweep is 76 ms on 32 MB, so this is
     # affordable to ask of anything.
     data = _read_capped(path)
     from acidcat.core.forensics.locate import signature_sweep
@@ -142,7 +186,7 @@ def classify(path, *, deep=True):
                         f"{len(hits)} audio container(s) embedded, first at "
                         f"0x{hits[0]['offset']:08x}", "locate", ev)
 
-    # 5. is the structure damaged rather than absent? A chunk grid that chains
+    # 6. is the structure damaged rather than absent? A chunk grid that chains
     # end-to-start is structure the normal path could not reach.
     from acidcat.core.forensics import resync
     rec = resync.recover(data, known_only=True)
@@ -154,7 +198,7 @@ def classify(path, *, deep=True):
                         f"({rec['coverage']:.0%} of the file) -- the header is "
                         f"damaged but the grid survives", "inspect --resync", ev)
 
-    # 6. nothing structural. It may still hold raw audio, which only the
+    # 7. nothing structural. It may still hold raw audio, which only the
     # statistical pass can find -- and that is expensive, so it is named, not run.
     return _verdict(OPAQUE, None,
                     "no magic, no embedded containers, no recoverable chunk grid",

@@ -140,3 +140,42 @@ def test_cli_json_is_machine_readable(tmp_path, capsys):
     main(["classify", str(p), "--json"])
     rows = json.loads(capsys.readouterr().out)
     assert rows[0]["shape"] == "single" and rows[0]["format"] == "wav"
+
+
+def test_named_but_unwalked_beats_opaque(tmp_path):
+    """A file we can identify deserves its name. Calling a Reaktor ensemble
+    "opaque" sends the user to a statistical scan when the honest answer is
+    that the gap is ours, not the file's."""
+    for magic, name, expect in (
+            (b"NRKT\x00\x01\x00\x00", "8-Pole_Filter.ism", "Reaktor"),
+            (b"MalC\x00\x00\x00\x00", "bank.glo", "Absynth"),
+            (b"malc\x00\x00\x00\x00", "old.glo", "Absynth")):
+        p = tmp_path / name
+        p.write_bytes(magic + b"\x00" * 512)
+        v = C.classify(str(p))
+        assert v["shape"] == C.UNWALKED, f"{name} -> {v['shape']}"
+        assert expect.lower() in v["detail"].lower()
+        assert v["next"] == "od", "bytes are still inspectable"
+
+
+def test_xml_backed_presets_are_named_as_text(tmp_path):
+    """BFD3 grooves and palettes are plain XML -- the user can just read them,
+    so neither "opaque" nor an acidcat verb is the right answer."""
+    for body, name in ((b"<root>\r\n  <BFD2Groove name=\"g\"/>\r\n</root>",
+                        "fill.bfd3grv"),
+                       (b"<?xml version=\"1.0\"?><patch/>", "a.preset")):
+        p = tmp_path / name
+        p.write_bytes(body)
+        v = C.classify(str(p))
+        assert v["shape"] == C.UNWALKED
+        assert "xml" in v["detail"].lower()
+        assert v["next"] is None
+
+
+def test_unwalked_does_not_shadow_a_real_walker(tmp_path):
+    """The named table is checked after sniff, so a format we actually walk
+    keeps its walker. Guards against a magic collision quietly downgrading a
+    supported format."""
+    p = tmp_path / "a.wav"
+    p.write_bytes(_wav())
+    assert C.classify(str(p))["shape"] == C.SINGLE

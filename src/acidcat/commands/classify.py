@@ -28,6 +28,7 @@ _SHAPE_COLOR = {
     "single": "32",       # green: understood
     "container": "36",    # cyan: holds things
     "chunked": "36",
+    "unwalked": "35",     # magenta: we know what it is, we just do not parse it
     "damaged": "33",      # yellow: recoverable with work
     "opaque": "90",       # dim: nothing structural
     "foreign": "90",
