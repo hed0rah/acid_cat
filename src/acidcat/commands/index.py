@@ -143,14 +143,14 @@ def run(args):
             f"target directory. Drop the target or remove the flag.",
             file=sys.stderr,
         )
-        return 1
+        return 2
     if len(active_mgmt) > 1:
         print(
             f"acidcat index: cannot combine {active_mgmt[0]} and "
             f"{active_mgmt[1]}; pick one.",
             file=sys.stderr,
         )
-        return 1
+        return 2
 
     # registry-management modes (no target required)
     if args.list_libs:
@@ -186,12 +186,12 @@ def run(args):
     if not args.target:
         print("acidcat index: missing target directory (or use "
               "--list/--orphans/--stats/--forget/--remove)", file=sys.stderr)
-        return 1
+        return 2
 
     target = args.target
     if not os.path.isdir(target):
         print(f"acidcat index: {target}: Not a directory", file=sys.stderr)
-        return 1
+        return 2
 
     _warn_legacy_db(args)
 

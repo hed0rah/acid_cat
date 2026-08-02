@@ -84,6 +84,45 @@ def _rf64_end(filepath):
     return None
 
 
+_MAGIC_BLOCK = 1 << 20            # bytes held at once; the region may be huge
+
+
+def _scan_magics(filepath, start, size):
+    """Yield (magic, label, absolute_offset) for every known magic in
+    [start, size), reading in blocks.
+
+    This used to read the first megabyte and search that, while the
+    accompanying finding announced the FULL trailing size -- so a PDF appended
+    3 MB past the container end was reported as 3 MB of trailing data and no
+    polyglot, with nothing saying the search had stopped at 1 MB. The region
+    can be arbitrarily large, so it is streamed rather than either truncated or
+    slurped; blocks overlap by the longest magic so one straddling a boundary
+    is still found.
+    """
+    overlap = max(len(m) for m, _ in _MAGICS) - 1
+    seen = set()
+    with open(filepath, "rb") as f:
+        f.seek(start)
+        pos = start
+        carry = b""
+        while pos < size:
+            block = f.read(_MAGIC_BLOCK)
+            if not block:
+                break
+            window = carry + block
+            base = pos - len(carry)
+            for magic, label in _MAGICS:
+                at = window.find(magic)
+                while at >= 0:
+                    absolute = base + at
+                    if (magic, absolute) not in seen:
+                        seen.add((magic, absolute))
+                        yield magic, label, absolute
+                    at = window.find(magic, at + 1)
+            pos += len(block)
+            carry = window[-overlap:] if overlap else b""
+
+
 def scan(filepath, fmt_label, chunks, warns):
     """Return a list of forensic findings for an already-walked file."""
     findings = []
@@ -120,17 +159,11 @@ def scan(filepath, fmt_label, chunks, warns):
         findings.append({"severity": "notice", "offset": end, "rule": "trailing_data",
                          "message": f"{size - end:,} bytes past the declared "
                                     f"container end"})
-        with open(filepath, "rb") as f:
-            f.seek(end)
-            # clamped: read(N) pre-allocates N bytes (see core/midi.py)
-            tail = f.read(min(1 << 20, size - end))
-        for magic, label in _MAGICS:
-            at = tail.find(magic)
-            if at >= 0:
-                findings.append({"severity": "alert", "offset": end + at,
-                                 "rule": "polyglot",
-                                 "message": f"possible polyglot: {label} magic at "
-                                            f"0x{end + at:08x}, past the container end"})
+        for magic, label, at in _scan_magics(filepath, end, size):
+            findings.append({"severity": "alert", "offset": at,
+                             "rule": "polyglot",
+                             "message": f"possible polyglot: {label} magic at "
+                                        f"0x{at:08x}, past the container end"})
 
     # 3. control bytes in decoded text fields (smuggling in "text")
     for c in chunks:

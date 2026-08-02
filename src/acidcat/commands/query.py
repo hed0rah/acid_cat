@@ -86,6 +86,14 @@ def _vlog(args, msg):
 
 
 def run(args):
+    try:
+        return _run(args)
+    except QueryUsageError as e:
+        print(f"acidcat query: {e}", file=sys.stderr)
+        return 2
+
+
+def _run(args):
     registry_path = getattr(args, "registry", None)
     rconn = reg.open_registry(registry_path)
     try:
@@ -283,15 +291,26 @@ def _shape_row(row):
     return out
 
 
+class QueryUsageError(ValueError):
+    """A bad filter value. Raised so run() can exit 2 like every other usage
+    error, instead of the string SystemExit this used to raise -- that printed
+    to stderr, exited 1, and bypassed the CLI's dispatch entirely."""
+
+
 def _parse_range(spec, field_name="value"):
     """Accept '120', '120:130', ':130', '120:' and return (lo, hi)."""
     if ":" not in spec:
         try:
             v = float(spec)
         except ValueError:
-            raise SystemExit(f"acidcat query: bad --{field_name} value: {spec}")
+            raise QueryUsageError(f"bad --{field_name} value: {spec}")
         return v, v
     lo_s, hi_s = spec.split(":", 1)
-    lo = float(lo_s) if lo_s else None
-    hi = float(hi_s) if hi_s else None
+    # the bare branch above was guarded and this one was not, so
+    # `--bpm a:b` raised an uncaught ValueError and printed a traceback
+    try:
+        lo = float(lo_s) if lo_s else None
+        hi = float(hi_s) if hi_s else None
+    except ValueError:
+        raise QueryUsageError(f"bad --{field_name} range: {spec}")
     return lo, hi

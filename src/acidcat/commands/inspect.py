@@ -468,7 +468,7 @@ def run(args):
         targets = [one] if one else []
     if not targets:
         print("acidcat inspect: no target file given", file=sys.stderr)
-        return 1
+        return 2
 
     deep = getattr(args, "frames", False) or getattr(args, "verbose", False)
     full = getattr(args, "full", False)

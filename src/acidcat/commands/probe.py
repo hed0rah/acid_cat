@@ -129,7 +129,7 @@ def _dispatch(args, verb, path, data):
             off, _ln, note = pr.resolve(path, args.at)
         except (KeyError, ValueError) as e:
             print(f"acidcat probe: {e}", file=sys.stderr)
-            return 1
+            return 2
         order = _byteorder(args, label)
         vals = pr.read_typed(data, off, args.type, args.count, order)
         if not vals:
@@ -146,7 +146,7 @@ def _dispatch(args, verb, path, data):
             value = float(args.value) if args.type in ("f32", "f64") else pr.parse_int(args.value)
         except ValueError:
             print(f"acidcat probe: bad value {args.value!r}", file=sys.stderr)
-            return 1
+            return 2
         hits = pr.scan_value(data, value, args.type)
         print(f"{len(hits)} hit(s) for {args.value} as {args.type}")
         for off, order in hits:
@@ -162,7 +162,7 @@ def _dispatch(args, verb, path, data):
                 needle = bytes.fromhex(pat)
             except ValueError:
                 print(f"acidcat probe: bad hex {pat!r} (use s: for text)", file=sys.stderr)
-                return 1
+                return 2
         offs = pr.find_bytes(data, needle)
         print(f"{len(offs)} hit(s) for {pat}")
         for off in offs:
@@ -183,7 +183,7 @@ def _dispatch(args, verb, path, data):
             off, ln, _note = pr.resolve(path, args.at)
         except (KeyError, ValueError) as e:
             print(f"acidcat probe: {e}", file=sys.stderr)
-            return 1
+            return 2
         length = args.length if args.length != 256 else (ln or 256)
         print(pr.hexdump(data, off, length))
         return 0

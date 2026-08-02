@@ -148,11 +148,16 @@ def run(args):
     # rather than making a blanket claim about coverage.
     from acidcat.core.forensics.audioscan import DEFAULT_READ_CAP
     from acidcat.core.forensics.framescan import _READ_CAP as FRAME_CAP
+    from acidcat.core.forensics.transforms import _READ_CAP as XFORM_CAP
     limited = []
     if args.mode != "strict" and len(data) > DEFAULT_READ_CAP:
         limited.append(("raw-audio scan", DEFAULT_READ_CAP))
     if len(data) > FRAME_CAP:
         limited.append(("stream scan", FRAME_CAP))
+    # the transform hunt caps at 16 MB -- much lower than the others -- and used
+    # to report "0 transformed" for a whole image with no note at all
+    if args.transforms and len(data) > XFORM_CAP:
+        limited.append(("transform scan", XFORM_CAP))
     for label, cap in limited:
         print(f"acidcat locate: {label} covers the first "
               f"{cap // (1024 * 1024)} MB of "

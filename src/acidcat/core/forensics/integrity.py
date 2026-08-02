@@ -51,13 +51,30 @@ def _effective_bits(data, start, size, bytes_per_sample, byteorder):
     from the lowest data-carrying bit. ``byteorder`` is "little" (WAV) or "big"
     (AIFF), so the low byte is masked wherever it actually sits. Returns
     (effective_bits, examined) or (None, examined)."""
-    end = start + min(size, _SCAN_CAP)
-    end -= (end - start) % bytes_per_sample
+    size -= size % bytes_per_sample
     acc = 0
     examined = 0
-    for p in range(start, end, bytes_per_sample):
-        acc |= int.from_bytes(data[p:p + bytes_per_sample], byteorder, signed=False)
-        examined += 1
+    if size <= _SCAN_CAP:
+        spans = [(start, start + size)]
+    else:
+        # Spread the budget across the whole span instead of taking the first
+        # 8 MB. The old prefix read ~28 seconds of 24/48 stereo, so a long
+        # master whose intro came from a 16-bit source was accused of being
+        # padded throughout. Real padding is present everywhere, so sampling
+        # blocks from end to end is strictly better evidence at the same cost.
+        blocks = 64
+        per = (_SCAN_CAP // blocks) - ((_SCAN_CAP // blocks) % bytes_per_sample)
+        stride = size // blocks
+        spans = []
+        for i in range(blocks):
+            at = start + i * stride
+            at -= (at - start) % bytes_per_sample
+            spans.append((at, min(at + per, start + size)))
+    for lo, hi in spans:
+        for p in range(lo, hi, bytes_per_sample):
+            acc |= int.from_bytes(data[p:p + bytes_per_sample], byteorder,
+                                  signed=False)
+            examined += 1
     tz = _trailing_zero_bits(acc)
     if tz is None:
         return None, examined
@@ -71,8 +88,8 @@ def _bit_depth_finding(bits, eff, examined):
         "check": "bit_depth",
         "verdict": f"declared {bits}-bit, effective {eff}-bit",
         "detail": f"the low {bits - eff} bit(s) are always zero across "
-                  f"{examined:,} samples -- likely upsampled from {eff}-bit "
-                  f"(padded, not true {bits}-bit)",
+                  f"{examined:,} samples sampled end to end -- likely upsampled "
+                  f"from {eff}-bit (padded, not true {bits}-bit)",
     }
 
 

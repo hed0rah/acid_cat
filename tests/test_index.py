@@ -817,7 +817,12 @@ class TestDiscover:
 
 
 class TestCollisionGuard:
-    """v0.5.3: target + management flags can't be combined silently."""
+    """v0.5.3: target + management flags can't be combined silently.
+
+    These assert 2, not 1: combining incompatible flags is a USAGE error, and
+    1.0 settles on the grep/argparse convention (0 ok, 1 ran-but-negative,
+    2 broke). index returned 1 here while write and repair returned 2 for the
+    identical mistake, which made the exit code unusable across verbs."""
 
     def test_target_with_list_errors(self, tmp_path, central_root,
                                       registry_path, wav_bytes):
@@ -825,7 +830,7 @@ class TestCollisionGuard:
         rc = index_cmd.run(_Args(
             target=str(lib), list_libs=True, registry=registry_path,
         ))
-        assert rc == 1
+        assert rc == 2
 
     def test_target_with_orphans_errors(self, tmp_path, central_root,
                                          registry_path, wav_bytes):
@@ -833,7 +838,7 @@ class TestCollisionGuard:
         rc = index_cmd.run(_Args(
             target=str(lib), orphans=True, registry=registry_path,
         ))
-        assert rc == 1
+        assert rc == 2
 
     def test_target_with_stats_errors(self, tmp_path, central_root,
                                        registry_path, wav_bytes):
@@ -842,7 +847,7 @@ class TestCollisionGuard:
             target=str(lib), stats_target="some-label",
             registry=registry_path,
         ))
-        assert rc == 1
+        assert rc == 2
 
     def test_target_with_discover_errors(self, tmp_path, central_root,
                                           registry_path, wav_bytes):
@@ -851,14 +856,14 @@ class TestCollisionGuard:
             target=str(lib), discover_root=str(lib),
             registry=registry_path,
         ))
-        assert rc == 1
+        assert rc == 2
 
     def test_two_management_flags_error(self, tmp_path, central_root,
                                          registry_path):
         rc = index_cmd.run(_Args(
             list_libs=True, orphans=True, registry=registry_path,
         ))
-        assert rc == 1
+        assert rc == 2
 
 
 class TestRefreshStats:

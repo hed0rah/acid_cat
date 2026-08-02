@@ -17,6 +17,7 @@ file is skipped, one that crashes the walker is flagged (a specimen in itself).
 """
 
 import os
+import sys
 
 from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import walk_file, _WALKERS
@@ -77,9 +78,11 @@ def _fast_fingerprint(path):
         elif fmt == "flac":
             from acidcat.core.formats.flac import iter_metadata_blocks
             ids = _ids(b[1] for b in iter_metadata_blocks(path))
+        flag = ""
     except Exception:
-        pass
-    return (label, "", ids, "")
+        # a parse failure and a legitimately empty file emitted identical rows
+        flag = "!parse-failed"
+    return (label, "", ids, flag)
 
 
 def _full_fingerprint(path, want_anomalies):
@@ -98,15 +101,25 @@ def _full_fingerprint(path, want_anomalies):
         from acidcat.core.forensics import anomalies
         try:
             findings = anomalies.scan(path, label, chunks, warns) or []
+            flag = ",".join(sorted({f["rule"] for f in findings}))
         except Exception:
-            findings = []
-        flag = ",".join(sorted({f["rule"] for f in findings}))
+            # a scan that crashed is not a file with no anomalies, and
+            # --warn-only filters on this flag -- so the empty string dropped
+            # exactly the crashiest specimens out of the listing
+            flag = "!anomaly-scan-failed"
     else:
         flag = "WARN" if warns else ""
     return (label, summary, ids, flag)
 
 
 def run(args):
+    # a target that does not exist yielded nothing, printed nothing and exited
+    # 0 -- indistinguishable from "scanned it, matched nothing"
+    missing = [t for t in args.targets if not os.path.exists(t)]
+    for t in missing:
+        print(f"acidcat shape: {t}: No such file or directory", file=sys.stderr)
+    if missing and len(missing) == len(args.targets):
+        return 2
     for path in _iter_files(args.targets):
         fp = (_fast_fingerprint(path) if args.fast
               else _full_fingerprint(path, args.anomalies))

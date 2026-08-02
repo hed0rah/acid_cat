@@ -86,3 +86,67 @@ def test_check_failed_findings_say_what_was_not_screened(tmp_path):
     for rule in ("ogg_multistream", "mp4_mdat_coverage", "id3_padding",
                  "dual_endian_pcm"):
         assert f"the {rule} check could not run" in src
+
+
+def test_a_polyglot_beyond_one_megabyte_is_found(tmp_path, capsys):
+    """The trailing-data search read the first 1 MiB while the accompanying
+    finding announced the FULL trailing size -- so a PDF appended 3 MB past the
+    container end was reported as 3 MB of trailing data and no polyglot, with
+    nothing saying the search had stopped."""
+    p = tmp_path / "far.wav"
+    p.write_bytes(_wav() + bytes(3 * 1024 * 1024) + b"%PDF-1.7\n" + bytes(64))
+    main(["audit", str(p)])
+    out = capsys.readouterr().out
+    assert "polyglot" in out, "a magic past the old 1 MiB cliff was missed"
+    assert "PDF" in out
+
+
+def test_a_nearby_polyglot_still_works(tmp_path, capsys):
+    p = tmp_path / "near.wav"
+    p.write_bytes(_wav() + bytes(512 * 1024) + b"%PDF-1.7\n" + bytes(64))
+    main(["audit", str(p)])
+    assert "polyglot" in capsys.readouterr().out
+
+
+def test_a_magic_straddling_a_block_boundary_is_found(tmp_path, capsys):
+    """The streaming search overlaps blocks by the longest magic; without the
+    overlap a signature split across the boundary would vanish."""
+    from acidcat.core.forensics.anomalies import _MAGIC_BLOCK
+    pad = _MAGIC_BLOCK - 4                      # puts %PDF- across the seam
+    p = tmp_path / "seam.wav"
+    p.write_bytes(_wav() + bytes(pad) + b"%PDF-1.7\n" + bytes(64))
+    main(["audit", str(p)])
+    assert "polyglot" in capsys.readouterr().out
+
+
+def test_fake_hires_is_judged_from_the_whole_file(tmp_path):
+    """The bit-depth check read a contiguous first 8 MB -- about 28 seconds of
+    24/48 stereo -- so a long master whose intro came from a 16-bit source was
+    accused of being padded throughout. Sampling end to end costs the same."""
+    import struct as _s
+    from acidcat.core.forensics import integrity
+    from acidcat.core.walk import walk_file
+
+    def wav24(frames, padded_prefix):
+        pcm = bytearray()
+        for i in range(frames):
+            v = (i * 7919) & 0xFFFFFF
+            v = (v & 0xFFFF00) if i < padded_prefix else (v | 1)
+            pcm += v.to_bytes(3, "little")
+        body = (b"fmt " + _s.pack("<I", 16)
+                + _s.pack("<HHIIHH", 1, 1, 48000, 144000, 3, 24)
+                + b"data" + _s.pack("<I", len(pcm)) + bytes(pcm))
+        return b"RIFF" + _s.pack("<I", len(body) + 4) + b"WAVE" + body
+
+    honest = tmp_path / "long.wav"              # 16-bit-sourced intro, real 24-bit after
+    honest.write_bytes(wav24(4_000_000, 3_000_000))
+    label, chunks, _ = walk_file(str(honest))
+    assert not integrity.analyze(label, chunks, honest.read_bytes()), \
+        "a true 24-bit master was accused because of its intro"
+
+    padded = tmp_path / "fake.wav"              # padded throughout
+    padded.write_bytes(wav24(400_000, 400_000))
+    label, chunks, _ = walk_file(str(padded))
+    found = integrity.analyze(label, chunks, padded.read_bytes())
+    assert found and "effective 16-bit" in found[0]["verdict"], \
+        "genuinely padded audio is no longer detected"
