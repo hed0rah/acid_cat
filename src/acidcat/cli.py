@@ -28,6 +28,7 @@ from acidcat import __version__
 from acidcat.commands._output import add_output_format_arg
 from acidcat.commands import (
     info, scan, shape, od, chunks, survey, detect, features, similar, dump,
+    classify,
     index, query, inspect, convert, write, cover, explore, tui, carve, repair, validate, audit, probe,
     census, locate, extract, formats,
 )
@@ -37,7 +38,7 @@ SUBCOMMANDS = {
     "info", "scan", "shape", "od", "chunks", "survey", "detect", "features",
     "similar", "dump", "index", "query", "inspect", "convert", "write", "cover",
     "explore", "tui", "carve", "repair", "validate", "audit", "probe", "locate", "extract",
-    "formats",
+    "formats", "classify",
 }
 
 
@@ -77,6 +78,7 @@ def _build_parser():
     locate.register(subparsers)
     extract.register(subparsers)
     formats.register(subparsers)
+    classify.register(subparsers)
 
     # keep a handle to the subparser table so unrecognized arguments can be
     # reported against the chosen subcommand's usage, not the top-level one.
