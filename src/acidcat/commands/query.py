@@ -94,6 +94,15 @@ def run(args):
 
 
 def _run(args):
+    # Validate the invocation before consulting any state. A malformed --bpm is
+    # wrong whether or not a library happens to be registered, and checking it
+    # second meant the same command reported "no libraries" (1) on a fresh
+    # machine and "bad value" (2) on a populated one.
+    for field in ("bpm", "duration"):
+        spec = getattr(args, field, None)
+        if spec:
+            _parse_range(str(spec), field)
+
     registry_path = getattr(args, "registry", None)
     rconn = reg.open_registry(registry_path)
     try:

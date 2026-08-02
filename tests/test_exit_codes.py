@@ -27,16 +27,37 @@ def _wav(n_frames=32):
     return b"RIFF" + struct.pack("<I", len(body) + 4) + b"WAVE" + body
 
 
-def test_a_bad_filter_value_is_a_usage_error(capsys):
-    assert main(["query", "--bpm", "zzz"]) == 2
+@pytest.fixture
+def empty_registry(tmp_path, monkeypatch):
+    """Point the registry somewhere empty.
+
+    These assertions used to pass on a developer machine and fail on CI for a
+    reason that had nothing to do with what they were testing: with libraries
+    registered, query reached the range parser and returned 2; with none, it
+    returned "no libraries" (1) first. Validating the invocation before any
+    state is the fix, and running against an empty registry is what proves it.
+    """
+    monkeypatch.setenv("ACIDCAT_REGISTRY", str(tmp_path / "reg.sqlite"))
+    return str(tmp_path / "reg.sqlite")
+
+
+def test_a_bad_filter_value_is_a_usage_error(capsys, empty_registry):
+    assert main(["query", "--registry", empty_registry, "--bpm", "zzz"]) == 2
     assert "bad --bpm value" in capsys.readouterr().err
 
 
-def test_a_bad_range_does_not_traceback(capsys):
+def test_a_bad_range_does_not_traceback(capsys, empty_registry):
     """The bare branch was guarded and the range branch was not, so
     `--bpm a:b` raised an uncaught ValueError."""
-    assert main(["query", "--bpm", "a:b"]) == 2
+    assert main(["query", "--registry", empty_registry, "--bpm", "a:b"]) == 2
     assert "bad --bpm range" in capsys.readouterr().err
+
+
+def test_a_valid_filter_against_an_empty_registry_is_not_a_usage_error(
+        capsys, empty_registry):
+    """The other side of the same fix: a well-formed query with nothing to
+    search is 1 (ran, no answer), not 2 (you typed it wrong)."""
+    assert main(["query", "--registry", empty_registry, "--bpm", "120"]) == 1
 
 
 def test_shape_on_a_missing_path_is_not_silent_success(tmp_path, capsys):
