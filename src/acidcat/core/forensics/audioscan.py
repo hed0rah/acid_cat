@@ -265,6 +265,29 @@ def audio_score(feat):
     return strength * shape * dist * live
 
 
+def _bulk_looks_float(np, data, window, step, count):
+    """Vectorized _looks_float, as a conservative pre-filter.
+
+    Returns a bool per window: False means the per-window probe would also have
+    said no, so it can be skipped. A True is only a hint -- _looks_float still
+    runs and has the final say -- which keeps this an optimization rather than a
+    second opinion. Falls back to all-True if the geometry does not line up.
+    """
+    nf = window // 4
+    if nf < 16 or step % 4 or len(data) < window:
+        return [True] * count
+    flt = np.frombuffer(data, dtype=np.float32, count=len(data) // 4)
+    fstep = max(1, nf // 32)
+    picks = np.arange(0, nf, fstep, dtype=np.int64)          # same indices
+    base = np.arange(count, dtype=np.int64) * (step // 4)
+    idx = base[:, None] + picks[None, :]
+    if idx[-1, -1] >= flt.size:
+        return [True] * count
+    inrange = np.abs(flt[idx]) <= _FLOAT_RANGE               # NaN -> False
+    frac = inrange.sum(axis=1) / picks.size
+    return frac >= _FLOAT_MIN_FRAC
+
+
 def _bulk_features(data, window, step, count):
     """Every window's feature dict at once, using numpy. Returns None if numpy
     is unavailable, so the caller falls back to the per-window path.
@@ -319,12 +342,18 @@ def _bulk_features(data, window, step, count):
                            np.maximum(r2 - r1, 0.0))
     np.clip(structure, 0.0, None, out=structure)
 
+    # The float pre-check samples fixed indices, so it vectorizes exactly. Worth
+    # doing: as a per-window call it was ~23% of this function, 400k struct
+    # unpacks. `v == v and -R <= v <= R` reduces to `abs(v) <= R` because a NaN
+    # fails every comparison anyway.
+    maybe_float = _bulk_looks_float(np, data, window, step, count)
+
     # windows above the entropy ceiling take the early-out, exactly as the
     # per-window path does, and float-looking windows are handed back to it
     dead = entropy > _ENTROPY_CEIL
     out = []
     for i in range(count):
-        if not dead[i]:
+        if not dead[i] and maybe_float[i]:
             at = i * step
             chunk = data[at:at + window]
             if _looks_float(chunk):

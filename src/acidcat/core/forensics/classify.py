@@ -175,28 +175,28 @@ def classify(path, *, deep=True):
         return _verdict(OPAQUE, None, "no magic at offset 0", "od", ev)
 
     # 5. does it hold files? The signature sweep is 76 ms on 32 MB, so this is
-    # affordable to ask of anything.
-    data = _read_capped(path)
-    from acidcat.core.forensics.locate import signature_sweep
-    hits = signature_sweep(data)
-    if hits:
-        ev["embedded_containers"] = len(hits)
-        ev["first_at"] = hits[0]["offset"]
-        return _verdict(CONTAINER, None,
-                        f"{len(hits)} audio container(s) embedded, first at "
-                        f"0x{hits[0]['offset']:08x}", "locate", ev)
+    # affordable to ask of anything, at any size -- see _Bytes.
+    with _Bytes(path) as data:
+        from acidcat.core.forensics.locate import signature_sweep
+        hits = signature_sweep(data)
+        if hits:
+            ev["embedded_containers"] = len(hits)
+            ev["first_at"] = hits[0]["offset"]
+            return _verdict(CONTAINER, None,
+                            f"{len(hits)} audio container(s) embedded, first at "
+                            f"0x{hits[0]['offset']:08x}", "locate", ev)
 
-    # 6. is the structure damaged rather than absent? A chunk grid that chains
-    # end-to-start is structure the normal path could not reach.
-    from acidcat.core.forensics import resync
-    rec = resync.recover(data, known_only=True)
-    if rec["chain"]:
-        ev["resync_chunks"] = len(rec["chain"])
-        ev["resync_coverage"] = rec["coverage"]
-        return _verdict(DAMAGED, None,
-                        f"{len(rec['chain'])} chunk(s) recoverable by resync "
-                        f"({rec['coverage']:.0%} of the file) -- the header is "
-                        f"damaged but the grid survives", "inspect --resync", ev)
+        # 6. is the structure damaged rather than absent? A chunk grid that
+        # chains end-to-start is structure the normal path could not reach.
+        from acidcat.core.forensics import resync
+        rec = resync.recover(data, known_only=True)
+        if rec["chain"]:
+            ev["resync_chunks"] = len(rec["chain"])
+            ev["resync_coverage"] = rec["coverage"]
+            return _verdict(DAMAGED, None,
+                            f"{len(rec['chain'])} chunk(s) recoverable by resync "
+                            f"({rec['coverage']:.0%} of the file) -- the header is "
+                            f"damaged but the grid survives", "inspect --resync", ev)
 
     # 7. nothing structural. It may still hold raw audio, which only the
     # statistical pass can find -- and that is expensive, so it is named, not run.
@@ -205,12 +205,45 @@ def classify(path, *, deep=True):
                     "locate", ev)
 
 
-_READ_CAP = 256 * 1024 * 1024
+# Above this we map instead of reading. The sweep and resync only need .find()
+# and slicing, both of which mmap supports, so there is no reason to hold a
+# multi-gigabyte image in RAM -- and no reason to cap it either. A cap here used
+# to mean a 300 MB image with a WAV at 260 MB reported "no embedded containers",
+# which is a confident wrong answer to the exact question this module exists for.
+_MMAP_ABOVE = 32 * 1024 * 1024
 
 
-def _read_capped(path):
-    with open(path, "rb") as f:
-        return f.read(_READ_CAP)
+class _Bytes:
+    """Whole-file view: mmap for big files, plain bytes for small ones."""
+
+    def __init__(self, path):
+        self._f = self._m = None
+        size = os.path.getsize(path)
+        self._f = open(path, "rb")
+        if size > _MMAP_ABOVE:
+            try:
+                import mmap
+                self._m = mmap.mmap(self._f.fileno(), 0, access=mmap.ACCESS_READ)
+                self.data = self._m
+                return
+            except (OSError, ValueError, ImportError):
+                pass                      # fall through to a plain read
+        self.data = self._f.read()
+
+    def close(self):
+        for obj in (self._m, self._f):
+            if obj is not None:
+                try:
+                    obj.close()
+                except Exception:
+                    pass
+
+    def __enter__(self):
+        return self.data
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
 
 
 def _verdict(shape, fmt, detail, nxt, evidence):

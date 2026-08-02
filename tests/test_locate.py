@@ -206,3 +206,31 @@ def test_locate_reports_one_region_per_embedded_file(tmp_path):
             span = r["end"] - r["offset"]
             assert not (span > 0 and overlap / span >= 0.5), \
                 f"blob at 0x{r['offset']:x} duplicates the container at 0x{c['offset']:x}"
+
+
+def test_oversize_input_reports_partial_statistical_coverage(tmp_path, capsys,
+                                                             monkeypatch):
+    """No silent caps. locate's signature sweep covers the whole buffer while
+    the statistical pass caps out, so a large image would otherwise report raw
+    audio from only part of it with nothing on screen saying so."""
+    from acidcat.cli import main
+    from acidcat.core.forensics import audioscan
+    monkeypatch.setattr(audioscan, "DEFAULT_READ_CAP", 4096)
+    p = tmp_path / "big.img"
+    p.write_bytes(bytes(9000))
+    main(["locate", str(p)])
+    err = capsys.readouterr().err
+    assert "statistical scan covers the first" in err
+    assert "found throughout" in err
+
+
+def test_strict_mode_does_not_claim_partial_coverage(tmp_path, capsys,
+                                                     monkeypatch):
+    """strict skips the statistical pass entirely, so the caveat would be noise."""
+    from acidcat.cli import main
+    from acidcat.core.forensics import audioscan
+    monkeypatch.setattr(audioscan, "DEFAULT_READ_CAP", 4096)
+    p = tmp_path / "big.img"
+    p.write_bytes(bytes(9000))
+    main(["locate", str(p), "--mode", "strict"])
+    assert "statistical scan covers" not in capsys.readouterr().err

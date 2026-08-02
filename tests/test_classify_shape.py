@@ -179,3 +179,39 @@ def test_unwalked_does_not_shadow_a_real_walker(tmp_path):
     p = tmp_path / "a.wav"
     p.write_bytes(_wav())
     assert C.classify(str(p))["shape"] == C.SINGLE
+
+
+def test_container_found_beyond_a_read_cap(tmp_path, monkeypatch):
+    """Regression: a read cap made this lie. A large image with a WAV past the
+    cap reported "no embedded containers" -- a confident wrong answer to the
+    exact question the module exists to answer. The whole file is mapped now.
+
+    Forced onto the mmap path with a tiny threshold so the test stays small."""
+    monkeypatch.setattr(C, "_MMAP_ABOVE", 0)
+    p = tmp_path / "disk.img"
+    p.write_bytes(bytes(3 * 1024 * 1024) + _wav(4000))
+    v = C.classify(str(p))
+    assert v["shape"] == C.CONTAINER
+    assert v["evidence"]["first_at"] == 3 * 1024 * 1024
+
+
+def test_mapped_file_is_released(tmp_path, monkeypatch):
+    """A leaked mmap keeps a Windows file locked, which would break any caller
+    that classifies a file and then moves or deletes it."""
+    monkeypatch.setattr(C, "_MMAP_ABOVE", 0)
+    p = tmp_path / "scratch.bin"
+    p.write_bytes(bytes(1024 * 1024) + b"\x00" * 16)
+    C.classify(str(p))
+    os.remove(str(p))                    # raises PermissionError if still mapped
+    assert not p.exists()
+
+
+def test_mmap_and_plain_read_agree(tmp_path, monkeypatch):
+    """The two backing stores must not change the verdict."""
+    p = tmp_path / "img.bin"
+    p.write_bytes(bytes(2048) + _wav(3000) + bytes(999))
+    monkeypatch.setattr(C, "_MMAP_ABOVE", 1 << 40)      # force plain read
+    plain = C.classify(str(p))
+    monkeypatch.setattr(C, "_MMAP_ABOVE", 0)            # force mmap
+    mapped = C.classify(str(p))
+    assert plain == mapped
