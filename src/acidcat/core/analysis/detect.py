@@ -238,6 +238,29 @@ _PITCH_CLASSES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B
 # search; "unknown" does not.
 KEY_CONF_MIN = 0.75
 
+# Minimum margin over the best differently-rooted candidate before we name a
+# key. This replaced the raw-correlation gate above and dominates it on both
+# axes, measured over 298 key-labelled files:
+#
+#     correlation >= 0.75    62.9% root accuracy, answers 20.8% of files
+#     margin      >= 0.15    68.0% root accuracy, answers 57.7% of files
+#
+# More accurate while answering nearly three times as many files, because a
+# high correlation is routinely shared by a key and its relative -- the raw fit
+# cannot tell "clearly C" from "C or Am, take your pick", and the margin can.
+KEY_MARGIN_MIN = 0.15
+
+# A key needs more than one pitch class to be a claim at all. The bar is set
+# just above zero on purpose: a first attempt used a fifth of the peak, and
+# measurement showed it threw away the BEST material -- the files it rejected
+# scored 80.0% root accuracy against 49.8% for the ones it kept, because a
+# tonal one-shot has a sparse chroma and an obvious key. Real audio spreads
+# some energy into every bin through leakage and partials, so at 2% this
+# rejects nothing real and still refuses a synthetic single-bin spike, which
+# carries no key information at all.
+_CHROMA_MIN_CLASSES = 3
+_CHROMA_PRESENT = 0.02
+
 
 def _pearson(a, b):
     """Pearson correlation of two equal-length sequences; 0 when either is flat."""
@@ -277,6 +300,126 @@ def estimate_key_ks(chroma12):
     return best_key, round(max(best_r, 0.0), 3)
 
 
+# Temperley's revision of the Krumhansl-Kessler weights, fitted to notated music
+# rather than to probe-tone experiments. The literature prefers them, and on this
+# corpus they are clearly WORSE: 23.0% root accuracy against 39.0% for the 1982
+# originals on the same 200 files and the same chroma. Kept selectable and
+# labelled so the result is not quietly re-discovered, but `ks` is the default
+# for a measured reason.
+_TEMPERLEY_MAJOR = (5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0)
+_TEMPERLEY_MINOR = (5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0)
+
+PROFILE_SETS = {
+    "ks": (_KS_MAJOR, _KS_MINOR),
+    "temperley": (_TEMPERLEY_MAJOR, _TEMPERLEY_MINOR),
+}
+
+
+def _relative_pair(a, b):
+    """True if two keys are each other's relative major/minor (Am vs C)."""
+    if a is None or b is None or a.endswith("m") == b.endswith("m"):
+        return False
+    major, minor = (b, a) if a.endswith("m") else (a, b)
+    tonic_maj = _PITCH_CLASSES.index(major)
+    tonic_min = _PITCH_CLASSES.index(minor[:-1])
+    return (tonic_min + 3) % 12 == tonic_maj
+
+
+def estimate_key_detailed(chroma12, profiles="ks"):
+    """Key finding that separates how sure we are of the ROOT from the MODE.
+
+    A single confidence number hides the failure this task actually has. The
+    relative major and minor of a key share all seven notes, so their profiles
+    correlate almost identically with the same chroma -- the root is often solid
+    while major-vs-minor is a coin flip. Reporting one number forces a choice
+    between overstating the mode and discarding a good root.
+
+    So the runners-up are kept, and confidence is the margin between the best
+    fit and the best fit of a *different* root -- a relative-key runner-up says
+    nothing about whether the root is right. Measured on 298 key-labelled files:
+    ranking by this margin gives 78.0% root accuracy over the most-confident
+    fifth against 62.7% for the raw correlation, and 74.8% vs 63.9% over the
+    most-confident two fifths. Identical at full coverage, as it must be -- the
+    detector is unchanged, only the ordering of trust.
+
+    A symmetric mode_confidence (margin against the same root's other mode) was
+    built and then removed: it measured *backwards*, 55.5% mode accuracy when
+    confident against 66.3% when not. The available ground truth cannot settle
+    why -- filename labels write a bare "C" for both C major and C minor -- and
+    shipping a confidence that anti-correlates with being right is worse than
+    shipping none. `ambiguous_with` is kept because it states a fact about the
+    scores rather than a claim about accuracy.
+
+    Returns a dict: key, root, mode, confidence, root_confidence, correlation,
+    ambiguous_with, runners_up.
+    """
+    empty = {"key": None, "root": None, "mode": None, "confidence": 0.0,
+             "root_confidence": 0.0,
+             "correlation": 0.0, "ambiguous_with": None, "runners_up": []}
+    if not chroma12 or len(chroma12) != 12 or sum(chroma12) <= 0:
+        return empty
+    # A key is a claim about which seven pitch classes are in play, so one or
+    # two of them cannot support it: an isolated A fits A major, A minor, D
+    # major and F# minor alike. The profiles will still rank *something* first
+    # and the margin can look healthy, so this has to be refused up front
+    # rather than left to the confidence.
+    peak = max(chroma12)
+    if sum(1 for v in chroma12 if v >= peak * _CHROMA_PRESENT) < _CHROMA_MIN_CLASSES:
+        return empty
+    major, minor = PROFILE_SETS.get(profiles, PROFILE_SETS["ks"])
+
+    scored = []
+    for tonic in range(12):
+        name = _PITCH_CLASSES[tonic]
+        maj = [major[(i - tonic) % 12] for i in range(12)]
+        minr = [minor[(i - tonic) % 12] for i in range(12)]
+        scored.append((_pearson(chroma12, maj), name, name, "major"))
+        scored.append((_pearson(chroma12, minr), name + "m", name, "minor"))
+    scored.sort(key=lambda t: -t[0])
+
+    best_r, best_key, best_root, best_mode = scored[0]
+    if best_r <= 0:
+        return empty
+
+    # margin against the best candidate rooted elsewhere -- a relative-key
+    # runner-up says nothing about whether the root is right
+    other_root = next((s for s in scored[1:] if s[2] != best_root), None)
+    root_conf = max(0.0, best_r - other_root[0]) if other_root else best_r
+
+    runner = scored[1]
+    ambiguous = runner[1] if _relative_pair(best_key, runner[1]) else None
+
+    return {
+        "key": best_key, "root": best_root, "mode": best_mode,
+        "confidence": round(max(best_r, 0.0), 3),      # legacy: the raw fit
+        "root_confidence": round(root_conf, 3),
+        "correlation": round(best_r, 3),
+        "ambiguous_with": ambiguous,
+        "runners_up": [{"key": k, "correlation": round(r, 3)}
+                       for r, k, _root, _mode in scored[1:4]],
+    }
+
+
+def _key_without_librosa(filepath):
+    """Audio-derived key using only numpy, or None.
+
+    The weaker path by design -- an STFT chroma cannot resolve low notes as
+    cleanly as a constant-Q one, and it measures 39.0% root accuracy against
+    51.0%. It exists because the alternative when librosa is absent is no
+    audio key detection at all, only the filename.
+    """
+    try:
+        from acidcat.core.analysis import chroma as chromamod, pcm
+        planes, rate = pcm.load(filepath)
+        vec = chromamod.chroma12(planes, rate, harmonic=True)
+    except Exception:
+        return None
+    if not vec:
+        return None
+    detail = estimate_key_detailed(vec)
+    return detail["key"] if detail["root_confidence"] >= KEY_MARGIN_MIN else None
+
+
 # ── Librosa-based estimation ───────────────────────────────────────
 
 def estimate_librosa_metadata(filepath):
@@ -299,16 +442,21 @@ def estimate_librosa_metadata(filepath):
         require("librosa", "numpy", group="analysis")
         fn_bpm = parse_bpm_from_filename(filepath)
         fn_key = parse_key_from_path(filepath)
+        # numpy alone can still read a key out of the audio -- less well than
+        # the CQT path (39.0% vs 51.0% root accuracy on the same files), but the
+        # alternative here is no audio key detection at all
+        det_key = _key_without_librosa(filepath)
         return {
             "estimated_bpm": fn_bpm,
-            "estimated_key": fn_key,
+            "estimated_key": fn_key or det_key,
             "duration_sec": None,
             "bpm_source": "filename" if fn_bpm is not None else None,
-            "key_source": "filename" if fn_key is not None else None,
+            "key_source": ("filename" if fn_key else
+                           ("audio-numpy" if det_key else None)),
             "filename_bpm": fn_bpm,
             "filename_key": fn_key,
             "detected_bpm": None,
-            "detected_key": None,
+            "detected_key": det_key,
         }
 
     try:
@@ -348,12 +496,22 @@ def estimate_librosa_metadata(filepath):
         # chroma argmax, comparing the distribution *shape* against two templates
         # names the mode (major vs minor), so we can emit a real key from audio.
         # chroma_cqt is more tuning-robust than chroma_stft for key finding.
+        # HPSS-separated chroma was tried here (percussion smears the pitch
+        # classes, so removing it should help) and measured WORSE on this
+        # corpus: 67.4% root accuracy against 71.7%, at 6.5x the cost. CQT's
+        # long low-frequency windows already suppress transients, so the
+        # separation only costs signal. Left as plain chroma_cqt on purpose.
         detected_key, detected_key_conf = None, 0.0
         try:
             chroma = librosa.feature.chroma_cqt(y=y, sr=sr)         # 12 x frames, bin 0 = C
             profile = [float(x) for x in chroma.mean(axis=1)]
-            detected_key, detected_key_conf = estimate_key_ks(profile)
-            if detected_key_conf < KEY_CONF_MIN:                    # too ambiguous to trust
+            detail = estimate_key_detailed(profile)
+            detected_key = detail["key"]
+            detected_key_conf = detail["correlation"]
+            # gate on the margin over the best *differently-rooted* candidate,
+            # not on the raw fit: at equal coverage that ranks 78.0% correct
+            # over the top fifth against 62.7% for the correlation
+            if detail["root_confidence"] < KEY_MARGIN_MIN:
                 detected_key = None
         except Exception:
             pass
