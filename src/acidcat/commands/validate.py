@@ -53,20 +53,20 @@ def _check(path, quiet):
             data = f.read()
     except OSError as e:
         print(f"acidcat validate: {path}: {e}", file=sys.stderr)
-        return False, True, True
+        return False, True, True, False
     report = constraints.analyze(data)
     if report is None:
-        return False, True, False               # not a structurally-modeled container
+        return False, True, False, False        # not a structurally-modeled container
     base = os.path.basename(path)
     if not report.violations:
         if not quiet:
             print(f"OK    {base}  [{report.label}]")
-        return True, True, False
+        return True, True, False, False
     print(f"FAIL  {base}  [{report.label}]  {len(report.violations)} issue(s)")
     for v in report.violations:
         mark = "" if v.repairable else "  (no witness)"
         print(f"        {v.describe()}{mark}")
-    return True, False, False
+    return True, False, False, any(v.repairable for v in report.violations)
 
 
 def run(args):
@@ -75,6 +75,7 @@ def run(args):
     # accessed (a real error). a file inside a walked directory that is missing
     # or unreadable is a skip, not a hard error.
     checked = failed = errors = unreadable = 0
+    any_repairable = False
     for inp in args.inputs:
         if not os.path.exists(inp):
             print(f"acidcat validate: {inp}: No such file or directory",
@@ -83,7 +84,8 @@ def run(args):
             continue
         named = not os.path.isdir(inp)
         for path in _iter_paths([inp]):
-            did, ok, error = _check(path, args.quiet)
+            did, ok, error, repairable = _check(path, args.quiet)
+            any_repairable = any_repairable or repairable
             if error:
                 # Inside a directory walk an unreadable file used to be counted
                 # nowhere -- not checked, not failed, not an error -- so a run
@@ -105,8 +107,12 @@ def run(args):
               + skipped, file=sys.stderr)
         return 1 if unreadable else 0
     if failed:
-        print(f"\n{failed} of {checked} file(s) have structural issues "
-              f"(fix with: acidcat repair){skipped}")
+        # only point at repair when something is actually repairable. An
+        # orphaned audio payload has no safe rewrite and repair refuses it, so
+        # the advice would send the user round a loop.
+        hint = " (fix with: acidcat repair)" if any_repairable else ""
+        print(f"\n{failed} of {checked} file(s) have structural issues"
+              f"{hint}{skipped}")
         return 1
     if not args.quiet:
         print(f"\nall {checked} file(s) consistent{skipped}")

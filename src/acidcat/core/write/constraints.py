@@ -47,6 +47,12 @@ class Violation:
         return bool(self.witness)
 
     def describe(self):
+        # some violations are not a stored-vs-computed mismatch at all -- an
+        # orphaned audio payload has no meaningful "computed" value, and the
+        # arrow form ("882,008 -> 0 bytes") reads as nonsense. When a violation
+        # carries a written explanation, that IS the description.
+        if self.detail and not self.repairable:
+            return f"{self.path}: {self.detail}"
         if self.field == "pad_byte":
             return f"{self.path} pad byte: 0x{self.stored:02x} -> 0x{self.computed:02x}"
         if isinstance(self.stored, int) and isinstance(self.computed, int):
