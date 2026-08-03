@@ -26,10 +26,24 @@ either *sustains* correlation (tonal) or *oscillates* into negative autocorr
 (voiced waveform). A lone lag-1 threshold can't separate low-fi 8-bit audio
 (r1~0.5) from code (r1~0.4) -- the decay/oscillation shape is what does.
 
-v1 reads the blob as 8-bit signed PCM. 16-bit / endianness / sign is a small
-search (try the strides, keep the best autocorr) and is a later increment.
+The features above read a window as 8-bit signed PCM, and on its own that is
+blind to the format most audio actually uses. In 16-bit PCM the low byte of a
+sample is close to noise, so consecutive bytes alternate noisy/smooth and the
+lag-1 correlation this engine keys on is destroyed. Measured on 600 KB of real
+16-bit stereo audio:
+
+    read as bytes      r1 = +0.001   r2 = +0.051    -> score 0.000, invisible
+    read as int16      r1 = +0.572   r2 = +0.998
+
+So `scan` reads each window three ways -- as-is, and decimated by two at both
+byte offsets, which recovers the high byte of a 16-bit sample as a smooth 8-bit
+signal the existing features handle unchanged -- and keeps whichever scores
+best. The winning reading is reported as `evidence.view` / `evidence.width`.
+Cost is ~2x (the decimated passes are half length); the return is that raw
+16-bit PCM is found at all, which is the common case.
+
 Compressed audio blobs (BRR, ADPCM, MP3) are high-entropy and not smooth, so
-this engine does not find them; they need structural signatures -- also later.
+this engine does not find them; they need structural signatures -- still later.
 
 Pure-Python by design: `scan` is a base-install capability, not gated behind the
 numpy `analysis` extra.
@@ -398,6 +412,105 @@ def _bulk_batch(np, data, window, step, first, count):
     return out
 
 
+# How the bytes are read before scoring. The features treat a window as 8-bit
+# signed PCM, which is blind to the format most audio actually uses: in 16-bit
+# PCM the low byte of each sample is close to noise, so consecutive bytes
+# alternate noisy/smooth and the lag-1 correlation the detector keys on is
+# destroyed. Measured on 600 KB of real 16-bit stereo audio:
+#
+#     read as bytes      r1 = +0.001   r2 = +0.051    -> scored 0.000, invisible
+#     read as int16      r1 = +0.572   r2 = +0.998
+#
+# Taking every other byte recovers the high byte, which IS a smooth 8-bit
+# signal, so the existing feature set works on it unchanged. Offset 1 is
+# little-endian, offset 0 big-endian. Cost is one extra half-length pass per
+# view; the win is that `locate` finds 16-bit PCM at all.
+# windows folded per block, so only one block of feature dicts is live per view
+_VIEW_BLOCK = 4096
+
+_VIEWS = (
+    ("8bit", 1, 0),
+    ("16bit-le", 2, 1),
+    ("16bit-be", 2, 0),
+)
+
+
+def _view_fits(data, window, step, stride):
+    """Whether a decimated reading has enough bytes per window to score."""
+    if stride == 1:
+        return True
+    vwin = window // stride
+    return vwin >= LAGS[-1] + 1 and step // stride >= 1 and len(data) >= window
+
+
+def _scores_for(data, window, step, stride, offset, first, n):
+    """(score, features) for windows [first, first+n) under one reading.
+
+    The decimation happens on this block only. Slicing `data[offset::stride]`
+    for the whole buffer copies half of it per view -- +256 MB on a scan at the
+    read cap, which is the same allocation-scales-with-input mistake the batch
+    loop in _bulk_features exists to avoid.
+    """
+    span_start = first * step
+    span_end = min(len(data), span_start + (n - 1) * step + window)
+    if span_end - span_start < window:
+        return []
+    block = data[span_start:span_end]
+    if stride > 1:
+        block = block[offset::stride]
+        vwin, vstep = window // stride, step // stride
+    else:
+        vwin, vstep = window, step
+    usable = (len(block) - vwin) // vstep + 1
+    n = min(n, max(0, usable))
+    if n < 1:
+        return []
+    feats = _bulk_features(block, vwin, vstep, n) if n > 64 else None
+    if feats is None:
+        feats = [window_features(block[i * vstep:i * vstep + vwin])
+                 for i in range(n)]
+    return [(audio_score(f), f) for f in feats]
+
+
+def _best_marks(data, window, step, count, min_score=0.0):
+    """Yield (offset, score, features) per window, under whichever view scores
+    best.
+
+    A generator on purpose: materializing one tuple per window held the whole
+    scan's features in memory at once, which is how peak allocation ended up
+    tracking input size even after the numpy layer was batched.
+
+    A window is audio if ANY reading of it looks like audio -- taking the max
+    rather than a fixed interpretation is what lets one scan find 8-bit and
+    16-bit material in the same blob. The winning view is recorded on the
+    features so `locate --analyze` and the region evidence can report it.
+    """
+    views = [(name, stride, offset) for name, stride, offset in _VIEWS
+             if _view_fits(data, window, step, stride)]
+    if not views:
+        return
+
+    # Fold the views a block of windows at a time. Building each view's full
+    # feature list and then combining would keep two complete sets alive at
+    # once, and those dicts are retained per window for the whole scan -- the
+    # same shape as the allocation bug the batch loop in _bulk_features exists
+    # to prevent.
+    for first in range(0, count, _VIEW_BLOCK):
+        n = min(_VIEW_BLOCK, count - first)
+        best = [(-1.0, None)] * n
+        for name, stride, offset in views:
+            for i, (score, feat) in enumerate(
+                    _scores_for(data, window, step, stride, offset, first, n)):
+                if score > best[i][0]:
+                    best[i] = (score, dict(feat, view=name))
+        for i, (score, feat) in enumerate(best):
+            # Only windows that clear the gate have their features kept: scan
+            # discards the rest, and retaining a dict per window made memory
+            # scale with the INPUT rather than with the audio actually found.
+            keep = feat if (feat and score >= min_score) else None
+            yield ((first + i) * step, max(score, 0.0), keep)
+
+
 def scan(data, *, window=DEFAULT_WINDOW, step=DEFAULT_STEP,
          min_score=DEFAULT_MIN_SCORE, merge_gap=DEFAULT_MERGE_GAP,
          read_cap=DEFAULT_READ_CAP):
@@ -417,11 +530,7 @@ def scan(data, *, window=DEFAULT_WINDOW, step=DEFAULT_STEP,
 
     last = n - window
     count = last // step + 1
-    feats = _bulk_features(data, window, step, count) if count > 64 else None
-    if feats is None:
-        feats = [window_features(data[i * step:i * step + window])
-                 for i in range(count)]
-    marks = [(i * step, audio_score(f), f) for i, f in enumerate(feats)]
+    marks = _best_marks(data, window, step, count, min_score)
 
     regions = []
     run = None                                          # accumulating region
@@ -429,12 +538,9 @@ def scan(data, *, window=DEFAULT_WINDOW, step=DEFAULT_STEP,
     for off, score, feat in marks:
         if score >= min_score:
             if run is None:
-                run = {"start": off, "end": off + window, "_scores": [score],
-                       "_feats": [feat]}
+                run = _acc_new(off, window, score, feat)
             else:
-                run["end"] = off + window               # end tracks the last HIT only
-                run["_scores"].append(score)
-                run["_feats"].append(feat)
+                _acc_add(run, off, window, score, feat)
             gap = 0
         elif run is not None:
             gap += 1
@@ -572,21 +678,49 @@ def _debug_tells(vals, peak_ref, full):
     }
 
 
-def _finalize(run):
+def _acc_new(off, window, score, feat):
+    """Start a region accumulator.
+
+    Running sums rather than a list of feature dicts: _finalize only ever wants
+    the MEAN of each field, and retaining one dict per window made scan()'s
+    peak memory scale with the audio found (4x the input on all-audio data).
+    The numpy layer is already batched; this was the other half.
+    """
+    acc = {"start": off, "end": off + window, "n": 0, "score_sum": 0.0,
+           "entropy_sum": 0.0, "ac_sum": {L: 0.0 for L in LAGS},
+           "views": {}}
+    _acc_add(acc, off, window, score, feat)
+    return acc
+
+
+def _acc_add(acc, off, window, score, feat):
+    acc["end"] = off + window                   # end tracks the last HIT only
+    acc["n"] += 1
+    acc["score_sum"] += score
+    if feat:
+        acc["entropy_sum"] += feat.get("entropy", 0.0)
+        for L in LAGS:
+            acc["ac_sum"][L] += feat.get("autocorr", {}).get(L, 0.0)
+        view = feat.get("view")
+        if view:
+            acc["views"][view] = acc["views"].get(view, 0) + 1
+
+
+def _finalize(acc):
     """Collapse an accumulated run into a reported region with mean evidence."""
-    scores = run["_scores"]
-    feats = run["_feats"]
-    k = len(feats)
-    mean_ac = {L: sum(f["autocorr"][L] for f in feats) / k for L in LAGS}
+    k = max(acc["n"], 1)
+    # the reading that won most often across the region -- 8bit / 16bit-le / -be
+    view = max(acc["views"], key=acc["views"].get) if acc["views"] else "8bit"
     return {
-        "start": run["start"],
-        "end": run["end"],
-        "length": run["end"] - run["start"],
-        "confidence": sum(scores) / k,
-        "windows": k,
+        "start": acc["start"],
+        "end": acc["end"],
+        "length": acc["end"] - acc["start"],
+        "confidence": acc["score_sum"] / k,
+        "windows": acc["n"],
         "evidence": {
-            "entropy": sum(f["entropy"] for f in feats) / k,
-            "autocorr": mean_ac,
-            "width": 1,                                 # v1: 8-bit signed PCM
+            "entropy": acc["entropy_sum"] / k,
+            "autocorr": {L: acc["ac_sum"][L] / k for L in LAGS},
+            "width": 2 if view.startswith("16bit") else 1,
+            "view": view,
         },
     }

@@ -479,13 +479,39 @@ class AcidcatTUI(App):
         out = [dict(regions[0])]
         for r in regions[1:]:
             prev = out[-1]
-            if (r["offset"] == prev["end"] and r["kind"] == prev["kind"]
-                    and r.get("format") == prev.get("format")):
+            same_kind = (r["kind"] == prev["kind"]
+                         and r.get("format") == prev.get("format"))
+            # A container whose extent was clipped at a segment boundary carries
+            # corrupt_extent, and the bytes that follow are its own payload --
+            # which the statistical pass now reports as blobs. They are neither
+            # the same kind nor absorbable (the container's end stops at the
+            # boundary), so the container has to swallow them as it goes.
+            continues = (prev["kind"] == "container" and r["kind"] == "blob"
+                         and prev.get("corrupt_extent")
+                         and r["offset"] <= prev["end"])
+            if r["offset"] == prev["end"] and (same_kind or continues):
                 prev["end"] = r["end"]
+                prev["length"] = prev["end"] - prev["offset"]
+            elif continues:
+                prev["end"] = max(prev["end"], r["end"])
                 prev["length"] = prev["end"] - prev["offset"]
             else:
                 out.append(dict(r))
-        return out
+
+        # Then drop statistical hits that are really a container's own payload.
+        # `locate` does this over a whole file, but a segmented scan never sees
+        # a whole file: a 12 KB WAV spans three 4 KB segments, so the first
+        # yields the container and the rest yield its PCM as separate blobs.
+        # They are not adjacent AND not the same kind, so the coalesce above
+        # cannot join them -- the containers have to absorb them instead.
+        from acidcat.core.forensics.locate import _mostly_within
+        extents = [(r["offset"], r["end"]) for r in out
+                   if r["kind"] == "container" and r["end"] > r["offset"]]
+        if not extents:
+            return out
+        return [r for r in out
+                if r["kind"] == "container"
+                or not _mostly_within(r["offset"], r["end"], extents)]
 
     def action_pause_scan(self):
         """space: freeze the scan at the current segment, or resume it."""

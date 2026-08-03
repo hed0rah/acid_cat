@@ -507,8 +507,12 @@ def run(args):
                 filepath, region_scope = regions.enter_context(
                     scoped_file(args, filepath))
             except (ValueError, OSError) as e:
+                # a malformed --offset/--at/--region is a USAGE error, and `od`
+                # and `carve` already return 2 for the identical mistake. This
+                # returned 1, so a script could not branch on it without
+                # knowing which verb it had called.
                 print(f"acidcat inspect: {source_path}: {e}", file=sys.stderr)
-                exit_code = 1
+                exit_code = 2
                 continue
             if getattr(args, "resync", False):
                 # a damaged container is exactly the case where the walk fails,

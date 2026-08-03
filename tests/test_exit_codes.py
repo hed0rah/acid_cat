@@ -91,14 +91,25 @@ def _code(argv):
         return e.code
 
 
-def test_the_same_mistake_gets_the_same_code_in_every_verb(tmp_path):
-    """The inconsistency that motivated this: an unresolvable offset expression
-    returned 2 from `od` and 1 from `probe`, so a script could not branch on
-    it without knowing which verb it had called."""
+# every verb that accepts a range expression -- checked as a set rather than a
+# hand-picked pair, because the first version of this test asserted only `od`
+# and `probe` and therefore missed `inspect`, which returned 1 for the same
+# mistake right up until a regression audit found it
+_RANGE_VERBS = [
+    ("od", lambda p: ["od", p, "--at", "notanoffset"]),
+    ("carve", lambda p: ["carve", p, "--at", "notanoffset", "--length", "4"]),
+    ("inspect", lambda p: ["inspect", p, "--at", "notanoffset"]),
+    ("probe", lambda p: ["probe", p, "read", "notanoffset"]),
+]
+
+
+@pytest.mark.parametrize("verb,argv", _RANGE_VERBS, ids=[v for v, _ in _RANGE_VERBS])
+def test_the_same_mistake_gets_the_same_code_in_every_verb(tmp_path, verb, argv):
+    """An unresolvable offset expression is a usage error everywhere, or a
+    script cannot branch on it without knowing which verb it called."""
     p = tmp_path / "a.wav"
     p.write_bytes(_wav())
-    assert _code(["od", str(p), "--at", "notanoffset"]) == 2
-    assert _code(["probe", str(p), "read", "notanoffset"]) == 2
+    assert _code(argv(str(p))) == 2, f"{verb} disagrees on a bad range expression"
 
 
 def test_a_missing_input_file_is_consistent(tmp_path):

@@ -126,7 +126,9 @@ def test_region_out_of_range_is_reported(tmp_path, capsys):
     img.write_bytes(b"\x00" * 2048 + _wav_bytes())
     rc = main(["inspect", str(img), "--region", "99"])
     err = capsys.readouterr().err
-    assert rc == 1 and "out of range" in err
+    # 2, not 1: a bad range expression is a usage error, and `od` and `carve`
+    # already returned 2 for the identical mistake. inspect was the outlier.
+    assert rc == 2 and "out of range" in err
 
 
 def test_region_errors_name_the_source_not_the_temp_copy(tmp_path, capsys):

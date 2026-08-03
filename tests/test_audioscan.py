@@ -91,7 +91,13 @@ def test_buried_tone_is_located():
     assert reg["start"] >= a0 - audioscan.DEFAULT_WINDOW
     assert reg["end"] <= a1 + audioscan.DEFAULT_WINDOW
     assert reg["confidence"] > 0.5
-    assert reg["evidence"]["width"] == 1
+    # width now reports the reading that won, not a hardcoded 1: the scan tries
+    # 8-bit and both 16-bit byte orders and keeps whichever scores best. An
+    # 8-bit synthetic tone can legitimately also read as 16-bit, so assert the
+    # value is one the detector actually supports rather than pinning the old
+    # single-interpretation behaviour.
+    assert reg["evidence"]["width"] in (1, 2)
+    assert reg["evidence"]["view"] in ("8bit", "16bit-le", "16bit-be")
 
 
 def test_two_tones_two_regions():

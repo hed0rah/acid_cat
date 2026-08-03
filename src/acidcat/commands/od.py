@@ -134,6 +134,11 @@ def _requested_range(args, path, size):
     return start, length
 
 
+# How much an automatic (no-walker) dump shows before it stops and says so.
+# An explicit --offset/--length is never capped: the user asked for that range.
+_AUTO_DUMP_CAP = 16 * 1024 * 1024
+
+
 def _raw_dump(data, start, length, width, on, note):
     """A plain hex dump of a byte range -- what od(1) does. Used when the file
     has no walker, or when an explicit range was asked for."""
@@ -172,9 +177,18 @@ def _run(args):
         # error. `inspect` is where "I do not know this format" is the answer.
         data, close = map_file(path)
         try:
-            return _raw_dump(data, 0, len(data), args.width, on,
-                             f"{path}  {len(data):,} bytes  "
-                             f"(no structural walker -- raw dump)")
+            # Bounded, and it says so. Unbounded, this printed 285 MB as hex --
+            # 1.4 GB of stdout over five and a half minutes -- where the old
+            # behaviour was to refuse in 0.19s. `locate` in this same release
+            # learned to name the engine that stopped short; the fallback that
+            # replaced a refusal has to do the same.
+            shown = min(len(data), _AUTO_DUMP_CAP)
+            note = (f"{path}  {len(data):,} bytes  "
+                    f"(no structural walker -- raw dump)")
+            if shown < len(data):
+                note += (f"\n  showing the first {shown:,} bytes; "
+                         f"use --offset/--length for the rest")
+            return _raw_dump(data, 0, shown, args.width, on, note)
         finally:
             close()
     # mmap, not f.read(): od only slices small header/field/preview runs, and
