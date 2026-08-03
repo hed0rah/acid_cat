@@ -47,3 +47,20 @@ The generator is committed, its output is not (`.gitignore`).
 run says something was skipped, the log says why. Skips that remain on CI are
 platform-conditional (the Linux-only sandbox profiles) or need a local corpus
 of a format we cannot synthesise yet (`nksf`, `nmsv`, `krz`).
+
+## Before you push
+
+    python scripts/preflight.py
+
+CI has nothing git does not carry. This machine has a 2,327-file sample
+library, a 16 MB format-fixture tree and 731 MB of instrument packs -- all
+gitignored, all invisible to a test that forgets to guard for them. Preflight
+hides them and clears `ACIDCAT_*`, so a green run locally means a green run
+there.
+
+Every red build this project has had came from that gap rather than a real
+defect: a test hardcoding `/tmp/...`, a test relying on the local registry, and
+three TUI `copyfile` calls that had never been allowed to run. All three passed
+here and failed on a runner.
+
+    python scripts/preflight.py --full     # the wide run, local corpora included
