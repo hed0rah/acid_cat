@@ -80,7 +80,7 @@ def _register_all():
                 "root": {"type": "string",
                          "description": "Library label or path. "
                          "Comma-separated for multiple."},
-                "limit": {"type": "integer", "default": 50, "description": "Max results to return."},
+                "limit": {"type": "integer", "minimum": 0, "default": 50, "description": "Max results to return."},
             },
         },
         search_samples,
@@ -106,7 +106,7 @@ def _register_all():
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Filename substring to match (case-insensitive)."},
-                "limit": {"type": "integer", "default": 10, "description": "Max results to return."},
+                "limit": {"type": "integer", "minimum": 0, "default": 10, "description": "Max results to return."},
             },
             "required": ["name"],
         },
@@ -185,7 +185,7 @@ def _register_all():
                         "Optional seconds floor. Overrides/augments kind "
                         "filter for length-specific queries.",
                 },
-                "limit": {"type": "integer", "default": 20, "description": "Max results to return."},
+                "limit": {"type": "integer", "minimum": 0, "default": 20, "description": "Max results to return."},
             },
             "required": ["path"],
         },
@@ -209,7 +209,7 @@ def _register_all():
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Absolute path to the sample file."},
-                "n": {"type": "integer", "default": 5, "description": "How many similar samples to return."},
+                "n": {"type": "integer", "minimum": 0, "default": 5, "description": "How many similar samples to return."},
                 "kind": {
                     "type": "string",
                     "enum": ["loop", "one_shot", "any"],
@@ -300,8 +300,10 @@ def _register_all():
                 "library": {"type": "string",
                             "description": "Optional: scope to one library "
                                            "by label or root path."},
-                "limit": {"type": "integer",
-                          "description": "Max files per library this call."},
+                "limit": {"type": "integer", "minimum": 0, "default": 0,
+                          "description": "Max files per library this call. "
+                                         "0 means no limit -- this tool is "
+                                         "VERY SLOW, so pass a number."},
             },
         },
         reindex_features,

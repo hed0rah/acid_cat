@@ -41,6 +41,32 @@ _CONN_CACHE = {}
 _CACHE_LOCK = threading.RLock()
 
 
+
+# Result-count limits arrive from a model, so they get clamped rather than
+# trusted. Two ways the raw value bites:
+#   * SQLite reads `LIMIT -5` as NO limit, and `merged[:-5]` then just drops the
+#     tail -- so a negative limit fans out over every registered library. On a
+#     1.2M-sample corpus `limit: -1` pulls every row into memory and into the
+#     model's context.
+#   * `int(args.get("limit") or 50)` turns an explicit 0 into 50, because
+#     `0 or 50` is 50.
+_MAX_LIMIT = 10_000
+
+
+def _limit(args, key, default):
+    """A sane row limit from tool arguments."""
+    raw = args.get(key)
+    if raw is None or raw == "":
+        return default
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        raise ToolError(f"{key} must be a whole number, got {raw!r}")
+    if n < 0:
+        raise ToolError(f"{key} must be zero or positive, got {n}")
+    return min(n, _MAX_LIMIT)
+
+
 def _cached_conn(db_path):
     """A cached read connection for db_path, revalidated on borrow (a DB file
     swapped/removed out of band is evicted and reopened). Call under _CACHE_LOCK."""
@@ -229,7 +255,7 @@ def search_samples(args):
         device=args.get("device"), category=args.get("category"),
         creator=args.get("creator"), product=args.get("product"),
         tags=args.get("tags"), text=args.get("text"))
-    limit = int(args.get("limit") or 50)
+    limit = _limit(args, "limit", 50)
     sql = query_sql.assemble(where, joins, order="s.path", limit_placeholder=True)
 
     merged = []
@@ -299,7 +325,7 @@ def locate_sample(args):
     name = args.get("name")
     if not name:
         raise ToolError("name is required")
-    limit = int(args.get("limit") or 10)
+    limit = _limit(args, "limit", 10)
     # substring match anywhere in the path. The previous "%/<name>%" pattern
     # required `name` to start at a path-component boundary, which silently
     # failed for searches that landed mid-filename (e.g. "Kick_Wet" inside
@@ -491,7 +517,7 @@ def find_compatible(args):
         half_double=bool(args.get("half_double", True)),
         include_relative=include_relative,
         min_duration=args.get("min_duration"),
-        limit=int(args.get("limit") or 20),
+        limit=_limit(args, "limit", 20),
         exclude_path=path,
     )
     compat_pretty = sorted(camelot.compatible_keys(key)) if key else []
@@ -524,7 +550,7 @@ def find_similar(args):
     resolve the target's features from the index or a live extract, then fan out
     and score in core."""
     path = _require_path(args)
-    n = int(args.get("n") or 5)
+    n = _limit(args, "n", 5)
     kind_arg = (args.get("kind") or "").lower() or None
     kind_filter_enabled = bool(args.get("kind_filter", True))
 
@@ -661,7 +687,11 @@ def reindex_features(args):
         return _analysis_unavailable()
     from acidcat.core.analysis.features import extract_audio_features
 
-    limit = args.get("limit")
+    # `if limit:` treated 0 as "no limit" here, the exact opposite of every
+    # other tool, where 0 fell through to a default. A model passing the falsy
+    # value it thinks is a no-op turned the slowest tool in the set into an
+    # unbounded multi-hour run. 0 now means 0.
+    limit = _limit(args, "limit", 0)
     target_label = args.get("library")  # optional: scope to one library
 
     rconn = reg.open_registry(_REGISTRY_PATH)
@@ -689,9 +719,9 @@ def reindex_features(args):
                 "LEFT JOIN features f ON f.path = s.path "
                 "WHERE f.path IS NULL"
             )
-            if limit:
+            if limit > 0:
                 sql += " LIMIT ?"
-                rows = conn.execute(sql, (int(limit),)).fetchall()
+                rows = conn.execute(sql, (limit,)).fetchall()
             else:
                 rows = conn.execute(sql).fetchall()
             for r in rows:

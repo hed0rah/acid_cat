@@ -185,3 +185,71 @@ def test_python_dash_m_is_a_working_entry_point():
                        cwd=REPO, env=env)
     assert p.returncode == 0, p.stderr
     assert "acidcat" in (p.stdout + p.stderr).lower()
+
+
+# ------------------------------------------------------- argument hardening
+
+def test_a_negative_limit_is_refused_not_treated_as_unlimited():
+    """SQLite reads `LIMIT -5` as NO limit, and `merged[:-5]` then just drops
+    the tail -- so a negative limit fanned out over every registered library.
+    An audit got 38 rows from `locate_sample{limit:-3}` on a 41-sample index;
+    on a 1.2M-sample corpus `limit: -1` pulls everything into the model's
+    context."""
+    from acidcat.mcp_server.handlers import ToolError, _limit
+    for key in ("limit", "n"):
+        with pytest.raises(ToolError, match="zero or positive"):
+            _limit({key: -1}, key, 50)
+
+
+def test_zero_means_zero_not_the_default():
+    """`int(args.get("limit") or 50)` turned an explicit 0 into 50, because
+    `0 or 50` is 50."""
+    from acidcat.mcp_server.handlers import _limit
+    assert _limit({"limit": 0}, "limit", 50) == 0
+    assert _limit({}, "limit", 50) == 50
+
+
+def test_an_absurd_limit_is_capped():
+    from acidcat.mcp_server.handlers import _limit
+    assert _limit({"limit": 10 ** 9}, "limit", 50) == 10_000
+
+
+def test_a_non_numeric_limit_is_a_clean_error():
+    from acidcat.mcp_server.handlers import ToolError, _limit
+    with pytest.raises(ToolError, match="whole number"):
+        _limit({"limit": "lots"}, "limit", 50)
+
+
+def test_count_schemas_publish_their_minimum():
+    """A client should be told the constraint rather than discovering it as a
+    fan-out."""
+    from acidcat.mcp_server import TOOLS
+    for tool in TOOLS:
+        props = tool["input_schema"].get("properties", {})
+        for name in ("limit", "n"):
+            if name in props and props[name].get("type") == "integer":
+                assert "minimum" in props[name], \
+                    f"{tool['name']}.{name} has no minimum"
+
+
+def test_http_transport_pins_host_and_origin():
+    """The SDK disables DNS-rebinding protection when security_settings is
+    None, and this server is stateless with no auth -- so any browser page
+    could POST to the loopback port with a forged Origin and reach every tool,
+    including destructive ones."""
+    from acidcat.mcp_server.transport import _security_settings
+    s = _security_settings("127.0.0.1", 8765)
+    if s is None:
+        pytest.skip("installed mcp SDK has no TransportSecuritySettings")
+    assert s.enable_dns_rebinding_protection is True
+    assert "127.0.0.1:8765" in s.allowed_hosts
+    assert "http://127.0.0.1:8765" in s.allowed_origins
+    assert not any("attacker" in o for o in s.allowed_origins)
+
+
+def test_binding_beyond_loopback_does_not_widen_the_allow_list():
+    from acidcat.mcp_server.transport import _security_settings
+    s = _security_settings("0.0.0.0", 9000)
+    if s is None:
+        pytest.skip("installed mcp SDK has no TransportSecuritySettings")
+    assert s.allowed_hosts == ["0.0.0.0:9000"]

@@ -114,6 +114,28 @@ async def _run_stdio():
         await app.run(read, write, app.create_initialization_options())
 
 
+_LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def _security_settings(host, port):
+    """Host/Origin allow-lists for the HTTP transport, or None if unavailable.
+
+    Only the address actually served is allowed. A browser page cannot forge
+    the Host header, so pinning it is what stops a rebinding attack reaching a
+    loopback-bound server that has no auth of its own.
+    """
+    try:
+        from mcp.server.transport_security import TransportSecuritySettings
+    except ImportError:                       # older SDK: nothing to configure
+        return None
+    names = sorted(_LOOPBACK | {host}) if host in _LOOPBACK else [host]
+    hosts = [f"{n}:{port}" for n in names]
+    origins = [f"http://{h}" for h in hosts] + [f"https://{h}" for h in hosts]
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=hosts, allowed_origins=origins)
+
+
 def _run_http(host, port, json_response):
     """Serve over Streamable HTTP (the modern replacement for the SSE transport).
     Stateless (no server-side session state), mounted at /mcp, so it can sit
@@ -134,8 +156,23 @@ def _run_http(host, port, json_response):
         sys.exit(1)
 
     app = _build_app()
+
+    # DNS-rebinding protection, explicitly. The SDK treats security_settings=None
+    # as "disable it, for backwards compatibility"
+    # (mcp/server/transport_security.py: `settings or
+    # TransportSecuritySettings(enable_dns_rebinding_protection=False)`), so
+    # leaving it unset is an opt-out rather than a default.
+    #
+    # That matters here because this server is stateless (no session to guess)
+    # and has no authentication: with protection off, any page in the user's
+    # browser can POST to the loopback port with a forged Origin and reach
+    # every tool, including destructive ones like forget_library. Verified by
+    # an audit -- a curl with `Origin: http://attacker.example` was served a
+    # full feature vector for a file outside every registered library.
+    security = _security_settings(host, port)
     manager = StreamableHTTPSessionManager(
-        app=app, event_store=None, json_response=json_response, stateless=True)
+        app=app, event_store=None, json_response=json_response, stateless=True,
+        security_settings=security)
 
     async def handle(scope, receive, send):
         await manager.handle_request(scope, receive, send)
@@ -146,6 +183,13 @@ def _run_http(host, port, json_response):
             yield
 
     star = Starlette(routes=[Mount("/mcp", app=handle)], lifespan=lifespan)
+    if host not in _LOOPBACK:
+        # not a refusal -- there are legitimate reasons to bind wider -- but it
+        # must not happen quietly. There is no auth in front of these tools.
+        print(f"acidcat-mcp: WARNING binding {host} exposes every tool, "
+              f"including destructive ones, with no authentication. Put it "
+              f"behind a proxy that authenticates, or bind 127.0.0.1.",
+              file=sys.stderr)
     print(f"acidcat-mcp: streamable HTTP on http://{host}:{port}/mcp",
           file=sys.stderr)
     uvicorn.run(star, host=host, port=port, log_level="warning")
@@ -218,8 +262,11 @@ def main(argv=None):
                         help="Transport: stdio (default, for local MCP clients) "
                              "or http (streamable HTTP at /mcp).")
     parser.add_argument("--host", default="127.0.0.1",
-                        help="HTTP bind host (default: 127.0.0.1; use 0.0.0.0 to "
-                             "expose beyond localhost).")
+                        help="HTTP bind host (default: 127.0.0.1). This server "
+                             "has NO authentication -- binding it beyond "
+                             "localhost exposes every tool, including "
+                             "destructive ones, to anyone who can reach the "
+                             "port.")
     parser.add_argument("--port", type=int, default=8765,
                         help="HTTP port (default: 8765).")
     parser.add_argument("--json-response", action="store_true",
