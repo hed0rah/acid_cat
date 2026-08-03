@@ -44,8 +44,14 @@ jobs:
           sudo apt-get update && sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Install
+        # `ml` was requested here and is not a defined extra -- pip warns and
+        # carries on, so it looked installed and never was. `tui` and `crypto`
+        # were simply missing, which silently skipped the whole Textual suite
+        # and the encrypted-disc tests on every run.
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[analysis,ml,mcp]" pytest
+          pip install -e ".[analysis,mcp,tui,crypto]" pytest pytest-cov
       - name: Run tests
-        run: pytest -q
+        # -rs prints WHY things skipped. Without it the run reported "114
+        # skipped" and gave nobody a way to find out what was not covered.
+        run: pytest -q -rs --cov=acidcat --cov-report=term-missing:skip-covered

@@ -68,3 +68,18 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "acidcat.core" = ["data/*.json"]
+
+[tool.pytest.ini_options]
+# There was no pytest configuration at all before 1.0, so every invocation
+# depended on the caller's flags and the developer's working directory.
+testpaths = ["tests"]
+# -rs so skipped tests explain themselves. A bare `pytest -q` reported "114
+# skipped" with no way to learn what went uncovered, which is the same silent
+# gap this project spent a week removing from its own output.
+addopts = "-rs"
+markers = [
+    "corpus: needs a local specimen corpus that is not in the repository",
+]
+filterwarnings = [
+    "error::DeprecationWarning:acidcat.*",
+]
