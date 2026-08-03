@@ -8,6 +8,7 @@ modified copy instead. `--dry-run` prints the field-level diff and writes nothin
 """
 
 import os
+import struct
 import sys
 
 from acidcat.core.write import writer, edits
@@ -86,7 +87,7 @@ def _run_strip(args):
     for path in args.inputs:
         try:
             fmt, new_data, removed = _strip(path)
-        except (edits.EditError, OSError, ValueError) as e:
+        except (edits.EditError,) + _mutagen_errors() as e:
             print(f"acidcat write: {path}: {e}", file=sys.stderr)
             rc = 1
             continue
@@ -120,6 +121,24 @@ def _commit_and_report(path, new_data, args):
     return 0
 
 
+def _mutagen_errors():
+    """Whatever mutagen raises on a file it recognizes but cannot parse.
+
+    mutagen.MutagenError is the base for flac.error, mp3.HeaderNotFoundError,
+    id3 errors and friends, but it is not the only thing that escapes -- an
+    AIFF missing COMM raises a bare KeyError from inside its parser. These were
+    unhandled, so 15 malformed specimens (truncated FLAC, sample rate 0, an
+    all-0xFF MP3) reached the user as a raw traceback. Every other verb handles
+    the same files cleanly; only the write path did not.
+    """
+    base = (OSError, ValueError, KeyError, IndexError, struct.error)
+    try:
+        import mutagen
+        return base + (mutagen.MutagenError,)
+    except Exception:
+        return base
+
+
 def run(args):
     if args.strip:
         return _run_strip(args)
@@ -140,7 +159,7 @@ def run(args):
     for path in args.inputs:
         try:
             fmt, new_data, applied = _edit(path, changes)
-        except (edits.EditError, OSError, ValueError) as e:
+        except (edits.EditError,) + _mutagen_errors() as e:
             print(f"acidcat write: {path}: {e}", file=sys.stderr)
             rc = 1
             continue

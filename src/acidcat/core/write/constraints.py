@@ -124,12 +124,29 @@ def applicable(data):
 def analyze(data, opts=None):
     """Read-only: the combined Report across every applicable repairer (validate/
     audit entry point). Returns None when no repairer applies."""
+    # imported here rather than at module scope: structure imports constraints
+    # for Violation/SIZE, so a top-level import would be circular
+    from acidcat.core.write.structure import StructError as _StructError
+
     reps = applicable(data)
     if not reps:
         return None
     violations, note, label = [], "", None
     for r in reps:
-        rep = r.analyze(data, opts)
+        try:
+            rep = r.analyze(data, opts)
+        except _StructError as e:
+            # A file too damaged (or too hostile) to parse is a finding, not an
+            # exception: `validate` and `audit` are read-only inspectors pointed
+            # at untrusted input, and a traceback from one file kills a sweep
+            # over a whole corpus at that file. 600 nested LIST chunks fit in
+            # 7 KB and did exactly that.
+            violations.append(Violation(
+                SIZE, r.label, "structure", "unparseable", "",
+                witness="", detail=f"cannot be parsed as {r.label}: {e}"))
+            if label is None:
+                label = r.label
+            continue
         violations += rep.violations
         if label is None and rep.label:
             label = rep.label

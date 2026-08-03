@@ -29,7 +29,16 @@ def _open(path):
         import mutagen
     except ImportError:
         raise CoverError("cover art needs mutagen (pip install mutagen)")
-    m = mutagen.File(path)
+    # mutagen signals "cannot read" two different ways: None for an
+    # unrecognized container, and an exception for one it recognized and then
+    # choked on -- an AIFF with no COMM chunk raises KeyError from deep inside
+    # its parser. Only the first was handled, so a malformed file reached the
+    # user as a raw traceback. Both mean the same thing here.
+    try:
+        m = mutagen.File(path)
+    except Exception as e:
+        raise CoverError(f"mutagen could not read this file: "
+                         f"{e.__class__.__name__}: {e}")
     if m is None:
         raise CoverError("mutagen could not read this file")
     return m

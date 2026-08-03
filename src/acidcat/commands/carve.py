@@ -443,11 +443,32 @@ def _run_field(args, filepath):
     return 0
 
 
+def _same_file(a, b):
+    """True if two paths name the same file. Tolerates b not existing yet."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.realpath(a) == os.path.realpath(b)
+
+
 def run(args):
     filepath = args.target
     if not os.path.isfile(filepath):
         print(f"acidcat carve: {filepath}: No such file", file=sys.stderr)
         return 1
+
+    # carve's own --help promises "File to carve from (never modified)". With
+    # -o pointing back at the target that promise was broken silently and
+    # catastrophically: `carve self.wav --offset 0 --length 4 -o self.wav`
+    # opened the output for writing, truncated it, and reported success -- a
+    # 2,044-byte WAV became 4 bytes, exit 0, no backup. Reachable by tab
+    # completion or a --batch loop that forgets to change directory.
+    out = getattr(args, "output", None)
+    if out and not args.batch and _same_file(filepath, out):
+        print(f"acidcat carve: {out}: output is the input; refusing to "
+              f"overwrite the file being carved from", file=sys.stderr)
+        return 2
+
     size = os.path.getsize(filepath)
 
     if args.batch is not None:

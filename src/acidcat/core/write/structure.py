@@ -147,9 +147,21 @@ def _parse_leaf(data, off, endian, hard_end):
     return node, nxt
 
 
-def _parse_container(data, off, end, endian, top=False):
+# Real IFF nests a handful deep (RIFF > LIST > LIST). This bound exists so a
+# hostile file cannot exhaust the interpreter stack: 600 nested LIST chunks fit
+# in 7 KB and took validate/audit down with a RecursionError, which in a batch
+# run over a corpus kills the whole sweep at the first such file. The recursion
+# is mutual (computed_size/on_disk_len walk back down), so capping the parse is
+# what bounds all of it.
+_MAX_NESTING = 64
+
+
+def _parse_container(data, off, end, endian, top=False, depth=0):
     """Parse a container at ``off`` spanning up to ``end``. Returns
     (node, next_off)."""
+    if depth > _MAX_NESTING:
+        raise StructError(f"container nesting deeper than {_MAX_NESTING} at "
+                          f"offset 0x{off:08x}")
     # bytes() for the same memoryview reason as in _parse_leaf
     node = Node(bytes(data[off:off + 4]), off, endian)
     size = struct.unpack_from(endian + "I", data, off + 4)[0]
@@ -176,7 +188,8 @@ def _parse_container(data, off, end, endian, top=False):
             break
         child_hard_end = min(span_end, pos + 8 + csize + 1)  # +1 for a pad byte
         if data[pos:pos + 4] == _LIST and pos + 12 <= span_end:
-            child, nxt = _parse_container(data, pos, child_hard_end, endian)
+            child, nxt = _parse_container(data, pos, child_hard_end, endian,
+                                          depth=depth + 1)
         else:
             child, nxt = _parse_leaf(data, pos, endian, child_hard_end)
         node.children.append(child)
