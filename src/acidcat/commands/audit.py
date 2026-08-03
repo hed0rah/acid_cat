@@ -71,7 +71,18 @@ def _signal_findings(path):
     # would turn every ordinary file into a finding.
     clean = {"no-wall", "stereo"}
     out = []
-    for check in (bandwidth.analyze(chans, rate), channels.analyze(chans, rate)):
+    for analyze in (bandwidth.analyze, channels.analyze):
+        # the analyzers were called outside the guard, so only pcm.load was
+        # protected: a WAV declaring nSamplesPerSec = 0 reached a division in
+        # the spectrum and took the whole verb down with a traceback
+        try:
+            check = analyze(chans, rate)
+        except Exception as e:
+            out.append({"check": getattr(analyze, "__module__", "signal"),
+                        "verdict": "check-failed",
+                        "detail": f"could not run ({type(e).__name__}); this "
+                                  f"file was NOT screened for it"})
+            continue
         if check and check["verdict"] not in clean:
             out.append({"check": check["check"], "verdict": check["verdict"],
                         "detail": check["detail"]})

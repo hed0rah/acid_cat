@@ -141,6 +141,12 @@ def load(path, *, max_frames=_MAX_FRAMES):
 
     if ch < 1 or bits < 8:
         raise Unsupported("degenerate channel count or bit depth")
+    # A declared rate of 0 is not merely odd -- every spectral measurement
+    # divides by it. Rejecting it here rather than downstream keeps the
+    # ZeroDivisionError out of `audit`, which is aimed at untrusted files by
+    # definition and must never answer a malformed header with a traceback.
+    if not 1 <= rate <= 4_000_000:
+        raise Unsupported(f"implausible sample rate: {rate}")
     frame = (bits // 8) * ch
     size = min(size, max(0, len(data) - start))
     size -= size % frame                              # whole frames only

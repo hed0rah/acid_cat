@@ -24,14 +24,36 @@ its size. Two design points, both forced by measurement rather than assumed:
     meets the noise floor there, which made a gentle 10 kHz lowpass score
     42.8 dB -- indistinguishable from a codec by size alone.
 
-Measured separation on encoded corpora: MP3 at 96-320 kbps scores 57-89 dB,
-while clean material (broadband noise, pure tone, dark pad, quiet, resampled,
-gentle 10 kHz lowpass) tops out at 29.3 dB. The threshold sits between them.
+ACCURACY, measured on real music rather than the synthetic signals this was
+first tuned against. 276 files: 12 real stereo sources encoded with ffmpeg to
+MP3/AAC/Vorbis/Opus at several bitrates and decoded back, plus filtered and
+resampled negative controls.
 
-Known limit, measured rather than assumed: AAC and Vorbis at 128 kbps preserved
-full bandwidth on the same material and score under 7 dB. This finds a specific
-artefact common to MP3-family encoding; a clean verdict is not proof a file was
-never compressed.
+    recall (lossy round-trips flagged)      47.0%   (62/132)
+    specificity (clean not flagged)         90.7%   (98/108)
+    precision                               86.1%
+
+So this catches about half of what it is aimed at, and is right about 6 times
+in 7 when it does fire. Both failure directions are real and worth knowing:
+
+  - MISSES: 100% of AAC 256k and Vorbis 256k, and half of MP3 320k. High
+    bitrates leave little or no wall.
+  - FALSE POSITIVES: resampling round-trips, 33% via 22.05 kHz and 50% via
+    16 kHz. An anti-imaging filter looks like a codec wall to this measure.
+
+The earlier numbers in this docstring (MP3 57-89 dB, clean under 29.3 dB) came
+from `_brickwall(_noise(), ...)` -- white noise with FFT bins zeroed. A flat
+spectrum truncated IS a huge local step; real music already has little energy
+near Nyquist, so the step an encoder actually leaves is far smaller. On real
+material the distributions overlap almost completely, and no single threshold
+does much better: the best available on that corpus is 24 dB for 75% accuracy,
+against 47%/91% at the shipped 40 dB.
+
+The verdict wording is deliberately "consistent with lossy encoding" rather
+than a claim of proof, and a clean verdict is not evidence a file was never
+compressed. Improving this needs a second discriminator -- the residual above
+the wall is near-flat for a codec kill and sloped for resampling -- not a
+different threshold.
 """
 
 _FFT = 8192

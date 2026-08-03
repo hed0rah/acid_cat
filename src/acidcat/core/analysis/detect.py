@@ -68,10 +68,31 @@ def parse_key_from_filename(filepath):
         r'\b([A-G][#b]?)\s*min\b',
         r'\b([A-G][#b]?)minor\b',
         r'\b([A-G][#b]?)min\b',
-        r'\b([A-G][#b]?)\s*[mM]\b',
+        # The mode suffix, split three ways because a bare capital M is
+        # ambiguous. `([A-G][#b]?)\s*[mM]\b` under re.IGNORECASE used to cover
+        # all of it, and read FM as F major: on a real 2,331-file synth corpus
+        # 10 of the 14 major labels it produced -- 71% -- were that false
+        # positive. `_BARE_KEY_TOKEN` below already rejected capital M for the
+        # same reason, so the two parsers disagreed with each other.
+        #
+        # Lowercase m may hug the letter; that spelling is unambiguous.
+        r'\b([A-G][#b]?)m\b',
+        # An accidental disambiguates: no English word contains "F#" or "Bb",
+        # so "F#M" is safely Beatport-style F# major even unspaced.
+        r'\b([A-G][#b])M\b',
+        # Without one, capital M must be separated. "FM", "AM", "GM", "BM" are
+        # ordinary words in sample names, and unspaced they are far more likely
+        # to be FM synthesis or AM radio than a key.
+        r'\b([A-G])\s+M\b',
     ]
+    # The last two are matched CASE-SENSITIVELY. Telling "Am" from "AM" is the
+    # whole point of them, and re.IGNORECASE erases exactly that distinction --
+    # which is why the fix above did nothing until this line changed. The
+    # spellings above are words ("major", "min") where case carries no meaning.
+    case_sensitive = set(key_patterns[-3:])
     for pattern in key_patterns:
-        match = re.search(pattern, filename, re.IGNORECASE)
+        flags = 0 if pattern in case_sensitive else re.IGNORECASE
+        match = re.search(pattern, filename, flags)
         if match:
             note = _normalize_root(match.group(1))
             key_text = match.group(0)
@@ -181,11 +202,20 @@ def validate_and_improve_bpm(detected_bpm, filename_bpm, confidence_threshold=20
     Returns:
         (final_bpm, source) where source is 'detected', 'filename', or 'corrected'.
     """
+    # The range check runs FIRST. It used to sit below the early return, so it
+    # only fired when a filename BPM was already available -- i.e. only when the
+    # answer was already known. With no filename tempo, anything shipped: over
+    # 400 real files, 71 of the 277 unlabelled ones (25.6%) came back outside
+    # this window, up to 304 BPM on a 0.4-second snare.
+    if detected_bpm is not None and not (60 <= detected_bpm <= 200):
+        # out of range and nothing to fall back on: say nothing rather than
+        # something wrong. A missing tempo is recoverable; a confident wrong
+        # one silently poisons every downstream sort.
+        return (filename_bpm, 'filename') if filename_bpm is not None \
+            else (None, 'rejected')
     if filename_bpm is None:
-        return detected_bpm, 'detected'
+        return detected_bpm, ('detected' if detected_bpm is not None else None)
     if detected_bpm is None:
-        return filename_bpm, 'filename'
-    if not (60 <= detected_bpm <= 200):
         return filename_bpm, 'filename'
 
     diff = abs(detected_bpm - filename_bpm)
@@ -420,6 +450,33 @@ def _key_without_librosa(filepath):
     return detail["key"] if detail["root_confidence"] >= KEY_MARGIN_MIN else None
 
 
+def _tempo(librosa, **kw):
+    """Tempo estimation across librosa versions.
+
+    `librosa.beat.tempo` is a deprecated alias for
+    `librosa.feature.rhythm.tempo` and is slated for removal in librosa 1.0.
+    The caller sits inside `except Exception: pass`, so when the alias
+    disappears the AttributeError would be swallowed and BPM would quietly go
+    filename-only while still reporting `bpm_source: "detected"` -- a silent
+    capability loss on a version bump. pyproject pins only `librosa>=0.10.1`
+    with no upper bound, and the one test covering this path monkeypatches
+    `librosa.beat.tempo`, so it would keep passing.
+    """
+    feature = getattr(librosa, "feature", None)
+    # `librosa.feature.tempo` is the re-export and is what features.py already
+    # calls; `librosa.feature.rhythm` is a submodule that is NOT auto-imported,
+    # so a plain getattr for it returns None until someone imports it.
+    fn = getattr(feature, "tempo", None)
+    if fn is None:
+        rhythm = getattr(feature, "rhythm", None)
+        fn = getattr(rhythm, "tempo", None)
+    if fn is None:                       # last resort: the deprecated alias
+        fn = getattr(getattr(librosa, "beat", None), "tempo", None)
+    if fn is None:                       # pragma: no cover -- no known version
+        raise AttributeError("librosa exposes no tempo estimator")
+    return fn(**kw)
+
+
 # ── Librosa-based estimation ───────────────────────────────────────
 
 def estimate_librosa_metadata(filepath):
@@ -476,8 +533,14 @@ def estimate_librosa_metadata(filepath):
         detected_bpm = None
         try:
             onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-            tempos_1 = librosa.beat.tempo(onset_envelope=onset_env, sr=sr, aggregate=None)
-            tempos_2 = librosa.beat.tempo(y=y, sr=sr, aggregate=None)
+            # librosa.feature.rhythm.tempo, not librosa.beat.tempo: the latter
+            # is a deprecated alias slated for removal in librosa 1.0, and the
+            # `except Exception: pass` below would have swallowed the resulting
+            # AttributeError -- BPM would have gone silently filename-only while
+            # still reporting bpm_source "detected". features.py already uses
+            # the new spelling; this was the last caller of the old one.
+            tempos_1 = _tempo(librosa, onset_envelope=onset_env, sr=sr, aggregate=None)
+            tempos_2 = _tempo(librosa, y=y, sr=sr, aggregate=None)
             all_tempos = []
             if tempos_1.size > 0:
                 all_tempos.extend(tempos_1)
@@ -507,7 +570,14 @@ def estimate_librosa_metadata(filepath):
             profile = [float(x) for x in chroma.mean(axis=1)]
             detail = estimate_key_detailed(profile)
             detected_key = detail["key"]
-            detected_key_conf = detail["correlation"]
+            # Report the number the gate keys on, not the raw fit. This
+            # exported `correlation` while gating on `root_confidence` -- so
+            # the confidence a consumer sorted by was the one the code argues
+            # against. Measured over 258 answered files: ranking by
+            # root_confidence gives 78.4% root accuracy over the top fifth
+            # against 72.5% for correlation, and 45.1% over the bottom fifth
+            # against 58.8% -- it separates, and correlation barely does.
+            detected_key_conf = detail["root_confidence"]
             # gate on the margin over the best *differently-rooted* candidate,
             # not on the raw fit: at equal coverage that ranks 78.0% correct
             # over the top fifth against 62.7% for the correlation
