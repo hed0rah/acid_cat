@@ -10,6 +10,20 @@ import struct
 import pytest
 
 
+def _fixture_or_skip(rel):
+    """A specimen from the gitignored `data/test_formats/` tree, or a skip.
+
+    These three call sites used to `shutil.copyfile` the path unguarded. That
+    was invisible for as long as it existed because CI never installed the
+    `tui` extra, so every test in this file was skipped before it could fail.
+    Installing the extra turned three silent skips into three hard errors --
+    which is the argument for installing it.
+    """
+    if not os.path.isfile(rel):
+        pytest.skip(f"fixture {rel} not present (gitignored corpus)")
+    return rel
+
+
 def test_tui_command_registers_without_textual():
     # register() and the CLI must import with no textual installed; the extra is
     # only touched inside run(). This just needs the module to import + register.
@@ -420,7 +434,7 @@ def test_mp3_channel_mode_enum_edit(tmp_path):
     from textual.widgets import Tree, Input
 
     orig = tmp_path / "cm.mp3"
-    shutil.copyfile("data/test_formats/generated/mp3_44100.mp3", orig)
+    shutil.copyfile(_fixture_or_skip("data/test_formats/generated/mp3_44100.mp3"), orig)
 
     def hdr(p):
         _f, ch, _w = walk_file(str(p), deep=True)
@@ -474,7 +488,7 @@ def test_mp3_bitrate_bitsdyn_edit(tmp_path):
     from textual.widgets import Tree, Input
 
     orig = tmp_path / "br.mp3"
-    shutil.copyfile("data/test_formats/generated/mp3_44100.mp3", orig)
+    shutil.copyfile(_fixture_or_skip("data/test_formats/generated/mp3_44100.mp3"), orig)
 
     def val(p, name):
         _f, ch, _w = walk_file(str(p), deep=True)
@@ -546,7 +560,7 @@ def test_flac_bitfield_edit_preserves_neighbours(tmp_path):
     from textual.widgets import Tree, Input
 
     orig = tmp_path / "b.flac"
-    shutil.copyfile("data/test_formats/generated/flac24.flac", orig)
+    shutil.copyfile(_fixture_or_skip("data/test_formats/generated/flac24.flac"), orig)
 
     def stream(p):
         _f, ch, _w = walk_file(str(p), deep=True)
