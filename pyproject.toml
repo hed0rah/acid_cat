@@ -51,7 +51,13 @@ analysis = [
     "scipy>=1.13",
     "soundfile>=0.12",
 ]
-mcp = ["mcp>=1.0"]
+# Upper bound is load-bearing, not caution. mcp 2.0 removed the low-level
+# `Server.list_tools` / `call_tool` decorators this server is built on, so with
+# an unbounded pin `pip install acidcat[mcp]` resolved 2.0 and `acidcat-mcp`
+# died on startup with AttributeError -- every new install got a dead server and
+# the documented Claude Desktop config was inert. 1.29 handshakes correctly.
+# Supporting the 2.x API is a port, not a version bump.
+mcp = ["mcp>=1.0,<2"]
 mcp-http = ["acidcat[mcp]", "starlette>=0.37", "uvicorn>=0.30"]
 tui = ["textual>=0.60"]
 # encrypted-disc support (Wii): AES for partition decryption. Kept optional so
