@@ -4,8 +4,25 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  # Publishing is irreversible: a version number can never be reused on PyPI.
+  # The build job used to run alone, so `twine check` passing was the only thing
+  # between a tag and the index -- a release could ship a tree whose tests fail.
+  test:
+    name: Test before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[analysis,mcp,tui,crypto]" pytest
+      - run: pytest -q -rs
+
   build:
     name: Build sdist + wheel
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
