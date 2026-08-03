@@ -154,16 +154,19 @@ def test_peak_memory_is_flat_in_input_size():
         finally:
             tracemalloc.stop()
 
-    original = A._BULK_BATCH_BYTES
+    original = (A._BULK_BATCH_BYTES, A._VIEW_BLOCK)
     try:
-        # a batch small enough that the test input spans several of them --
-        # at the shipping size these inputs would fit in one batch and the
-        # measurement would prove nothing
+        # Small enough that the test input spans several of BOTH -- at the
+        # shipping sizes these inputs fit in one batch and one view block, so
+        # nothing is bounded and the measurement proves nothing. Forcing only
+        # the batch left this on a knife edge: it passed locally and failed on
+        # Python 3.10 at a ratio of 2.01 against a 2.0 threshold.
         A._BULK_BATCH_BYTES = 512 * 1024
+        A._VIEW_BLOCK = 32
         small = peak(data)
         large = peak(data * 3)
     finally:
-        A._BULK_BATCH_BYTES = original
+        A._BULK_BATCH_BYTES, A._VIEW_BLOCK = original
     # the retained feature dicts grow with input; the numpy arrays must not
     assert large < small * 2.0, (
         f"peak allocation tracked input size ({small} -> {large} for 3x the "
