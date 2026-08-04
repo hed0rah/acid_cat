@@ -9,12 +9,14 @@ next to each decoded field. `--frames` adds a per-element deep dump
 highlights the table (auto/always/never, respects NO_COLOR). `--json`
 emits the same structure for machines.
 
-Supports WAV/RIFF, RF64, AIFF/AIFC, Standard MIDI Files, Xfer Serum
-presets, MP3 (ID3v2 + MPEG frames + Xing/LAME), and FLAC.
+The format walkers live in acidcat/core/walk and are dispatched through
+its registry, so what `inspect` supports is exactly what the registry
+holds -- `acidcat formats` prints it. Do not enumerate the list here: a
+hardcoded subset in a docstring reads as the whole set and goes stale
+every time a walker lands.
 
-The format walkers live in acidcat/core/walk (dispatched through its
-registry); this module is the CLI shell: argument parsing, chunk
-selection, and rendering.
+This module is the CLI shell: argument parsing, chunk selection, and
+rendering.
 """
 
 import contextlib
@@ -40,11 +42,11 @@ def register(subparsers):
         help="readelf-style structural dump of an audio or synth/DAW preset file.",
     )
     p.add_argument("targets", nargs="+", metavar="target",
-                   help="One or more audio/preset files (WAV, RF64, AIFF, MIDI, MP3, "
-                        "FLAC, Ogg, MP4/M4A, Serum, Bitwig, Vital, NCW, NI). "
-                        "With more than one, each is printed under a "
-                        "'File:' banner; JSON output becomes NDJSON (one record "
-                        "per line).")
+                   help="One or more audio, sampler or synth/DAW preset files. "
+                        "Run `acidcat formats` for the full list of what has a "
+                        "walker. With more than one target, each is printed "
+                        "under a 'File:' banner; JSON output becomes NDJSON "
+                        "(one record per line).")
     p.add_argument("--hex", action="store_true", dest="show_hex",
                    help="Show raw bytes next to each decoded field.")
     add_output_format_arg(p, only=("table", "json"))
@@ -74,7 +76,11 @@ def register(subparsers):
                         "appended-format magic (polyglots), structural size "
                         "mismatches, and control bytes smuggled into text fields.")
     add_color_arg(p)
-    p.add_argument("-v", "--verbose", action="store_true")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="Synonym for --frames: request the walker's deep pass. "
+                        "What that adds is per-format -- every MPEG frame, "
+                        "every MIDI event, the Bitwig device tree, the Vital "
+                        "modulation matrix, the NI compressed subtree.")
     # experimental: parse untrusted input in a resource-limited worker so a
     # memory/CPU-bomb file takes down only the worker. Linux only; --sandbox
     # errors (never silently runs unsandboxed) where it cannot run.

@@ -6,6 +6,140 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+A hardening pass ahead of the 1.0 release candidate. Almost every entry below
+has one shape: **work was skipped and the result was reported as complete.** A
+cap, a swallowed exception or a filter would drop part of the job, and the
+summary line counted what it had looked at rather than what it had been asked
+to look at -- so a partial answer was indistinguishable from a whole one. Six of
+these were introduced by the 1.0 restructure itself.
+
+### Breaking
+- **Python 3.9 is no longer supported.** The floor is 3.10. The code already
+  used 3.10 syntax; the metadata claimed 3.8+, so `pip` installed a package that
+  could not import on the versions it advertised. CI now runs the versions the
+  package actually claims.
+
+### Fixed
+- **`repair` could destroy audio, and exited 0.** On a WAV whose container size
+  had been truncated, the repairer rewrote the file to the size the header
+  declared -- orphaning 882,000 bytes of perfectly readable samples and
+  reporting success. `repair` now refuses to write when a fix would strand audio
+  data past the container, and says which bytes it would have lost.
+- **`carve -o` could destroy its own input.** Carving a region back over the
+  source path truncated the file to the region (2,044 bytes in, 4 bytes out).
+  The output path is now checked against the input, including through symlinks
+  and case-insensitive filesystems.
+- **`locate` could not find 16-bit PCM** -- the headline capability. The
+  statistical detector scored bytes only as 8-bit samples, so 16-bit little- and
+  big-endian raw audio, the two most common cases in a card dump, read as noise.
+  It now folds three decimated views (8-bit, 16-bit LE, 16-bit BE) per block and
+  keeps the best-scoring one.
+- **`locate` ranked silence above real audio.** The confidence score rewarded
+  low variance, so a run of zeros beat a drum loop. Digital silence is now
+  rejected outright rather than promoted.
+- **The MCP server was dead on every fresh install.** `mcp` 2.0 removed the
+  low-level `Server.list_tools` / `call_tool` decorators this server is built
+  on, and the dependency was unpinned -- so `pip install acidcat[mcp]` resolved
+  2.0 and `acidcat-mcp` died on startup with an `AttributeError`. Pinned to
+  `mcp>=1.0,<2`. Supporting the 2.x API is a port, not a version bump.
+- **MCP DNS-rebinding protection was off.** The SDK treats an omitted
+  `TransportSecuritySettings` as opt-*out*, so the HTTP transport accepted any
+  `Host`/`Origin` -- a page in the user's browser could drive the server. It is
+  now on by default, with the loopback origins allowed and a warning when bound
+  to a non-loopback address. Result limits are clamped so a client cannot ask
+  for an unbounded row count.
+- **`census` silently dropped 1.65% of files on Windows.** `os.open` without
+  `O_BINARY` opens in text mode, where `os.read` stops at the first `0x1A`
+  byte -- so any file with a `^Z` in its first block was truncated mid-scan and
+  counted as clean.
+- **`detect` invented tempos and keys.** A 0.4-second snare reported 304 BPM.
+  Tempo is now range-checked before it is reported, key detection gates on the
+  margin between the best and second-best profile rather than on raw
+  correlation, and `bandwidth.py`'s documented accuracy figures were corrected
+  (they had been tuned against white noise, which is not representative:
+  measured recall is 47%).
+- **`audit --signal` crashed on a WAV declaring a sample rate of 0.** The signal
+  analyzers ran outside the guard that protected the decode, so a division by
+  zero took the whole verb down with a traceback. A check that cannot run is now
+  reported as "NOT screened", not omitted.
+- **`od` was unbounded** -- a 285 MB input produced a 1.4 GB dump over five and
+  a half minutes with no way to stop it.
+- **`audioscan` peaked at 46x the input size** (32 MB in, 1.4 GB resident). The
+  vectorized path materialized whole-buffer slices per view and retained a dict
+  per block; it now decimates per block and accumulates running sums.
+- **`query` reported different errors on different machines.** `--bpm zzz`
+  checked the registry before it checked the argument, so the same bad command
+  exited 1 ("no libraries") on a fresh machine and 2 ("bad value") on a
+  populated one. Arguments are validated before any state is consulted.
+- **Empty results are now valid machine output.** `query --json` with no matches
+  emitted zero bytes, so `jq` and `json.loads` both failed on an ordinary empty
+  answer.
+- **`scan --json` and `features DIR --json` did nothing.** Both registered
+  `--output-format` and then ignored it, always writing a CSV file -- so the
+  flag was accepted, CSV came out, and neither command could be the left side of
+  a pipe. The default (a CSV file) is unchanged.
+- Malformed input produces a message and a usable exit code rather than a
+  traceback, across the verbs where hostile bytes reached an unguarded parse.
+
+### Added
+- **`acidcat wrap`** -- a filter that puts a WAV header on raw PCM read from
+  stdin (`--rate`, `--channels`, `--bits`, `--endian`, `--float`). This closes
+  the recovery chain: a region `locate` finds and `carve` cuts is now playable
+  without a detour through Python or sox.
+- **`carve --wrap`** does the same in bulk, so `locate --json | carve --batch -`
+  produces playable WAVs directly instead of headerless blobs.
+- **`acidcat classify`** -- a triage verdict for a file before committing to a
+  walker: single format, container, damaged, or not audio. It also names the
+  formats acidcat can identify but does not walk, rather than calling them
+  unknown.
+- **`inspect --resync`** rebuilds chunk structure from a damaged container by
+  scanning for plausible `[id][size]` records and keeping the ones that chain
+  end-to-start, showing what a corrupt size field costs the normal walk.
+- **`inspect --format`, `--region` and `--force`** -- parse as a named format
+  regardless of the magic bytes; walk the Nth region `locate` reported inside a
+  larger blob; on a file no walker claims, try every walker and report what each
+  made of it (leads, not identifications).
+- **`acidcat od`** dumps any bytes, not just a chunk, with `--offset` / `--at` /
+  `--region` to scope it.
+- **Lossy-transcode detection without librosa.** `core/analysis/bandwidth.py`
+  identifies a WAV that is really a decoded MP3 from the steepness of the
+  spectral edge rather than from a cutoff frequency, using numpy only.
+- **`python -m acidcat.mcp_server`** as an entry point alongside the
+  `acidcat-mcp` console script.
+
+### Performance
+- `audioscan` 22.9 s -> 1.4 s (16x) on large blobs: a vectorized feature path,
+  then batching to fix the memory blowup it introduced.
+- `framescan` 0.8 -> 67 MB/s (79x) on adversarial sync-byte runs.
+- `locate` 1.6x on the statistical scan, byte-identical output.
+
+### Internal
+- **A fresh clone can now reproduce the test results.** The suite depended on
+  gitignored corpora with no generation script anywhere, so sixteen test files
+  and the entire TUI suite skipped on CI while passing locally.
+  `tests/make_corpus.py` generates 23 synthetic specimens (15 KB, license-clean,
+  deterministic) from nothing.
+- **`scripts/preflight.py` reproduces CI locally** by hiding the gitignored
+  corpora and clearing `ACIDCAT_*` before running pytest. Three of seven pushes
+  had gone red from machine-only dependencies; the first preflight predicted
+  1,521 passed / 78 skipped against CI's 1,526 / 73.
+- **The test suite no longer writes into the real home directory.** `conftest`
+  now points `HOME`/`USERPROFILE` at a temp path instead of deleting the
+  variables, so a test run cannot touch a user's registry.
+- **`publish.yml` runs the tests before publishing.** It previously built,
+  ran `twine check`, and uploaded to PyPI without executing the suite at all.
+- CI gates `develop` as well as `main`, and pytest is configured in
+  `pyproject.toml` (`-rs`, so skips explain themselves) rather than depending on
+  the caller's flags.
+
+### Documentation
+- `README`, `CHEATSHEET.md` and `ARCHITECTURE.md` were re-derived from the
+  build. Between them they documented a `-f/--format` output flag that now
+  errors, omitted seven registered verbs, gave `audit`'s section count three
+  different ways, and reported 24 verbs / 48 modules against an actual 29 / 193.
+  `inspect`'s own docstring named 13 formats as though they were the whole set;
+  it now points at `acidcat formats`, which asks the binary.
+
 ## [1.0.0b1] - 2026-07-31
 
 The 1.0 beta. Nothing here changes what acidcat can do -- the verb list, the

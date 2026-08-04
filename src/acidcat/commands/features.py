@@ -77,6 +77,21 @@ def run(args):
         print("acidcat features: No features extracted.", file=sys.stderr)
         return 0
 
+    # An explicitly requested rendering goes to stdout (or -o), like the
+    # single-file path above already did. The directory path read
+    # --output-format nowhere, so `features DIR --json` accepted the flag and
+    # wrote a CSV file -- and nothing at all reached a pipe.
+    if fmt_name in ("json", "table"):
+        stream = sys.stdout
+        if getattr(args, 'output', None):
+            stream = open(args.output, 'w', encoding='utf-8', newline='')
+        try:
+            output(rows, fmt=fmt_name, stream=stream)
+        finally:
+            if stream is not sys.stdout:
+                stream.close()
+        return 0
+
     default_base = os.path.basename(os.path.normpath(target))
     out_path = getattr(args, 'output', None) or safe_basename_for_csv(
         default_base + "_features.csv"

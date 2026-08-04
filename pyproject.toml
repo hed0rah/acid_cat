@@ -12,12 +12,20 @@ requires-python = ">=3.10"
 authors = [
     {name = "hed0rah", email = "18272116+hed0rah@users.noreply.github.com"},
 ]
+# These describe what the tool IS, not only what it started as. The original
+# set was a metadata reader's vocabulary and never mentioned the forensics,
+# carving or reverse-engineering half that is now most of the project.
 keywords = [
-    "audio", "wav", "aiff", "midi", "metadata", "riff",
-    "acid", "bpm", "key", "camelot", "harmonic-mixing",
-    "librosa", "music", "samples", "mcp",
+    "audio", "wav", "aiff", "midi", "riff", "flac", "mp3",
+    "forensics", "reverse-engineering", "binary-analysis", "hex",
+    "file-carving", "data-recovery", "metadata",
+    "sampler", "soundfont", "tracker", "synthesizer-presets",
+    "bpm", "key", "camelot", "harmonic-mixing", "samples", "mcp",
 ]
 classifiers = [
+    # correct while the version carries a b/rc suffix. Bump to
+    # "5 - Production/Stable" in the same commit that tags 1.0.0 final,
+    # or the PyPI page and the version number disagree.
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
@@ -43,6 +51,8 @@ dependencies = [
 Homepage = "https://github.com/hed0rah/acidcat"
 Repository = "https://github.com/hed0rah/acidcat"
 Issues = "https://github.com/hed0rah/acidcat/issues"
+Documentation = "https://github.com/hed0rah/acidcat/blob/main/README.md"
+Changelog = "https://github.com/hed0rah/acidcat/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 analysis = [

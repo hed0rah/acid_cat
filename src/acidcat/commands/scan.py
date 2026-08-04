@@ -253,6 +253,25 @@ def run(args):
     else:
         fieldnames = base_fieldnames
 
+    # An explicitly requested rendering goes to stdout. `add_output_format_arg`
+    # registered --json/--csv/--output-format here and run() then ignored them
+    # entirely, always writing CSV to a file -- so `scan DIR --json` accepted
+    # the flag and produced CSV, and `scan DIR | anything` piped nothing at all.
+    # The default is unchanged (a CSV file) because scripts depend on it.
+    fmt = getattr(args, "output_format", None)
+    if fmt in ("json", "table"):
+        from acidcat.core.infra.render import output as _render
+        shaped = [{k: r.get(k) for k in fieldnames} for r in rows]
+        stream = sys.stdout
+        if getattr(args, "output", None):
+            stream = open(args.output, "w", encoding="utf-8", newline="")
+        try:
+            _render(shaped, fmt=fmt, stream=stream)
+        finally:
+            if stream is not sys.stdout:
+                stream.close()
+        return 0
+
     # output
     with open(output_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")

@@ -166,7 +166,7 @@ def _run_batch(args, filepath, size):
         print(f"acidcat carve --batch: {e}", file=sys.stderr)
         return 2
     os.makedirs(args.output, exist_ok=True)
-    done = skipped = headered = 0
+    done = skipped = headered = no_geometry = 0
     with open(filepath, "rb") as f:
         for i, r in enumerate(recs):
             off, length = r["offset"], r["length"]
@@ -189,7 +189,13 @@ def _run_batch(args, filepath, size):
             with open(os.path.join(args.output, name), "wb") as g:
                 g.write(blob)
             done += 1
-            if want_wrap and wrapped is not None:
+            if want_wrap and ext == "raw":
+                # _wrap_blob returns None when the record carries no usable
+                # geometry, which is the normal case for `locate --json`
+                # without --analyze. Saying nothing meant --wrap looked
+                # honoured while every region landed as a headerless .raw.
+                no_geometry += 1
+            elif want_wrap and wrapped is not None:
                 headered += 1
     if not args.quiet:
         extra = []
@@ -201,6 +207,9 @@ def _run_batch(args, filepath, size):
                    else f"at an assumed {_ASSUMED_RATE} Hz -- pass --rate if "
                         f"you know better")
             extra.append(f"{headered} headerless region(s) wrapped as WAV {how}")
+        if no_geometry:
+            extra.append(f"{no_geometry} left raw: no sample geometry in the "
+                         f"record (re-run locate with --analyze)")
         print(f"carved {done} region(s) -> {args.output}"
               + (f" ({', '.join(extra)})" if extra else ""), file=sys.stderr)
     return 0

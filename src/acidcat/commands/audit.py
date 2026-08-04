@@ -1,18 +1,28 @@
-"""acidcat audit -- a forensic verdict on one file: structure, forensics, provenance.
+"""acidcat audit -- a forensic verdict on one file.
 
 Where `validate` answers "are the derived fields consistent" and `inspect` shows
-the raw structure, `audit` composes three read-only views into one report:
+the raw structure, `audit` composes read-only views into one report:
 
   STRUCTURE   the constraint model's violations (what `repair` would fix)
-  FORENSICS   the anomaly detector's findings (polyglots, cavities, trailing
-              data, high-entropy regions, duplicate/oversized chunks)
+  HIDDEN      concealed or appended data, with the `carve` command to get it
+  FORENSICS   other anomaly findings (high-entropy regions, duplicate or
+              oversized chunks, spec violations)
+  INTEGRITY   header vs audio: effective bit depth, duration consistency, and
+              with --signal the decoded-audio checks (is this WAV really a
+              decoded MP3, is this stereo really dual-mono)
   PROVENANCE  the writer/tool tells the file carries (encoder, software, muxer)
 
 It is the "does the stored structure match reality, and who wrote it" question,
 answered by reusing the same analyses the other verbs use. Writes nothing.
 
+Every negative is a claim about a check that RAN. When there is no walker for
+the format, the sections say "not scanned" and the verdict says "not
+analyzable" rather than "clean" -- `locate` still finds embedded audio in a
+file nothing can walk.
+
     acidcat audit FILE
     acidcat audit FILE --json          # machine-readable
+    acidcat audit FILE --signal        # + decode the audio (needs numpy)
 """
 
 import json

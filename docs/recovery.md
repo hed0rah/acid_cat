@@ -1,19 +1,39 @@
 # Recovery and rescue
 
-Four verbs turn acidcat into a forensic recovery tool for audio: find audio in a
-raw blob, cut it out, pull samples out of a bank, and make an odd codec playable.
-They are built as coreutils would be, each doing one thing and piping into the
-next:
+Five verbs turn acidcat into a forensic recovery tool for audio: find audio in a
+raw blob, cut it out, give a headerless region a header, pull samples out of a
+bank, and make an odd codec playable. They are built as coreutils would be, each
+doing one thing and piping into the next:
 
-    locate   find the audio regions in a blob        (reports, never writes)
-    carve    cut a byte range out to a file          (the extractor)
+    locate   find the audio regions in a blob         (reports, never writes)
+    carve    cut a byte range out to a file           (the extractor)
+    wrap     put a WAV header on raw PCM              (the filter)
     extract  pull every sample out of a known bank    (the bulk unpacker)
     convert  transcode a file to a friendlier format  (the transcoder)
 
 `locate` reports regions to stdout; a region's offset/length is exactly a `carve`
-range; `carve`'s output is `convert`'s input. So the verbs chain into a rescue
-pipeline. Records go to stdout and summaries to stderr, so `locate | carve`
-composes cleanly.
+range; `carve`'s output is `wrap`'s and `convert`'s input. So the verbs chain
+into a rescue pipeline. Records go to stdout and summaries to stderr, so
+`locate | carve` composes cleanly.
+
+A statistically-detected region has no header -- that is why it needed detecting.
+`wrap` supplies one, so the region is playable without a detour through Python or
+sox:
+
+    acidcat carve disk.img --offset 0x8a000 --length 882000 | \
+      acidcat wrap --rate 44100 --channels 2 --bits 16 -o rescued.wav
+
+For bulk work `carve --wrap` does the same inline, so every region `locate` finds
+lands as a playable WAV. The sample geometry comes from the record, so `locate`
+has to have run `--analyze`; without it there is nothing to build a header from
+and `carve` says so rather than quietly writing `.raw`:
+
+    acidcat locate disk.img --analyze --json | \
+      acidcat carve disk.img --batch - --wrap --rate 44100 -o recovered/
+
+Width, channel count and endianness are inferred from the bytes. Sample rate is
+not in the bytes at all, so `--rate` is yours to supply; without it acidcat
+assumes 44100 Hz and says that it assumed.
 
 ## locate: find the audio in a blob
 

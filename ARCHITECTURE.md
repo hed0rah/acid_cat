@@ -6,7 +6,7 @@ see exactly what a file is, flag anomalies, and edit or repair its structure.
 Closer to readelf / 010 Editor / radare2's format layer than to exiftool, with
 some optional audio analysis (BPM/key via librosa).
 
-v1.0.0b1 · ~36k source LOC · ~19k test LOC · one hard dependency (`mutagen`);
+v1.0.0b1 · ~39k source LOC · ~23k test LOC · one hard dependency (`mutagen`);
 everything heavier is an optional, lazily imported extra, so `import acidcat`
 pulls only the stdlib core.
 
@@ -24,57 +24,78 @@ unchanged.
 
 ## Layer stack (bottom to top)
 
-1. **Format primitives** -- `core/*.py`: per-format byte decoders (`riff`, `aiff`,
-   `mp3`, `mp4`, `flac`, `ni`, `tracker`, `sf2`, ...), the enc-language
-   (`fieldcodec.py`), the strict IFF container engine (`structure.py`), sniffing
-   (`sniff.py`, `detect.py`).
-2. **Walkers** -- `core/walk/*.py`: 20 format walkers, one per format, each emitting
-   the field model. **The correctness oracle and the default.** Dispatch:
-   `core/walk/__init__.py::walk_file`.
-3. **Declarative engine (new, v0.46)** -- `core/grammar/`: format descriptors as
-   data + one interpreter emitting the same field model. Opt-in, test-only,
-   validated byte-for-byte against the walkers, which remain the oracle.
+1. **Format primitives** -- `core/formats/` (per-format byte decoders: `riff`,
+   `aiff`, `mp3`, `mp4`, `flac`, `ni`, `tracker`, `sf2`, ...),
+   `core/primitives/` (shared byte readers), `core/codecs/` (ADPCM, BRR, VADPCM
+   and friends), `core/containers/` (disc images and archives),
+   `core/infra/` (`sniff.py` -- 57 recognized formats, `fieldcodec.py` -- the
+   enc-language, `mapped.py`, `render.py`).
+2. **Walkers** -- `core/walk/*.py`: 34 modules serving 46 registered format
+   labels, each emitting the field model. **The correctness oracle and the
+   default.** Dispatch: `core/walk/__init__.py::walk_file`.
+3. **Declarative engine** -- `core/grammar/`: format descriptors as data plus one
+   interpreter emitting the same field model. Opt-in, test-only, validated
+   byte-for-byte against the walkers, which remain the oracle.
 4. **Analysis surface** -- `core/probe.py` (typed reads, value scan,
-   `fmt.sample_rate` addressing), `core/forensics/viz.py` (entropy, Hilbert byte-map),
-   `core/forensics/anomalies.py` (forensic checks), `core/write/constraints.py` +
-   `core/write/repairers.py` (validate / repair).
-5. **Index / DB / MCP** -- `core/{index,indexing,registry,search}.py` (per-library
-   SQLite + FTS) and `mcp_server.py` (19 tools). A **consumer** of the core; the
-   core never imports it, so it is cleanly severable.
-6. **Interfaces** -- `cli.py` (24 subcommands) + `commands/*.py` (one per verb);
-   `tui_app.py` (Textual inspector/editor); the public API in `acidcat/__init__`;
+   `fmt.sample_rate` addressing), `core/forensics/` (entropy and Hilbert byte-map
+   in `viz.py`, forensic checks in `anomalies.py`, the statistical audio detector
+   in `audioscan.py`, provenance in `provenance.py`), `core/analysis/` (PCM
+   decode, BPM/key detection, feature extraction, bandwidth and channel checks),
+   `core/write/` (the strict IFF engine `structure.py`, `constraints.py` and
+   `repairers.py` behind validate / repair), `core/extract/` (embedded-sample
+   recovery).
+5. **Index / DB / MCP** -- `core/catalogue/` (per-library SQLite + FTS, the
+   registry, the shared filter builder) and `mcp_server/` (19 tools over stdio or
+   streamable HTTP). A **consumer** of the core; the core never imports it, so it
+   is cleanly severable.
+6. **Interfaces** -- `cli.py` (29 subcommands) + `commands/*.py` (one per verb);
+   `tui_app/` (Textual inspector/editor); the public API in `acidcat/__init__`;
    console scripts `acidcat` and `acidcat-mcp`.
 
 ## Two facts that explain most of the design
 
 - **Walkers are the oracle.** Any new parsing path (the grammar engine) is proven
   by diffing its output against the walkers across a large corpus, field for field.
-- **Two container engines, on purpose.** `structure.py` is strict (clamps sizes,
-  rejects malformed input) and drives write / repair; the lenient traversal
-  (`riff.iter_chunks`, and `riff.iter_spans` built on it, which the walker and the
-  grammar strategy both consume) reports a chunk's declared-but-wrong size,
-  degrades, and never raises, and drives dissection. Malformed files are the
-  subject, not an error.
+- **Two container engines, on purpose.** `core/write/structure.py` is strict
+  (clamps sizes, rejects malformed input) and drives write / repair; the lenient
+  traversal (`formats/riff.iter_chunks`, and `iter_spans` built on it, which the
+  walker and the grammar strategy both consume) reports a chunk's
+  declared-but-wrong size, degrades, and never raises, and drives dissection.
+  Malformed files are the subject, not an error.
 
 ## Invariants (the layering rules, all currently holding)
 
 - `commands/` depends on `core/`; `core/` never imports `commands/`.
 - DB connections live only in `core/catalogue/index.py` and `core/catalogue/registry.py`.
-- The dissection core (walk, grammar, probe, viz, constraints, anomalies) imports
-  nothing from the index / DB / MCP layer. The dependency arrow points inward only.
+- The dissection core (walk, grammar, probe, forensics, write) imports nothing
+  from the index / DB / MCP layer. The dependency arrow points inward only.
+- Every label `walk_file` can dispatch is a label `sniff` can produce
+  (`tests/test_formats.py::test_walker_keys_are_known_formats`).
 
 ## Directory map
 
 ```
 src/acidcat/
-  core/            primitives, walkers, grammar, analysis, index (48 modules)
-    riff.py        RIFF chunk primitives incl. the shared lenient iter_spans
-    vocab.py       core-owned value->label tables + the semantic ctx-key set
-    walk/          20 format walkers + the field-model base
-    grammar/       declarative descriptor engine (v0.46, opt-in)
-  commands/        24 CLI verbs
-  cli.py  tui_app.py  mcp_server.py  explorer.py  __init__.py
-tests/             ~0.49 test:source LOC
+  core/            139 modules
+    formats/       per-format byte decoders (17)
+    walk/          34 walker modules -> 46 format labels
+    primitives/    shared byte readers (5)
+    codecs/        sample-data decoders: ADPCM, BRR, VADPCM, ... (12)
+    containers/    disc images and archives (5)
+    infra/         sniff, fieldcodec, mmap, rendering (8)
+    forensics/     anomalies, entropy/viz, audioscan, provenance (13)
+    analysis/      PCM decode, BPM/key, features, bandwidth (8)
+    write/         strict IFF engine, constraints, repairers (12)
+    extract/       embedded-sample recovery (4)
+    catalogue/     SQLite index, registry, query builder, search (8)
+    grammar/       declarative descriptor engine (opt-in) (6)
+    data/          shipped JSON tables (provenance signatures)
+  commands/        29 CLI verbs (31 modules)
+  mcp_server/      schema, handlers, transport (19 tools)
+  tui_app/         Textual inspector/editor
+  util/            small shared helpers
+  cli.py  explorer.py  tui_theme.py  __init__.py     (193 modules in total)
+tests/             ~0.59 test:source LOC
 docs/              architecture.md (detailed), format anatomy pages
 internal_docs/     design + review notes (gitignored, local-only)
 ```

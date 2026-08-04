@@ -29,14 +29,21 @@ full-text.
 
 ## Install
 
+Python 3.10+.
+
+    pip install acidcat              # core + mutagen, one dependency
+    pip install acidcat[analysis]    # + librosa BPM/key detection + features
+    pip install acidcat[tui]         # + the interactive terminal inspector
+    pip install acidcat[mcp]         # + MCP server (acidcat-mcp, stdio)
+    pip install acidcat[mcp-http]    # + MCP streamable-HTTP transport
+    pip install acidcat[crypto]      # + AES for encrypted Wii disc extraction
+    pip install acidcat[all]         # everything
+
+From a checkout, swap `acidcat` for `-e .`:
+
     git clone https://github.com/hed0rah/acidcat.git
     cd acidcat
-    pip install -e .                # core + mutagen (WAV/AIFF/MIDI/Serum/MP3/FLAC/OGG/Opus/M4A)
-    pip install -e .[analysis]      # + librosa BPM/key detection + features
-    pip install -e .[mcp]           # + MCP server (acidcat-mcp, stdio)
-    pip install -e .[mcp-http]      # + MCP streamable-HTTP transport (acidcat-mcp --transport http)
-    pip install -e .[crypto]        # + AES for encrypted Wii disc extraction
-    pip install -e .[all]           # everything
+    pip install -e ".[all]"
 
 ## Quick Start
 
@@ -121,42 +128,61 @@ the whole RIFF-to-BWF-to-RF64-to-Wave64 family.
 | `acidcat query [flags]` | Filter the global index by bpm/key/tag/text |
 | `acidcat query --compatible-with FILE` | Find samples that mix with FILE: harmonic key (Camelot) + compatible tempo (incl. half/double-time) |
 | `acidcat convert FILE [-o OUT]` | Export/transcode: `.bwclip` -> MIDI, NCW -> WAV (single file or a directory), SF2/SF3 -> a folder of samples, 8SVX -> WAV; `--to-pcm` decodes an ADPCM or mistagged WAV to plain playable 16-bit PCM (`--codec ima` to force it) |
-| `acidcat locate BLOB [--mode strict\|normal\|aggressive] [--analyze] [--transforms] [-v]` | Find the audio regions in a raw blob or disk image (containers, signatureless raw PCM, headerless MP3 streams) and report them; never writes. `--analyze` infers PCM geometry, `--transforms` finds audio hidden under XOR/rotate/nibble-swap, `-v` shows the evidence. Pipe `--json` into `carve --batch` |
+| `acidcat classify FILE\|DIR [--shallow]` | Triage before anything expensive: is this one format you understand, a container holding files, a chunked-but-unknown format, damaged remains, or not audio at all. Each verdict names the verb to run next |
+| `acidcat locate BLOB [--mode strict\|normal\|aggressive] [--analyze] [--transforms] [--min-confidence C] [-v]` | Find the audio regions in a raw blob or disk image (containers, signatureless raw PCM, headerless MP3 streams) and report them; never writes. `--analyze` infers PCM geometry, `--transforms` finds audio hidden under XOR/rotate/nibble-swap, `-v` shows the evidence. Pipe `--json` into `carve --batch` |
+| `acidcat wrap [RAW] [--rate N] [--bits N] [--channels N] [--endian le\|be]` | Give headerless PCM a WAV header so it plays. The end of the recovery chain: `carve … \| acidcat wrap --rate 44100 --bits 16 --endian be > out.wav` |
+| `acidcat census DIR [--json]` | Chunk-ID histogram across a whole corpus, plus flags for the open questions (rare chunks, odd format tags) -- the specimen-hunting view |
+| `acidcat formats` | The capability matrix: which formats acidcat can inspect / extract / convert / repair. The fastest answer to "can it read my files?" |
 | `acidcat extract BANK [-o DIR]` | Pull every embedded sample out of a known bank/module as its own WAV: MOD/XM/IT/S3M, Gravis `.pat`, 8SVX, NCW, SF2/SF3, Bitwig `.multisample`, Kurzweil `.krz`, E-mu `.e4b`/`.e5b`, MPC `.snd`. Also rips soundtracks off console disc images: PlayStation/CD-XA (`.bin`/`.img`), any `.cue` (CD-DA), GameCube `.iso` (HPS/ADX/DTK), Wii `.iso` (BRSTM, needs `[crypto]`), N64 `.z64/.n64/.v64` ROMs (container-agnostic VADPCM recovery), and SNES `.sfc/.smc` ROMs (container-agnostic BRR recovery). `--json` for a manifest |
 | `acidcat write FILE --set field=value` | Edit metadata in place, with a `_original` backup, `-o` copy, and `--dry-run`; custom frames via `txxx:NAME=value`; Bitwig/NI preset editing (experimental) |
 | `acidcat probe FILE read\|scan\|find\|strings\|hexdump\|diff\|entropy\|map ...` | Low-level byte dissection (RE-tool surface): typed read at an offset (`read fmt.sample_rate -t u32`), value scan, byte-pattern find, strings, hexdump, diff, plus `entropy` (Shannon curve + histogram) and `map` (binvis Hilbert byte-map). Addresses can be raw offsets or structural names (`chunk` / `chunk.field`) resolved through the walker |
 | `acidcat carve FILE (--chunk ID \| --trailing \| --offset N [--length N] \| --at EXPR \| --batch SRC)` | Extract a structurally-identified byte region (a chunk payload, an appended blob, or an explicit/anchored range) to a file or stdout; `--batch` consumes `locate` records and cuts every region into a directory |
 | `acidcat repair FILE [--dry-run] [-o OUT]` | Fix stale container sizes, offset tables, table counts, and pad bytes without touching a byte of audio (WAV, RF64, AIFF, MP4, FLAC); keeps a `_original` backup |
 | `acidcat validate FILE\|DIR [-q]` | Read-only structural check with an exit code (0 = all consistent, 1 = any violation); walks a directory tree |
-| `acidcat audit FILE [--json]` | Forensic verdict in four parts: STRUCTURE (repairable inconsistencies), INTEGRITY (fake hi-res, duration mismatch), HIDDEN (concealed/appended data + a carve command), PROVENANCE (the writing tool) |
+| `acidcat audit FILE [--json] [--signal]` | Forensic verdict in five parts: STRUCTURE (repairable inconsistencies), HIDDEN (concealed/appended data + a carve command), FORENSICS (anomalies), INTEGRITY (fake hi-res, duration mismatch), PROVENANCE (the writing tool). `--signal` adds decoded-audio checks: is this WAV really a decoded MP3, is this stereo really dual-mono |
 | `acidcat tui FILE` | Interactive terminal inspector: goto/search, follow pointers (`x`), byte map (`m`), edit fields, and validate/repair (`v`/`r`) |
 | `acidcat cover FILE [-o art.jpg] [--set img] [--remove]` | Extract, embed, or remove embedded cover art (MP3/FLAC/MP4/Ogg) |
 | `acidcat explore FILE [-o out.html]` | Build a standalone interactive HTML byte-explorer (hex grid + tinted fields + LSB heat-map) |
 
-## Global Flags
+## Common flags
 
-    -f, --format FMT                Output format (default varies by command)
-    -o, --output FILE               Write output to file
-    -q, --quiet                     Suppress progress output
-    -v, --verbose                   Extra detail
-    -n, --num N                     Max files to scan (default: 500)
-    --has CHUNKS                    Filter by chunk IDs (comma-separated)
-    --deep                          Include librosa analysis
+Three words are reserved and mean the same thing everywhere:
 
-Most commands accept `table`, `json`, and `csv` (default `table`, but
-`scan` and `features` default to `csv`). Two differ: `inspect` is
-`table`/`json`, and `dump` is `hex`/`json`.
+| word | meaning |
+|---|---|
+| `--format` | the **file's** format (e.g. `inspect --format wav` to force a walker) |
+| `--output-format` | how the result is **rendered** (`table` / `json` / `csv`) |
+| `--encoding` | how carved **bytes** are serialized (`carve --encoding hex`) |
+
+    --output-format FMT   table / json / csv, whichever the command supports
+    --json                shorthand for --output-format json
+    --csv                 shorthand for --output-format csv
+    -o, --output FILE     write to a file instead of stdout
+    -q, --quiet           suppress progress
+    -v, --verbose         extra detail
+
+`-f` still works as a deprecated alias for `--output-format` and warns. It was
+the old spelling of `--format`, which now belongs to the file-format axis.
+
+Rendering support varies: most commands do `table`/`json`/`csv`, `inspect` does
+`table`/`json`, `dump` does `hex`/`json`. `scan` and `features` default to
+`csv`, and write it to a file rather than stdout unless you ask otherwise.
+
+Not global, though they look it: `--has` is on `scan` and `survey`; `--deep` is
+on `info` and `index`; `-n/--num` defaults to 500 on `scan`/`detect`/`features`
+but 5 on `similar`.
 
 ## Dependency Groups
 
 | Group | What it adds | Commands enabled |
 |-------|-------------|-----------------|
 | (none) | mutagen (base) | info, scan, chunks, survey, dump, inspect, explore, index, query, write, convert, cover for WAV/AIFF/MIDI/Serum/MP3/FLAC/OGG/Opus/M4A + all inspect-only formats |
-| `[analysis]` | librosa, numpy, scipy, soundfile | detect, features, info --deep |
+| `[analysis]` | librosa, numpy, scipy, soundfile | detect, features, similar, `audit --signal`, info --deep |
+| `[tui]` | textual | `acidcat tui` |
 | `[mcp]` | mcp SDK | `acidcat-mcp` stdio server |
 | `[mcp-http]` | starlette + uvicorn | `acidcat-mcp --transport http` (streamable-HTTP transport) |
 | `[crypto]` | cryptography | extract audio from encrypted Wii disc images |
-| `[all]` | everything (includes `[mcp-http]`, `[crypto]`) | all commands, all formats |
+| `[all]` | everything (`[analysis]`, `[mcp-http]`, `[tui]`, `[crypto]`) | all commands, all formats |
 
 ## Examples
 
@@ -198,15 +224,27 @@ Most commands accept `table`, `json`, and `csv` (default `table`, but
 
 ### Recovery / rescue
 
-Find audio in a raw blob, cut it out, and make odd codecs playable. Four verbs
-chain like coreutils: `locate` (find) -> `carve` (cut) -> `convert` (transcode),
-with `extract` for known banks. Full workflow in [docs/recovery.md](docs/recovery.md).
+Find audio in a raw blob, cut it out, make it playable. The verbs chain like
+coreutils: `classify` (what is this) -> `locate` (find) -> `carve` (cut) ->
+`wrap` (add a header) or `convert` (transcode), with `extract` for known banks.
+Full workflow in [docs/recovery.md](docs/recovery.md).
+
+    # what am I even holding, and what should I run next
+    acidcat classify mystery.bin
 
     # find the audio regions in a disk image or card dump
     acidcat locate disk.img --mode aggressive --analyze
 
-    # the pipeline: locate the regions, carve every one into a directory
+    # embedded FILES: locate the regions, carve every one into a directory
     acidcat locate disk.img --json | acidcat carve disk.img --batch - -o recovered/
+
+    # headerless PCM: carve it, then give it a header so it plays
+    acidcat locate disk.img --analyze --json \
+      | acidcat carve disk.img --batch - --wrap --rate 44100 -o recovered/
+
+    # one region by hand
+    acidcat carve disk.img --offset 0x5d1000 --length 2048 \
+      | acidcat wrap --rate 44100 --bits 16 --endian be > region.wav
 
     # pull every sample out of a sampler bank / tracker module
     acidcat extract kit.sf2 -o kit_samples/
