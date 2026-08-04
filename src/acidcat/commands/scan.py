@@ -186,8 +186,14 @@ def run(args):
                     print(f"  [skip] {file}: {e}", file=sys.stderr)
                 continue
 
-            # chunk filter (only applies to chunk-based formats)
-            if wanted and seen:
+            # Chunk filter. `and seen` made this a no-op for any format with no
+            # chunks -- a tagged MP3 or an AppleDouble stub returns seen == [],
+            # so the filter was skipped and the row kept. `--has acid` returned
+            # 95 rows where two independent counts (survey, and the index's own
+            # `chunks` column) both say 80: 13 MP3s, an MP4 and a resource-fork
+            # stub passed a RIFF-chunk filter. A file with no chunks cannot
+            # contain the one you asked for.
+            if wanted:
                 upper_seen = {s.upper() for s in seen}
                 if not (upper_seen & wanted):
                     continue

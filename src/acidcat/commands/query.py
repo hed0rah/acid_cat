@@ -7,6 +7,7 @@ scope to one or more libraries by label or path. Override the registry
 location with --registry or the ACIDCAT_REGISTRY env var.
 """
 
+import json
 import os
 import sqlite3
 import sys
@@ -136,6 +137,15 @@ def _run(args):
     rows = rows[: args.limit]
 
     if not rows:
+        # An empty result still has to be VALID output in a machine format:
+        # `acidcat query --bpm 128 --json` emitted zero bytes, so `jq` and
+        # json.loads both fail on "no matches" -- in a tool whose whole design
+        # goal is piping, that turns an ordinary empty answer into a parse
+        # error downstream. The human note stays on stderr.
+        fmt = getattr(args, "output_format", "table")
+        if fmt == "json":
+            json.dump([], sys.stdout)
+            sys.stdout.write("\n")
         if not getattr(args, "paths_only", False):
             print("(no matches)", file=sys.stderr)
         return 0

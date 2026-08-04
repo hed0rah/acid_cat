@@ -228,7 +228,17 @@ class Census:
         """Dissect one file into this accumulator. Positioned reads of chunk
         headers only; degrades on any malformed/short file, never raises."""
         self.files += 1
-        flags = os.O_RDONLY
+        # O_BINARY is mandatory on Windows and a no-op everywhere else. Without
+        # it os.open gives a TEXT-mode descriptor, and os.read stops dead at the
+        # first 0x1A (DOS end-of-file). Every count this module produces then
+        # silently understates the corpus: measured on a real 39,369-file tree,
+        # 651 valid RIFF/WAVE files (1.65%) were dropped entirely and 573 more
+        # truncated mid-walk, with `errors` reporting 0 throughout.
+        #
+        # It survived because the buggy path is the fallback used when os.pread
+        # is missing -- i.e. Windows only -- and CI ran ubuntu alone, so the
+        # branch was never executed on the platform this is developed on.
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
         if noatime and _HAS_NOATIME:
             try:
                 fd = os.open(path, flags | os.O_NOATIME)
