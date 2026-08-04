@@ -48,17 +48,29 @@ def register(subparsers):
 
 
 def _iter_files(targets):
+    """Yield (path, named): `named` is True for a path the caller wrote on the
+    command line, False for one the directory recursion turned up."""
     for t in targets:
         if os.path.isfile(t):
-            yield t
+            yield t, True
         elif os.path.isdir(t):
             for root, _dirs, names in os.walk(t):
                 for name in names:
-                    yield os.path.join(root, name)
+                    yield os.path.join(root, name), False
 
 
 def _ids(seq):
     return ",".join(sorted({str(c).strip() for c in seq}))
+
+
+# A file you NAMED gets a row even when nothing can walk it; a file the
+# directory recursion FOUND does not. Naming a file is a question about that
+# file, and answering it with zero bytes and exit 0 is indistinguishable from
+# "walked it, the filters excluded it" -- `shape mystery.ch1` printed nothing,
+# and a sweep over a directory of one unknown format produced an empty
+# histogram rather than the cluster of N that is the whole signal. Recursion is
+# a question about a tree, where a row per README and .DS_Store is noise.
+_UNWALKED = "?unwalked"
 
 
 def _fast_fingerprint(path):
@@ -120,11 +132,13 @@ def run(args):
         print(f"acidcat shape: {t}: No such file or directory", file=sys.stderr)
     if missing and len(missing) == len(args.targets):
         return 2
-    for path in _iter_files(args.targets):
+    for path, named in _iter_files(args.targets):
         fp = (_fast_fingerprint(path) if args.fast
               else _full_fingerprint(path, args.anomalies))
         if fp is None:
-            continue
+            if not named:
+                continue
+            fp = (_UNWALKED, sniffmod.sniff(path) or "", "", "")
         label, summary, ids, flag = fp
         if args.fmt_filter and args.fmt_filter.lower() not in label.lower():
             continue

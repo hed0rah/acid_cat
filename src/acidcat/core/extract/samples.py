@@ -67,15 +67,48 @@ def _undelta16(raw):
 
 # ---- per-format extractors: each yields {name, wav, note} ------------------
 
+def _bounded(data, off, want):
+    """Slice `want` bytes at `off`, and say how many were not there.
+
+    A sample header declaring more data than the file holds used to slice short
+    and then be described by its DECLARED size: a MOD claiming a 4,096-byte
+    sample starting at EOF listed as `4,096 B 8-bit`, counted toward "extracted
+    4 sample(s)", exit 0 -- and landed on disk as a 44-byte WAV header with no
+    audio in it. The bank's own truncation is a finding, not a silent success.
+
+    Returns (raw, short_by).
+    """
+    if off is None or off < 0 or off >= len(data):
+        return b"", want
+    raw = data[off:off + want]
+    return raw, want - len(raw)
+
+
+def _truncated_note(name, want, have, total):
+    """The informational record for a sample the file does not actually hold.
+    wav=None keeps it out of the extracted count and routes it to `notes`."""
+    if have:
+        return None
+    return {"name": name, "wav": None,
+            "note": f"{name}: declared {want:,} B but the file holds none of "
+                    f"it (file is {total:,} B) -- not extracted"}
+
+
 def _mod_samples(data):
     m = tkmod.parse_mod(data)
     for i, s in enumerate(m["samples"], 1):
         if not s["length"] or s["offset"] is None:
             continue
-        raw = data[s["offset"]:s["offset"] + s["length"]]
-        yield {"name": s["name"] or f"sample{i:02d}",
-               "wav": _s8_to_wav(raw, _TRACKER_RATE),
-               "note": f"{s['length']:,} B 8-bit"}
+        name = s["name"] or f"sample{i:02d}"
+        raw, short = _bounded(data, s["offset"], s["length"])
+        skip = _truncated_note(name, s["length"], len(raw), len(data))
+        if skip:
+            yield skip
+            continue
+        note = f"{len(raw):,} B 8-bit"
+        if short:
+            note += f" (declared {s['length']:,} B; {short:,} B past EOF)"
+        yield {"name": name, "wav": _s8_to_wav(raw, _TRACKER_RATE), "note": note}
 
 
 def _xm_samples(data):
@@ -86,7 +119,12 @@ def _xm_samples(data):
             if not s["length"] or s.get("offset") is None:
                 continue
             n += 1
-            raw = data[s["offset"]:s["offset"] + s["length"]]
+            name = s["name"] or inst["name"] or f"sample{n:02d}"
+            raw, short = _bounded(data, s["offset"], s["length"])
+            skip = _truncated_note(name, s["length"], len(raw), len(data))
+            if skip:
+                yield skip
+                continue
             if s["bits16"]:
                 pcm = _undelta16(raw)                     # -> signed 16-bit LE
                 frames = pcm
@@ -94,9 +132,10 @@ def _xm_samples(data):
                 dec = _undelta8(raw)                      # -> wrapped signed 8-bit
                 frames = b"".join(struct.pack("<h", (b - 256 if b > 127 else b) * 256)
                                   for b in dec)
-            yield {"name": s["name"] or inst["name"] or f"sample{n:02d}",
-                   "wav": _wav(frames, _TRACKER_RATE),
-                   "note": f"{s['length']:,} B {'16' if s['bits16'] else '8'}-bit delta"}
+            note = f"{len(raw):,} B {'16' if s['bits16'] else '8'}-bit delta"
+            if short:
+                note += f" (declared {s['length']:,} B; {short:,} B past EOF)"
+            yield {"name": name, "wav": _wav(frames, _TRACKER_RATE), "note": note}
 
 
 def _s3m_frames(raw, bits16, stereo):
@@ -219,19 +258,27 @@ def _it_samples(data):
         off, length = s.get("data_off"), s["length"]
         if not off:
             continue
+        name = s["name"] or s.get("dos_name") or f"sample{i:02d}"
+        want = length * (2 if bits16 else 1)
+        short = 0
         if s.get("compressed"):
             pcm = _it_decompress(data, off, length, bits16, it215)
         else:
-            pcm = data[off:off + length * (2 if bits16 else 1)]
+            pcm, short = _bounded(data, off, want)
+        skip = _truncated_note(name, want, len(pcm), len(data))
+        if skip:
+            yield skip
+            continue
         if bits16:
             frames = pcm[:(len(pcm) // 2) * 2]           # signed 16-bit LE already
         else:
             frames = b"".join(struct.pack("<h", (b - 256 if b > 127 else b) * 256)
                               for b in pcm)
-        yield {"name": s["name"] or s.get("dos_name") or f"sample{i:02d}",
-               "wav": _wav(frames, rate),
-               "note": f"{length:,} {'16' if bits16 else '8'}-bit "
-                       f"{'IT-compressed' if s.get('compressed') else 'PCM'} @ {rate} Hz"}
+        note = (f"{len(pcm):,} B {'16' if bits16 else '8'}-bit "
+                f"{'IT-compressed' if s.get('compressed') else 'PCM'} @ {rate} Hz")
+        if short:
+            note += f" (declared {want:,} B; {short:,} B past EOF)"
+        yield {"name": name, "wav": _wav(frames, rate), "note": note}
 
 
 def _gf1_frames(raw, bits16, unsigned):
