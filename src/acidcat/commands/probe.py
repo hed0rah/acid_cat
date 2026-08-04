@@ -17,6 +17,7 @@ f32/f64); it is searched in both byte orders. HEX for find is a hex string
 (64617461) or, with a leading s:, literal text (s:data).
 """
 
+import json
 import os
 import sys
 from acidcat.util.stdin import display_name
@@ -33,6 +34,14 @@ def register(subparsers):
         "probe",
         help="Byte-level dissection: typed read, value scan, find, strings, hexdump, diff.")
     p.add_argument("file", help="File to dissect, or '-' for stdin.")
+    # probe is the RE surface and had no machine output at all: every subverb
+    # printed its summary and its results together on stdout, so scripting
+    # `probe find` meant `tail -n +2 | tr -d ' '`. Declared on the parent so it
+    # applies to whichever subverb follows.
+    p.add_argument("--json", action="store_true", dest="as_json",
+                   help="Emit results as JSON on stdout (read/scan/find/"
+                        "strings/diff/entropy). The human summary moves to "
+                        "stderr, so the data pipes cleanly either way.")
     sub = p.add_subparsers(dest="verb", metavar="VERB")
 
     r = sub.add_parser("read", help="Read AT as typed values (pwndbg x).")
@@ -90,6 +99,15 @@ def _byteorder(args, label):
     return pr.default_byteorder(label)
 
 
+def _emit(args, payload):
+    """JSON to stdout for the machine path. Returns True if it handled output."""
+    if not getattr(args, "as_json", False):
+        return False
+    json.dump(payload, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return True
+
+
 def run(args):
     from acidcat.util.stdin import resolved_input
     with resolved_input(args.file) as _p:
@@ -135,6 +153,10 @@ def _dispatch(args, verb, path, data):
         if not vals:
             print(f"acidcat probe: nothing to read at 0x{off:x}", file=sys.stderr)
             return 1
+        if _emit(args, {"verb": "read", "offset": off, "type": args.type,
+                        "endian": order, "anchor": note,
+                        "values": list(vals)}):
+            return 0
         head = f"0x{off:08x}  {args.type} {order}-endian  ({note})"
         print(head)
         for i, v in enumerate(vals):
@@ -148,7 +170,11 @@ def _dispatch(args, verb, path, data):
             print(f"acidcat probe: bad value {args.value!r}", file=sys.stderr)
             return 2
         hits = pr.scan_value(data, value, args.type)
-        print(f"{len(hits)} hit(s) for {args.value} as {args.type}")
+        if _emit(args, {"verb": "scan", "value": args.value, "type": args.type,
+                        "hits": [{"offset": o, "endian": e} for o, e in hits]}):
+            return 0 if hits else 1
+        print(f"{len(hits)} hit(s) for {args.value} as {args.type}",
+              file=sys.stderr)
         for off, order in hits:
             print(f"  0x{off:08x}  ({order})")
         return 0 if hits else 1
@@ -164,7 +190,11 @@ def _dispatch(args, verb, path, data):
                 print(f"acidcat probe: bad hex {pat!r} (use s: for text)", file=sys.stderr)
                 return 2
         offs = pr.find_bytes(data, needle)
-        print(f"{len(offs)} hit(s) for {pat}")
+        if _emit(args, {"verb": "find", "pattern": pat,
+                        "length": len(needle),
+                        "hits": [{"offset": o} for o in offs]}):
+            return 0 if offs else 1
+        print(f"{len(offs)} hit(s) for {pat}", file=sys.stderr)
         for off in offs:
             print(f"  0x{off:08x}")
         return 0 if offs else 1
@@ -174,9 +204,13 @@ def _dispatch(args, verb, path, data):
         # (iterating the mmap itself yields 1-byte bytes objects)
         with memoryview(data) as view:
             found = pr.strings(view, args.min)
+        if _emit(args, {"verb": "strings", "min_length": args.min,
+                        "strings": [{"offset": o, "text": t}
+                                    for o, t in found]}):
+            return 0 if found else 1
         for off, text in found:
             print(f"0x{off:08x}  {text}")
-        return 0
+        return 0 if found else 1
 
     if verb == "hexdump":
         try:
@@ -198,6 +232,13 @@ def _dispatch(args, verb, path, data):
             ranges, la, lb = pr.diff(data, other)
         finally:
             oclose()
+        if _emit(args, {"verb": "diff", "a": display_name(path),
+                        "b": os.path.basename(args.other),
+                        "a_length": la, "b_length": lb,
+                        "identical": not ranges and la == lb,
+                        "ranges": [{"offset": st, "end": en, "length": en - st}
+                                   for st, en in ranges]}):
+            return 0 if (not ranges and la == lb) else 1
         if not ranges and la == lb:
             print("identical")
             return 0
@@ -214,6 +255,14 @@ def _dispatch(args, verb, path, data):
         # zero-copy windows into the map
         with memoryview(data) as view:
             ent = viz.windowed_entropy(view, max(8, args.width))
+            if _emit(args, {"verb": "entropy", "file": display_name(path),
+                            "size": len(data), "window": max(8, args.width),
+                            "min": min(ent), "max": max(ent),
+                            "mean": sum(ent) / len(ent),
+                            "high_windows": sum(1 for e in ent if e >= 7.2),
+                            "high_threshold": 7.2,
+                            "windows": [round(e, 4) for e in ent]}):
+                return 0
             print(f"entropy  {display_name(path)}  {len(data):,} bytes  (0 = uniform .. 8 = random)")
             for line in viz.braille_line(ent, width=args.width, height=8, vmin=0, vmax=8):
                 print("  " + line)

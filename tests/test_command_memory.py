@@ -137,5 +137,6 @@ def test_probe_empty_file(tmp_path, capsys):
         count=1, be=False, le=False))
     capsys.readouterr()
     assert rc == 1                     # nothing to read, but no crash
-    assert probe_cmd.run(SimpleNamespace(file=str(p), verb="strings", min=4)) == 0
+    # 1: it ran fine and found no strings, per the exit-code convention
+    assert probe_cmd.run(SimpleNamespace(file=str(p), verb="strings", min=4)) == 1
     capsys.readouterr()

@@ -92,8 +92,9 @@ def test_cmd_read_field_by_name(tmp_path, capsys):
 def test_cmd_scan_finds_rate(tmp_path, capsys):
     p = _wav(tmp_path, rate=44100)
     rc = cmd.run(_args(p, "scan", value="44100", type="u32"))
-    out = capsys.readouterr().out
-    assert rc == 0 and "hit(s)" in out and "(le)" in out
+    cap = capsys.readouterr()
+    # the summary is on stderr so the offsets on stdout pipe cleanly
+    assert rc == 0 and "hit(s)" in cap.err and "(le)" in cap.out
 
 
 def test_cmd_diff(tmp_path, capsys):
