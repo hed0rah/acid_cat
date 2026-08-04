@@ -346,7 +346,7 @@ def _full_chunk(chunk, filepath):
     return c
 
 
-def _run_resync(filepath, paint, source_path=None):
+def _run_resync(filepath, paint, source_path=None, as_json=False):
     """--resync: report the chunk grid still recoverable from a damaged container."""
     from acidcat.core.forensics import resync as resyncmod
 
@@ -355,6 +355,23 @@ def _run_resync(filepath, paint, source_path=None):
     res = resyncmod.recover(data, known_only=True)
     chain, recs = res["chain"], res["records"]
     name = os.path.basename(source_path or filepath)
+    if as_json:
+        # --resync --json emitted the human table verbatim, so `jq` got a parse
+        # error on the one output a damaged-container workflow most wants to
+        # script over. The chain is a list of carve ranges; say so in the data.
+        sys.stdout.write(json.dumps({
+            "file": source_path or filepath,
+            "mode": "resync",
+            "endian": res["endian"],
+            "coverage": res["coverage"],
+            "isolated_records": len(recs),
+            "chunks": [{"id": r["id"], "offset": r["offset"], "size": r["size"],
+                        "payload_offset": r["offset"] + 8,
+                        "confidence": r["confidence"],
+                        "known_id": r["known"],
+                        "chains_onward": r["corroborated"]} for r in chain],
+        }) + "\n")
+        return 0 if chain else 1
     if not chain:
         print(f"{name}: no recoverable chunk grid "
               f"({len(recs)} isolated record(s) found)")
@@ -447,6 +464,22 @@ def _forced_candidates(filepath, deep):
     return rows
 
 
+def _forced_json(filepath, rows):
+    """--force --json. The candidate list is the whole point of --force and it
+    was reachable only by eyeballing a table -- these are leads to feed back in
+    as `--format <id>`, which is a scripted loop if it is machine-readable."""
+    sys.stdout.write(json.dumps({
+        "file": filepath,
+        "mode": "force",
+        "identified": False,        # never an identification, always hypotheses
+        "candidates": [{"format": r["format"], "chunks": r["chunks"],
+                        "fields": r["fields"], "anchored": r["anchored"],
+                        "fits_file": r["fits"], "ids_at_offsets": r["ids_ok"],
+                        "plausible": bool(r["fits"] and r["ids_ok"]),
+                        "complaint": r["complaint"]} for r in rows],
+    }) + "\n")
+
+
 def _print_forced_candidates(filepath, rows, paint):
     base = os.path.basename(filepath)
     arg = f'"{base}"' if any(c in base for c in ' \t&()+;') else base
@@ -524,7 +557,7 @@ def run(args):
                 # a damaged container is exactly the case where the walk fails,
                 # so recovery runs instead of it rather than after it
                 rc = _run_resync(filepath, _Paint(color_enabled(args)),
-                                 source_path=source_path)
+                                 source_path=source_path, as_json=as_json)
                 exit_code = exit_code or rc
                 continue
             try:
@@ -550,8 +583,11 @@ def run(args):
                 if getattr(args, "force", False):
                     rows = _forced_candidates(filepath, deep)
                     if rows:
-                        _print_forced_candidates(
-                            filepath, rows, _Paint(color_enabled(args)))
+                        if as_json:
+                            _forced_json(source_path, rows)
+                        else:
+                            _print_forced_candidates(
+                                filepath, rows, _Paint(color_enabled(args)))
                         exit_code = 1     # still unidentified; these are leads
                         continue
                 if True:
@@ -610,7 +646,22 @@ def run(args):
                     out_chunks = []
                     for c in shown:
                         oc = {k: v for k, v in c.items() if k != "_idx"}
-                        oc["fields"] = [_public_field(f) for f in c.get("fields", [])]
+                        # `offset` is the chunk header, `field.off` is relative
+                        # to the payload, so `chunk.offset + field.off` read
+                        # eight bytes early -- format-dependent, because a
+                        # headerless model like MOD has no skew and a script
+                        # tuned on trackers broke silently on RIFF. --full has
+                        # always emitted the absolute offsets; plain --json now
+                        # does too, at no extra cost.
+                        pb = c.get("payload_base", c["offset"] + 8)
+                        oc["payload_base"] = pb
+                        fields = []
+                        for f in c.get("fields", []):
+                            f2 = _public_field(f)
+                            f2["abs"] = (pb + f["off"]
+                                         if f.get("off") is not None else None)
+                            fields.append(f2)
+                        oc["fields"] = fields
                         out_chunks.append(oc)
                 sys.stdout.write(json.dumps({
                     "file": filepath,

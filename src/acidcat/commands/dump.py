@@ -75,6 +75,13 @@ def _run(args):
         entry = {
             "chunk": cid,
             "offset": offset,
+            # `offset` points at the 8-byte [id][size] header while `size` and
+            # the hex describe the payload, so the record was not sufficient to
+            # locate its own bytes: piping it into `carve --offset` read 8
+            # bytes early and returned the ASCII chunk id. Naming the payload
+            # start is additive -- `offset` keeps its meaning for anyone
+            # already reading it.
+            "payload_offset": offset + 8,
             "size": size,
         }
 
