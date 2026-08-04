@@ -1,0 +1,16 @@
+# 47 of 406 tracked text files were stored with CRLF and the rest with LF, from
+# a mix of editors on Windows. Editing a CRLF file with an LF-writing tool turns
+# a 13-line change into a whole-file rewrite, which buries the real change in a
+# review. Normalize in the repository; check out whatever the platform wants.
+* text=auto eol=lf
+
+# binary: never touch
+*.png binary
+*.ico binary
+*.wav binary
+*.aif binary
+*.aiff binary
+*.mp3 binary
+*.flac binary
+*.sf2 binary
+*.db  binary
