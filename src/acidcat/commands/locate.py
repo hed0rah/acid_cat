@@ -50,10 +50,11 @@ def register(subparsers):
     add_output_format_arg(p, only=("table", "json", "tsv"))
     p.add_argument("--min-confidence", type=float, default=0.0, metavar="C",
                    help="Only report regions at or above this confidence (0..1). "
-                        "A signature-matched container is 0.90; a statistical "
-                        "blob can be anything. Filtering here keeps "
-                        "`locate | carve --batch` a one-liner instead of "
-                        "needing jq in the middle.")
+                        "A signature-matched container is 0.90; a headerless "
+                        "blob is inferred statistically and never exceeds 0.89, "
+                        "so --min-confidence 0.90 means 'validated containers "
+                        "only'. Filtering here keeps `locate | carve --batch` a "
+                        "one-liner instead of needing jq in the middle.")
     p.add_argument("-v", "--verbose", action="store_true",
                    help="Show the evidence behind each region (entropy, "
                         "autocorrelation, distribution) and any debug tells "

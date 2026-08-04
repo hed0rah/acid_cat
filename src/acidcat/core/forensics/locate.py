@@ -40,8 +40,27 @@ from acidcat.core.infra.sniff import (sniff_bytes,
 MODES = ("strict", "normal", "aggressive")
 
 _HEADER_BACKTRACK = 64 * 1024     # "back up a little" for a corrupt-extent header
-_NORMAL_BLOB_MIN = 0.45           # headerless blobs need this confidence in 'normal'
 _CONTAINER_CONF = 0.9             # a validated container is a strong recovery
+
+# A statistical blob can never outrank a signature-validated container. It used
+# to: a verified WAV came back at 0.900 and a headerless guess at 1.000, so the
+# inference scored above the proof and `--min-confidence 0.90` could not
+# separate them -- it filtered out containers and kept guesses. On a compressed
+# proprietary container (byte entropy 7.8, which this tool's own `probe entropy`
+# calls "encrypted or compressed") that meant four megabytes of noise reported
+# as raw PCM at confidence 1.00, with no threshold able to reject it.
+#
+# Certainty about a headerless region is not available from autocorrelation
+# alone, so the scale now says so: blobs occupy [0, _BLOB_CONF_MAX] and only a
+# checked magic number reaches _CONTAINER_CONF.
+_BLOB_CONF_MAX = 0.89
+
+# What `normal` mode requires of a headerless blob. Expressed on the rescaled
+# scale so the gate is exactly where it was before the rescale (0.45 raw), and
+# not accidentally tightened by it -- this threshold decides what `locate`
+# finds, and moving it would be a detection change wearing a reporting change's
+# clothes.
+_NORMAL_BLOB_MIN = round(0.45 * _BLOB_CONF_MAX, 3)      # 0.4
 _COALESCE_GAP = 32 * 1024        # merge headerless blob fragments within this gap
                                  # (a quiet passage inside a file is still one file)
 
@@ -258,7 +277,10 @@ def locate(data, *, mode="normal", scan_kwargs=None):
             continue                                  # part of a container/stream we found
         records.append({
             "kind": "blob", "format": None, "offset": region["start"],
-            "end": region["end"], "confidence": region["confidence"],
+            "end": region["end"],
+            # rescaled, not clipped: clipping would flatten every strong blob
+            # onto one value and destroy the ranking that makes `sort` useful
+            "confidence": round(region["confidence"] * _BLOB_CONF_MAX, 3),
             "inspectable": False, "evidence": region["evidence"],
         })
 
