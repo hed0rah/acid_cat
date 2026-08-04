@@ -97,8 +97,46 @@ these were introduced by the 1.0 restructure itself.
   a pipe. The default (a CSV file) is unchanged.
 - Malformed input produces a message and a usable exit code rather than a
   traceback, across the verbs where hostile bytes reached an unguarded parse.
+- **`locate` ranked a statistical guess above a signature-validated container.**
+  A real WAV whose magic had been checked came back at confidence 0.900 and a
+  headerless region inferred from autocorrelation came back at 1.000, so
+  `--min-confidence 0.90` filtered out the containers and kept the guesses. On a
+  compressed proprietary container (byte entropy 7.8, which acidcat's own
+  `probe entropy` calls "encrypted or compressed") that meant four megabytes of
+  noise reported as raw PCM at confidence 1.00 with no threshold able to reject
+  it. Blobs now occupy `[0, 0.89]` and only a checked magic number reaches 0.90.
+  Rescaled rather than clipped, and the `normal`-mode detection gate moved onto
+  the new scale with it, so what `locate` *finds* is unchanged.
+- **JSON records could not locate their own bytes.** `dump --json` reported
+  `offset` for the 8-byte chunk header while `size` and `hex` described the
+  payload, so feeding a record into `carve --offset` read 8 bytes early and
+  returned the ASCII chunk id; `inspect --json` had the same skew between
+  `chunk.offset` and `field.off`. Format-dependent, so a script tuned on
+  trackers (no header, no skew) broke silently on RIFF. Chunks now carry
+  `payload_base` / `payload_offset` and fields carry `abs`, which `--full` has
+  always emitted.
+- **`inspect --force` and `--resync` emitted no JSON at all** under `--json` --
+  the human table verbatim, so `jq` failed on the two verbs you reach for when
+  no walker claims a file.
+- **`extract` counted samples it recovered nothing from.** A MOD declaring a
+  4,096-byte sample starting at EOF was listed at its declared size, counted,
+  and written as a 44-byte WAV header with no audio.
+- **`shape` answered with silence for files it cannot walk**, so
+  `shape mystery.ch1` printed nothing and a sweep of one unknown format gave an
+  empty histogram. A file you *name* now gets a row; directory recursion still
+  filters, so a tree sweep does not sprout a row per README.
+- **`census --limit` made whole-corpus claims from a prefix.** `--json` carried
+  no truncation marker, and the "rare chunks" section reported a chunk occurring
+  1,178 times as rare because only 20 files had been opened.
+- `extract` leaked the temp path it buffers stdin into, naming a file the user
+  never asked about.
 
 ### Added
+- **`probe --json`** on `read`, `scan`, `find`, `strings`, `diff` and `entropy`.
+  probe is the verb you live in while reverse-engineering an unknown format and
+  it had no machine output at all, so scripting `probe find` meant
+  `tail -n +2 | tr -d ' '`. The human summary lines also moved to stderr, so the
+  plain output pipes cleanly too.
 - **`acidcat wrap`** -- a filter that puts a WAV header on raw PCM read from
   stdin (`--rate`, `--channels`, `--bits`, `--endian`, `--float`). This closes
   the recovery chain: a region `locate` finds and `carve` cuts is now playable
