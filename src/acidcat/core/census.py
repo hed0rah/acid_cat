@@ -186,6 +186,10 @@ class Census:
         self.files = 0
         self.riff_files = 0
         self.errors = 0
+        # set by run_census when --limit stopped the walk early, so every
+        # consumer can tell a prefix of a corpus from the whole thing
+        self.truncated = False
+        self.limit = None
         self.by_container = {}
         self.chunk_counts = {}
         self.chunk_first = {}
@@ -209,6 +213,8 @@ class Census:
         self.files += other.files
         self.riff_files += other.riff_files
         self.errors += other.errors
+        self.truncated = self.truncated or other.truncated
+        self.limit = self.limit if self.limit is not None else other.limit
         for attr in ("by_container", "chunk_counts", "fmt_tags", "list_types",
                      "fact_sizes", "bext_versions"):
             dst, src = getattr(self, attr), getattr(other, attr)
@@ -401,6 +407,14 @@ class Census:
             "fact_sizes": {str(k): v for k, v in self.fact_sizes.items()},
             "bext_versions": {str(k): v for k, v in self.bext_versions.items()},
             "flags": self.flags,
+            # A truncated census makes the same claims as a complete one. The
+            # table disclosed "20 files opened" but --json had no limit or
+            # truncation field at all, so a consumer could not tell a prefix
+            # from a whole corpus -- `--limit 20` reported "Rare chunks
+            # (<=5 occurrences): LIST 4" for a chunk that occurs 1,178 times
+            # and is the 4th most common in the tree.
+            "truncated": bool(self.truncated),
+            "limit": self.limit,
         }
 
 
@@ -455,6 +469,8 @@ def run_census(roots, opts=None, jobs="auto", io_hint="auto", limit=None,
                     progress(cx.files, cx.riff_files, cx.errors)
                 if limit and cx.files >= limit:
                     break
+            cx.limit = limit
+            cx.truncated = bool(limit and cx.files >= limit)
             return cx
 
         q = queue.Queue(maxsize=jobs * 256)
@@ -494,6 +510,8 @@ def run_census(roots, opts=None, jobs="auto", io_hint="auto", limit=None,
         merged = Census()
         for local in workers_out:
             merged.merge(local)
+        merged.limit = limit
+        merged.truncated = bool(limit and fed >= limit)
         return merged
     finally:
         gc.collect()

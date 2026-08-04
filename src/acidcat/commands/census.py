@@ -132,7 +132,15 @@ def _write_table(w, res):
         w.write("\n")
 
     if res["rare_chunks"]:
+        # "rare" is a claim about the whole corpus, and --limit makes it a
+        # claim about a prefix. On a real library `--limit 20` reported
+        # "LIST 4" as rare -- LIST occurs 1,178 times there and is the 4th most
+        # common chunk in the tree. The counts are still worth showing; what
+        # they are not is evidence of rarity.
+        cap = (f" -- counts from the first {res['limit']} file(s) only; "
+               f"NOT evidence of rarity in the full tree"
+               if res.get("truncated") else "")
         w.write(f"Rare chunks (<=5 occurrences): "
-                f"{len(res['rare_chunks'])}\n")
+                f"{len(res['rare_chunks'])}{cap}\n")
         for cid, n, ex in res["rare_chunks"][:40]:
             w.write(f"  {cid:10s} {n}  {ex}\n")

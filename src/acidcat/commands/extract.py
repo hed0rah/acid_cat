@@ -42,12 +42,17 @@ def _safe(name, idx, ext="wav"):
 def run(args):
     tmp = None
     path = args.input
+    # the name to put in messages: stdin is buffered to a temp file so the
+    # byte-level parsers can seek, and leaking that path told the user about a
+    # file they never named and which no longer exists by the time they read it
+    display = path
     if is_stdin_target(path):
         tmp = stdin_to_tempfile()
         if tmp is None:
             print("acidcat extract: no input on stdin", file=sys.stderr)
-            return 1
+            return 2
         path = tmp
+        display = "<stdin>"
     elif not os.path.isfile(path):
         print(f"acidcat extract: {path}: No such file", file=sys.stderr)
         return 2
@@ -55,7 +60,7 @@ def run(args):
     try:
         records = list(smod.iter_samples(path))
     except smod.SampleError as e:
-        print(f"acidcat extract: {path}: {e}", file=sys.stderr)
+        print(f"acidcat extract: {display}: {e}", file=sys.stderr)
         return 1
     finally:
         if tmp:
