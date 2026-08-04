@@ -117,7 +117,9 @@ class TestInTreeDbPathFor:
 
 class TestRegistryPathResolution:
     def test_default_under_home(self, monkeypatch):
-        # cli/env both unset
+        # cli/env both unset -- conftest sets ACIDCAT_REGISTRY for isolation, so
+        # this test has to clear it to reach the default it is about
+        monkeypatch.delenv("ACIDCAT_REGISTRY", raising=False)
         p = paths.resolve_registry_path()
         assert p.endswith("/.acidcat/registry.db")
 
@@ -139,7 +141,14 @@ class TestLegacyDetection:
 
 
 class TestFindLibraryRootAbove:
-    def test_returns_none_when_no_in_tree_db(self, tmp_path):
+    def test_returns_none_when_no_in_tree_db(self, tmp_path, monkeypatch):
+        # The walk stops at the user's home (a .acidcat there is the legacy v0.4
+        # global DB, not a library root), so this test has to say where home is.
+        # Without that it depends on whether any ANCESTOR of the pytest tmp dir
+        # happens to contain .acidcat -- on this machine the real home does, and
+        # the test passed only by accident of HOME matching it.
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
         f = tmp_path / "x.wav"
         f.write_bytes(b"")
         assert paths.find_library_root_above(str(f)) is None

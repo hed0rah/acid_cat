@@ -11,13 +11,25 @@ os.environ.setdefault("ACIDCAT_WALKER_RAISE", "1")
 
 
 @pytest.fixture(autouse=True)
-def _isolate_acidcat_env(monkeypatch):
-    """Strip acidcat env vars so a dev shell with ACIDCAT_REGISTRY/ACIDCAT_DB
-    set cannot leak into the test process and corrupt the user's real
-    registry or single-DB index. Applied to every test.
+def _isolate_acidcat_env(monkeypatch, tmp_path_factory):
+    """Point every acidcat path at a throwaway home. Applied to every test.
+
+    Deleting the env vars was not enough, and was in fact the bug: with
+    ACIDCAT_REGISTRY unset, `paths.acidcat_home()` falls back to
+    `os.path.expanduser("~")`, so the suite wrote per-library databases into
+    the user's REAL `~/.acidcat/libraries/`. Two audit runs plus the test suite
+    left 1,786 orphaned .db files there, 126 MB, against 32 genuinely
+    registered libraries.
+
+    Setting a fake HOME is what actually contains it: expanduser reads
+    USERPROFILE on Windows and HOME on POSIX, and both have to be overridden
+    because acidcat is developed on the former and tested on the latter.
     """
+    home = tmp_path_factory.mktemp("acidcat_home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("ACIDCAT_REGISTRY", str(home / ".acidcat" / "registry.db"))
     monkeypatch.delenv("ACIDCAT_DB", raising=False)
-    monkeypatch.delenv("ACIDCAT_REGISTRY", raising=False)
 
 
 def _make_riff_wav(sample_rate=44100, channels=1, bits=16, num_samples=4):
