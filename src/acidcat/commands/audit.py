@@ -147,6 +147,20 @@ def _gather(path, signal=False):
         close()
 
 
+def _code(scanned, vios, findings, integ):
+    """0 clean, 1 the file has something to answer for, 2 nothing was checked.
+
+    audit returned 0 unconditionally, so the forensic verb could not gate a
+    script: `audit f && ship f` shipped a file whose own report said
+    "3 forensic alert(s)". 2 for an unscanned file keeps "no walker ran" apart
+    from "walked it, clean" -- the distinction the report itself already draws
+    in its section text.
+    """
+    if not scanned and not vios:
+        return 2
+    return 1 if (vios or findings or integ) else 0
+
+
 def run(args):
     path = args.input
     try:
@@ -154,7 +168,7 @@ def run(args):
             path, getattr(args, "signal", False))
     except OSError as e:
         print(f"acidcat audit: {path}: {e}", file=sys.stderr)
-        return 1
+        return 2
     size = os.path.getsize(path)
 
     if args.json:
@@ -172,7 +186,7 @@ def run(args):
             "scanned": scanned,
         }
         print(json.dumps(out, indent=2, default=str))
-        return 0
+        return _code(scanned, out["structure"], findings, integ)
 
     print(f"{os.path.basename(path)}  [{label or 'unknown'}]  {size:,} bytes\n")
 
@@ -253,4 +267,4 @@ def run(args):
         # still finds embedded containers in a format we cannot walk.
         bits.append("clean" if scanned else "not analyzable -- no walker; try acidcat locate")
     print(f"\n  VERDICT: {', '.join(bits) if bits else 'no structural fixes; review findings'}")
-    return 0
+    return _code(scanned, vios, findings, integ)

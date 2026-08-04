@@ -50,7 +50,7 @@ def run(args):
         path = tmp
     elif not os.path.isfile(path):
         print(f"acidcat extract: {path}: No such file", file=sys.stderr)
-        return 1
+        return 2
 
     try:
         records = list(smod.iter_samples(path))

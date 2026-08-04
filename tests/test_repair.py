@@ -58,7 +58,7 @@ def test_repair_dry_run_writes_nothing(tmp_path, capsys):
     p = tmp_path / "b.wav"
     p.write_bytes(bytes(broken))
     rc = repair.run(_args([str(p)], dry_run=True))
-    assert rc == 0
+    assert rc == 1                                # repairs are pending
     assert p.read_bytes() == bytes(broken)        # unchanged on disk
     assert "size:" in capsys.readouterr().out
 
@@ -67,5 +67,5 @@ def test_repair_rejects_non_iff(tmp_path, capsys):
     p = tmp_path / "x.bin"
     p.write_bytes(b"ID3\x04not a container")
     rc = repair.run(_args([str(p)]))
-    assert rc == 1
+    assert rc == 2                     # nothing checkable, as validate says
     assert "not a RIFF/AIFF/MP4 container" in capsys.readouterr().err

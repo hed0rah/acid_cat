@@ -231,7 +231,7 @@ def run(args):
         except OSError as e:
             print(f"acidcat index: --rebuild could not remove {db_path}: {e}",
                   file=sys.stderr)
-            return 1
+            return 2
         _vlog(args, f"[index] removed existing DB at {db_path}")
 
     conn = idx.open_db(db_path)

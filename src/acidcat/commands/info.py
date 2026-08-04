@@ -469,7 +469,7 @@ def run(args):
 
     if not os.path.isfile(filepath):
         print(f"acidcat: {filepath}: No such file", file=sys.stderr)
-        return 1
+        return 2
 
     try:
         fmt_type = _detect_format(filepath)

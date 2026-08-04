@@ -1237,7 +1237,7 @@ class TestRunCli:
         assert run(self._args(str(p))) == 1
 
     def test_missing_file_exits_1(self):
-        assert run(self._args("does/not/exist.wav")) == 1
+        assert run(self._args("does/not/exist.wav")) == 2
 
     def test_color_always_emits_ansi(self, tmp_path, capsys):
         p = tmp_path / "t.mp3"
@@ -1284,7 +1284,7 @@ class TestRunCli:
 
     def test_missing_among_present_keeps_going_exit_1(self, tmp_path, capsys):
         a = _wav(tmp_path, _fmt(), _data(), name="a.wav")
-        assert run(self._multi([a, str(tmp_path / "gone.wav")])) == 1
+        assert run(self._multi([a, str(tmp_path / "gone.wav")])) == 2
         out = capsys.readouterr().out
         assert "RIFF/WAVE" in out  # the good file still rendered
 

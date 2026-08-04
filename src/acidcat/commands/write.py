@@ -108,7 +108,7 @@ def _commit_and_report(path, new_data, args):
             path, new_data, out=args.output, overwrite=args.overwrite)
     except OSError as e:
         print(f"acidcat write: {path}: {e}", file=sys.stderr)
-        return 1
+        return 2
     if backup:
         note = f"  (backup: {os.path.basename(backup)})"
     elif not args.output and not args.overwrite:

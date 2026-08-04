@@ -133,7 +133,7 @@ def run(args):
     directory = args.target
     if not os.path.isdir(directory):
         print(f"acidcat scan: {directory}: Not a directory", file=sys.stderr)
-        return 1
+        return 2
 
     default_base = os.path.basename(os.path.normpath(directory))
     output_csv = safe_basename_for_csv(

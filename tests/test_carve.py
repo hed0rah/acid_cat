@@ -116,7 +116,9 @@ def test_carve_requires_exactly_one_target(tmp_path):
 
 def test_carve_missing_chunk_errors(tmp_path):
     p = _write(tmp_path, "f.wav", _wav(_FMT, _DATA))
-    assert carve.run(_Args(target=p, chunk="XXXX", output=str(tmp_path / "x"))) == 2
+    # 1, not 2: the chunk is simply not in this file, which is a negative
+    # result. `dump FILE XXXX` has always answered 1 to the same question.
+    assert carve.run(_Args(target=p, chunk="XXXX", output=str(tmp_path / "x"))) == 1
 
 
 def test_carve_range_past_eof_clamped(tmp_path):
@@ -130,8 +132,8 @@ def test_carve_range_past_eof_clamped(tmp_path):
 def test_carve_no_trailing_data(tmp_path):
     # a clean WAV with nothing appended has no trailing region
     p = _write(tmp_path, "clean.wav", _wav(_FMT, _DATA))
-    assert carve.run(_Args(target=p, trailing=True, output=str(tmp_path / "x"))) == 2
+    assert carve.run(_Args(target=p, trailing=True, output=str(tmp_path / "x"))) == 1
 
 
 def test_carve_missing_file():
-    assert carve.run(_Args(target="/nonexistent/nope.wav", offset="0")) == 1
+    assert carve.run(_Args(target="/nonexistent/nope.wav", offset="0")) == 2

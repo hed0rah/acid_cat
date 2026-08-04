@@ -48,7 +48,7 @@ def run(args):
     for t in args.target:
         if not os.path.isdir(t):
             print(f"acidcat census: {t}: Not a directory", file=sys.stderr)
-            return 1
+            return 2
         roots.append(t)
 
     opts = _census.ScanOptions(

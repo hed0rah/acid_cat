@@ -172,6 +172,25 @@ Not global, though they look it: `--has` is on `scan` and `survey`; `--deep` is
 on `info` and `index`; `-n/--num` defaults to 500 on `scan`/`detect`/`features`
 but 5 on `similar`.
 
+## Exit codes
+
+Every verb answers with the same three codes, following `grep` and `diff`, so a
+script can branch without knowing which verb it called:
+
+| code | meaning | examples |
+|---|---|---|
+| `0` | it worked | the file is clean, the chunk is here, regions were found |
+| `1` | ran fine, the answer is no | `locate` found nothing, `audit` has findings, `validate` saw a violation, `carve --chunk` is not in this file |
+| `2` | could not run | bad flag or value, missing or unreadable input, or nothing in the input was checkable |
+
+The distinction that matters in practice is `1` vs `2`. `validate` returns `2`
+on a format it does not model, rather than `0`, so a gate cannot pass a file it
+never examined:
+
+    acidcat validate track.wav && ship track.wav      # only ships a checked, clean file
+    acidcat locate disk.img --json | acidcat carve disk.img --batch - -o out/ \
+      || echo "nothing recovered"                    # a real answer either way
+
 ## Dependency Groups
 
 | Group | What it adds | Commands enabled |

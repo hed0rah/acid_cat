@@ -47,7 +47,7 @@ def _run(args):
     filepath = args.target
     if not os.path.isfile(filepath):
         print(f"acidcat dump: {filepath}: No such file", file=sys.stderr)
-        return 1
+        return 2
 
     # RIFF chunk IDs are always 4 bytes -- pad short names (e.g. "fmt" -> "fmt ")
     wanted = {c.upper().ljust(4)[:4] for c in args.chunks}

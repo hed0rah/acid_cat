@@ -113,5 +113,5 @@ def test_locate_transforms_finds_xored_audio(tmp_path, capsys):
 def test_locate_empty_input(tmp_path, capsys):
     p = _img(tmp_path, b"")
     rc = cmd.run(_args(input=p))
-    assert rc == 1
+    assert rc == 2                     # could not run: there are no bytes
     assert "no input" in capsys.readouterr().err

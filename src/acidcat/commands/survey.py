@@ -30,7 +30,7 @@ def run(args):
     directory = args.target
     if not os.path.isdir(directory):
         print(f"acidcat survey: {directory}: Not a directory", file=sys.stderr)
-        return 1
+        return 2
 
     wanted = None
     has_val = getattr(args, 'has', None)
@@ -134,4 +134,5 @@ def run(args):
         print(f"\n[INFO] Scanned {files_scanned} WAV file(s), {len(counts)} "
               f"unique chunk ID(s){tail}.", file=sys.stderr)
 
-    return 0
+    # a tree with no parseable audio in it is a negative result
+    return 0 if files_scanned else 1

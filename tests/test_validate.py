@@ -51,6 +51,7 @@ def test_directory_walk_and_quiet(tmp_path, capsys):
 
 def test_non_container_skipped(tmp_path, capsys):
     (tmp_path / "x.txt").write_bytes(b"not audio")
-    # a directory with nothing modeled -> "no files to check", exit 0
+    # a directory with nothing modeled -> "no files to check". 2, not 0:
+    # a gate must not pass files it never examined.
     rc = validate.run(_args([str(tmp_path)]))
-    assert rc == 0
+    assert rc == 2

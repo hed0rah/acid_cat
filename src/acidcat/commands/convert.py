@@ -237,7 +237,7 @@ def run(args):
             data = f.read()
     except OSError as e:
         print(f"acidcat convert: {path}: {e}", file=sys.stderr)
-        return 1
+        return 2
     if (args.to_pcm or args.codec) and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
         return _run_to_pcm(path, data, args)
     if data[:4] == ncwmod.MAGIC:

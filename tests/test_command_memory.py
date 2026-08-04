@@ -125,7 +125,7 @@ def test_map_file_empty_falls_back_to_bytes(tmp_path):
 def test_audit_empty_file(tmp_path, capsys):
     p = tmp_path / "empty.wav"
     p.write_bytes(b"")
-    assert audit.run(SimpleNamespace(input=str(p), json=False)) == 0
+    assert audit.run(SimpleNamespace(input=str(p), json=False)) == 2
     assert "unknown" in capsys.readouterr().out
 
 

@@ -27,7 +27,9 @@ def _unwalkable_with_hidden_wav(tmp_path):
 
 def test_unwalkable_file_is_not_called_clean(tmp_path, capsys):
     p = _unwalkable_with_hidden_wav(tmp_path)
-    assert main(["audit", str(p)]) == 0
+    # 2: nothing was checked. 0 would be the same claim the report text is
+    # careful not to make -- "clean" about scans that never ran.
+    assert main(["audit", str(p)]) == 2
     out = capsys.readouterr().out
     assert "VERDICT: clean" not in out, "claimed clean without running the scans"
     assert "no walker" in out

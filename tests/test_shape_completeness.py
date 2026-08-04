@@ -75,7 +75,7 @@ def test_warn_only_still_means_warnings(tmp_path):
     suddenly fill up with them."""
     (tmp_path / "opaque.bin").write_bytes(bytes(range(256)) * 8)
     r = _shape(tmp_path, "--warn-only", "opaque.bin")
-    assert r.returncode == 0
+    assert r.returncode == 1          # ran fine, the filter matched nothing
     assert r.stdout.strip() == ""
 
 

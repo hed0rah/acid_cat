@@ -1,16 +1,30 @@
 """Exit codes are the scripting contract, so they get pinned.
 
-The convention, following grep and argparse:
+The convention, following grep and diff:
 
-    0   it worked
-    1   it ran fine and the answer is negative, or a runtime failure
-    2   the invocation was wrong (bad flag, bad value, missing target)
+    0   it worked: the file is clean, the thing you asked for is here
+    1   it ran fine and the answer is no: nothing matched, nothing found,
+        or the file has something to answer for
+    2   it could not run: bad flag, bad value, missing or unreadable input,
+        or nothing in the input was checkable
 
-Before 1.0 this was a habit rather than a rule: `probe`, `index` and `inspect`
-returned 1 for usage errors while `od`, `write` and `repair` returned 2 for the
-identical class; `query` raised a string SystemExit (which exits 1 and bypasses
-dispatch entirely); and `shape /no/such/path` printed nothing and exited 0. A
-script cannot branch on that.
+Before 1.0 this was a habit rather than a rule, and the gaps were not cosmetic:
+
+  - `locate` exited 0 having found nothing, so `locate --json | carve --batch -`
+    on a blob with no audio in it succeeded all the way through and a recovery
+    script carried on with an empty output directory.
+  - `validate` exited 0 for files it never modelled, giving a clean bill of
+    health to anything it did not understand -- on the same byte where `audit`
+    had findings.
+  - `audit` always exited 0, so the forensic verb could not gate anything.
+  - `repair --dry-run` exited 0 over a list of pending repairs.
+  - a missing file was 1 in eleven verbs and 2 in three.
+  - `carve --chunk ZZZZ` was 2 (you typed it wrong) where `dump FILE ZZZZ` was
+    1 (it is not in this file) for the identical question.
+
+The previous version of the missing-file test asserted `in (1, 2)` across three
+verbs, which encoded the disagreement rather than catching it. It is now
+parametrized over every verb that takes a path.
 """
 
 import struct
@@ -112,10 +126,34 @@ def test_the_same_mistake_gets_the_same_code_in_every_verb(tmp_path, verb, argv)
     assert _code(argv(str(p))) == 2, f"{verb} disagrees on a bad range expression"
 
 
-def test_a_missing_input_file_is_consistent(tmp_path):
-    missing = str(tmp_path / "nope.wav")
-    for argv in (["od", missing], ["locate", missing], ["chunks", missing]):
-        assert _code(argv) in (1, 2), argv
+# Every verb that takes a file path. The old version of this test checked three
+# verbs and asserted `in (1, 2)` -- it encoded the disagreement instead of
+# catching it, and eleven verbs said 1 while three said 2 for the same typo.
+_FILE_VERBS = [
+    ("classify", lambda p: ["classify", p]),
+    ("locate", lambda p: ["locate", p]),
+    ("carve", lambda p: ["carve", p, "--trailing"]),
+    ("inspect", lambda p: ["inspect", p]),
+    ("dump", lambda p: ["dump", p, "fmt"]),
+    ("extract", lambda p: ["extract", p]),
+    ("repair", lambda p: ["repair", p]),
+    ("audit", lambda p: ["audit", p]),
+    ("info", lambda p: ["info", p]),
+    ("probe", lambda p: ["probe", p, "strings"]),
+    ("chunks", lambda p: ["chunks", p]),
+    ("cover", lambda p: ["cover", p]),
+    ("convert", lambda p: ["convert", p]),
+    ("od", lambda p: ["od", p]),
+    ("validate", lambda p: ["validate", p]),
+    ("shape", lambda p: ["shape", p]),
+]
+
+
+@pytest.mark.parametrize("verb,argv", _FILE_VERBS, ids=[v for v, _ in _FILE_VERBS])
+def test_a_missing_input_is_two_everywhere(tmp_path, verb, argv):
+    """2 = could not run. A path that is not there is the same failure whichever
+    verb you handed it to."""
+    assert _code(argv(str(tmp_path / "nope.wav"))) == 2, verb
 
 
 def test_a_clean_file_exits_zero(tmp_path):
@@ -123,3 +161,84 @@ def test_a_clean_file_exits_zero(tmp_path):
     p.write_bytes(_wav())
     assert main(["validate", str(p)]) == 0
     assert main(["audit", str(p)]) == 0
+    assert main(["classify", str(p)]) == 0
+    assert main(["shape", str(p)]) == 0
+    assert main(["repair", "--dry-run", str(p)]) == 0
+
+
+def _stale_riff(tmp_path, name="broken.wav"):
+    """A WAV whose RIFF size field disagrees with the file -- one violation,
+    repairable, and every structural verb should agree it is not clean."""
+    raw = bytearray(_wav())
+    raw[4:8] = struct.pack("<I", 99999)
+    p = tmp_path / name
+    p.write_bytes(bytes(raw))
+    return p
+
+
+def test_a_negative_answer_is_one_everywhere(tmp_path):
+    """1 = it ran fine and the answer is no. These all used to be 0, so a
+    recovery or gating script could not branch on any of them."""
+    clean = tmp_path / "a.wav"
+    clean.write_bytes(_wav())
+    broken = _stale_riff(tmp_path)
+    noise = tmp_path / "noise.img"
+    noise.write_bytes(bytes((i * 37 + 11) % 256 for i in range(80000)))
+
+    # locate found nothing -- the one that let `locate | carve` claim success
+    assert main(["locate", "--min-confidence", "0.99", str(noise)]) == 1
+    # audit has something to report
+    assert main(["audit", str(broken)]) == 1
+    # repair --dry-run has pending work, same answer validate gives
+    assert main(["repair", "--dry-run", str(broken)]) == 1
+    assert main(["validate", str(broken)]) == 1
+    # a named region that is not in the file
+    assert main(["dump", str(clean), "ZZZZ"]) == 1
+    assert main(["carve", str(clean), "--chunk", "ZZZZ"]) == 1
+    # a filter that matched nothing
+    assert main(["shape", "--format", "flac", str(clean)]) == 1
+
+
+def test_nothing_checkable_is_not_success(tmp_path):
+    """2, not 0. `validate` gave a clean bill of health to files it never
+    modelled, which is the worst possible answer from a gating verb."""
+    p = tmp_path / "opaque.bin"
+    p.write_bytes(bytes(range(256)) * 8)
+    assert main(["validate", str(p)]) == 2
+    assert main(["audit", str(p)]) == 2
+    assert main(["repair", str(p)]) == 2
+
+
+def test_the_recovery_pipeline_can_report_failure(tmp_path):
+    """The end-to-end case the whole convention exists for.
+
+    A shell pipeline reports the LAST command's status, so fixing `locate`
+    alone was not enough -- `carve --batch` is the code the script sees, and it
+    returned 0 after carving nothing.
+    """
+    blob = tmp_path / "noise.img"
+    blob.write_bytes(bytes((i * 37 + 11) % 256 for i in range(80000)))
+    empty = tmp_path / "regions.json"
+    empty.write_text("[]")
+    out = tmp_path / "out"
+
+    assert main(["carve", str(blob), "--batch", str(empty), "-o", str(out)]) == 1
+    assert not list(out.iterdir())
+
+    # and the success side still succeeds
+    real = tmp_path / "a.wav"
+    real.write_bytes(_wav())
+    recs = tmp_path / "one.json"
+    recs.write_text('[{"offset": 0, "length": 44, "kind": "container"}]')
+    out2 = tmp_path / "out2"
+    assert main(["carve", str(real), "--batch", str(recs), "-o", str(out2)]) == 0
+    assert len(list(out2.iterdir())) == 1
+
+
+def test_carve_separates_not_found_from_bad_usage(tmp_path):
+    """Both used to be 2, so `carve --chunk X` could not be told apart from a
+    typo in the invocation."""
+    p = tmp_path / "a.wav"
+    p.write_bytes(_wav())
+    assert main(["carve", str(p), "--chunk", "ZZZZ"]) == 1        # not there
+    assert _code(["carve", str(p), "--chunk", "fmt", "--trailing"]) == 2  # typo

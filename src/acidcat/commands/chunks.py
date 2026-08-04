@@ -41,10 +41,10 @@ def _run(args):
     filepath = args.target
     if os.path.isdir(filepath):
         print(f"acidcat chunks: {filepath}: is a directory (expected a file)", file=sys.stderr)
-        return 1
+        return 2
     if not os.path.isfile(filepath):
         print(f"acidcat chunks: {filepath}: No such file", file=sys.stderr)
-        return 1
+        return 2
 
     fmt_name = getattr(args, 'output_format', 'table')
 

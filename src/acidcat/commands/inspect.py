@@ -493,7 +493,7 @@ def run(args):
             sandbox_profile = _sb.resolve_profile(getattr(args, "sandbox_profile", "auto"))
         except _sb.SandboxUnavailable as e:
             print(f"acidcat inspect: --sandbox: {e}", file=sys.stderr)
-            return 1
+            return 2               # asked for an isolation mode we cannot run
         if not getattr(args, "quiet", False):
             print(f"[sandbox: {sandbox_profile}]", file=sys.stderr)
 
@@ -506,7 +506,7 @@ def run(args):
         for filepath in targets:
             if not os.path.isfile(filepath):
                 print(f"acidcat inspect: {filepath}: No such file", file=sys.stderr)
-                exit_code = 1
+                exit_code = 2          # could not read it, as everywhere else
                 continue
             source_path = filepath          # for messages: never leak the temp copy
             try:

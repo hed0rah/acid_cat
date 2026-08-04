@@ -114,7 +114,7 @@ def _run(args):
         data, close = map_file(path)
     except OSError as e:
         print(f"acidcat probe: {path}: {e}", file=sys.stderr)
-        return 1
+        return 2
     try:
         return _dispatch(args, verb, path, data)
     finally:
@@ -193,7 +193,7 @@ def _dispatch(args, verb, path, data):
             other, oclose = map_file(args.other)
         except OSError as e:
             print(f"acidcat probe: {args.other}: {e}", file=sys.stderr)
-            return 1
+            return 2
         try:
             ranges, la, lb = pr.diff(data, other)
         finally:

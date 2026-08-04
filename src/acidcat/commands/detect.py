@@ -107,4 +107,4 @@ def _run(args):
         return 0
 
     print(f"acidcat detect: {target}: No such file or directory", file=sys.stderr)
-    return 1
+    return 2

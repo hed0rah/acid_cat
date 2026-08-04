@@ -103,9 +103,15 @@ def run(args):
         return 2
     skipped = f", {unreadable} unreadable (not checked)" if unreadable else ""
     if checked == 0:
+        # 2, not 0. `validate` is the natural gate in a script, and returning
+        # success for files it never modelled gave a clean bill of health to
+        # anything it did not understand -- `validate garbage.bin` and
+        # `validate track.mod` both said "fine" while `audit` on the same byte
+        # had findings. Nothing checked is "could not do the job", the same
+        # class as an unreadable input, not a passing result.
         print("acidcat validate: no structurally-modeled files to check"
               + skipped, file=sys.stderr)
-        return 1 if unreadable else 0
+        return 2
     if failed:
         # only point at repair when something is actually repairable. An
         # orphaned audio payload has no safe rewrite and repair refuses it, so

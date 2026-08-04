@@ -60,14 +60,21 @@ def _repair_one(path, args):
     opts = {"keep_pad": args.keep_pad}
 
     if constraints.repairer_for(data) is None:
+        # nothing checkable, the same answer `validate` gives on a format it
+        # does not model -- not a passing result for a file never examined
         print(f"acidcat repair: {path}: not a RIFF/AIFF/MP4 container "
               f"(nothing to repair here)", file=sys.stderr)
-        return 1
+        return 2
 
     if args.dry_run:
         report = constraints.analyze(data, opts)
         _present(path, report)
-        return 0
+        # 1 for any violation, the same answer `validate` gives on the same
+        # file. --dry-run always returned 0, so `repair --dry-run f && echo
+        # clean` printed "clean" over a list of pending repairs. Keyed on
+        # violations rather than on repairability so the two verbs cannot
+        # disagree about whether a file is sound.
+        return 1 if report.violations else 0
 
     try:
         new_data, report = constraints.repair(data, opts)
@@ -83,7 +90,7 @@ def _repair_one(path, args):
             path, new_data, out=args.output, overwrite=args.overwrite)
     except OSError as e:
         print(f"acidcat repair: {path}: {e}", file=sys.stderr)
-        return 1
+        return 2
     note = f"  (backup: {os.path.basename(backup)})" if backup else ""
     print(f"  wrote {os.path.basename(written)}{note}")
     return 0
@@ -99,5 +106,5 @@ def run(args):
             rc = _repair_one(path, args) or rc
         except (OSError, ValueError) as e:
             print(f"acidcat repair: {path}: {e}", file=sys.stderr)
-            rc = 1
+            rc = 2
     return rc

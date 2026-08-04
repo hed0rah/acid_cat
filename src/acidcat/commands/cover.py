@@ -60,12 +60,12 @@ def run(args):
     path = args.file
     if not os.path.isfile(path):
         print(f"acidcat cover: {path}: No such file", file=sys.stderr)
-        return 1
+        return 2
     try:
         if args.set_image:
             if not os.path.isfile(args.set_image):
                 print(f"acidcat cover: {args.set_image}: No such file", file=sys.stderr)
-                return 1
+                return 2
             img = open(args.set_image, "rb").read()
             written, backup = _mutate(path, lambda t: covermod.set_cover(t, img),
                                       args.overwrite)

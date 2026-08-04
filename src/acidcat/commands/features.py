@@ -50,7 +50,7 @@ def run(args):
     # Directory
     if not os.path.isdir(target):
         print(f"acidcat features: {target}: No such file or directory", file=sys.stderr)
-        return 1
+        return 2
 
     num = getattr(args, 'num', 500)
     rows = []

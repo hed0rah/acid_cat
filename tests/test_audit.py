@@ -28,7 +28,7 @@ def test_audit_reports_repairable_structure(tmp_path, capsys):
     p = tmp_path / "bad.wav"
     p.write_bytes(bytes(broken))
     rc = audit.run(_args(str(p)))
-    assert rc == 0
+    assert rc == 1                    # it has structural findings to report
     out = capsys.readouterr().out
     assert "STRUCTURE" in out and "repairable" in out
     assert "VERDICT" in out and "structural fix" in out

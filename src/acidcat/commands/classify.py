@@ -69,24 +69,40 @@ def _c(code, text, on):
     return f"\033[{code}m{text}\033[0m" if on else text
 
 
+# verdicts that mean "there is nothing here acidcat can work with". Every other
+# shape names something it understood well enough to hand to another verb.
+_NOTHING_FOUND = {"opaque", "foreign", "empty"}
+
+
 def run(args):
     on = color_enabled(args)
     fmt = getattr(args, "output_format", "table")
     rows, exit_code = [], 0
+    # counted separately from `rows` because --quiet drops the `single` rows,
+    # and "nothing interesting to show" is a success, not a negative result
+    identified = 0
 
     for path in _iter_targets(args.targets):
         try:
             v = classify_file(path, deep=not args.shallow)
         except OSError as e:
             print(f"acidcat classify: {path}: {e}", file=sys.stderr)
-            exit_code = 1
+            exit_code = 2                      # could not read it, not a verdict
             continue
+        if v["shape"] not in _NOTHING_FOUND:
+            identified += 1
         if args.quiet and v["shape"] == "single":
             continue
         rows.append({"file": display_name(path), "shape": v["shape"],
                      "format": v["format"] or "", "next": v["next"] or "",
                      "detail": v["detail"], "path": path,
                      "evidence": v["evidence"]})
+
+    # 1 when nothing among the targets was identifiable, so `classify f &&
+    # inspect f` stops instead of running inspect on a file classify just
+    # called opaque. A read failure (2) outranks it.
+    if not exit_code and not identified:
+        exit_code = 1
 
     if fmt == "json":
         json.dump(rows, sys.stdout, indent=2, default=str)

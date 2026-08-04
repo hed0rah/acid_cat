@@ -86,10 +86,10 @@ def run(args):
                 data = f.read()
     except OSError as e:
         print(f"acidcat wrap: {args.input}: {e}", file=sys.stderr)
-        return 1
+        return 2
     if not data:
         print("acidcat wrap: no input bytes", file=sys.stderr)
-        return 1
+        return 2
 
     block = args.channels * (args.bits // 8)
     trimmed = len(data) - (len(data) % block) if block else len(data)
@@ -116,7 +116,7 @@ def run(args):
                 f.write(wav)
         except OSError as e:
             print(f"acidcat wrap: {args.output}: {e}", file=sys.stderr)
-            return 1
+            return 2
         frames = len(data) // block if block else 0
         print(f"wrapped {len(data):,} bytes as {args.rate} Hz {args.channels}ch "
               f"{args.bits}-bit ({frames / args.rate:.3f} s) -> {args.output}",

@@ -124,7 +124,7 @@ class TestChunksCommand:
 
     def test_nonexistent_file(self, tmp_path):
         code, out, err = run_cli("chunks", str(tmp_path / "missing.wav"))
-        assert code == 1
+        assert code == 2
 
     def test_json_output(self, minimal_wav):
         code, out, err = run_cli("chunks", minimal_wav, "-f", "json")
@@ -157,7 +157,7 @@ class TestDumpCommand:
 
     def test_nonexistent_file(self, tmp_path):
         code, out, err = run_cli("dump", str(tmp_path / "ghost.wav"), "fmt")
-        assert code == 1
+        assert code == 2
 
 
 class TestScanCommand:
@@ -184,7 +184,7 @@ class TestScanCommand:
 
     def test_scan_not_a_directory(self, minimal_wav):
         code, out, err = run_cli("scan", minimal_wav, "-q")
-        assert code == 1
+        assert code == 2
 
     def test_scan_csv_has_header(self, tmp_path, minimal_wav):
         import shutil
@@ -366,11 +366,13 @@ class TestDumpJson:
 
     def test_survey_empty_directory(self, tmp_path):
         code, out, err = run_cli("survey", str(tmp_path), "-q")
-        assert code == 0 or code is None
+        # 1: it ran and found no audio. 0 said "surveyed a tree" about a
+        # tree it had found nothing in.
+        assert code == 1
 
     def test_survey_not_directory(self, minimal_wav):
         code, out, err = run_cli("survey", minimal_wav)
-        assert code == 1
+        assert code == 2
 
 
 class TestInfoMidiDivision:

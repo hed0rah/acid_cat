@@ -136,10 +136,10 @@ def run(args):
         data = _read(args.input)
     except OSError as e:
         print(f"acidcat locate: {args.input}: {e}", file=sys.stderr)
-        return 1
+        return 2
     if not data:
         print("acidcat locate: no input bytes", file=sys.stderr)
-        return 1
+        return 2
 
     # Only the signature sweep is unbounded. The statistical pass and the frame
     # scan each cap out, so on a large image they cover a prefix while containers
@@ -198,4 +198,9 @@ def run(args):
         tail = f", {nt} transformed" if nt else ""
         print(f"located {len(recs)} region(s): {nc} container(s), {ns} stream(s), "
               f"{len(recs) - nc - ns - nt} blob(s){tail} [{args.mode}]", file=sys.stderr)
-    return 0
+    # `locate | carve` on a blob with no audio in it exited 0 all the way
+    # through, so a recovery script branching on $? believed it had succeeded
+    # and carried on with an empty output directory. 1 is the grep convention
+    # for ran-fine-nothing-matched, and `probe scan`, `probe find`, `dump` and
+    # `extract` in this same tool already use it.
+    return 0 if recs else 1

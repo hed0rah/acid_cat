@@ -18,6 +18,23 @@ these were introduced by the 1.0 restructure itself.
   used 3.10 syntax; the metadata claimed 3.8+, so `pip` installed a package that
   could not import on the versions it advertised. CI now runs the versions the
   package actually claims.
+- **Exit codes are now one convention across every verb**, following `grep` and
+  `diff`: `0` it worked, `1` it ran fine and the answer is no, `2` it could not
+  run. Sixteen verbs disagreed, and the disagreements were not cosmetic:
+  `locate` exited 0 having found nothing, so `locate --json | carve --batch -`
+  on a blob with no audio in it succeeded end to end and a recovery script
+  carried on with an empty output directory; `validate` exited 0 for files it
+  never modelled, giving a clean bill of health to anything it did not
+  understand, on the same byte where `audit` had findings; `audit` always
+  exited 0, so the forensic verb could not gate anything; `repair --dry-run`
+  exited 0 over a list of pending repairs; a missing file was 1 in eleven verbs
+  and 2 in three; and `carve --chunk ZZZZ` was 2 (you typed it wrong) where
+  `dump FILE ZZZZ` was 1 (it is not in this file) for the identical question.
+  The convention is documented in the README and pinned by
+  `tests/test_exit_codes.py`, parametrized over every verb that takes a path --
+  the previous version of that test asserted `in (1, 2)` across three verbs,
+  which encoded the disagreement rather than catching it. **If you script
+  acidcat, check any `&&` / `||` chain and any `$?` branch.**
 
 ### Fixed
 - **`repair` could destroy audio, and exited 0.** On a WAV whose container size

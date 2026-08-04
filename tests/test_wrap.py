@@ -111,7 +111,7 @@ def test_absurd_rate_is_refused(tmp_path, capsys):
 def test_empty_input_is_an_error_not_an_empty_wav(tmp_path, capsys):
     raw = tmp_path / "r.pcm"
     raw.write_bytes(b"")
-    assert main(["wrap", str(raw), "-o", str(tmp_path / "o.wav")]) == 1
+    assert main(["wrap", str(raw), "-o", str(tmp_path / "o.wav")]) == 2
     assert "no input bytes" in capsys.readouterr().err
 
 

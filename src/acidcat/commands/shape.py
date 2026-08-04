@@ -132,6 +132,7 @@ def run(args):
         print(f"acidcat shape: {t}: No such file or directory", file=sys.stderr)
     if missing and len(missing) == len(args.targets):
         return 2
+    emitted = 0
     for path, named in _iter_files(args.targets):
         fp = (_fast_fingerprint(path) if args.fast
               else _full_fingerprint(path, args.anomalies))
@@ -146,8 +147,11 @@ def run(args):
             continue
         if args.coarse:
             summary = ""
+        emitted += 1
         cols = [label, summary, ids, flag]
         if not args.no_path:
             cols.append(path)
         print("\t".join(cols))
-    return 0
+    # a filter that matched nothing is a negative result, not a success --
+    # `shape lib --format flac && ...` used to proceed on an empty listing
+    return 0 if emitted else 1

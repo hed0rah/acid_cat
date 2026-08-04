@@ -212,7 +212,10 @@ def _run_batch(args, filepath, size):
                          f"record (re-run locate with --analyze)")
         print(f"carved {done} region(s) -> {args.output}"
               + (f" ({', '.join(extra)})" if extra else ""), file=sys.stderr)
-    return 0
+    # A shell pipeline reports the LAST command's status, so `locate | carve`
+    # exited 0 on a blob with no audio in it even after locate learned to
+    # return 1 -- carve is the one whose code the script actually sees.
+    return 0 if done else 1
 
 
 def _wrap_blob(blob, geometry, rate_override):
@@ -250,6 +253,11 @@ def _wrap_blob(blob, geometry, rate_override):
     if geo.get("endian") == "be":
         blob = _swap(blob, bits)
     return _wav_wrap(blob, rate, channels, bits, 3 if floating else 1)
+
+
+class NotFound(ValueError):
+    """The named region is not in this file. A negative result, not a usage
+    error -- carve returns 1 for these and 2 for a malformed invocation."""
 
 
 def _int(text, what):
@@ -301,7 +309,7 @@ def _resolve_range(args, filepath, size, typed_len=None):
             raise ValueError("no declared container size for --trailing (RIFF/AIFF/"
                              "RF64 only); use --offset for this format")
         if end >= size:
-            raise ValueError(f"no trailing data: container end (0x{end:x}) at/past "
+            raise NotFound(f"no trailing data: container end (0x{end:x}) at/past "
                              f"EOF (0x{size:x})")
         return end, size - end
 
@@ -313,7 +321,7 @@ def _resolve_range(args, filepath, size, typed_len=None):
     except Exception as e:
         raise ValueError(f"could not walk chunks (RIFF/AIFF only?): "
                          f"{e.__class__.__name__}: {e}")
-    raise ValueError(f"no chunk {args.chunk!r} found (RIFF/AIFF only; use --offset)")
+    raise NotFound(f"no chunk {args.chunk!r} found (RIFF/AIFF only; use --offset)")
 
 
 # ---- typed / struct / field modes ------------------------------------------
@@ -464,7 +472,7 @@ def run(args):
     filepath = args.target
     if not os.path.isfile(filepath):
         print(f"acidcat carve: {filepath}: No such file", file=sys.stderr)
-        return 1
+        return 2
 
     # carve's own --help promises "File to carve from (never modified)". With
     # -o pointing back at the target that promise was broken silently and
@@ -491,6 +499,14 @@ def run(args):
         if args.type is not None:
             return _run_typed(args, filepath, size)
         start, length = _resolve_range(args, filepath, size)
+    except NotFound as e:
+        # ran fine, the thing you asked for is not in this file. Distinct from
+        # the usage errors below, which share ValueError: `carve --chunk ZZZZ`
+        # returned 2 and `dump FILE ZZZZ` returned 1 for the identical
+        # question, so a script could not branch without knowing which verb it
+        # had called.
+        print(f"acidcat carve: {e}", file=sys.stderr)
+        return 1
     except (ValueError, bf.FieldError) as e:
         print(f"acidcat carve: {e}", file=sys.stderr)
         return 2
