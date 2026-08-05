@@ -19,6 +19,7 @@ import sys
 
 from acidcat.commands._output import add_output_format_arg
 from acidcat.core.infra.render import output as _render
+from acidcat.core.infra.mapped import map_file
 from acidcat.core.write import constraints
 
 _EXTS = (".wav", ".rf64", ".bwf", ".aif", ".aiff", ".aifc", ".sf2", ".sf3",
@@ -57,16 +58,28 @@ def _check(path, quiet, rows=None):
     clean skip). When `rows` is given, append a record instead of printing --
     the same verdict, in the machine's shape.
     """
+    # Mapped, not slurped -- the same treatment `audit` gives the same bytes.
+    # constraints.analyze only walks the chunk-size cascade and never needs a
+    # payload, but f.read() pulled the whole file in: on a 41 MB WAV that was
+    # 82.9 MB of Python heap against 0.01 MB mapped, and validate's footprint
+    # scaled with input where audit's stayed flat. A directory sweep over a
+    # library of multi-GB RF64 files was slurping each one entire.
+    # The memoryview matters as much as the map: the IFF engine keeps a slice
+    # of every chunk it parses, and a view slice is a zero-copy window where a
+    # bytes slice would materialize the payload.
     try:
-        with open(path, "rb") as f:
-            data = f.read()
+        data, close = map_file(path)
     except OSError as e:
         print(f"acidcat validate: {path}: {e}", file=sys.stderr)
         if rows is not None:
             rows.append({"path": path, "format": None, "status": "unreadable",
                          "issues": 0, "repairable": False, "detail": str(e)})
         return False, True, True, False
-    report = constraints.analyze(data)
+    try:
+        with memoryview(data) as view:
+            report = constraints.analyze(view)
+    finally:
+        close()
     if report is None:
         if rows is not None:
             # a skip is a real answer and belongs in the record set, so a

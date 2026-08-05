@@ -46,6 +46,39 @@ def _wav_fmt(data, fmt_chunk):
     return tag, ch, bits
 
 
+def _or_reduce_numpy(data, spans, bytes_per_sample, byteorder):
+    """OR every sample in `spans` together, vectorized. (acc, examined) or None.
+
+    Returns None when numpy is absent, and the caller falls back to the loop --
+    numpy is an OPTIONAL extra and this check runs on a base install today, so a
+    hard dependency here would quietly move `audit` behind `[analysis]`.
+
+    Whole-sample OR is the same value whichever order the bytes are combined in,
+    so the reduction is done per byte-POSITION and reassembled. That avoids
+    building an intermediate wide integer type and works for any sample width,
+    including the 24-bit case numpy has no native dtype for.
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        return None
+    per_pos = bytearray(bytes_per_sample)
+    examined = 0
+    for lo, hi in spans:
+        n = (hi - lo) // bytes_per_sample
+        if n <= 0:
+            continue
+        block = np.frombuffer(data, dtype=np.uint8, count=n * bytes_per_sample,
+                              offset=lo).reshape(n, bytes_per_sample)
+        ored = np.bitwise_or.reduce(block, axis=0)
+        for i in range(bytes_per_sample):
+            per_pos[i] |= int(ored[i])
+        examined += n
+    if not examined:
+        return 0, 0
+    return int.from_bytes(bytes(per_pos), byteorder, signed=False), examined
+
+
 def _effective_bits(data, start, size, bytes_per_sample, byteorder):
     """OR every sample in the (capped) PCM span and read the effective bit depth
     from the lowest data-carrying bit. ``byteorder`` is "little" (WAV) or "big"
@@ -70,11 +103,26 @@ def _effective_bits(data, start, size, bytes_per_sample, byteorder):
             at = start + i * stride
             at -= (at - start) % bytes_per_sample
             spans.append((at, min(at + per, start + size)))
-    for lo, hi in spans:
-        for p in range(lo, hi, bytes_per_sample):
-            acc |= int.from_bytes(data[p:p + bytes_per_sample], byteorder,
-                                  signed=False)
-            examined += 1
+    fast = _or_reduce_numpy(data, spans, bytes_per_sample, byteorder)
+    if fast is not None:
+        acc, examined = fast
+    else:
+        # The pure-Python fallback, and the definition the numpy path must
+        # match. This ran `int.from_bytes` once per sample -- 28.7 MILLION
+        # calls over an 80-file audit -- to compute one OR reduction.
+        #
+        # `hi` is clamped to the declared data end, which need not be a whole
+        # number of samples on a malformed file -- acidcat's whole subject. The
+        # loop used to count a short tail as a sample, so `examined` could
+        # over-report by one per span. It is compared against 1024 and printed
+        # as "{examined:,} samples", so it is a number the user reads. Both
+        # paths now stop at the last COMPLETE sample.
+        for lo, hi in spans:
+            end = lo + ((hi - lo) // bytes_per_sample) * bytes_per_sample
+            for p in range(lo, end, bytes_per_sample):
+                acc |= int.from_bytes(data[p:p + bytes_per_sample], byteorder,
+                                      signed=False)
+                examined += 1
     tz = _trailing_zero_bits(acc)
     if tz is None:
         return None, examined
