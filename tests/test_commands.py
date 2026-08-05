@@ -67,14 +67,20 @@ class TestInfoWav:
         data = json.loads(out)
         assert "Format" in data or "format" in data or "File" in data
 
-    def test_not_riff_wav_no_crash(self, not_riff):
+    def test_not_riff_wav_says_so(self, not_riff):
+        """Was `code in (0, 1, None)` -- an assertion that accepted the old
+        behaviour, where a non-audio file got a card of dashes and exit 0.
+        Unrecognized is could-not-run (2), like validate and chunks."""
         code, out, err = run_cli(not_riff)
-        # should not raise -- either shows minimal info or prints an error
-        assert code in (0, 1, None)
+        assert "Traceback" not in err
+        assert code == 2
+        assert "not a format acidcat recognizes" in err
+        assert "acidcat classify" in err          # names the verb that can help
 
-    def test_empty_wav_no_crash(self, empty_file):
+    def test_empty_file_says_so(self, empty_file):
         code, out, err = run_cli(empty_file)
-        assert code in (0, 1, None)
+        assert "Traceback" not in err
+        assert code == 2
 
     def test_nonexistent_file_returns_error(self, tmp_path):
         code, out, err = run_cli(str(tmp_path / "ghost.wav"))

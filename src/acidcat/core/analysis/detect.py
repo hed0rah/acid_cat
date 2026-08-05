@@ -12,7 +12,20 @@ import re
 
 def parse_bpm_from_filename(filepath):
     """Extract BPM from filename using common patterns. Returns int or None."""
-    filename = os.path.basename(filepath)
+    # The EXTENSION is stripped before matching. The bare-number pattern below
+    # rejects a digit run followed by a dot, which is there to keep `120.5` from
+    # reading as 120 -- but it also rejected the dot that starts the extension,
+    # so `Kick_128.wav` parsed as None while `Kick_128_C.wav` gave 128. In this
+    # project's own corpus, 135 files are named that way, and the convention is
+    # unambiguous: where a file carries both, the take number sits in the middle
+    # and the tempo last (`..._loop_01_groovy_80.wav`), and whole folders named
+    # "140 bpm" hold files ending in _140.
+    #
+    # Stripping only the extension keeps the decimal guard intact -- `120.5.wav`
+    # becomes `120.5`, where 120 is still followed by a dot and still rejected --
+    # and the 60..300 range keeps the drum-machine names out: `Kick_909.wav` and
+    # `Snare_808.wav` are above it, `Take_02.wav` below.
+    filename = os.path.splitext(os.path.basename(filepath))[0]
     bpm_patterns = [
         r'(\d{2,3})\s*bpm',
         r'bpm\s*(\d{2,3})',

@@ -487,6 +487,22 @@ def run(args):
         else:
             rec = _info_wav(filepath, args)
 
+        # Nothing identified it. Every path that recognises a file sets
+        # "Format"; its absence means the catch-all WAV reader ran and found no
+        # RIFF structure, so what came back was a card of dashes -- File, BPM -,
+        # Key -, Chunks (none) -- and exit 0. A .txt or a mistyped path looked
+        # exactly like a valid, empty audio file.
+        #
+        # Same rule this project already applies twice: `validate` on a format
+        # it does not model exits 2, and `chunks` on a non-RIFF exits 2 naming
+        # `inspect`. The friendly front door should not be friendly enough to
+        # give a confident wrong answer.
+        if "Format" not in rec:
+            name = "<stdin>" if tmp_path else os.path.basename(filepath)
+            print(f"acidcat: {name}: not a format acidcat recognizes "
+                  f"(try: acidcat classify {name})", file=sys.stderr)
+            return 2
+
         # when reading from stdin, show <stdin> instead of tempfile name
         if tmp_path:
             rec["File"] = "<stdin>"
