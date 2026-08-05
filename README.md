@@ -172,6 +172,14 @@ Not global, though they look it: `--has` is on `scan` and `survey`; `--deep` is
 on `info` and `index`; `-n/--num` defaults to 500 on `scan`/`detect`/`features`
 but 5 on `similar`.
 
+## Environment
+
+| variable | effect |
+|---|---|
+| `ACIDCAT_HOME` | relocate **all** catalogue state (registry + per-library index DBs). Default `~/.acidcat/`. Set this for a scratch catalogue -- it is one variable, not a list. |
+| `ACIDCAT_REGISTRY` | relocate only `registry.db`. More specific, so it wins over `ACIDCAT_HOME` for that one file; the per-library DBs still follow `ACIDCAT_HOME`. |
+| `NO_COLOR` | honoured by every `--color auto` path. |
+
 ## Exit codes
 
 Every verb answers with the same three codes, following `grep` and `diff`, so a

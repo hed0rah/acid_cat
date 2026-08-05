@@ -54,8 +54,22 @@ def compare_path(p):
 
 
 def acidcat_home():
-    """`~/.acidcat/`. Created on demand by callers that write into it."""
-    return os.path.join(os.path.expanduser("~"), ACIDCAT_DIR_NAME).replace("\\", "/")
+    """`$ACIDCAT_HOME`, else `~/.acidcat/`. Created on demand by callers that
+    write into it.
+
+    ACIDCAT_REGISTRY relocates only registry.db, which is not the whole state:
+    the per-library index DBs live in `<home>/libraries/` and kept landing in
+    the real home regardless. So setting ACIDCAT_REGISTRY to a temp path -- the
+    obvious way to try a scratch catalogue, and the recipe this project handed
+    its own auditors -- still wrote index DBs into `~/.acidcat/libraries/`.
+    That is how ~1,800 stray DBs accumulated there.
+
+    ACIDCAT_HOME moves everything at once, so isolation is one variable rather
+    than a list of them.
+    """
+    env = os.environ.get("ACIDCAT_HOME")
+    base = env if env else os.path.join(os.path.expanduser("~"), ACIDCAT_DIR_NAME)
+    return str(base).replace("\\", "/")
 
 
 def central_libraries_dir():
