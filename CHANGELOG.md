@@ -132,6 +132,20 @@ these were introduced by the 1.0 restructure itself.
   never asked about.
 
 ### Added
+- **`acidcat probe FILE table AT`** -- walk a discovered offset table into
+  carve-ready regions. This is the gap between acidcat-as-hex-viewer and
+  acidcat-as-RE-workbench: an audit reverse-engineered a real proprietary
+  container in about eight acidcat commands (`od`, `probe read`,
+  `probe entropy`, cross-specimen `carve --encoding hex`) and then stopped,
+  because nothing let it express what it had learned. `--struct` decodes one
+  fixed record and cannot take a count from a field it just read, so carving the
+  375 frames meant leaving the tool and computing offsets in Python.
+  `--count-at` reads the entry count out of the file, `--base after-table`
+  handles the common layout where entries are relative to the byte just past the
+  table, and the records come out in `locate` shape so `--json` pipes straight
+  into `carve --batch -` with no jq in between. A count read from the file is
+  hostile by definition, so it is bounded by what the file can hold and the
+  report says when it was clamped rather than quoting the file's claim back.
 - **`probe --json`** on `read`, `scan`, `find`, `strings`, `diff` and `entropy`.
   probe is the verb you live in while reverse-engineering an unknown format and
   it had no machine output at all, so scripting `probe find` meant

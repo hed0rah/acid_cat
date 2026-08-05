@@ -44,6 +44,33 @@ def register(subparsers):
                         "stderr, so the data pipes cleanly either way.")
     sub = p.add_subparsers(dest="verb", metavar="VERB")
 
+    # The gap between acidcat-as-hex-viewer and acidcat-as-RE-workbench. You
+    # could derive a container's offset table with `probe read` and then had no
+    # way to act on it: --struct decodes one fixed record and cannot take a
+    # count from a field it just read, so carving the regions meant leaving the
+    # tool and computing offsets in Python. This emits `locate`-shaped records,
+    # so the thing you just learned feeds `carve --batch -` unchanged.
+    tb = sub.add_parser(
+        "table", help="Walk an offset table into carve-ready regions.")
+    tb.add_argument("at", help="Where the table starts (any --at expression).")
+    tb.add_argument("--type", "-t", default="u32", choices=sorted(pr.FMT_STRUCT),
+                    help="Entry type (default u32).")
+    tb.add_argument("--count", "-n", type=int,
+                    help="Number of entries, if you know it.")
+    tb.add_argument("--count-at", metavar="EXPR",
+                    help="Read the entry count from the file at EXPR instead.")
+    tb.add_argument("--count-type", default="u32", choices=sorted(pr.FMT_STRUCT),
+                    help="Type of the --count-at value (default u32).")
+    tb.add_argument("--base", metavar="EXPR", default=None,
+                    help="What the entries are relative to. An offset "
+                         "expression, or 'after-table' for the byte just past "
+                         "the table itself (the common layout). Default: the "
+                         "entries are absolute file offsets.")
+    tb.add_argument("--end", metavar="EXPR",
+                    help="Where the last region ends (default: EOF).")
+    tb.add_argument("--be", action="store_true", help="Force big-endian.")
+    tb.add_argument("--le", action="store_true", help="Force little-endian.")
+
     r = sub.add_parser("read", help="Read AT as typed values (pwndbg x).")
     r.add_argument("at", help="Offset (0x.. / decimal) or name (chunk / chunk.field).")
     r.add_argument("--type", "-t", default="u32", choices=sorted(pr.FMT_STRUCT),
@@ -139,8 +166,87 @@ def _run(args):
         close()
 
 
+def _table_regions(args, path, data, order):
+    """Offset table -> [{offset, length, kind}] in `locate` record shape.
+
+    Entries are region starts; each region runs to the next entry, and the last
+    to --end or EOF. Returns (records, meta) or raises ValueError with a reason
+    the caller can print.
+    """
+    start, _ln, _note = pr.resolve(path, args.at)
+    size = pr.FMT_STRUCT[args.type][1] if args.type != "u24" else 3
+
+    count = args.count
+    if args.count_at is not None:
+        coff, _l, _n = pr.resolve(path, args.count_at)
+        vals = pr.read_typed(data, coff, args.count_type, 1, order)
+        if not vals:
+            raise ValueError(f"could not read a count at {args.count_at}")
+        count = int(vals[0])
+    if count is None:
+        raise ValueError("give --count N or --count-at EXPR")
+    # a count read from the file is attacker-controlled by definition: it is the
+    # value under investigation. Bound it by what the file can actually hold
+    # rather than trusting it into a multi-GB allocation.
+    room = max(0, (len(data) - start) // size)
+    if count < 1:
+        raise ValueError(f"entry count is {count}")
+    declared = count                     # before clamping: what the FILE claimed
+    truncated = count > room
+    if truncated:
+        count = room
+
+    entries = pr.read_typed(data, start, args.type, count, order)
+    if not entries:
+        raise ValueError(f"no entries readable at 0x{start:x}")
+
+    if args.base == "after-table":
+        base = start + len(entries) * size
+    elif args.base is not None:
+        base, _l, _n = pr.resolve(path, args.base)
+    else:
+        base = 0
+    if args.end is not None:
+        end_at, _l, _n = pr.resolve(path, args.end)
+    else:
+        end_at = len(data)
+
+    starts = [base + int(e) for e in entries]
+    recs = []
+    for i, off in enumerate(starts):
+        nxt = starts[i + 1] if i + 1 < len(starts) else end_at
+        if off < 0 or off > len(data) or nxt <= off:
+            continue                     # a lying entry drops out, not the run
+        recs.append({"offset": off, "length": min(nxt, len(data)) - off,
+                     "kind": "entry", "index": i})
+    meta = {"table_at": start, "entries": len(entries), "base": base,
+            "declared_count": declared,
+            "truncated_to_file": truncated, "usable": len(recs)}
+    return recs, meta
+
+
 def _dispatch(args, verb, path, data):
     label, _chunks, _warns = pr._walk(path)
+
+    if verb == "table":
+        order = "big" if args.be else ("little" if args.le
+                                       else _byteorder(args, label))
+        try:
+            recs, meta = _table_regions(args, path, data, order)
+        except (KeyError, ValueError) as e:
+            print(f"acidcat probe: {e}", file=sys.stderr)
+            return 2
+        if _emit(args, {"verb": "table", **meta, "regions": recs}):
+            return 0 if recs else 1
+        if meta["truncated_to_file"]:
+            print(f"  count {meta['declared_count']} exceeds what the file "
+                  f"holds; walked {meta['entries']}", file=sys.stderr)
+        print(f"{meta['entries']} entr(ies) at 0x{meta['table_at']:08x}, "
+              f"base 0x{meta['base']:08x} -> {len(recs)} region(s)",
+              file=sys.stderr)
+        for r in recs:
+            print(f"  [{r['index']:>4}]  0x{r['offset']:08x}  {r['length']:>12,}")
+        return 0 if recs else 1
 
     if verb == "read":
         try:
