@@ -96,6 +96,27 @@ def _run_cli(argv):
     return rc, out.getvalue(), err.getvalue()
 
 
+
+@pytest.fixture
+def lean_wav(tmp_path):
+    """A valid WAV, generated here.
+
+    These tests used to point at `data/test_formats/generated/src.wav`, which is
+    gitignored, so on every CI runner seven of the nine skipped and the
+    behavioural half of the lean-install invariant was never actually exercised
+    -- only the static import scan ran. They do not need a particular specimen,
+    just a well-formed file, so they make one.
+    """
+    import struct
+    pcm = b"".join(struct.pack("<h", (i * 137) % 20000 - 10000) for i in range(512))
+    body = (b"WAVE"
+            + b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, 44100, 88200, 2, 16)
+            + b"data" + struct.pack("<I", len(pcm)) + pcm)
+    p = tmp_path / "src.wav"
+    p.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+    return str(p)
+
+
 @pytest.mark.parametrize("argv", [
     ["info", "{wav}"],
     ["inspect", "{wav}"],
@@ -104,23 +125,17 @@ def _run_cli(argv):
     ["validate", "{wav}"],
     ["formats"],
 ])
-def test_core_verbs_run_without_optional_deps(argv, tmp_path):
-    wav = os.path.join("data", "test_formats", "generated", "src.wav")
-    if not os.path.isfile(wav):
-        pytest.skip("test corpus WAV not present")
-    argv = [a.format(wav=wav) for a in argv]
+def test_core_verbs_run_without_optional_deps(argv, lean_wav):
+    argv = [a.format(wav=lean_wav) for a in argv]
     with _lean_install():
         rc, _out, _err = _run_cli(argv)
     assert rc == 0, f"{argv[0]} failed on a lean install (rc={rc})"
 
 
-def test_dep_gated_verb_hints_instead_of_crashing():
+def test_dep_gated_verb_hints_instead_of_crashing(lean_wav):
     """A verb whose stack is missing must say how to install it, not traceback."""
-    wav = os.path.join("data", "test_formats", "generated", "src.wav")
-    if not os.path.isfile(wav):
-        pytest.skip("test corpus WAV not present")
     with _lean_install():
-        rc, out, err = _run_cli(["features", wav])
+        rc, out, err = _run_cli(["features", lean_wav])
     assert rc != 0
     assert "pip install acidcat[analysis]" in (err + out)
 
