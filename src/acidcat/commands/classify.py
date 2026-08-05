@@ -108,9 +108,21 @@ def run(args):
             if args.quiet and v["shape"] == "single":
                 continue
             name = display if display == "<stdin>" else display_name(path)
+            # `file` is for reading, `path` is for running: the latter must stay
+            # the real filesystem path or a consumer cannot act on the verdict.
+            # `next` alone was a bare verb ("locate") with no target, so the one
+            # field whose whole purpose is "what to run now" could not be run --
+            # next_command is the same line the table prints.
+            target = display if display == "<stdin>" else os.path.normpath(path)
+            nxt = v["next"] or ""
             rows.append({"file": name, "shape": v["shape"],
-                         "format": v["format"] or "", "next": v["next"] or "",
-                         "detail": v["detail"], "path": name,
+                         "format": v["format"] or "", "next": nxt,
+                         # always quoted, unlike the table's display hint:
+                         # _shell_quote only quotes on spaces, and a Windows
+                         # path's backslashes are eaten by the shell unquoted
+                         "next_command": (f'acidcat {nxt} "{target}"'
+                                          if nxt else ""),
+                         "detail": v["detail"], "path": target,
                          "evidence": v["evidence"]})
 
     # 1 when nothing among the targets was identifiable, so `classify f &&
