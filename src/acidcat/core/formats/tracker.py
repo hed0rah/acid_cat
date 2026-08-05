@@ -315,6 +315,16 @@ def parse_it(data):
     (instrument/sample/pattern pointers) and each IMPS sample header, whose
     SamplePointer is an absolute file offset to the PCM."""
     warns = []
+    # parse_it was the one tracker parser with no length guard. The fields at
+    # 32..47 are read with unpack_from, which raises the struct.error every
+    # caller already handles -- but gvol/mvol/speed/tempo at 48..51 are bare
+    # indices, so a file of exactly 48-51 bytes passed every unpack and then
+    # raised IndexError, which `extract` deliberately does NOT catch (its
+    # _MALFORMED set treats IndexError as a bug in us, and it was). Raising the
+    # short-read signal here converts it to the handled path for every caller.
+    if len(data) < 192:                  # the fixed IT header, before the orders
+        raise struct.error(
+            f"IT header truncated: {len(data)} bytes, need at least 192")
     songname = _c(data[4:30])
     ordnum = struct.unpack_from("<H", data, 32)[0]
     insnum = struct.unpack_from("<H", data, 34)[0]

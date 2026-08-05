@@ -487,5 +487,13 @@ def scan(filepath, fmt_label, chunks, warns):
                                  "message": "an APEv2 tag sits on a non-MP3 file "
                                             "(unusual metadata carrier)"})
 
-    findings.sort(key=lambda x: (-_SEVERITY.get(x["severity"], 0), x["offset"]))
+    # offset is deliberately None on the four "check_failed" rules -- the ones
+    # whose whole job is to say "this rule could not run, the file was NOT
+    # screened for it". Sorting on it directly compared None against an int the
+    # moment such a finding shared a severity with a positioned one, and
+    # `audit` died with a TypeError traceback. A 3-byte b"ID3" was the smallest
+    # trigger, but any ordinary corrupt file that crashes one rule while
+    # another warns hits it. File-global findings sort ahead of positioned ones.
+    findings.sort(key=lambda x: (-_SEVERITY.get(x["severity"], 0),
+                                 x["offset"] if x["offset"] is not None else -1))
     return findings

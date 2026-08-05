@@ -9,6 +9,8 @@ fsync, then rename over the target so a crash never leaves a half-written file.
 import os
 import tempfile
 
+from acidcat.util import outpath
+
 
 def backup_path(path):
     """The `<name>_original.<ext>` sibling used for in-place backups."""
@@ -53,7 +55,12 @@ def commit(src_path, new_data, out=None, overwrite=False):
     distinguish should check os.path.exists(backup_path(src_path)), because a
     pre-existing file there may predate acidcat and not hold this original.
     """
-    if out:
+    # `-o` pointed at the input is not a copy, it is an in-place edit, and it
+    # took the branch that makes no backup -- so the one guaranteed-recoverable
+    # path was silently lost exactly when a script templated out == input, and
+    # write's help still promised "the input is untouched". Treat it as what it
+    # actually is and give it the backup the default path would have made.
+    if out and not outpath.same_file(src_path, out):
         atomic_write(out, new_data)
         return out, None
     backup = None
