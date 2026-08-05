@@ -220,6 +220,14 @@ these were introduced by the 1.0 restructure itself.
   `acidcat-mcp` console script.
 
 ### Performance
+- **`scripts/bench.py` -- a committed performance baseline.** One tracked number
+  per verb, driven through the real dispatcher, so a regression is visible
+  instead of felt. Runs with no arguments on a bare clone (it generates the
+  suite's synthetic corpus, so two machines can compare) or `--corpus DIR` for
+  real-world figures; `--json` writes a baseline and `--compare` diffs against
+  one. Reports cold and warm, min/median/max rather than best-of, and ms/file
+  alongside MB/s -- the walkers cap their reads, so their MB/s flatters them.
+  Interpreter startup is measured separately, being a per-invocation constant.
 - `audioscan` 22.9 s -> 1.4 s (16x) on large blobs: a vectorized feature path,
   then batching to fix the memory blowup it introduced.
 - `framescan` 0.8 -> 67 MB/s (79x) on adversarial sync-byte runs.
