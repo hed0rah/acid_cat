@@ -20,6 +20,8 @@ repair here" rather than guessing.
 import os
 import sys
 
+from acidcat.commands._output import add_output_format_arg, chosen_format
+from acidcat.core.infra.render import output as _render
 from acidcat.core.write import constraints, writer
 from acidcat.core.write.repairers import AudioGuardError
 
@@ -36,12 +38,30 @@ def register(subparsers):
                    help="Skip the _original backup on in-place repair.")
     p.add_argument("--keep-pad", action="store_true",
                    help="Do not normalize a non-zero pad byte to 0x00.")
+    # repair CHANGES your files and could not tell a script which ones or how.
+    # json carries the per-violation detail; csv/tsv are one row per file.
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.set_defaults(func=run)
 
 
-def _present(path, report):
-    """Print a report's header + one line per violation. Returns True if there
-    is anything to write."""
+def _record(path, report):
+    """The machine shape of a report: what this file is and what is wrong."""
+    return {"path": path, "format": report.label,
+            "issues": len(report.violations),
+            "repairable": any(v.repairable for v in report.violations),
+            "detail": "; ".join(v.describe() for v in report.violations),
+            "violations": [{"describe": v.describe(), "kind": v.kind,
+                            "field": v.field, "stored": v.stored,
+                            "computed": v.computed, "repairable": v.repairable}
+                           for v in report.violations]}
+
+
+def _present(path, report, rows=None):
+    """Print a report's header + one line per violation, or append a record
+    when `rows` is given. Returns True if there is anything to write."""
+    if rows is not None:
+        rows.append(_record(path, report))
+        return any(v.repairable for v in report.violations)
     base = os.path.basename(path)
     if not report.violations:
         tail = f"  {report.note}" if report.note else "  already consistent"
@@ -54,7 +74,7 @@ def _present(path, report):
     return any(v.repairable for v in report.violations)
 
 
-def _repair_one(path, args):
+def _repair_one(path, args, rows=None):
     with open(path, "rb") as f:
         data = f.read()
     opts = {"keep_pad": args.keep_pad}
@@ -62,18 +82,26 @@ def _repair_one(path, args):
     if constraints.repairer_for(data) is None:
         # nothing checkable, the same answer `validate` gives on a format it
         # does not model -- not a passing result for a file never examined
+        if rows is not None:
+            rows.append({"path": path, "format": None, "action": "skipped",
+                         "issues": 0, "repairable": False, "written": None,
+                         "backup": None,
+                         "detail": "not a structurally-modeled container"})
         print(f"acidcat repair: {path}: not a RIFF/AIFF/MP4 container "
               f"(nothing to repair here)", file=sys.stderr)
         return 2
 
     if args.dry_run:
         report = constraints.analyze(data, opts)
-        _present(path, report)
+        _present(path, report, rows)
         # 1 for any violation, the same answer `validate` gives on the same
         # file. --dry-run always returned 0, so `repair --dry-run f && echo
         # clean` printed "clean" over a list of pending repairs. Keyed on
         # violations rather than on repairability so the two verbs cannot
         # disagree about whether a file is sound.
+        if rows is not None:
+            rows[-1]["action"] = "would-repair" if report.violations else "clean"
+            rows[-1]["written"] = rows[-1]["backup"] = None
         return 1 if report.violations else 0
 
     try:
@@ -83,7 +111,9 @@ def _repair_one(path, args):
               file=sys.stderr)
         return 1
 
-    if not _present(path, report):
+    if not _present(path, report, rows):
+        if rows is not None:
+            rows[-1].update(action="clean", written=None, backup=None)
         return 0
     try:
         written, backup = writer.commit(
@@ -91,6 +121,9 @@ def _repair_one(path, args):
     except OSError as e:
         print(f"acidcat repair: {path}: {e}", file=sys.stderr)
         return 2
+    if rows is not None:
+        rows[-1].update(action="repaired", written=written, backup=backup)
+        return 0
     note = f"  (backup: {os.path.basename(backup)})" if backup else ""
     print(f"  wrote {os.path.basename(written)}{note}")
     return 0
@@ -100,11 +133,19 @@ def run(args):
     if args.output and len(args.inputs) > 1:
         print("acidcat repair: -o works with a single input file", file=sys.stderr)
         return 2
+    fmt = chosen_format(args)
+    rows = None if fmt == "table" else []
     rc = 0
     for path in args.inputs:
         try:
-            rc = _repair_one(path, args) or rc
+            rc = _repair_one(path, args, rows) or rc
         except (OSError, ValueError) as e:
             print(f"acidcat repair: {path}: {e}", file=sys.stderr)
             rc = 2
+    if rows is not None:
+        if fmt in ("csv", "tsv"):
+            # a nested violation list has no honest cell; drop the key rather
+            # than stringify it, same as validate
+            rows = [{k: v for k, v in r.items() if k != "violations"} for r in rows]
+        _render(rows, fmt=fmt)
     return rc

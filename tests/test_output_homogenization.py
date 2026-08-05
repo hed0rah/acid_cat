@@ -165,8 +165,8 @@ def _declared_formats(verb):
 # every verb whose output is flat records. The nested ones (inspect's chunk
 # tree, census's histograms, dump's hex) deliberately offer table+json only.
 _FLAT_RECORD_VERBS = ["chunks", "classify", "detect", "extract", "features",
-                      "formats", "info", "locate", "query", "scan", "similar",
-                      "survey", "shape", "validate"]
+                      "formats", "info", "locate", "query", "repair", "scan",
+                      "similar", "survey", "shape", "validate", "write"]
 
 
 @pytest.mark.parametrize("verb", _FLAT_RECORD_VERBS)
@@ -225,3 +225,57 @@ def test_extract_machine_output_reports_nothing_extracted(tmp_path):
     p.write_bytes(bytes(32))
     for fmt in ([], ["--json"], ["--csv"]):
         assert _run("extract", str(p), *fmt).returncode in (1, 2), fmt
+
+
+# -- repair / write: the two verbs that CHANGE your files -----------
+
+def test_repair_json_says_what_it_did(tmp_path):
+    """repair rewrites your file and could not tell a script which one or how."""
+    p = _wav(tmp_path / "b.wav", riff_size=99999)
+    doc = json.loads(_run("repair", str(p), "--json").stdout)
+    assert len(doc) == 1
+    r = doc[0]
+    assert r["action"] == "repaired"
+    assert r["written"].endswith("b.wav")
+    assert r["backup"].endswith("b_original.wav")
+    assert r["violations"][0]["describe"]
+
+
+def test_repair_dry_run_reports_would_repair(tmp_path):
+    p = _wav(tmp_path / "b.wav", riff_size=99999)
+    before = p.read_bytes()
+    doc = json.loads(_run("repair", "--dry-run", str(p), "--json").stdout)
+    assert doc[0]["action"] == "would-repair"
+    assert doc[0]["written"] is None
+    assert p.read_bytes() == before            # --dry-run still writes nothing
+
+
+def test_write_json_says_which_fields_moved(tmp_path):
+    p = _wav(tmp_path / "a.wav")
+    doc = json.loads(_run("write", str(p), "--set", "artist=X",
+                          "--set", "title=Y", "--json").stdout)
+    changes = {c["field"]: c["new"] for c in doc[0]["changes"]}
+    assert changes == {"artist": "X", "title": "Y"}
+    assert doc[0]["backup"].endswith("a_original.wav")
+
+
+def test_write_dry_run_is_marked_and_writes_nothing(tmp_path):
+    p = _wav(tmp_path / "a.wav")
+    before = p.read_bytes()
+    doc = json.loads(_run("write", str(p), "--set", "artist=X",
+                          "--dry-run", "--json").stdout)
+    assert doc[0]["dry_run"] is True and doc[0]["written"] is None
+    assert p.read_bytes() == before
+    assert not (tmp_path / "a_original.wav").exists()
+
+
+@pytest.mark.parametrize("verb,extra_args", [
+    ("repair", []),
+    ("write", ["--set", "artist=X"]),
+])
+def test_mutating_verbs_keep_their_human_output(tmp_path, verb, extra_args):
+    """The default is still the human report -- these renderings are additive."""
+    p = _wav(tmp_path / "b.wav", riff_size=99999)
+    out = _run(verb, str(p), *extra_args).stdout
+    assert "wrote" in out
+    assert not out.lstrip().startswith(("{", "["))
