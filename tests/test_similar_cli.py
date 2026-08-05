@@ -129,7 +129,7 @@ def test_cli_similar_paths_only(indexed_library, capsys):
 
 def test_cli_similar_missing_file(indexed_library, capsys):
     rc = similar.run(_args(indexed_library, "/no/such/file.wav"))
-    assert rc == 1
+    assert rc == 2                     # missing input is 2 in every verb
     assert "file not found" in capsys.readouterr().err
 
 

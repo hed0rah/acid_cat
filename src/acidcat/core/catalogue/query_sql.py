@@ -39,11 +39,19 @@ def build_filter(*, bpm_min=None, bpm_max=None, duration_min=None,
 
     tags = [t for t in (tags or []) if t]
     if tags:
+        # LOWER() on both sides, like every scalar filter above. Exact `tag IN
+        # (?)` made tags the one case-SENSITIVE filter in the builder, so
+        # `--tag wavetable` returned 0 rows against 85 stored as 'Wavetable' --
+        # a confident empty answer with no hint that case was the reason, and
+        # the same builder backs the MCP search tool, so a model hit it too.
+        # COUNT(DISTINCT LOWER(tag)) so two casings of one tag cannot satisfy
+        # a two-tag AND on their own.
         ph = ",".join("?" for _ in tags)
-        where.append(f"s.path IN (SELECT path FROM tags WHERE tag IN ({ph}) "
-                     f"GROUP BY path HAVING COUNT(DISTINCT tag) = ?)")
-        params.extend(tags)
-        params.append(len(tags))
+        where.append(f"s.path IN (SELECT path FROM tags "
+                     f"WHERE LOWER(tag) IN ({ph}) "
+                     f"GROUP BY path HAVING COUNT(DISTINCT LOWER(tag)) = ?)")
+        params.extend(t.lower() for t in tags)
+        params.append(len({t.lower() for t in tags}))
 
     if text:
         joins.append("JOIN samples_fts fts ON fts.path = s.path")

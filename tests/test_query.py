@@ -218,7 +218,10 @@ class TestFTS5SyntaxError:
         captured = capsys.readouterr()
         # exit non-zero, and the user gets a message that mentions
         # both the FTS5 special chars and the offending input
-        assert rc == 1
+        # 2: a malformed --text is the same class of mistake as a malformed
+        # --bpm, which has always been 2. It was 1, so a script could not
+        # tell "your syntax is wrong" from "nothing matched".
+        assert rc == 2
         assert "(foo" in captured.err
         # must mention at least one of the metacharacters by name so
         # the user knows what to escape
@@ -229,7 +232,10 @@ class TestNoLibraries:
     def test_no_libs_registered_returns_error(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ACIDCAT_REGISTRY", str(tmp_path / "empty.db"))
         rc = query_cmd.run(_Args())
-        assert rc == 1
+        # 2, not 1: nothing to search means the query could not run. With 1,
+        # `query ... || echo "no matches"` reports no matches on a machine that
+        # has simply never been indexed.
+        assert rc == 2
 
 
 class TestLimit:

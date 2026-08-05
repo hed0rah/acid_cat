@@ -308,9 +308,16 @@ def get_sample(args):
             "SELECT description FROM descriptions WHERE path = ?", (resolved,)
         ).fetchone()
         out["description"] = desc["description"] if desc else None
+        # "has features" has to mean "features find_similar can actually use".
+        # An unversioned check reported True for stale rows that find_similar
+        # filters out, so get_sample said "has features" about the same file
+        # find_similar reported a population of 0 for -- two tools contradicting
+        # each other is worse for a model than either answer alone.
+        from acidcat.core.analysis.features import FEATURE_SET_VERSION
         out["has_features"] = bool(
             conn.execute(
-                "SELECT 1 FROM features WHERE path = ?", (resolved,)
+                "SELECT 1 FROM features WHERE path = ? AND features_version = ?",
+                (resolved, FEATURE_SET_VERSION),
             ).fetchone()
         )
         if lib is not None:
@@ -685,7 +692,8 @@ def reindex_features(args):
     _evict()                                    # cached readers rebuild after the write
     if not _librosa_available():
         return _analysis_unavailable()
-    from acidcat.core.analysis.features import extract_audio_features
+    from acidcat.core.analysis.features import (extract_audio_features,
+                                               FEATURE_SET_VERSION)
 
     # `if limit:` treated 0 as "no limit" here, the exact opposite of every
     # other tool, where 0 fell through to a default. A model passing the falsy
@@ -714,16 +722,19 @@ def reindex_features(args):
         except Exception:
             continue
         try:
+            # stale-version rows count as needing work, not as done: a row
+            # written by the old version=1 path is non-null, so this used to
+            # skip it forever and the library could never repair itself
             sql = (
                 "SELECT s.path FROM samples s "
                 "LEFT JOIN features f ON f.path = s.path "
-                "WHERE f.path IS NULL"
+                "WHERE f.path IS NULL OR f.features_version != ?"
             )
             if limit > 0:
-                sql += " LIMIT ?"
-                rows = conn.execute(sql, (limit,)).fetchall()
+                rows = conn.execute(sql + " LIMIT ?",
+                                    (FEATURE_SET_VERSION, limit)).fetchall()
             else:
-                rows = conn.execute(sql).fetchall()
+                rows = conn.execute(sql, (FEATURE_SET_VERSION,)).fetchall()
             for r in rows:
                 p = r["path"]
                 if not os.path.isfile(p):
@@ -733,13 +744,27 @@ def reindex_features(args):
                 if feats is None:
                     failed += 1
                     continue
-                idx.upsert_features(conn, p, feats, version=1)
+                # No explicit version. This was `version=1` -- the only caller
+                # in the tree that overrode the default, and 1 means
+                # "pre-vector JSON only". find_similar filters on
+                # features_version = FEATURE_SET_VERSION (3), so every vector
+                # this tool wrote was invisible to the one tool that consumes
+                # them: reindex_features reported {"processed": 2, "failed": 0}
+                # and find_similar then returned population 0 on the same
+                # library. Expensive work, confidently reported complete,
+                # silently unusable.
+                idx.upsert_features(conn, p, feats)
                 processed += 1
             conn.commit()
+            # Count what still needs CURRENT-version features, not merely what
+            # has no features row at all. The stale version-1 rows are non-null,
+            # so "remaining" read 0 and a re-run skipped them forever -- the
+            # library could not repair itself without the CLI's --force.
             remaining += conn.execute(
                 "SELECT COUNT(*) AS c FROM samples s "
                 "LEFT JOIN features f ON f.path = s.path "
-                "WHERE f.path IS NULL"
+                "WHERE f.path IS NULL OR f.features_version != ?",
+                (FEATURE_SET_VERSION,),
             ).fetchone()["c"]
         finally:
             conn.close()

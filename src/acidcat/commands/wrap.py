@@ -22,6 +22,8 @@ import os
 import struct
 import sys
 
+from acidcat.util import outpath
+
 from acidcat.util.play import _wav_wrap
 
 _WIDTHS = (8, 16, 24, 32, 64)
@@ -111,6 +113,10 @@ def run(args):
                     3 if args.floating else 1)
 
     if args.output:
+        err = outpath.refuse_self_overwrite('wrap', args.input, args.output)
+        if err:
+            print(err, file=sys.stderr)
+            return 2
         try:
             with open(args.output, "wb") as f:
                 f.write(wav)

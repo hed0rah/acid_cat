@@ -67,11 +67,21 @@ def test_a_bad_range_does_not_traceback(capsys, empty_registry):
     assert "bad --bpm range" in capsys.readouterr().err
 
 
-def test_a_valid_filter_against_an_empty_registry_is_not_a_usage_error(
-        capsys, empty_registry):
-    """The other side of the same fix: a well-formed query with nothing to
-    search is 1 (ran, no answer), not 2 (you typed it wrong)."""
-    assert main(["query", "--registry", empty_registry, "--bpm", "120"]) == 1
+def test_a_valid_filter_with_nothing_to_search_is_two(capsys, empty_registry):
+    """This assertion used to be 1, on the reasoning that the invocation was
+    well-formed so the answer was merely negative. That was wrong, and a
+    library audit caught it.
+
+    The deciding case is `query --bpm 128 || echo "no matches"` on a machine
+    where nothing has been indexed: with 1 it prints "no matches" when the truth
+    is "I have no data at all". An empty answer and an empty catalogue are
+    different facts and a script has to be able to tell them apart. `validate`
+    already returns 2 for nothing-checkable on exactly this reasoning.
+
+    A well-formed query against a POPULATED registry that matches nothing is
+    still 0 -- that is a real, complete answer.
+    """
+    assert main(["query", "--registry", empty_registry, "--bpm", "120"]) == 2
 
 
 def test_shape_on_a_missing_path_is_not_silent_success(tmp_path, capsys):

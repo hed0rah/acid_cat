@@ -15,6 +15,8 @@ import os
 import struct
 import sys
 
+from acidcat.util import outpath
+
 from acidcat.core.codecs import adpcm
 from acidcat.core.formats import bitwig as bwmod
 from acidcat.core.codecs import ncw as ncwmod
@@ -98,6 +100,10 @@ def _run_ncw(path, data, args):
         print(f"acidcat convert: {path}: {e}", file=sys.stderr)
         return 1
     out = args.output or (os.path.splitext(path)[0] + ".wav")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     with open(out, "wb") as f:
         f.write(wav)
     print(f"wrote {out}: {hdr['channels']}ch {hdr['bits']}-bit "
@@ -142,6 +148,10 @@ def _run_svx(path, data, args):
         return 1
     wav = svxmod.to_wav(info, samples)
     out = args.output or (os.path.splitext(path)[0] + ".wav")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     with open(out, "wb") as f:
         f.write(wav)
     rate = info["rate"]
@@ -220,6 +230,10 @@ def _run_to_pcm(path, data, args):
             return 1
 
     out = args.output or (os.path.splitext(path)[0] + "_pcm.wav")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     with open(out, "wb") as f:
         f.write(_pcm16_wav(pcm, rate, channels))
     frames = len(pcm) // 2 // max(channels, 1)
@@ -268,6 +282,10 @@ def run(args):
               f"({e.__class__.__name__})", file=sys.stderr)
         return 1
     out = args.output or (os.path.splitext(path)[0] + ".mid")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     with open(out, "wb") as f:
         f.write(smf)
     print(f"wrote {out}: {len(notes)} notes, {bpm:g} bpm")

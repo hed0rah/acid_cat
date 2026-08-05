@@ -32,6 +32,8 @@ import os
 import argparse
 import sys
 
+from acidcat.util import outpath
+
 from acidcat.core.infra import bytefields as bf
 from acidcat.core.forensics.anomalies import _declared_end, _rf64_end
 from acidcat.core.formats.riff import iter_chunks
@@ -460,14 +462,6 @@ def _run_field(args, filepath):
     return 0
 
 
-def _same_file(a, b):
-    """True if two paths name the same file. Tolerates b not existing yet."""
-    try:
-        return os.path.samefile(a, b)
-    except OSError:
-        return os.path.realpath(a) == os.path.realpath(b)
-
-
 def run(args):
     filepath = args.target
     if not os.path.isfile(filepath):
@@ -481,7 +475,7 @@ def run(args):
     # 2,044-byte WAV became 4 bytes, exit 0, no backup. Reachable by tab
     # completion or a --batch loop that forgets to change directory.
     out = getattr(args, "output", None)
-    if out and not args.batch and _same_file(filepath, out):
+    if out and not args.batch and outpath.same_file(filepath, out):
         print(f"acidcat carve: {out}: output is the input; refusing to "
               f"overwrite the file being carved from", file=sys.stderr)
         return 2

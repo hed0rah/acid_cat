@@ -112,9 +112,11 @@ def _run(args):
         rconn.close()
 
     if not libs:
+        # 2: there is nothing to search, so the query could not run at all --
+        # the same answer `validate` gives when nothing was checkable.
         print("acidcat query: no libraries registered. "
               "Run `acidcat index DIR --label NAME` first.", file=sys.stderr)
-        return 1
+        return 2
 
     scopes = None
     if args.root:
@@ -131,8 +133,11 @@ def _run(args):
     try:
         rows = _fan_out(libs, args)
     except idx.FTSQueryError as e:
+        # 2: a malformed --text is the same class of mistake as a malformed
+        # --bpm, which already exits 2. It was 1 (ran fine, no answer), so a
+        # script could not tell "your syntax is wrong" from "nothing matched".
         print(f"acidcat query: {e}", file=sys.stderr)
-        return 1
+        return 2
     rows.sort(key=lambda r: r.get("path") or "")
     rows = rows[: args.limit]
 

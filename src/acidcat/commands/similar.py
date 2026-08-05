@@ -46,7 +46,7 @@ def run(args):
     target = args.target
     if not os.path.exists(target):
         print(f"acidcat similar: file not found: {target}", file=sys.stderr)
-        return 1
+        return 2          # could not read the input, as everywhere else
 
     rconn = reg.open_registry(getattr(args, "registry", None))
     try:
@@ -56,7 +56,7 @@ def run(args):
     if not libs:
         print("acidcat similar: no libraries registered. Run "
               "`acidcat index DIR --features` first.", file=sys.stderr)
-        return 1
+        return 2          # nothing to search: the query could not run
 
     # reference features: from the index, else a live librosa extract
     target_feats, target_meta = search.resolve_target_features(target, libs)
