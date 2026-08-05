@@ -7,7 +7,7 @@ import sys
 from acidcat.util.stdin import display_name
 
 from acidcat.core.formats.riff import iter_chunks, get_riff_info
-from acidcat.commands._output import add_output_format_arg
+from acidcat.commands._output import add_output_format_arg, out_stream
 from acidcat.core.infra.render import output
 
 
@@ -83,35 +83,27 @@ def _run(args):
     _vlog(args, f"[chunks] parsed {len(results)} fields from "
                 f"{len(walked)} chunks")
 
-    if fmt_name == "table":
-        stream = sys.stdout
-        if getattr(args, 'output', None):
-            stream = open(args.output, 'w', encoding='utf-8')
+    with out_stream(getattr(args, 'output', None)) as stream:
+        if fmt_name == "table":
+            stream.write(f"RIFF container: {riff_info['size']} bytes, "
+                         f"type={riff_info['type']}\n")
+            stream.write(f"File: {display_name(filepath)}\n\n")
 
-        stream.write(f"RIFF container: {riff_info['size']} bytes, type={riff_info['type']}\n")
-        stream.write(f"File: {display_name(filepath)}\n\n")
+            # Raw chunk layout
+            stream.write("Chunk Layout:\n")
+            for c in chunk_list:
+                stream.write(f"  {c['chunk']:4s}  @ {c['offset']:>8d}  "
+                             f"size={c['size']}\n")
 
-        # Raw chunk layout
-        stream.write("Chunk Layout:\n")
-        for c in chunk_list:
-            stream.write(f"  {c['chunk']:4s}  @ {c['offset']:>8d}  size={c['size']}\n")
-
-        # Parsed fields
-        if results:
-            stream.write(f"\nParsed Fields:\n")
-            for cid, key, val in results:
-                stream.write(f"  {cid}.{key} = {val}\n")
-
-        if stream is not sys.stdout:
-            stream.close()
-    else:
-        # JSON or CSV: emit the parsed fields
-        data = [{"chunk": cid, "key": key, "value": val} for cid, key, val in results]
-        stream = sys.stdout
-        if getattr(args, 'output', None):
-            stream = open(args.output, 'w', encoding='utf-8')
-        output(data, fmt=fmt_name, stream=stream)
-        if stream is not sys.stdout:
-            stream.close()
+            # Parsed fields
+            if results:
+                stream.write(f"\nParsed Fields:\n")
+                for cid, key, val in results:
+                    stream.write(f"  {cid}.{key} = {val}\n")
+        else:
+            # JSON or CSV: emit the parsed fields
+            data = [{"chunk": cid, "key": key, "value": val}
+                    for cid, key, val in results]
+            output(data, fmt=fmt_name, stream=stream)
 
     return 0

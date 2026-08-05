@@ -269,7 +269,15 @@ class _Bytes:
                 return
             except (OSError, ValueError, ImportError):
                 pass                      # fall through to a plain read
-        self.data = self._f.read()
+        try:
+            self.data = self._f.read()
+        except BaseException:
+            # __init__ raising means the object never reaches its `with`, so
+            # __exit__ never runs and the descriptor leaks -- which on Windows
+            # keeps the file locked. The mmap branch above is already guarded;
+            # this one was not.
+            self.close()
+            raise
 
     def close(self):
         for obj in (self._m, self._f):

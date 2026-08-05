@@ -64,6 +64,43 @@ def vector_from_features(feats):
     return out
 
 
+def _undecodable_types():
+    """Exceptions that mean THIS FILE could not be decoded, as opposed to a
+    break in acidcat or in librosa.
+
+    Built lazily because core/ must not import the optional analysis stack at
+    module level (tests/test_lean_install.py pins that invariant). audioread's
+    NoBackendError and soundfile's LibsndfileError are both about the file;
+    librosa's ParameterError can be either, so it stays out -- a wrong argument
+    from us is a bug we want to hear about.
+    """
+    types = [OSError, EOFError, ValueError]
+    for mod, name in (("audioread", "DecodeError"),
+                      ("soundfile", "SoundFileRuntimeError"),
+                      ("soundfile", "LibsndfileError")):
+        try:
+            types.append(getattr(__import__(mod), name))
+        except (ImportError, AttributeError):
+            pass
+    return tuple(types)
+
+# module-level so a caller can count what went wrong without parsing stderr
+EXTRACTION_FAILURES = []
+
+
+def _note(filepath, exc, fatal):
+    """Record and announce an extraction failure. Silence here is what turns a
+    systemic break into an empty catalogue nobody investigates."""
+    import os
+    rec = {"path": filepath, "error": f"{exc.__class__.__name__}: {exc}",
+           "fatal": fatal}
+    EXTRACTION_FAILURES.append(rec)
+    if fatal:
+        import sys
+        print(f"acidcat: feature extraction failed on "
+              f"{os.path.basename(filepath)}: {rec['error']}", file=sys.stderr)
+
+
 def extract_audio_features(filepath):
     """
     Extract audio features for ML analysis.
@@ -170,5 +207,25 @@ def extract_audio_features(filepath):
 
         return features
 
+    except _undecodable_types() as e:
+        # This FILE could not be decoded -- a real, per-file None answer.
+        _note(filepath, e, fatal=False)
+        return None
     except Exception as e:
+        # Anything else is a break in us or in librosa, not a property of the
+        # file, and it must not be reported as "this file has no features".
+        #
+        # detect.py already documents exactly this failure: `librosa.beat.tempo`
+        # became `librosa.feature.tempo`, and because the call sat inside a
+        # catch-all, BPM went silently filename-only while still reporting
+        # bpm_source "detected". Line 149 below calls `librosa.feature.tempo`,
+        # pyproject pins only `librosa>=0.10.1` with no upper bound, and this
+        # function is the SOLE feature path -- so the next rename would make a
+        # 1.2M-file reindex store nothing, report success, and leave
+        # `similar` / MCP find_similar returning empty results that look
+        # exactly like a corpus with no analyzable audio.
+        #
+        # Raising would abort a whole library run over one bad file, so it
+        # still returns None -- but never silently.
+        _note(filepath, e, fatal=True)
         return None

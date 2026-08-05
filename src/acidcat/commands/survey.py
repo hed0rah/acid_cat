@@ -8,7 +8,7 @@ import sys
 from collections import Counter, defaultdict
 
 from acidcat.core.formats.riff import iter_chunks
-from acidcat.commands._output import add_output_format_arg
+from acidcat.commands._output import add_output_format_arg, out_stream
 from acidcat.core.infra.render import output
 from acidcat.util.csv_helpers import safe_basename_for_csv
 
@@ -99,35 +99,31 @@ def run(args):
         })
 
     fmt_name = getattr(args, 'output_format', 'table')
-    stream = sys.stdout
     out_path = getattr(args, 'output', None)
-    if out_path:
-        stream = open(out_path, 'w', encoding='utf-8')
+    with out_stream(out_path) as stream:
+        if fmt_name == "table":
+            note = f", {unparseable} unparseable" if unparseable else ""
+            if capped:
+                note += f" (stopped at the -n {num} cap -- more files remain)"
+            stream.write(f"Chunk ID Survey -- {files_scanned} WAV files scanned"
+                         f"{note}\n\n")
+            if files_scanned == 0:
+                if unparseable:
+                    # "none found" and "found, none readable" are different
+                    # answers, and for a specimen hunter the second one is the
+                    # interesting one
+                    stream.write(f"  ({unparseable} .wav file(s) found, none "
+                                 f"readable as RIFF -- try: acidcat classify "
+                                 f"DIR, or acidcat inspect --resync FILE)\n")
+                else:
+                    stream.write("  (no RIFF/WAV files found -- survey only "
+                                 "processes .wav files)\n")
+            for r in rows:
+                stream.write(f"  {r['chunk_id']:6s} : {r['files']} files\n")
+        else:
+            output(rows, fmt=fmt_name, stream=stream)
 
-    if fmt_name == "table":
-        note = f", {unparseable} unparseable" if unparseable else ""
-        if capped:
-            note += f" (stopped at the -n {num} cap -- more files remain)"
-        stream.write(f"Chunk ID Survey -- {files_scanned} WAV files scanned"
-                     f"{note}\n\n")
-        if files_scanned == 0:
-            if unparseable:
-                # "none found" and "found, none readable" are different answers,
-                # and for a specimen hunter the second one is the interesting one
-                stream.write(f"  ({unparseable} .wav file(s) found, none readable "
-                             f"as RIFF -- try: acidcat classify DIR, or "
-                             f"acidcat inspect --resync FILE)\n")
-            else:
-                stream.write("  (no RIFF/WAV files found -- survey only "
-                             "processes .wav files)\n")
-        for r in rows:
-            stream.write(f"  {r['chunk_id']:6s} : {r['files']} files\n")
-    else:
-        output(rows, fmt=fmt_name, stream=stream)
-
-    if stream is not sys.stdout:
-        stream.close()
-    elif not quiet:
+    if not out_path and not quiet:
         tail = f", {unparseable} unparseable" if unparseable else ""
         if capped:
             tail += f", stopped at the -n {num} cap"

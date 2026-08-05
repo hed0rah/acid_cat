@@ -9,7 +9,7 @@ from acidcat.util import deps
 from acidcat.util.stdin import display_name
 
 from acidcat.core.analysis.detect import estimate_librosa_metadata
-from acidcat.commands._output import add_output_format_arg
+from acidcat.commands._output import add_output_format_arg, out_stream
 from acidcat.core.infra.render import output
 from acidcat.util.csv_helpers import safe_basename_for_csv
 
@@ -61,12 +61,8 @@ def _run(args):
 
     if os.path.isfile(target):
         rec = _detect_single(target, quiet)
-        stream = sys.stdout
-        if getattr(args, 'output', None):
-            stream = open(args.output, 'w', encoding='utf-8')
-        output(rec, fmt=fmt_name, stream=stream)
-        if stream is not sys.stdout:
-            stream.close()
+        with out_stream(getattr(args, 'output', None)) as stream:
+            output(rec, fmt=fmt_name, stream=stream)
         # a missing analysis stack that the filename could not cover means the
         # command could not do its job -- report failure so `detect f && ...`
         # does not proceed on an empty answer. with librosa present, an
@@ -92,13 +88,9 @@ def _run(args):
             if count >= num:
                 break
 
-        stream = sys.stdout
-        out_path = getattr(args, 'output', None)
-        if out_path:
-            stream = open(out_path, 'w', encoding='utf-8')
-        output(rows, fmt=fmt_name if fmt_name != "table" else "csv", stream=stream)
-        if stream is not sys.stdout:
-            stream.close()
+        with out_stream(getattr(args, 'output', None)) as stream:
+            output(rows, fmt=fmt_name if fmt_name != "table" else "csv",
+                   stream=stream)
         if not quiet:
             cap_note = (f" (stopped at the -n {num} cap; more files remain)"
                         if count >= num else "")

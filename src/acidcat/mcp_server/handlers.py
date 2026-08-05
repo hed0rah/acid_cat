@@ -173,15 +173,22 @@ def _open_owning_library(path):
             conn = idx.open_db(cand["db_path"])
         except Exception:
             continue
-        hit = conn.execute(
-            "SELECT 1 FROM samples WHERE path = ? LIMIT 1", (norm,)
-        ).fetchone()
-        if hit is None and norm != path:
+        # the SELECTs were unguarded, so a DB that locks or corrupts partway
+        # through this loop leaked its connection -- the caller only ever closes
+        # the one that is RETURNED
+        try:
             hit = conn.execute(
-                "SELECT 1 FROM samples WHERE path = ? LIMIT 1", (path,)
+                "SELECT 1 FROM samples WHERE path = ? LIMIT 1", (norm,)
             ).fetchone()
+            if hit is None and norm != path:
+                hit = conn.execute(
+                    "SELECT 1 FROM samples WHERE path = ? LIMIT 1", (path,)
+                ).fetchone()
+        except Exception:
+            conn.close()
+            continue                      # unreadable library: skip, do not leak
         if hit is not None:
-            return cand, conn
+            return cand, conn             # ownership passes to the caller
         conn.close()
     return None, None
 

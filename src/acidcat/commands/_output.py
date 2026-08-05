@@ -14,6 +14,7 @@ and never selects rendering. Add the standard flags with
 ``add_output_format_arg(parser)``.
 """
 
+import contextlib
 import argparse
 import sys
 
@@ -82,3 +83,27 @@ def chosen_format(args, default="table"):
     if getattr(args, "json", False) or getattr(args, "as_json", False):
         return "json"
     return default
+
+
+@contextlib.contextmanager
+def out_stream(path):
+    """Yield a writable stream for ``path``, or stdout when it is None.
+
+    The same three lines were written two different ways across sibling verbs:
+    census/features/info/query/scan/similar wrapped the write in try/finally,
+    while chunks/detect/survey did a bare `if stream is not sys.stdout:
+    stream.close()` after it. In the second form an exception during the write
+    -- a full disk, or a value the renderer cannot serialize -- leaves the
+    output file open, and on Windows that keeps the partial file locked until
+    the GC gets to it. That is the leaked-handle class that has already cost a
+    fix here.
+
+    Never closes stdout.
+    """
+    stream = sys.stdout if not path else open(path, "w", encoding="utf-8",
+                                              newline="")
+    try:
+        yield stream
+    finally:
+        if stream is not sys.stdout:
+            stream.close()
