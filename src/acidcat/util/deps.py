@@ -10,6 +10,10 @@ def available(*packages):
     return all(importlib.util.find_spec(p) is not None for p in packages)
 
 
+# hints already emitted this process, so a multi-path verb says it once
+_ANNOUNCED = set()
+
+
 def require(*packages, group="analysis"):
     """Check that optional packages are importable.
 
@@ -23,10 +27,17 @@ def require(*packages, group="analysis"):
         except ImportError:
             missing.append(pkg)
     if missing:
-        print(
-            f"acidcat: missing {', '.join(missing)} "
-            f"-- install with: pip install acidcat[{group}]",
-            file=sys.stderr,
-        )
+        # Once per process, per group. `detect` reaches this through more than
+        # one path in a single run, so a user with no analysis stack was told
+        # the same thing two and three times before being handed a table of
+        # nulls -- it read as the tool scolding them rather than helping.
+        key = (group, tuple(sorted(missing)))
+        if key not in _ANNOUNCED:
+            _ANNOUNCED.add(key)
+            print(
+                f"acidcat: missing {', '.join(missing)} "
+                f"-- install with: pip install acidcat[{group}]",
+                file=sys.stderr,
+            )
         return False
     return True

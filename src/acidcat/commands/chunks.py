@@ -54,8 +54,15 @@ def _run(args):
     # Get RIFF container info
     riff_info = get_riff_info(filepath)
     if riff_info is None:
-        print(f"acidcat chunks: {filepath}: Not a RIFF file", file=sys.stderr)
-        return 1
+        # 2, not 1: a format this verb does not model is "could not run", the
+        # same answer `validate` gives, and the README states that rule. It said
+        # 1, so a script could not tell "not a RIFF" from "a RIFF with no
+        # matching chunks". Point at the verb that DOES read this file, rather
+        # than making the user already know which one to switch to.
+        print(f"acidcat chunks: {filepath}: not a RIFF container "
+              f"(try: acidcat inspect {os.path.basename(filepath)})",
+              file=sys.stderr)
+        return 2
 
     # Walk raw chunks (offsets + sizes)
     chunk_list = []

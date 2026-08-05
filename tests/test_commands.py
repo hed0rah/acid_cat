@@ -119,8 +119,13 @@ class TestChunksCommand:
 
     def test_not_riff_file(self, not_riff):
         code, out, err = run_cli("chunks", not_riff)
-        assert code == 1
-        assert "Not a RIFF" in err
+        # 2: a format this verb does not model is could-not-run, the same answer
+        # validate gives, and the README states that rule
+        assert code == 2
+        assert "not a RIFF container" in err
+        # and it names the verb that CAN read the file, rather than leaving the
+        # user to already know which one to switch to
+        assert "acidcat inspect" in err
 
     def test_nonexistent_file(self, tmp_path):
         code, out, err = run_cli("chunks", str(tmp_path / "missing.wav"))

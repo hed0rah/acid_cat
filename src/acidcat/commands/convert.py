@@ -261,9 +261,15 @@ def run(args):
     if sf2mod.is_sf2(data):
         return _run_sf2(path, data, args)
     if data[:4] != bwmod.MAGIC:
+        # 2, like every other "this verb does not model that format".
+        # The list also omitted --to-pcm, which is the documented path for a
+        # WAV -- so someone holding exactly that was told convert could not help
+        # while the feature they wanted went unmentioned.
         print(f"acidcat convert: {path}: unsupported input (expected a Bitwig "
-              f".bwclip, NCW .ncw, SF2 .sf2, or IFF 8SVX)", file=sys.stderr)
-        return 1
+              f".bwclip, NCW .ncw, SF2 .sf2, or IFF 8SVX). For a WAV, "
+              f"--to-pcm decodes ADPCM or a mistagged codec to plain PCM.",
+              file=sys.stderr)
+        return 2
     try:
         notes = bwmod.parse_notes(data)
     except Exception as e:
