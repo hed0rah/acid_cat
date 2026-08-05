@@ -19,7 +19,7 @@ def register(subparsers):
     p.add_argument("target", help="WAV file or directory, or '-' for stdin.")
     p.add_argument("-n", "--num", type=int, default=500, help="Max files to scan (for dirs).")
     p.add_argument("-q", "--quiet", action="store_true")
-    add_output_format_arg(p, only=("table", "json", "csv"))
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.set_defaults(func=run)
 

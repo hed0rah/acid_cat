@@ -144,3 +144,61 @@ def test_validate_table_output_is_unchanged(files):
     out = _run("validate", str(ok), str(bad)).stdout
     assert "OK    ok.wav" in out
     assert "FAIL  bad.wav" in out
+
+
+# ── the invariant: a declared format must actually render ──────────
+
+def _declared_formats(verb):
+    """The --output-format choices a verb advertises, read from its parser."""
+    import argparse
+    from acidcat import cli
+    p = argparse.ArgumentParser()
+    sub = p.add_subparsers()
+    mod = __import__(f"acidcat.commands.{verb}", fromlist=["register"])
+    mod.register(sub)
+    for act in sub.choices[verb]._actions:
+        if act.dest == "output_format" and act.choices:
+            return list(act.choices)
+    return []
+
+
+# every verb whose output is flat records. The nested ones (inspect's chunk
+# tree, census's histograms, dump's hex) deliberately offer table+json only.
+_FLAT_RECORD_VERBS = ["chunks", "classify", "detect", "features", "formats",
+                      "info", "locate", "query", "scan", "similar", "survey",
+                      "shape", "validate"]
+
+
+@pytest.mark.parametrize("verb", _FLAT_RECORD_VERBS)
+def test_flat_record_verbs_offer_all_four_renderings(verb):
+    """Six different format sets across the verbs was the finding. One rule:
+    flat records get table/json/csv/tsv, so a user never has to remember which
+    verb supports which."""
+    assert set(_declared_formats(verb)) == {"table", "json", "csv", "tsv"}, verb
+
+
+@pytest.mark.parametrize("verb", ["census", "inspect"])
+def test_nested_verbs_deliberately_offer_fewer(verb):
+    """Pinned so the rule above is a decision, not an oversight: csv/tsv have
+    no honest representation for a chunk tree or a histogram-of-histograms."""
+    assert set(_declared_formats(verb)) == {"table", "json"}, verb
+
+
+@pytest.mark.parametrize("verb,argv", [
+    ("classify", ["classify"]),
+    ("locate", ["locate"]),
+    ("chunks", ["chunks"]),
+    ("info", ["info"]),
+    ("shape", ["shape"]),
+    ("validate", ["validate"]),
+])
+def test_every_declared_format_actually_changes_the_output(tmp_path, verb, argv):
+    """A format listed in --help that falls through to the table renderer is a
+    flag that is accepted and ignored -- exactly the bug `scan --json` had.
+    classify ignored tsv, locate and formats ignored csv, all three silently.
+    """
+    src = _wav(tmp_path / "a.wav")
+    base = _run(*argv, str(src), "--output-format", "table").stdout
+    for fmt in ("json", "csv", "tsv"):
+        got = _run(*argv, str(src), "--output-format", fmt).stdout
+        assert got != base, f"{verb} --output-format {fmt} is ignored"

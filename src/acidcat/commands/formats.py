@@ -50,7 +50,7 @@ def register(subparsers):
                         "support per format.")
     p.add_argument("format", nargs="?",
                    help="Show just this format id (as sniff/inspect report it).")
-    add_output_format_arg(p, only=("table", "json", "tsv"), deprecated_f=False)
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"), deprecated_f=False)
     p.add_argument("--format-out", dest="output_format",
                    choices=("table", "json", "tsv"),
                    help=argparse.SUPPRESS)          # deprecated: use --output-format
@@ -112,6 +112,9 @@ def run(args):
         for r in rows:
             print(r["id"] + "\t" + r["label"] + "\t"
                   + "\t".join("1" if r[c] else "0" for c in _CAPS))
+    elif args.output_format == "csv":
+        from acidcat.core.infra.render import output as _render
+        _render(rows, fmt="csv")
     else:
         _print_table(rows)
     return 0

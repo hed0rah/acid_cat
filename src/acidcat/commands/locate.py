@@ -47,7 +47,7 @@ def register(subparsers):
                         "(XOR-byte / bit-rotate / nibble-swap) -- the CTF "
                         "obfuscation lens. The reported key is a candidate "
                         "(polarity/low-bits are ambiguous). Reads at most 16 MB.")
-    add_output_format_arg(p, only=("table", "json", "tsv"))
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("--min-confidence", type=float, default=0.0, metavar="C",
                    help="Only report regions at or above this confidence (0..1). "
                         "A signature-matched container is 0.90; a headerless "
@@ -188,7 +188,10 @@ def run(args):
         json.dump([_public(r, args.verbose) for r in recs], sys.stdout, indent=2)
         sys.stdout.write("\n")
     elif args.output_format == "tsv":
-        _print_tsv(recs)
+        _print_tsv(recs)                     # historical layout, no header
+    elif args.output_format == "csv":
+        from acidcat.core.infra.render import output as _render
+        _render([_public(r, args.verbose) for r in recs], fmt="csv")
     else:
         _print_table(recs, args.verbose)
 

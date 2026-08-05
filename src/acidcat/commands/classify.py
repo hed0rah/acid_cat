@@ -49,7 +49,7 @@ def register(subparsers):
                    help="Magic and chunk structure only -- skip the embedded "
                         "container sweep and resync. For large trees where the "
                         "per-file sweep would dominate.")
-    add_output_format_arg(p, only=("table", "json", "csv"))
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     add_color_arg(p)
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Only report files that are not a plainly-understood "
@@ -135,9 +135,12 @@ def run(args):
         json.dump(rows, sys.stdout, indent=2, default=str)
         sys.stdout.write("\n")
         return exit_code
-    if fmt == "csv":
+    if fmt in ("csv", "tsv"):
+        # both delimited renderings, not just csv: listing tsv in the choices
+        # while falling through to the table would be a flag that is accepted
+        # and ignored, which is the bug this pass exists to remove.
         output([{k: r[k] for k in ("file", "shape", "format", "next", "detail")}
-                for r in rows], fmt="csv")
+                for r in rows], fmt=fmt)
         return exit_code
 
     if not rows:

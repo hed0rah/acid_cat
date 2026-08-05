@@ -72,7 +72,7 @@ def register(subparsers):
                    help="With --compatible-with, override the inferred sample "
                         "kind filter (loop / one_shot / any).")
     p.add_argument("--limit", type=int, default=50, help="Max rows (default 50).")
-    add_output_format_arg(p, only=("table", "json", "csv"))
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("--paths-only", action="store_true",
                    help="Print bare paths, one per line.")

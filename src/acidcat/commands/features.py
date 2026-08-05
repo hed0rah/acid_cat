@@ -16,7 +16,7 @@ def register(subparsers):
     p.add_argument("target", help="WAV file or directory.")
     p.add_argument("-n", "--num", type=int, default=500, help="Max files to scan.")
     p.add_argument("-q", "--quiet", action="store_true")
-    add_output_format_arg(p, default="csv", only=("table", "json", "csv"))
+    add_output_format_arg(p, default="csv", only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Output file path.")
     p.set_defaults(func=run)
 

@@ -35,7 +35,7 @@ def _vlog(args, msg):
 def register(subparsers):
     p = subparsers.add_parser("info", help="Show metadata for a single audio file.")
     p.add_argument("target", help="Path to an audio file (WAV, AIFF, MIDI, Serum preset).")
-    add_output_format_arg(p, only=("table", "json", "csv"))
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("--deep", action="store_true",
                    help="Include librosa deep analysis (BPM/key detection + spectral features).")
     p.add_argument("-q", "--quiet", action="store_true", help="Suppress progress messages.")

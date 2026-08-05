@@ -30,7 +30,7 @@ def register(subparsers):
     p.add_argument("-n", "--num", type=int, default=500, help="Max files to scan (default: 500).")
     p.add_argument("-q", "--quiet", action="store_true", help="Suppress console output.")
     p.add_argument("-v", "--verbose", action="store_true", help="Verbose output.")
-    add_output_format_arg(p, default="csv", only=("table", "json", "csv"))
+    add_output_format_arg(p, default="csv", only=("table", "json", "csv", "tsv"))
     p.add_argument("--has", help="Filter: only WAV files containing these chunk IDs (comma-separated).")
     p.add_argument("--fallback", action="store_true",
                    help="Estimate BPM/key with librosa if no metadata found.")

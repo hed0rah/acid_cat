@@ -14,7 +14,7 @@ from acidcat.core.infra.render import output
 def register(subparsers):
     p = subparsers.add_parser("chunks", help="Walk RIFF chunks in a WAV file.")
     p.add_argument("target", help="Path to a WAV file, or '-' for stdin.")
-    add_output_format_arg(p, only=("table", "json", "csv"))
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("-q", "--quiet", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true",

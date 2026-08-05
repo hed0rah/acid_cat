@@ -21,7 +21,7 @@ def register(subparsers):
     p.add_argument("--has", help="Only count files containing these chunk IDs (comma-separated).")
     p.add_argument("--examples", type=int, default=1,
                    help="Example file paths to store per chunk ID.")
-    add_output_format_arg(p, only=("table", "json", "csv"))
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.set_defaults(func=run)
 

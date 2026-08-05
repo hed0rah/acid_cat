@@ -35,7 +35,7 @@ def register(subparsers):
                    help="Do not filter candidates by kind.")
     p.add_argument("--registry",
                    help="Override registry DB path (default ~/.acidcat/registry.db).")
-    add_output_format_arg(p, only=("table", "json", "csv"))
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("--paths-only", action="store_true",
                    help="Print bare paths, one per line.")
