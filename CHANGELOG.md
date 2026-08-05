@@ -97,6 +97,29 @@ these were introduced by the 1.0 restructure itself.
   a pipe. The default (a CSV file) is unchanged.
 - Malformed input produces a message and a usable exit code rather than a
   traceback, across the verbs where hostile bytes reached an unguarded parse.
+- **`audit` died with a TypeError on any file triggering a "check_failed"
+  anomaly.** Four rules deliberately report `offset: None` -- they are the ones
+  whose job is to say "this rule could not run, the file was NOT screened" --
+  and the sort ordered on offset directly, so the moment such a finding shared a
+  severity with a positioned one, Python compared None against an int. A 3-byte
+  `ID3` was the smallest trigger; any ordinary corrupt file that crashes one
+  rule while another warns hit it.
+- **`extract` raised IndexError on an Impulse Tracker file of 48-51 bytes.**
+  `parse_it` was the one tracker parser without an upfront length guard: the
+  fields at 32..47 use `unpack_from` (the clean short-read signal every caller
+  handles) but gvol/mvol/speed/tempo at 48..51 were bare indices.
+- **`write -o` pointed at its own input edited in place and made no backup** --
+  that path is not a copy, and it took the branch that skips the `_original`, so
+  the one guaranteed-recoverable path was lost exactly when a script templates
+  output == input.
+- **MCP `reindex_features` wrote feature vectors `find_similar` could never
+  read**, tagging them version 1 (pre-vector) while the search filters on the
+  current version. It reported `{"processed": N, "failed": 0}` and the library
+  then returned a population of 0 -- and could not repair itself, because the
+  "remaining" count keyed on rows being absent rather than stale.
+- **The tag filter was the one case-SENSITIVE filter** in the shared query
+  builder, so `--tag wavetable` returned nothing against 85 rows stored as
+  `Wavetable`. The same builder backs the MCP search tool.
 - **`locate` ranked a statistical guess above a signature-validated container.**
   A real WAV whose magic had been checked came back at confidence 0.900 and a
   headerless region inferred from autocorrelation came back at 1.000, so
@@ -132,6 +155,26 @@ these were introduced by the 1.0 restructure itself.
   never asked about.
 
 ### Added
+- **One rendering rule across every verb.** There were six different
+  output-format sets: seven verbs offered `table/json/csv` but not `tsv`, two
+  offered `tsv` but not `csv`, three declared a private `--json` boolean that
+  bypassed the shared registry entirely (so `--output-format json` -- which
+  worked on 26 other verbs -- was an *error* on the forensic verb, the recovery
+  verb and the RE verb), and twelve had no machine-readable output at all. The
+  rule now: a verb whose output is flat records offers **table, json, csv and
+  tsv**; a verb whose output is nested (`inspect`'s chunk tree, `census`'s
+  histograms, `dump`'s native hex) offers table and json, because csv has no
+  honest representation for a tree. Three invariant tests read each verb's
+  declared choices straight off its parser and assert the rule holds.
+- **`shape`, `validate`, `repair` and `write` gained machine output.** `shape`
+  *is* the data verb -- its whole output is records built for `sort | uniq -c` --
+  and TSV was hardcoded with no route to a JSON consumer. `validate` is the
+  CI-gate verb: you could branch on its exit code but not read *which* file
+  failed or *why* without scraping the human table. `repair` and `write` change
+  your files and could not report what they changed or where the backup went;
+  `write --dry-run --json` is now a usable preview rather than prose. Defaults
+  are unchanged throughout -- `shape` stays TSV and stays headerless, because
+  `sort | uniq -c` would count a header as data.
 - **`acidcat probe FILE table AT`** -- walk a discovered offset table into
   carve-ready regions. This is the gap between acidcat-as-hex-viewer and
   acidcat-as-RE-workbench: an audit reverse-engineered a real proprietary
