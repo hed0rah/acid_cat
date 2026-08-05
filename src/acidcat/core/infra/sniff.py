@@ -55,6 +55,13 @@ AUDIO_CONTAINERS = {
     "ogg":  (b"OggS", "ogg"),
     "sf2":  (b"RIFF", "sf2"),
     "mp3":  (b"ID3",  "mp3"),
+    # MIDI was missing, so `classify x.mid` said "midi, a format acidcat walks"
+    # while `locate x.mid` said "0 regions" -- two format vocabularies behind
+    # one pipeline, and the .mid in a disc image went unreported while a
+    # raw-pcm blob was reported overlapping it. A sequencer's MIDI is often the
+    # most recoverable thing on a music workstation's disk.
+    "midi": (b"MThd", "mid"),
+    "rmid": (b"RIFF", "mid"),
 }
 
 # distinct leading magics of the audio containers, in first-seen order (the scan
@@ -167,6 +174,30 @@ def _id3_wraps_other_container(filepath):
     return nxt in _ID3_WRAPPED_MAGICS
 
 
+def _second_frame_follows(filepath, head):
+    """Corroborate a bare MPEG frame sync with the next frame.
+
+    True when a second decodable header sits exactly ``frame_length`` bytes on,
+    which is the cadence a real stream has and a chance byte pair does not. A
+    single-frame file is vanishingly rare and losing it is a far better trade
+    than calling every UTF-16 text file an MP3.
+    """
+    from acidcat.core.formats import mp3 as mp3mod
+    first = mp3mod.decode_frame_header(head[:4])
+    if not first:
+        return False
+    step = first.get("frame_length") or 0
+    if step < 4:
+        return False                       # free-format: no predictable cadence
+    try:
+        with open(filepath, "rb") as f:
+            f.seek(step)
+            nxt = f.read(4)
+    except OSError:
+        return False
+    return len(nxt) == 4 and mp3mod.decode_frame_header(nxt) is not None
+
+
 def sniff(filepath):
     """Sniff a file on disk. Same ids as ``sniff_bytes`` plus
     "id3-wrapped" for an ID3v2 tag around a non-MP3 container."""
@@ -175,6 +206,13 @@ def sniff(filepath):
     fmt = sniff_bytes(head)
     if fmt == "mp3" and head[:3] == b"ID3" and _id3_wraps_other_container(filepath):
         return "id3-wrapped"
+    if fmt == "mp3" and head[:3] != b"ID3" and not _second_frame_follows(filepath, head):
+        # A bare 4-byte frame sync is weak evidence: 0xFF 0xFE decodes as a
+        # perfectly "valid" MPEG-1 Layer I header, so every UTF-16-LE text file
+        # -- which opens with exactly that BOM -- was identified as an MP3.
+        # A real stream has a second frame exactly frame_length away; one lucky
+        # byte pair does not. Costs one 4-byte read, and only on this path.
+        fmt = None
     # a .cue may open with REM/CATALOG lines before FILE; trust the extension
     if fmt is None and filepath.lower().endswith(".cue"):
         return "cue"

@@ -93,6 +93,34 @@ def _confirm_container(data, off, fmt):
     return True                                               # riff/form: sniff did it
 
 
+def _midi_extent(data, off):
+    """End of a Standard MIDI File at `off`, or None if it does not add up.
+
+    An SMF has no total-size field, but it is exactly walkable: a 14-byte MThd
+    (whose own length field is 6), then `ntrks` MTrk chunks each carrying a
+    big-endian payload length. Without this a .mid embedded in a disc image
+    carved to EOF -- 34 real bytes plus 4,096 of surrounding junk.
+    """
+    n = len(data)
+    if off + 14 > n or bytes(data[off:off + 4]) != b"MThd":
+        return None
+    hdr_len = struct.unpack_from(">I", data, off + 4)[0]
+    if hdr_len != 6:
+        return None                                    # not an SMF we can trust
+    ntrks = struct.unpack_from(">H", data, off + 10)[0]
+    if not 1 <= ntrks <= 65535:
+        return None
+    pos = off + 14
+    for _ in range(ntrks):
+        if pos + 8 > n or bytes(data[pos:pos + 4]) != b"MTrk":
+            return None                                # truncated or lying header
+        tlen = struct.unpack_from(">I", data, pos + 4)[0]
+        pos += 8 + tlen
+        if pos > n:
+            return None                                # runs past EOF
+    return pos
+
+
 def _container_extent(data, off, fmt):
     """End offset of a container at `off`, or None when it can't be trusted.
     RIFF/FORM carry a declared size; a size that is zero, sub-header, or runs
@@ -104,6 +132,8 @@ def _container_extent(data, off, fmt):
         size = struct.unpack_from("<I", data, off + 4)[0]     # RIFF: little-endian
     elif fmt in ("aiff", "aifc", "8svx") and off + 8 <= n:
         size = struct.unpack_from(">I", data, off + 4)[0]     # IFF/FORM: big-endian
+    elif fmt == "midi":
+        return _midi_extent(data, off)
     if size is None:
         return None                                           # flac/ogg: streaming
     end = off + 8 + size
@@ -113,7 +143,7 @@ def _container_extent(data, off, fmt):
 
 
 # declared-size formats: an absent extent means the size field itself is corrupt
-_DECLARED_SIZE_FMTS = {"wav", "rf64", "sf2", "aiff", "aifc", "8svx"}
+_DECLARED_SIZE_FMTS = {"wav", "rf64", "sf2", "aiff", "aifc", "8svx", "midi"}
 _HEADER_SLACK = 4096              # audio may start this far past a container header
 _AUDIO_GAP_TOL = 4096            # bridge small non-audio gaps between audio sub-regions
 

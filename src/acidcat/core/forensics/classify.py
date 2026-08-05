@@ -84,6 +84,40 @@ _UNWALKED_MAGICS = (
 _XML_ROOTS = (b"<?xml", b"<root", b"<Root", b"<ROOT")
 
 
+def _is_text(head):
+    """True if `head` reads as text in a common encoding.
+
+    Deliberately conservative: it decides whether to STOP calling something
+    opaque binary, so a false positive here would mislabel a real binary. UTF-8
+    or UTF-16 that decodes cleanly and is overwhelmingly printable qualifies;
+    anything with a NUL in a byte-oriented encoding does not.
+    """
+    if not head:
+        return False
+    for bom, enc in ((b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be")):
+        if head.startswith(bom):
+            try:
+                head[2:].decode(enc, "strict")
+                return True
+            except UnicodeDecodeError:
+                # a truncated read can split a surrogate pair; that is not
+                # evidence against the file being text
+                return b"\x00\x00" not in head[2:]
+    if b"\x00" in head:
+        return False
+    try:
+        text = head.decode("utf-8", "strict")
+    except UnicodeDecodeError:
+        try:                       # a multi-byte char straddling the read edge
+            text = head[:-4].decode("utf-8", "strict")
+        except UnicodeDecodeError:
+            return False
+    if not text:
+        return False
+    printable = sum(1 for c in text if c.isprintable() or c in "\t\r\n")
+    return printable / len(text) >= 0.95
+
+
 def _unwalked(head):
     """(detail, next_verb, short_label) for a format we can name but not parse."""
     for magic, label in _UNWALKED_MAGICS:
@@ -95,6 +129,13 @@ def _unwalked(head):
         if stripped.startswith(root):
             return ("XML document -- readable as text, no walker needed",
                     None, "XML document")
+    if _is_text(head):
+        # "opaque -- no magic, no embedded containers, no recoverable chunk
+        # grid / next: locate" was the verdict on a 48-byte ASCII file. Every
+        # README, sfz, cue sheet, .asd and text preset in a sample library got
+        # called opaque binary and sent to the statistical audio scanner. Text
+        # has no magic by definition; that is not the same as having no shape.
+        return ("text -- readable as text, no walker needed", None, "text")
     return None
 
 
