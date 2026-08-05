@@ -6,9 +6,10 @@ readable list that composes with jq and other tools.
 """
 
 import binascii
-import json
 import os
 import sys
+
+from acidcat.core.infra.render import format_json
 
 from acidcat.core.formats.riff import iter_chunks
 from acidcat.commands._output import add_output_format_arg
@@ -116,8 +117,7 @@ def _run(args):
         return 1
 
     if fmt_name == "json":
-        json.dump(collected, sys.stdout, indent=2)
-        sys.stdout.write("\n")
+        format_json(collected, sys.stdout)
 
     _vlog(args, f"[dump] matched {len(collected) if fmt_name == 'json' else 'N/A'} chunks")
     return 0

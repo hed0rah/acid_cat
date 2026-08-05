@@ -18,10 +18,10 @@ into real format tables is the next housekeeping step.
 """
 
 import argparse
-import json
 import sys
 
 from acidcat.commands._output import add_output_format_arg
+from acidcat.core.infra.render import format_json
 
 # Convert and Repair have no format-keyed registry to read (they branch on magic
 # bytes in commands/convert.py and core/constraints.py), so these are listed here
@@ -105,8 +105,7 @@ def run(args):
             return 1
 
     if args.output_format == "json":
-        json.dump(rows, sys.stdout, indent=2)
-        print()
+        format_json(rows, sys.stdout)
     elif args.output_format == "tsv":
         print("id\tlabel\t" + "\t".join(_CAPS))
         for r in rows:

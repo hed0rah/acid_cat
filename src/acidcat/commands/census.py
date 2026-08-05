@@ -8,9 +8,10 @@ millions of files without evicting the machine's working set; see
 ``acidcat.core.census`` for the traversal and read strategy.
 """
 
-import json
 import os
 import sys
+
+from acidcat.core.infra.render import format_json
 import time
 
 from acidcat.core import census as _census
@@ -80,8 +81,7 @@ def run(args):
         stream = open(out_path, "w", encoding="utf-8")
     try:
         if args.output_format == "json":
-            json.dump(res, stream, indent=2)
-            stream.write("\n")
+            format_json(res, stream)
         else:
             _write_table(stream, res)
     finally:

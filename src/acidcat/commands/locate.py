@@ -17,12 +17,12 @@ inferred width / channels / endianness of each raw blob (sample rate is not in
 the bytes -- reported null, with common candidates).
 """
 
-import json
 import sys
 
 from acidcat.core.forensics import audioscan
 from acidcat.commands._output import add_output_format_arg
 from acidcat.core.forensics import locate as locatemod
+from acidcat.core.infra.render import format_json
 from acidcat.util.stdin import is_stdin_target
 
 _PUBLIC_KEYS = ("kind", "format", "offset", "end", "length", "confidence",
@@ -185,8 +185,7 @@ def run(args):
                   f"{floor:g} not reported", file=sys.stderr)
 
     if args.output_format == "json":
-        json.dump([_public(r, args.verbose) for r in recs], sys.stdout, indent=2)
-        sys.stdout.write("\n")
+        format_json([_public(r, args.verbose) for r in recs], sys.stdout)
     elif args.output_format == "tsv":
         _print_tsv(recs)                     # historical layout, no header
     elif args.output_format == "csv":

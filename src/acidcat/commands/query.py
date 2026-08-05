@@ -17,7 +17,7 @@ from acidcat.commands._output import add_output_format_arg
 from acidcat.core.catalogue import paths as acidpaths
 from acidcat.core.catalogue import query_sql
 from acidcat.core.catalogue import registry as reg
-from acidcat.core.infra.render import output
+from acidcat.core.infra.render import format_json, output
 
 
 DEFAULT_FIELDS = [
@@ -149,8 +149,7 @@ def _run(args):
         # error downstream. The human note stays on stderr.
         fmt = getattr(args, "output_format", "table")
         if fmt == "json":
-            json.dump([], sys.stdout)
-            sys.stdout.write("\n")
+            format_json([], sys.stdout)
         if not getattr(args, "paths_only", False):
             print("(no matches)", file=sys.stderr)
         return 0

@@ -16,6 +16,7 @@ import os
 import sys
 
 from acidcat.core.extract import samples as smod
+from acidcat.core.infra.render import format_json
 from acidcat.commands._output import (add_output_format_arg,
                                       chosen_format)
 from acidcat.util.stdin import is_stdin_target, stdin_to_tempfile
@@ -85,8 +86,7 @@ def run(args):
             # the envelope keeps `notes`, which is the channel that reports
             # samples the bank declared but does not contain -- dropping it
             # would put the count back to describing more work than was done
-            json.dump({"samples": manifest, "notes": notes}, sys.stdout, indent=2)
-            sys.stdout.write("\n")
+            format_json({"samples": manifest, "notes": notes}, sys.stdout)
         else:
             # csv/tsv are one row per sample; the notes have no column, so they
             # go to stderr rather than being silently discarded
