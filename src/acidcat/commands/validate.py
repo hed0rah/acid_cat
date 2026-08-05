@@ -17,6 +17,8 @@ violation, 2 on a usage error.
 import os
 import sys
 
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.infra.render import output as _render
 from acidcat.core.write import constraints
 
 _EXTS = (".wav", ".rf64", ".bwf", ".aif", ".aiff", ".aifc", ".sf2", ".sf3",
@@ -30,6 +32,10 @@ def register(subparsers):
     p.add_argument("inputs", nargs="+", help="File(s) or directory(ies) to check.")
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Only print files that have violations.")
+    # validate is the CI-gate verb: you could branch on its exit code but not
+    # read WHICH file failed or WHY without scraping the human table. json
+    # carries the violations nested; csv/tsv flatten to one row per file.
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.set_defaults(func=run)
 
 
@@ -44,24 +50,50 @@ def _iter_paths(inputs):
             yield inp
 
 
-def _check(path, quiet):
-    """Return (checked, ok, error): checked is False for a skipped or unreadable
-    file; error is True only when the file could not be read (I/O error), as
-    opposed to being a format acidcat does not structurally model (a clean skip)."""
+def _check(path, quiet, rows=None):
+    """Return (checked, ok, error, repairable): checked is False for a skipped or
+    unreadable file; error is True only when the file could not be read (I/O
+    error), as opposed to being a format acidcat does not structurally model (a
+    clean skip). When `rows` is given, append a record instead of printing --
+    the same verdict, in the machine's shape.
+    """
     try:
         with open(path, "rb") as f:
             data = f.read()
     except OSError as e:
         print(f"acidcat validate: {path}: {e}", file=sys.stderr)
+        if rows is not None:
+            rows.append({"path": path, "format": None, "status": "unreadable",
+                         "issues": 0, "repairable": False, "detail": str(e)})
         return False, True, True, False
     report = constraints.analyze(data)
     if report is None:
+        if rows is not None:
+            # a skip is a real answer and belongs in the record set, so a
+            # consumer can tell "checked, clean" from "never modelled"
+            rows.append({"path": path, "format": None, "status": "skipped",
+                         "issues": 0, "repairable": False,
+                         "detail": "not a structurally-modeled container"})
         return False, True, False, False        # not a structurally-modeled container
     base = os.path.basename(path)
     if not report.violations:
-        if not quiet:
+        if rows is not None:
+            rows.append({"path": path, "format": report.label, "status": "ok",
+                         "issues": 0, "repairable": False, "detail": ""})
+        elif not quiet:
             print(f"OK    {base}  [{report.label}]")
         return True, True, False, False
+    if rows is not None:
+        rows.append({"path": path, "format": report.label, "status": "fail",
+                     "issues": len(report.violations),
+                     "repairable": any(v.repairable for v in report.violations),
+                     "detail": "; ".join(v.describe() for v in report.violations),
+                     "violations": [{"describe": v.describe(), "kind": v.kind,
+                                     "field": v.field, "stored": v.stored,
+                                     "computed": v.computed,
+                                     "repairable": v.repairable}
+                                    for v in report.violations]})
+        return True, False, False, any(v.repairable for v in report.violations)
     print(f"FAIL  {base}  [{report.label}]  {len(report.violations)} issue(s)")
     for v in report.violations:
         mark = "" if v.repairable else "  (no witness)"
@@ -76,6 +108,8 @@ def run(args):
     # or unreadable is a skip, not a hard error.
     checked = failed = errors = unreadable = 0
     any_repairable = False
+    fmt = getattr(args, "output_format", "table")
+    rows = None if fmt == "table" else []
     for inp in args.inputs:
         if not os.path.exists(inp):
             print(f"acidcat validate: {inp}: No such file or directory",
@@ -84,7 +118,7 @@ def run(args):
             continue
         named = not os.path.isdir(inp)
         for path in _iter_paths([inp]):
-            did, ok, error, repairable = _check(path, args.quiet)
+            did, ok, error, repairable = _check(path, args.quiet, rows)
             any_repairable = any_repairable or repairable
             if error:
                 # Inside a directory walk an unreadable file used to be counted
@@ -99,6 +133,13 @@ def run(args):
                 checked += 1
                 if not ok:
                     failed += 1
+    if rows is not None:
+        # csv/tsv are one flat row per file; the nested per-violation detail
+        # only survives in json, so drop the key rather than stringify a list
+        # into a cell nobody can parse.
+        if fmt in ("csv", "tsv"):
+            rows = [{k: v for k, v in r.items() if k != "violations"} for r in rows]
+        _render(rows, fmt=fmt)
     if errors:
         return 2
     skipped = f", {unreadable} unreadable (not checked)" if unreadable else ""
@@ -117,9 +158,12 @@ def run(args):
         # orphaned audio payload has no safe rewrite and repair refuses it, so
         # the advice would send the user round a loop.
         hint = " (fix with: acidcat repair)" if any_repairable else ""
+        # stdout belongs to the records in a machine format -- a trailing human
+        # sentence made the JSON unparseable ("Extra data")
         print(f"\n{failed} of {checked} file(s) have structural issues"
-              f"{hint}{skipped}")
+              f"{hint}{skipped}", file=sys.stderr if rows is not None else sys.stdout)
         return 1
     if not args.quiet:
-        print(f"\nall {checked} file(s) consistent{skipped}")
+        print(f"\nall {checked} file(s) consistent{skipped}",
+              file=sys.stderr if rows is not None else sys.stdout)
     return 1 if unreadable else 0

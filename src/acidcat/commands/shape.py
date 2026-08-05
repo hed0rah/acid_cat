@@ -19,6 +19,9 @@ file is skipped, one that crashes the walker is flagged (a specimen in itself).
 import os
 import sys
 
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.infra.render import output as _render
+
 from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import walk_file, _WALKERS
 from acidcat.core.walk.base import Unsupported
@@ -44,6 +47,11 @@ def register(subparsers):
                    help="only files whose format label contains FMT (case-insensitive)")
     p.add_argument("--warn-only", action="store_true",
                    help="only files that carry a warning / anomaly")
+    # tsv stays the DEFAULT -- shape's contract is `sort | uniq -c` and every
+    # existing use depends on it. The other renderings are additive: shape was
+    # the one verb producing records with no way to hand them to a JSON
+    # consumer, which is odd for the verb whose entire output IS data.
+    add_output_format_arg(p, default="tsv", only=("tsv", "csv", "json", "table"))
     p.set_defaults(func=run)
 
 
@@ -133,6 +141,7 @@ def run(args):
     if missing and len(missing) == len(args.targets):
         return 2
     emitted = 0
+    rows = []
     for path, named in _iter_files(args.targets):
         fp = (_fast_fingerprint(path) if args.fast
               else _full_fingerprint(path, args.anomalies))
@@ -148,10 +157,20 @@ def run(args):
         if args.coarse:
             summary = ""
         emitted += 1
-        cols = [label, summary, ids, flag]
+        row = {"format": label, "summary": summary, "chunks": ids, "flag": flag}
         if not args.no_path:
-            cols.append(path)
-        print("\t".join(cols))
+            row["path"] = path
+        rows.append(row)
+    fmt = getattr(args, "output_format", "tsv")
+    if rows:
+        if fmt == "tsv":
+            # Hand-rolled rather than through the renderer, deliberately: the
+            # historical format has NO header row, and shape's whole contract
+            # is `sort | uniq -c`, which would count a header as a data line.
+            for r in rows:
+                print("\t".join(str(v) for v in r.values()))
+        else:
+            _render(rows, fmt=fmt)
     # a filter that matched nothing is a negative result, not a success --
     # `shape lib --format flac && ...` used to proceed on an empty listing
     return 0 if emitted else 1
