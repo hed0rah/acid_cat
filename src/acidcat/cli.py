@@ -90,6 +90,22 @@ def _build_parser():
     return parser
 
 
+def _scan_default_format():
+    """`scan`'s own default rendering, read from its parser rather than copied.
+
+    Hard-coding "csv" here would just recreate the drift this exists to fix.
+    """
+    import argparse as _ap
+    from acidcat.commands import scan as _scan
+    p = _ap.ArgumentParser()
+    sub = p.add_subparsers()
+    _scan.register(sub)
+    for act in sub.choices["scan"]._actions:
+        if act.dest == "output_format" and act.default:
+            return act.default
+    return "csv"
+
+
 def _try_bare_path(argv):
     """
     If the first non-flag arg is a path (not a subcommand), auto-route to
@@ -130,6 +146,21 @@ def _try_bare_path(argv):
         elif os.path.isfile(fb_args.target):
             return info.run(fb_args)
         elif os.path.isdir(fb_args.target):
+            # This fallback parser is a SECOND declaration of flags the real
+            # verbs already declare, and the two drifted: it defaults
+            # output_format to "table" while `scan`'s own parser defaults to
+            # "csv". So `acidcat DIR` and `acidcat scan DIR` -- which the README
+            # presents as the same thing ("auto-detected") -- rendered
+            # completely differently, and the bare form emitted a twelve-line
+            # vertical record per file. Pointed at a 3,200-file library that is
+            # roughly 38,000 lines into the terminal.
+            #
+            # Only override when the user did not ASK for a rendering, so an
+            # explicit `acidcat DIR --json` still means what it says.
+            asked = any(a == "--output-format" or a.startswith("--output-format=")
+                        or a in ("--json", "--csv", "-f") for a in argv)
+            if not asked:
+                fb_args.output_format = _scan_default_format()
             return scan.run(fb_args)
 
     return None
