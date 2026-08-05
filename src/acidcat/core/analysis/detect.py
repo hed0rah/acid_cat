@@ -278,6 +278,16 @@ KEY_CONF_MIN = 0.75
 # More accurate while answering nearly three times as many files, because a
 # high correlation is routinely shared by a key and its relative -- the raw fit
 # cannot tell "clearly C" from "C or Am, take your pick", and the margin can.
+#
+# THOSE NUMBERS ARE CQT-ONLY. They were measured on librosa's constant-Q
+# chroma, which is the only path that reaches this gate when librosa is
+# installed. The numpy fallback (`_key_without_librosa`) builds its chroma from
+# an STFT, whose margins are systematically smaller -- median 0.08 against this
+# 0.15 threshold on a 70-file sample -- so the same gate answers roughly 18% of
+# files there, not 57.7%. It is a coverage mismatch, not an accuracy claim:
+# the gate is doing its job, it is simply calibrated for a different
+# distribution. Giving the STFT path its own threshold needs a labelled corpus
+# pass; until then the number above must not be read as applying to it.
 KEY_MARGIN_MIN = 0.15
 
 # A key needs more than one pitch class to be a claim at all. The bar is set
@@ -603,14 +613,35 @@ def estimate_librosa_metadata(filepath):
         }
 
     except Exception:
+        # librosa could not decode this file. That is a statement about the
+        # AUDIO, not about the name -- and the name may still carry the answer.
+        #
+        # This branch parsed filename_bpm/filename_key and then returned
+        # estimated_* = None, so `128_Am.wav` with a corrupt payload reported
+        # bpm null while holding 128 in the record it just built. Evidence
+        # computed and thrown away. Worse, the sibling ImportError branch a
+        # hundred lines up does the right thing, so the file got a BETTER answer
+        # with librosa absent than with it installed.
+        #
+        # parse_key_from_path, not parse_key_from_filename: the folder-aware
+        # parser (basename + 3 parents, so `.../Am/loop.wav` resolves) was wired
+        # only into the no-librosa branch. Same evidence, two different readers.
+        fn_bpm = parse_bpm_from_filename(filepath)
+        fn_key = parse_key_from_path(filepath)
+        # acidcat's own PCM decoder is not librosa's, and reads WAVs librosa
+        # chokes on -- so it is worth one guarded attempt. Returns None safely.
+        det_key = _key_without_librosa(filepath)
         return {
-            "estimated_bpm": None,
-            "estimated_key": None,
+            "estimated_bpm": fn_bpm,
+            "estimated_key": fn_key or det_key,
             "duration_sec": None,
-            "bpm_source": "failed",
-            "key_source": "failed",
-            "filename_bpm": parse_bpm_from_filename(filepath),
-            "filename_key": parse_key_from_filename(filepath),
+            # "failed" only where nothing was recovered: the decode failing and
+            # the answer being unknown are different facts.
+            "bpm_source": "filename" if fn_bpm is not None else "failed",
+            "key_source": ("filename" if fn_key else
+                           ("audio-numpy" if det_key else "failed")),
+            "filename_bpm": fn_bpm,
+            "filename_key": fn_key,
             "detected_bpm": None,
-            "detected_key": None,
+            "detected_key": det_key,
         }
