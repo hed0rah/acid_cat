@@ -14,11 +14,13 @@ sweep ~76 ms on 32 MB. The statistical audio scan (~13 s on the same file) is
 never run here -- when it is the right next step, that is reported, not done.
 """
 
+import contextlib
 import json
 import os
 import sys
 
 from acidcat.commands._output import add_output_format_arg
+from acidcat.util import stdin as stdinmod
 from acidcat.core.forensics.classify import classify as classify_file
 from acidcat.core.infra.render import output
 from acidcat.util.color import add_color_arg, color_enabled
@@ -82,21 +84,34 @@ def run(args):
     # and "nothing interesting to show" is a success, not a negative result
     identified = 0
 
-    for path in _iter_targets(args.targets):
-        try:
-            v = classify_file(path, deep=not args.shallow)
-        except OSError as e:
-            print(f"acidcat classify: {path}: {e}", file=sys.stderr)
-            exit_code = 2                      # could not read it, not a verdict
-            continue
-        if v["shape"] not in _NOTHING_FOUND:
-            identified += 1
-        if args.quiet and v["shape"] == "single":
-            continue
-        rows.append({"file": display_name(path), "shape": v["shape"],
-                     "format": v["format"] or "", "next": v["next"] or "",
-                     "detail": v["detail"], "path": path,
-                     "evidence": v["evidence"]})
+    with contextlib.ExitStack() as stack:
+        for path in _iter_targets(args.targets):
+            # classify is the documented entry point of the triage pipeline
+            # ("point it at anything"), and it was the one verb that could not
+            # start one: `cat blob | acidcat classify -` was a file-not-found.
+            display = path
+            if stdinmod.is_stdin_target(path):
+                path = stack.enter_context(stdinmod.resolved_input(path))
+                if path is None:
+                    print("acidcat classify: no data on stdin", file=sys.stderr)
+                    exit_code = 2
+                    continue
+                display = "<stdin>"     # never the temp copy's path
+            try:
+                v = classify_file(path, deep=not args.shallow)
+            except OSError as e:
+                print(f"acidcat classify: {display}: {e}", file=sys.stderr)
+                exit_code = 2                  # could not read it, not a verdict
+                continue
+            if v["shape"] not in _NOTHING_FOUND:
+                identified += 1
+            if args.quiet and v["shape"] == "single":
+                continue
+            name = display if display == "<stdin>" else display_name(path)
+            rows.append({"file": name, "shape": v["shape"],
+                         "format": v["format"] or "", "next": v["next"] or "",
+                         "detail": v["detail"], "path": name,
+                         "evidence": v["evidence"]})
 
     # 1 when nothing among the targets was identifiable, so `classify f &&
     # inspect f` stops instead of running inspect on a file classify just

@@ -30,6 +30,7 @@ from acidcat.commands._output import add_output_format_arg
 from acidcat.core.forensics import lsb as lsbmod
 from acidcat.core.walk import Unsupported, walk_file
 from acidcat.util.region import add_region_args, scoped_file
+from acidcat.util import stdin as stdinmod
 
 # --full emits raw region bytes for chunks that have decoded fields; cap the
 # hex so a huge header (embedded art) cannot bloat the dump without bound.
@@ -177,13 +178,13 @@ def _human_size(n):
         x /= 1024
 
 
-def _render_pretty(filepath, fmt_label, chunks, file_warns, args):
+def _render_pretty(filepath, fmt_label, chunks, file_warns, args, shown_as=None):
     """A clean, human-friendly view of the decoded tags/metadata: section per
     chunk, aligned key/value, no byte offsets. Made for presets and tagged
     files (Bitwig, Vital, Serum, MP4 tags, WAV/FLAC/MP3 metadata)."""
     p = _Paint(color_enabled(args))
     size = os.path.getsize(filepath)
-    print(p("id", os.path.basename(filepath)))
+    print(p("id", shown_as or os.path.basename(filepath)))
     print(p("dim", f"{fmt_label}, {_human_size(size)}"))
     for c in chunks:
         fields = [f for f in c["fields"]
@@ -224,14 +225,16 @@ def _render_anomalies(findings, args):
         print(f"    {tag} {off}  {f['rule']:16} {f['message']}")
 
 
-def _render_table(filepath, fmt_label, chunks, file_warns, args, total=None):
+def _render_table(filepath, fmt_label, chunks, file_warns, args, total=None,
+                  shown_as=None):
     file_size = os.path.getsize(filepath)
     p = _Paint(color_enabled(args))
     if total is not None and total != len(chunks):
         count = f"showing {len(chunks)} of {total} chunks"
     else:
         count = f"{len(chunks)} chunks"
-    print(f"{os.path.basename(filepath)}: {p('id', fmt_label)}, {file_size:,} bytes, "
+    name = shown_as or os.path.basename(filepath)
+    print(f"{name}: {p('id', fmt_label)}, {file_size:,} bytes, "
           f"{count}")
     print()
     print(p("dim", f"  {'idx':<5} {'id':<5} {'offset':<11} {'size':<11} summary"))
@@ -537,11 +540,25 @@ def run(args):
     regions = contextlib.ExitStack()
     try:
         for filepath in targets:
-            if not os.path.isfile(filepath):
+            # `carve FILE --chunk data | inspect -` is the most natural
+            # two-step in the tool and inspect was the half that could not
+            # take a pipe, so every RE session detoured through a temp file.
+            # stdin is buffered to one here for the same reason chunks/dump/
+            # probe do it: the walkers seek.
+            if stdinmod.is_stdin_target(filepath):
+                filepath = regions.enter_context(
+                    stdinmod.resolved_input(filepath))
+                if filepath is None:
+                    print("acidcat inspect: no data on stdin", file=sys.stderr)
+                    exit_code = 2
+                    continue
+                source_path = "<stdin>"     # never the temp copy's path
+            elif not os.path.isfile(filepath):
                 print(f"acidcat inspect: {filepath}: No such file", file=sys.stderr)
                 exit_code = 2          # could not read it, as everywhere else
                 continue
-            source_path = filepath          # for messages: never leak the temp copy
+            else:
+                source_path = filepath      # for messages: never leak the temp copy
             try:
                 filepath, region_scope = regions.enter_context(
                     scoped_file(args, filepath))
@@ -664,7 +681,10 @@ def run(args):
                         oc["fields"] = fields
                         out_chunks.append(oc)
                 sys.stdout.write(json.dumps({
-                    "file": filepath,
+                    # source_path, not filepath: with `-` the latter is a temp
+                    # copy whose name means nothing to the caller and is gone
+                    # by the time they read the record
+                    "file": source_path,
                     "format": fmt_label,
                     "size": os.path.getsize(filepath),
                     "full": full,
@@ -680,9 +700,11 @@ def run(args):
                 elif multi:
                     print()  # separate files; --pretty prints its own name header
                 if pretty:
-                    _render_pretty(filepath, fmt_label, shown, file_warns, args)
+                    _render_pretty(filepath, fmt_label, shown, file_warns, args,
+                                   shown_as=os.path.basename(source_path))
                 else:
-                    _render_table(filepath, fmt_label, shown, file_warns, args, total)
+                    _render_table(filepath, fmt_label, shown, file_warns, args, total,
+                                  shown_as=os.path.basename(source_path))
                 if findings is not None:
                     _render_anomalies(findings, args)
     except BrokenPipeError:
