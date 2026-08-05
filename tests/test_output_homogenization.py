@@ -164,9 +164,9 @@ def _declared_formats(verb):
 
 # every verb whose output is flat records. The nested ones (inspect's chunk
 # tree, census's histograms, dump's hex) deliberately offer table+json only.
-_FLAT_RECORD_VERBS = ["chunks", "classify", "detect", "features", "formats",
-                      "info", "locate", "query", "scan", "similar", "survey",
-                      "shape", "validate"]
+_FLAT_RECORD_VERBS = ["chunks", "classify", "detect", "extract", "features",
+                      "formats", "info", "locate", "query", "scan", "similar",
+                      "survey", "shape", "validate"]
 
 
 @pytest.mark.parametrize("verb", _FLAT_RECORD_VERBS)
@@ -177,7 +177,7 @@ def test_flat_record_verbs_offer_all_four_renderings(verb):
     assert set(_declared_formats(verb)) == {"table", "json", "csv", "tsv"}, verb
 
 
-@pytest.mark.parametrize("verb", ["census", "inspect"])
+@pytest.mark.parametrize("verb", ["census", "inspect", "audit", "probe"])
 def test_nested_verbs_deliberately_offer_fewer(verb):
     """Pinned so the rule above is a decision, not an oversight: csv/tsv have
     no honest representation for a chunk tree or a histogram-of-histograms."""
@@ -202,3 +202,26 @@ def test_every_declared_format_actually_changes_the_output(tmp_path, verb, argv)
     for fmt in ("json", "csv", "tsv"):
         got = _run(*argv, str(src), "--output-format", fmt).stdout
         assert got != base, f"{verb} --output-format {fmt} is ignored"
+
+
+_BARE_JSON_BOOL = ["audit", "extract", "probe"]
+
+
+@pytest.mark.parametrize("verb", _BARE_JSON_BOOL)
+def test_no_verb_keeps_a_bare_json_bool(verb):
+    """These three declared `--json` as a store_true, bypassing the shared
+    registry -- so `--output-format json`, which works on 26 other verbs, was an
+    error on the forensic one, the recovery one and the RE one. Both spellings
+    must reach the same place.
+    """
+    fmts = _declared_formats(verb)
+    assert "json" in fmts and "table" in fmts, verb
+
+
+def test_extract_machine_output_reports_nothing_extracted(tmp_path):
+    """The json path returned 0 unconditionally while the table path returned 1
+    for the same empty result -- the exit code depended on how you asked."""
+    p = tmp_path / "empty.mod"
+    p.write_bytes(bytes(32))
+    for fmt in ([], ["--json"], ["--csv"]):
+        assert _run("extract", str(p), *fmt).returncode in (1, 2), fmt

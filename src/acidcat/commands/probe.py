@@ -20,6 +20,9 @@ f32/f64); it is searched in both byte orders. HEX for find is a hex string
 import json
 import os
 import sys
+
+from acidcat.commands._output import (add_output_format_arg,
+                                      chosen_format)
 from acidcat.util.stdin import display_name
 from acidcat.util.color import add_color_arg, color_enabled
 
@@ -36,12 +39,14 @@ def register(subparsers):
     p.add_argument("file", help="File to dissect, or '-' for stdin.")
     # probe is the RE surface and had no machine output at all: every subverb
     # printed its summary and its results together on stdout, so scripting
-    # `probe find` meant `tail -n +2 | tr -d ' '`. Declared on the parent so it
-    # applies to whichever subverb follows.
-    p.add_argument("--json", action="store_true", dest="as_json",
-                   help="Emit results as JSON on stdout (read/scan/find/"
-                        "strings/diff/entropy). The human summary moves to "
-                        "stderr, so the data pipes cleanly either way.")
+    # `probe find` meant `tail -n +2 | tr -d ' '`. Declared on the PARENT, so it
+    # applies to whichever subverb follows -- which also means it has to be
+    # written before the subverb, as argparse requires.
+    #
+    # table+json only: the subverbs return different shapes (typed values, hit
+    # offsets, entropy windows, byte ranges) and there is no single column set a
+    # csv could honestly claim to be.
+    add_output_format_arg(p, only=("table", "json"))
     sub = p.add_subparsers(dest="verb", metavar="VERB")
 
     # The gap between acidcat-as-hex-viewer and acidcat-as-RE-workbench. You
@@ -128,7 +133,7 @@ def _byteorder(args, label):
 
 def _emit(args, payload):
     """JSON to stdout for the machine path. Returns True if it handled output."""
-    if not getattr(args, "as_json", False):
+    if chosen_format(args) != "json":
         return False
     json.dump(payload, sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")

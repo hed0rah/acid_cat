@@ -61,3 +61,24 @@ def add_output_format_arg(parser, default="table", only=None, deprecated_f=True)
             "-f", dest="output_format", action=_DeprecatedOutputFormat,
             choices=choices, metavar="FMT", help=argparse.SUPPRESS)
     return parser
+
+
+def chosen_format(args, default="table"):
+    """The rendering the caller asked for.
+
+    Reads ``args.output_format``, and falls back to a legacy ``args.json`` /
+    ``args.as_json`` boolean. Three verbs (audit, extract, probe) declared a
+    bare ``--json`` store_true instead of going through
+    ``add_output_format_arg``, so ``--output-format json`` -- which works on 26
+    other verbs -- was an error on the forensic one, the recovery one and the RE
+    one. Converting them changed the attribute the code reads, and anything
+    constructing an args object programmatically (tests, and the public API)
+    would have silently lost its JSON. One accessor, so no verb has to remember
+    which spelling it grew up with.
+    """
+    fmt = getattr(args, "output_format", None)
+    if fmt:
+        return fmt
+    if getattr(args, "json", False) or getattr(args, "as_json", False):
+        return "json"
+    return default

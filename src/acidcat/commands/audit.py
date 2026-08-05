@@ -29,6 +29,8 @@ import json
 import os
 import sys
 
+from acidcat.commands._output import (add_output_format_arg,
+                                      chosen_format)
 from acidcat.core.forensics import anomalies, integrity, provenance
 from acidcat.core.write import constraints
 from acidcat.core.infra.mapped import map_file
@@ -55,7 +57,11 @@ def register(subparsers):
     p = subparsers.add_parser(
         "audit", help="Forensic verdict: structure + anomalies + provenance (read-only).")
     p.add_argument("input", help="File to audit.")
-    p.add_argument("--json", action="store_true", help="Emit a machine-readable report.")
+    # through the shared registry, not a bare bool: --json here was the only
+    # spelling, so `--output-format json` -- which works on 26 other verbs --
+    # was an error on the forensic one. table+json only: an audit verdict is
+    # nested (violations, findings, provenance) with no honest csv shape.
+    add_output_format_arg(p, only=("table", "json"))
     p.add_argument("--signal", action="store_true",
                    help="Also analyze the decoded audio: bandwidth (is a WAV "
                         "really a decoded MP3) and channel relationship (is "
@@ -171,7 +177,7 @@ def run(args):
         return 2
     size = os.path.getsize(path)
 
-    if args.json:
+    if chosen_format(args) == "json":
         out = {
             "file": os.path.basename(path), "format": label, "size": size,
             "structure": [{"kind": v.kind, "path": v.path, "field": v.field,
