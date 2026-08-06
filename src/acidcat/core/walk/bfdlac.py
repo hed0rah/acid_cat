@@ -70,8 +70,19 @@ def inspect_bfdlac(filepath):
                 "warnings": [f"chunk decode error: {e.__class__.__name__}: {e}"]}, fmt
         fmt = fmt_out
         if avail < size:
-            chunk.setdefault("warnings", []).append(
-                f"chunk declares {size:,} bytes, only {avail:,} present (truncated)")
+            # distinguish a short FILE from a short READ. Comparing against the
+            # capped buffer reports a perfectly good file as truncated once it
+            # outgrows _READ_CAP -- the same defect rx2 had, where 7 of 347 real
+            # files were called corrupt because their audio exceeded the buffer.
+            if payload + size <= file_size:
+                chunk.setdefault("warnings", []).append(
+                    f"chunk declares {size:,} bytes; only {avail:,} were read "
+                    f"(the {_READ_CAP // (1024 * 1024)} MB read window, not a "
+                    f"short file)")
+            else:
+                chunk.setdefault("warnings", []).append(
+                    f"chunk declares {size:,} bytes, only "
+                    f"{max(0, file_size - payload):,} present (truncated)")
         chunks.append(chunk)
         if cid == b"data":                              # data is the final, huge chunk
             break
