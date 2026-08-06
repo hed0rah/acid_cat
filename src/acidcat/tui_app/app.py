@@ -213,6 +213,10 @@ class AcidcatTUI(App):
         self._clean_region_tmps()
         self._make_work()
         self._load()
+        # the hidden #editbar is still focusable, so without this every single-key
+        # binding (and the arrows) goes into it instead of the tree -- same reason
+        # the scan path focuses the tree explicitly
+        self.query_one("#tree", Tree).focus()
         if self._maybe_disc():          # a CD-XA disc opens straight into audio browsing
             return
         self._maybe_regions()
