@@ -403,3 +403,59 @@ def test_a_big_endian_file_without_an_overview_is_not_an_error():
     optional even in the newer generation (171 of 1,031)."""
     raw = build_asd(grid_for(44100, 1.0), order=">")
     assert ab.overview_trailer(raw, ">") is None
+
+
+def test_the_dictionary_is_found_when_it_sits_deep_in_the_body():
+    """The declarations do NOT always open the object section.
+
+    In 4.8% of a 2,456-file sample the overview pyramid comes first and the
+    type dictionary sits 10-25 KB deep. A fixed scan window from the start of
+    the body dropped their entire object tree, and the walker then reported
+    "no analysis fields" -- blaming the file for the reader's bound.
+    """
+    filler = b"\xa7" * 20_000                      # stands in for the pyramid
+    name = "IsWarped"
+    deep = filler + struct.pack("<I", len(name)) + name.encode("utf-16le") + bytes([0x10])
+    toks = ab.type_dictionary(deep, 0, len(deep))
+    assert ("field", "IsWarped", 0x10) in toks
+
+
+def test_non_identifier_runs_are_not_mistaken_for_fields():
+    """Scanning the whole body means walking high-entropy peak bytes, and some
+    of it decodes as a length-prefixed UTF-16 run. A real specimen yielded
+    "MOONBOYS ASS SNARE HIGH" as a field. Field names are C++ member names, so
+    requiring an identifier keeps that noise out of the declared count."""
+    junk = "MOONBOYS ASS SNARE HIGH"
+    blob = struct.pack("<I", len(junk)) + junk.encode("utf-16le") + bytes([0xFF])
+    assert [n for k, n, _ in ab.type_dictionary(blob, 0, len(blob)) if k == "field"] == []
+
+
+def test_a_sidecar_with_no_object_tree_says_so_plainly(tmp_path):
+    """Verified over 1,500 specimens: when no field names appear in EITHER byte
+    order the file really does carry only a header and grid. The warning must
+    describe the file, not imply a parse failure."""
+    # a real bare sidecar still has a body -- 373 to 22,932 bytes of overview
+    # data in the corpus -- it just holds no field names
+    p = tmp_path / "bare.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 1.0), tail=bytes([0xA7]) * 4000))
+    _, warns = walker.inspect_asd(str(p))
+    assert any("only the header and frame grid" in w for w in warns)
+    assert not any("no recognised analysis fields" in w for w in warns)
+
+
+def test_the_walker_finds_a_dictionary_past_any_fixed_window(tmp_path):
+    """Guards the WALKER's call site, not just the parser.
+
+    The regression was a fixed scan window in inspect_asd, so a test that
+    calls type_dictionary directly cannot catch it -- it has to go through
+    the walk.
+    """
+    name = "IsWarped"
+    deep = (bytes([0xA7]) * 20_000
+            + struct.pack("<I", len(name)) + name.encode("utf-16le") + bytes([0x10]))
+    p = tmp_path / "deep.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 1.0), tail=deep))
+    chunks, warns = walker.inspect_asd(str(p))
+    objs = [c for c in chunks if c["id"] == "objects"]
+    assert objs and "IsWarped" in {f["name"] for f in objs[0]["fields"]}
+    assert not any("only the header and frame grid" in w for w in warns)

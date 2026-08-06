@@ -138,3 +138,25 @@ class TestWeakJsonMagic:
         p = self._w(tmp_path, "readme.rtf", rb"{\rtf1\ansi\deff0 licence text}"
                     + b"\x00" * 200)
         assert C.classify(p)["shape"] == C.FOREIGN
+
+    def test_the_key_is_found_at_the_TAIL_of_a_large_preset(self, tmp_path):
+        """The reason a head-only check was wrong.
+
+        Vital serialises JSON with keys in alphabetical order, so `settings` --
+        a wavetable and base64 blob routinely hundreds of KB -- always precedes
+        `synth_version`, which lands about 24 bytes from EOF. Measured on 40
+        real presets: the key sat at filesize-24 in every one, and files ran
+        170 KB to 3.2 MB. A head-only check found it in NONE of them, which
+        made the sniffer stricter than the parser and left inspect unable to
+        reach any real preset.
+        """
+        big = (b'{"author":"x","settings":{"blob":"' + b"A" * 300_000
+               + b'"},"synth_version":"1.5.5"}')
+        p = self._w(tmp_path, "real.vital", big)
+        assert sniff(p) == "vital"
+
+    def test_a_huge_json_without_the_key_is_still_refused(self, tmp_path):
+        """The tail window must not become a way in for any large JSON."""
+        p = self._w(tmp_path, "big.json",
+                    b'{"a":"' + b"x" * 300_000 + b'","b":1}')
+        assert sniff(p) != "vital"

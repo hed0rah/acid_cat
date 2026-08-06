@@ -227,12 +227,30 @@ TYPE_TAGS = {
 }
 
 
+def _is_identifier(s):
+    """Field names are C++ member names, so they are plain identifiers.
+
+    This matters because the object section is scanned in full: the overview
+    pyramid is high-entropy bytes, and by chance some of it decodes as a
+    length-prefixed UTF-16 run. Sample titles embedded nearby do too -- a real
+    specimen yielded "MOONBOYS ASS SNARE HIGH" as a "field". Requiring an
+    identifier costs nothing and keeps that noise out of the declared count.
+    """
+    return bool(s) and (s[0].isalpha() or s[0] == "_") and \
+        all(c.isalnum() or c == "_" for c in s)
+
+
 def type_dictionary(raw, start, end, order="<"):
     """Walk the type dictionary. Yields ('class', name, u32) and
     ('field', name, tag) in file order.
 
-    Stops at `end`; the caller bounds it, because the bulk of the object
-    section is the high-entropy overview pyramid rather than declarations.
+    Scans to `end`, which callers should set to the end of the file rather
+    than a fixed window. A window looked safe -- the declarations usually open
+    the object section -- but in 4.8% of a 2,456-file sample the overview
+    pyramid comes FIRST and the dictionary sits 10-25 KB deep, so a window
+    dropped their entire object tree and the walker then reported "no analysis
+    fields", blaming the file for the reader's bound.
+
     Class names are ASCII and so byte-order agnostic; field names are UTF-16 in
     the file's declared order.
     """
@@ -257,10 +275,11 @@ def type_dictionary(raw, start, end, order="<"):
                 if (all(bb[i + hi] == 0 for i in range(0, len(bb), 2))
                         and all(0x20 <= bb[i + lo] < 0x7F
                                 for i in range(0, len(bb), 2))):
-                    out.append(("field", bb[lo::2].decode("ascii"),
-                                raw[o + 4 + 2 * c]))
-                    o += 4 + 2 * c + 1
-                    continue
+                    name = bb[lo::2].decode("ascii")
+                    if _is_identifier(name):
+                        out.append(("field", name, raw[o + 4 + 2 * c]))
+                        o += 4 + 2 * c + 1
+                        continue
         o += 1
     return out
 

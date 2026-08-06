@@ -129,8 +129,10 @@ def inspect_asd(filepath):
     if body_off < len(raw):
         # the declarations sit at the front; the rest is the overview pyramid,
         # so bound the dictionary walk rather than scanning megabytes of peaks
-        toks = abmod.type_dictionary(raw, body_off,
-                                     body_off + _DICTIONARY_SCAN, h["order"])
+        # scan to EOF, not a window: in 4.8% of files the overview pyramid
+        # comes first and the declarations sit 10-25 KB deep, so a window
+        # dropped their whole object tree. Costs about 8 ms on a 640 KB file.
+        toks = abmod.type_dictionary(raw, body_off, len(raw), h["order"])
         tags = {n: t for kind, n, t in toks if kind == "field"}
         classes = [n for kind, n, _ in toks if kind == "class"]
         present = set(tags)
@@ -154,8 +156,15 @@ def inspect_asd(filepath):
                         f"{len(set(classes))} classes, {_generation(present)}"),
             "fields": obj_fields, "warnings": [], "payload_base": body_off,
         })
-        if not notable:
-            warns.append("no recognised analysis fields found in the object tree")
+        if not present:
+            # verified over 1,500 specimens: when the scan finds no field names
+            # in EITHER byte order, the file genuinely carries only a header and
+            # grid. Say that, rather than something that reads as a parse failure
+            warns.append("this sidecar carries only the header and frame grid; "
+                         "there is no object tree in it")
+        elif not notable:
+            warns.append(f"{len(present)} declared fields, none of them a "
+                         f"recognised analysis field")
 
         ov = abmod.overview_trailer(raw, h["order"])
         if ov:
@@ -240,7 +249,6 @@ def inspect_ableton_xml(filepath, fmt_id="als"):
 # 'ampf' magic, a u32 version, then a 4-byte marker -- 'aaaa' in every specimen
 # seen -- and only then the chunk chain. Reading the marker as a chunk id makes
 # its next 4 bytes look like a 1.6 GB length, which is how this was caught.
-_DICTIONARY_SCAN = 8192   # declarations sit at the front; the rest is peaks
 _AMXD_HEADER = 12
 _AMXD_MAX_CHUNKS = 64
 

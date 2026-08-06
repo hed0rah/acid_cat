@@ -72,7 +72,7 @@ def inspect_rx2(filepath):
             # against the truncated buffer reported a perfectly good file as
             # corrupt. Report the chunk at its real size and say we stopped.
             chunks.append({"id": cid.decode("latin-1", "replace"), "offset": pos,
-                           "size": clen + 8,
+                           "size": clen,   # payload only, as every sibling reports
                            "summary": (f"{clen:,} bytes, beyond the "
                                        f"{_MAX // (1024 * 1024)} MB read window"),
                            "fields": [], "warnings": [], "payload_base": cbody})
