@@ -166,6 +166,26 @@ def inspect_asd(filepath):
             warns.append(f"{len(present)} declared fields, none of them a "
                          f"recognised analysis field")
 
+        marks = abmod.warp_markers(raw, h["order"])
+        if marks:
+            bpm = abmod.derived_tempo(marks)
+            wf = [_f(0, 4, "count", len(marks), "warp markers")]
+            for m in marks[:8]:
+                wf.append(_f(0, 16, f"marker[{m['id']}]",
+                             f"{m['sec']:.6f} s = beat {m['beat']:g}"))
+            if bpm:
+                wf.append(_f(0, 0, "derived_tempo", f"{bpm:g} BPM",
+                             "beats per second between two markers x 60; Live "
+                             "stores this mapping, not the number"))
+            chunks.append({
+                "id": "warp", "offset": raw.find(abmod.WARP_MARKER_NAME),
+                "size": len(marks) * abmod.WARP_MARKER_SIZE,
+                "summary": (f"{len(marks)} warp marker(s)"
+                            + (f", {bpm:g} BPM" if bpm else "")),
+                "fields": wf, "warnings": [],
+                "payload_base": raw.find(abmod.WARP_MARKER_NAME),
+            })
+
         on = abmod.onsets(raw, h["total_frames"], body_off, h["order"])
         if on:
             rate = h["sample_rate"]

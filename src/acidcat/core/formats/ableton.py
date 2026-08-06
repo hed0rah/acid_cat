@@ -302,6 +302,70 @@ OVERVIEW_SENTINEL = bytes.fromhex("ab1e5678")
 OVERVIEW_MARK = b"\x13SampleOverViewLevel"
 
 
+# Each warp marker carries its own class name inline, u8-length-prefixed, the
+# same convention the type dictionary uses. That makes them self-locating: no
+# count to find, no offset to derive, no heuristic. The record is 32 bytes:
+#
+#     u8   0x0A            length of the name
+#     char "WarpMarker"
+#     u32  Id              matches the XML's Id attribute
+#     f64  SecTime         seconds into the audio
+#     f64  BeatTime        position in beats
+#
+# Confirmed by taking the exact values a Live Set states for a clip and finding
+# them, bit for bit, in that clip's sidecar.
+WARP_MARKER_NAME = b"\x0aWarpMarker"
+WARP_MARKER_SIZE = 1 + 10 + 4 + 8 + 8
+
+
+def warp_markers(raw, order="<", limit=400):
+    """[{id, sec, beat}] for every warp marker, in file order.
+
+    Live positions audio by mapping seconds to beats: each marker pins one
+    instant of the recording to one position in the bar. Two markers are enough
+    to state a tempo, and the tempo Live shows is DERIVED from consecutive
+    pairs rather than stored -- which is why searching the file for a BPM value
+    finds nothing.
+    """
+    def sane(x):
+        # a real time is zero or an ordinary magnitude. The class DECLARATION
+        # in the type dictionary carries the same "WarpMarker" literal, and the
+        # bytes after it decode as denormals around 1e-307 -- which slipped
+        # through an "is it finite" test and added a phantom marker to every
+        # file.
+        return x == 0.0 or 1e-9 < abs(x) < 1e6
+
+    out = []
+    o = raw.find(WARP_MARKER_NAME)
+    while o != -1 and len(out) < limit:
+        rec = o + 11
+        if rec + 20 > len(raw):
+            break
+        mid = struct.unpack_from(order + "I", raw, rec)[0]
+        sec, beat = struct.unpack_from(order + "2d", raw, rec + 4)
+        if mid <= 100_000 and sane(sec) and sane(beat):
+            out.append({"id": mid, "sec": sec, "beat": beat})
+        o = raw.find(WARP_MARKER_NAME, o + 1)
+    # instances are written in id order; anything else is not the array
+    out.sort(key=lambda m: m["id"])
+    return [m for i, m in enumerate(out) if m["id"] == i]
+
+
+def derived_tempo(markers):
+    """BPM implied by consecutive warp markers, or None.
+
+    Live stores no tempo number; it stores this mapping. Between two markers,
+    (beats / seconds) * 60 is the tempo over that span. Returns None when the
+    markers do not span real time, which is the ordinary case for an unwarped
+    one-shot.
+    """
+    for a, b in zip(markers, markers[1:]):
+        dt, db = b["sec"] - a["sec"], b["beat"] - a["beat"]
+        if dt > 1e-9 and db > 1e-9:
+            return round(db / dt * 60.0, 4)
+    return None
+
+
 def onsets(raw, total_frames, start, order="<", limit=200_000):
     """Live's detected transients: (positions, energies), or None.
 

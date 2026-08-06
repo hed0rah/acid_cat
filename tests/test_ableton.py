@@ -534,3 +534,53 @@ def test_clip_params_mix_ints_and_floats():
     kinds = [k for _n, k in ab.CLIP_PARAMS]
     assert kinds.count("u32") == 2 and kinds.count("f32") == 6
     assert ab.CLIP_PARAMS[0] == ("TransientResolution", "u32")
+
+
+# ── warp markers, and the tempo they imply ────────────────────────────────
+
+def _marker(mid, sec, beat):
+    """One on-disk warp marker: the class name is inline and length-prefixed,
+    which is what makes them self-locating."""
+    return (ab.WARP_MARKER_NAME + struct.pack("<I", mid)
+            + struct.pack("<2d", sec, beat))
+
+
+def test_a_warp_marker_is_a_named_32_byte_record():
+    blob = bytes(8) + _marker(0, 0.0, 0.0) + _marker(1, 0.011029411764705883, 0.03125)
+    got = ab.warp_markers(blob)
+    assert [m["id"] for m in got] == [0, 1]
+    assert got[1]["sec"] == 0.011029411764705883
+    assert got[1]["beat"] == 0.03125
+    assert ab.WARP_MARKER_SIZE == 31
+
+
+def test_tempo_is_derived_from_the_mapping_not_stored():
+    """Live stores seconds-to-beats, not a BPM. 0.03125 beats in
+    0.011029411764705883 s is 170 BPM -- and that is exactly the tempo the Live
+    Set that produced these markers declares."""
+    got = ab.warp_markers(bytes(8) + _marker(0, 0.0, 0.0)
+                          + _marker(1, 0.011029411764705883, 0.03125))
+    assert ab.derived_tempo(got) == 170.0
+
+
+def test_the_class_declaration_is_not_read_as_a_marker():
+    """The type dictionary carries the same "WarpMarker" literal, and the bytes
+    after it decode as denormals around 1e-307. An "is it finite" test let one
+    through and added a phantom marker to every file."""
+    decl = ab.WARP_MARKER_NAME + struct.pack("<I", 2) + struct.pack("<2d", 9.3e-307, 1.2e-306)
+    blob = decl + _marker(0, 0.0, 0.0) + _marker(1, 0.5, 1.0)
+    assert [m["id"] for m in ab.warp_markers(blob)] == [0, 1]
+
+
+def test_markers_must_be_a_run_starting_at_zero():
+    """A stray record with a high id is not the array."""
+    blob = _marker(7, 1.0, 2.0)
+    assert ab.warp_markers(blob) == []
+
+
+def test_no_tempo_without_two_markers_spanning_time():
+    """An unwarped one-shot has nothing to derive a tempo from, and gets None
+    rather than a guess."""
+    assert ab.derived_tempo([{"id": 0, "sec": 0.0, "beat": 0.0}]) is None
+    assert ab.derived_tempo([{"id": 0, "sec": 0.0, "beat": 0.0},
+                             {"id": 1, "sec": 0.0, "beat": 0.0}]) is None
