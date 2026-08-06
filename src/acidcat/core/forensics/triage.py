@@ -26,6 +26,11 @@ from acidcat.core.walk.base import _f
 
 _READ_CAP = 4 * 1024 * 1024
 _MIN_CHUNKS = 2
+# how many chunks are RETAINED for display, versus how far the walk goes to
+# decide tiling. These were one number, which is what let a display cap
+# silently reject a container for being large.
+_LIST_CAP = 256
+_WALK_CAP = 1_000_000            # runaway guard only; the walk is header arithmetic
 _TILE_SLACK = 3
 
 # chunk tags that strongly imply audio content
@@ -40,18 +45,28 @@ def _printable4(t):
 def _walk_grid(b, total, start, endian):
     """Walk [4-byte tag][u32 size] chunks from `start`. Uses declared sizes to
     jump (so a huge trailing payload needs only its header in the read window)
-    and validates each against the real file size. Returns (chunks, tiled)."""
-    pos, chunks = start, []
-    while pos + 8 <= len(b) and len(chunks) < 256:
+    and validates each against the real file size.
+
+    Returns (chunks, tiled, found) where `chunks` is capped at _LIST_CAP for
+    display but `found` is the true count and `tiled` is decided from the FULL
+    walk. Deciding tiling from a capped walk was a real bug: the walk stopped
+    mid-file, `tiled` came out False, and a well-formed container with more
+    than _LIST_CAP chunks was rejected outright as "not a container". Walking
+    on is nearly free -- it is header arithmetic, not payload reads.
+    """
+    pos, chunks, found = start, [], 0
+    while pos + 8 <= len(b) and found < _WALK_CAP:
         tag = b[pos:pos + 4]
         size = struct.unpack_from(endian + "I", b, pos + 4)[0]
         end = pos + 8 + size
         if not _printable4(tag) or size <= 0 or end > total:
             break
-        chunks.append((tag, pos, size))
+        found += 1
+        if len(chunks) < _LIST_CAP:
+            chunks.append((tag, pos, size))
         pos = end
-    tiled = bool(chunks) and abs(pos - total) <= _TILE_SLACK
-    return chunks, tiled
+    tiled = bool(found) and abs(pos - total) <= _TILE_SLACK
+    return chunks, tiled, found
 
 
 def generic_walk(filepath):
@@ -69,18 +84,18 @@ def generic_walk(filepath):
     outer_le = struct.unpack_from("<I", b, 4)[0]
     wrapper_ok = any(abs(o + 8 - total) <= _TILE_SLACK for o in (outer, outer_le))
 
-    best = None                                        # (score, chunks, tiled, endian, start)
+    best = None                          # (score, chunks, tiled, endian, start, found)
     for start in (8, 12):
         for endian, ename in ((">", "big"), ("<", "little")):
-            chunks, tiled = _walk_grid(b, total, start, endian)
-            if len(chunks) < _MIN_CHUNKS:
+            chunks, tiled, found = _walk_grid(b, total, start, endian)
+            if found < _MIN_CHUNKS:
                 continue
-            score = len(chunks) + (5 if tiled else 0) + (3 if wrapper_ok else 0)
+            score = found + (5 if tiled else 0) + (3 if wrapper_ok else 0)
             if best is None or score > best[0]:
-                best = (score, chunks, tiled, ename, start)
+                best = (score, chunks, tiled, ename, start, found)
     if best is None:
         return None
-    _score, chunks, tiled, endian, start = best
+    _score, chunks, tiled, endian, start, found = best
     if not (tiled or wrapper_ok):                      # too weak -- not a container
         return None
 
@@ -100,7 +115,7 @@ def generic_walk(filepath):
     header = {
         "id": magic.decode("latin1"), "offset": 0, "size": 8,
         "summary": f"{verdict} -- {endian}-endian chunk grid, "
-                   f"{len(chunks)} chunk(s), payload {payload} (H={H:.2f}), "
+                   f"{found:,} chunk(s), payload {payload} (H={H:.2f}), "
                    f"confidence {min(conf, 0.99):.2f}",
         "fields": [
             _f(0x00, 4, "magic", magic.decode("latin1"), "unknown format signature"),
@@ -124,4 +139,8 @@ def generic_walk(filepath):
         })
     warns = ["generic structural triage: no format-specific walker; "
              "chunk names and sizes are decoded, payloads are not"]
+    if found > len(chunks):
+        # the count above is the real one; say plainly that the LIST below is
+        # only a prefix, so "257 chunks" is never read as the whole grid
+        warns.append(f"{found:,} chunks found; listing the first {len(chunks):,}")
     return label, out, warns
