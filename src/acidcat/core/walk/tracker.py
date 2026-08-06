@@ -197,10 +197,12 @@ def inspect_s3m(filepath):
         flds = [_f(i * 2, 2, f"[{i}]", f"0x{p:04x}",
                    f"<<4 -> {target} @ 0x{p << 4:08x}", xref=p << 4)
                 for i, p in enumerate(paras[:_XREF_CAP])]
+        fw = ([f"{len(paras)} entries; annotating first {_XREF_CAP}"]
+              if len(paras) > _XREF_CAP else [])
         chunks.append({
             "id": label, "offset": base, "size": len(paras) * 2,
             "summary": f"{len(paras)} {target} parapointer(s), byte = value * 16",
-            "fields": flds, "warnings": [], "payload_base": base,
+            "fields": flds, "warnings": fw, "payload_base": base,
         })
 
     sign = "unsigned" if s["ffi"] == 2 else "signed"
@@ -294,10 +296,12 @@ def inspect_it(filepath):
         for i, o in enumerate(offs[:_XREF_CAP]):
             flds.append(_f(i * 4, 4, f"[{i}]", f"0x{o:08x}",
                            f"-> {target}", xref=o))
+        fw = ([f"{len(offs)} entries; annotating first {_XREF_CAP}"]
+              if len(offs) > _XREF_CAP else [])
         chunks.append({
             "id": label, "offset": base, "size": len(offs) * 4,
             "summary": f"{len(offs)} {target} pointer(s)",
-            "fields": flds, "warnings": [], "payload_base": base,
+            "fields": flds, "warnings": fw, "payload_base": base,
         })
 
     for i, s in enumerate(it["samples"][:_SAMPLE_CAP]):

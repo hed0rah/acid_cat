@@ -142,5 +142,6 @@ def generic_walk(filepath):
     if found > len(chunks):
         # the count above is the real one; say plainly that the LIST below is
         # only a prefix, so "257 chunks" is never read as the whole grid
-        warns.append(f"{found:,} chunks found; listing the first {len(chunks):,}")
+        warns.append(f"{found:,} chunks found; listing the first "
+                     f"{_LIST_CAP:,}")
     return label, out, warns

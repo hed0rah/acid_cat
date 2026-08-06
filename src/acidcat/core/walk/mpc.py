@@ -422,6 +422,9 @@ def _inspect_pgm_mpc1000(data, size, prog):
                "summary": f"MPC1000 program '{prog}': {len(pads)} pad(s), "
                           f"{len(all_samples)} sample(s)",
                "fields": fields, "warnings": []}]
+    if len(pads) > _PGM_PAD_CAP:
+        chunks[0]["warnings"].append(
+            f"{len(pads)} pads; listing first {_PGM_PAD_CAP}")
     for pi, base, layers in pads[:_PGM_PAD_CAP]:
         pf = [_f(loff, laysz, f"layer[{j}]", nm, note)
               for j, (loff, nm, note) in enumerate(layers)]
@@ -449,7 +452,9 @@ def _inspect_pgm_mpc2000(data, size, prog):
     if entries:
         sf = [_f(o, 16, f"[{j}]", n)
               for j, (o, n) in enumerate(entries[:_PGM_PAD_CAP])]
+        sw = ([f"{len(entries)} slots; listing first {_PGM_PAD_CAP}"]
+              if len(entries) > _PGM_PAD_CAP else [])
         chunks.append({"id": "samples", "offset": 2, "size": len(entries) * 17,
                        "summary": f"{len(entries)} sample-name slot(s)",
-                       "fields": sf, "warnings": [], "payload_base": 2})
+                       "fields": sf, "warnings": sw, "payload_base": 2})
     return chunks, []
