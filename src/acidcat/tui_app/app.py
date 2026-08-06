@@ -45,7 +45,7 @@ from acidcat.core.infra.fieldcodec import (
 # brand theme (ink / gunmetal + teal/orange accents); source of truth is
 # acidcat/tui_theme.py, imported by the playground TUI too so they cannot drift.
 from acidcat.tui_theme import (
-    PALETTE, ACCENT, FG, SOFT, DIM, GUTTER, PEND, AMBER, SEV, byte_color,
+    PALETTE, ACCENT, FG, SOFT, DIM, GUTTER, PEND, AMBER, SEV, TEAL, byte_color,
 )
 
 from acidcat.tui_app.render import (
@@ -55,6 +55,7 @@ from acidcat.tui_app.render import (
 )
 from acidcat.tui_app.screens import (
     BrowseScreen, ConfirmScreen, DiffScreen, DiscScreen, EditScreen, HelpScreen,
+    YesNoScreen,
     HexPane, MapScreen, PromptScreen, RegionsScreen, ValidateScreen,
 )
 
@@ -1002,13 +1003,24 @@ class AcidcatTUI(App):
         tree.root.set_label(Text(self._display_name(), style=f"bold {FG}"))
         tree.root.data = (0, self.fsize, ACCENT)
         self._nodemeta[id(tree.root)] = (0, self.fsize, ACCENT)
+        from acidcat.core.infra.sniff import AUDIO_SAMPLE_IDS
         for i, c in enumerate(self.chunks):
             accent = PALETTE[i % len(PALETTE)]
+            cid = str(c.get("id", "?")).strip()
+            # Mark the chunk that actually holds sample data. Every field node in
+            # this tree is a selectable, playable region and almost none of them
+            # are audio, so without a mark the only way to find out which is
+            # which was to press play and get a burst of noise.
+            is_audio = cid in AUDIO_SAMPLE_IDS
             lbl = Text()
-            lbl.append(f"{str(c.get('id', '?')).strip():<6}", style=f"bold {accent}")
+            lbl.append("~ " if is_audio else "  ", style=f"bold {TEAL}")
+            lbl.append(f"{cid:<6}",
+                       style=f"bold {TEAL}" if is_audio else f"bold {accent}")
             lbl.append(f"0x{c.get('offset', 0):08x}  ", style=DIM)
             lbl.append(f"{c.get('size', 0):,}b  ", style=SOFT)
             lbl.append(str(c.get("summary", "")), style=FG)
+            if is_audio:
+                lbl.append("  [playable]", style=TEAL)
             node = tree.root.add(lbl)
             node.data = (c.get("offset", 0), c.get("size", 0), accent)
             self._nodemeta[id(node)] = node.data
@@ -1203,6 +1215,32 @@ class AcidcatTUI(App):
             t.append(row + "\n", style=ACCENT)
         return t
 
+    def _audio_span(self):
+        """(start, end) of the file's sample data, or None.
+
+        Structural, not statistical: inside a walked container the chunk id IS
+        the answer, and no heuristic beats it.
+        """
+        from acidcat.core.infra.sniff import AUDIO_SAMPLE_IDS
+        for c in self.chunks:
+            if str(c.get("id", "")).strip() in AUDIO_SAMPLE_IDS:
+                base = c.get("payload_base", (c.get("offset") or 0) + 8)
+                return base, base + (c.get("size") or 0)
+        return None
+
+    def _region_is_audio(self, off, length):
+        """True when most of [off, off+length) lies in the sample data.
+
+        Most, not all: a selection that starts a few bytes early is still the
+        audio, and demanding containment would nag on every ordinary drag.
+        """
+        span = self._audio_span()
+        if span is None:
+            return None                     # unknown -- no walker said either way
+        lo, hi = span
+        overlap = max(0, min(off + length, hi) - max(off, lo))
+        return overlap >= 0.5 * max(1, length)
+
     def action_play(self):
         """Audition the selected region's bytes as raw PCM (p); '.' stops."""
         if not play.have_audio():
@@ -1213,6 +1251,29 @@ class AcidcatTUI(App):
         if off is None or not length:
             self.notify("highlight a region with bytes to play", severity="warning")
             return
+
+        # Auditioning a header, a tag or a chunk of text as PCM produces a burst
+        # of loud noise at whatever volume the user happens to be on. That is a
+        # real hazard with headphones, and it is easy to hit -- every field node
+        # in the tree is a selectable region, and almost none of them are audio.
+        is_audio = self._region_is_audio(off, length)
+        if is_audio is False:
+            where = self._chunk_name_at(off)
+            self.push_screen(
+                YesNoScreen(f"{where} is not the audio payload. Playing it as "
+                            f"PCM will be loud noise, not sound. Continue?"),
+                lambda ok: ok and self._do_play(off, length))
+            return
+        self._do_play(off, length)
+
+    def _chunk_name_at(self, off):
+        for c in self.chunks:
+            base = c.get("offset") or 0
+            if base <= off < base + (c.get("size") or 0) + 8:
+                return f"'{str(c.get('id', '?')).strip()}'"
+        return "this region"
+
+    def _do_play(self, off, length):
         data = _read(self.work, off, min(length, 4 * 1024 * 1024))
         rate, ch, bits, floating = self._audio_params()
         self.action_stop_play()

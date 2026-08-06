@@ -569,3 +569,39 @@ class PromptScreen(ModalScreen):
         self.dismiss(None)
 
 
+
+
+class YesNoScreen(ModalScreen):
+    """A plain proceed/cancel prompt. dismiss()es True or False.
+
+    ConfirmScreen answers a three-way save/discard/cancel question, which is the
+    wrong shape for "are you sure". Kept separate rather than overloading it,
+    so neither prompt has to explain which of its buttons do not apply.
+    """
+
+    CSS = """
+    YesNoScreen { align: center middle; }
+    #ynbox { width: 66; height: auto; border: round #FF4D00;
+             background: #16181C; padding: 1 2; }
+    #ynmsg { color: #C9CDD3; padding-bottom: 1; }
+    #ynbtns { height: auto; }
+    """
+    BINDINGS = [("escape", "cancel", "cancel")]
+
+    def __init__(self, prompt, yes_label="play anyway"):
+        super().__init__()
+        self.prompt = prompt
+        self.yes_label = yes_label
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="ynbox"):
+            yield Static(Text(self.prompt, style=f"bold {PEND}"), id="ynmsg")
+            with Horizontal(id="ynbtns"):
+                yield Button(self.yes_label, id="yes", variant="warning")
+                yield Button("cancel", id="cancel")
+
+    def on_button_pressed(self, event):
+        self.dismiss(event.button.id == "yes")
+
+    def action_cancel(self):
+        self.dismiss(False)

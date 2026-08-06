@@ -66,6 +66,23 @@ AUDIO_CONTAINERS = {
 
 # distinct leading magics of the audio containers, in first-seen order (the scan
 # patterns for locate's signature sweep); and the id set locate accepts.
+# Chunk/block ids whose payload IS the sample data, as the walkers emit them.
+# One definition, because more than one surface needs to answer "are these bytes
+# audio": the TUI colours them and refuses to audition anything else without
+# asking, and a caller reinterpreting arbitrary bytes as PCM wants the same
+# answer. Structural, not statistical -- inside a walked container the chunk id
+# is the ground truth, and no heuristic beats it.
+AUDIO_PAYLOAD_IDS = frozenset({
+    "data",     # RIFF/WAVE, RF64
+    "SSND",     # AIFF/AIFC
+    "BODY",     # IFF 8SVX
+    "smpl",     # not audio itself, but sampler loop points over it
+})
+# `smpl` describes the audio rather than being it; kept separate so a caller can
+# ask the strict question.
+AUDIO_SAMPLE_IDS = AUDIO_PAYLOAD_IDS - {"smpl"}
+
+
 AUDIO_CONTAINER_MAGICS = tuple(dict.fromkeys(m for m, _ext in AUDIO_CONTAINERS.values()))
 AUDIO_CONTAINER_FMTS = frozenset(AUDIO_CONTAINERS)
 AUDIO_CONTAINER_EXT = {fid: ext for fid, (_m, ext) in AUDIO_CONTAINERS.items()}
