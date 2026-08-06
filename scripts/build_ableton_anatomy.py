@@ -7,8 +7,17 @@ the byte-map SPECS are ours. Every byte below is copied from a real specimen.
 import pathlib
 import re
 
-SRC = pathlib.Path("docs/formats/krz-anatomy.html")
-OUT = pathlib.Path("docs/formats/ableton-anatomy.html")
+# The shell is taken from an existing page so the CSS, favicon, theme toggle
+# and byte-map builder cannot drift. Pass a source and destination to build
+# against the PUBLISHED site instead of the repo copy -- the two have
+# diverged before, with the site carrying theme modes the repo lacks, and
+# generating from the older shell would ship a visibly inconsistent page.
+#     python scripts/build_ableton_anatomy.py <src-page> <out-page>
+import sys
+SRC = pathlib.Path(sys.argv[1] if len(sys.argv) > 1
+                   else "docs/formats/krz-anatomy.html")
+OUT = pathlib.Path(sys.argv[2] if len(sys.argv) > 2
+                   else "docs/formats/ableton-anatomy.html")
 s = SRC.read_text(encoding="utf-8")
 
 head = s[:s.index("</head>") + len("</head>")]

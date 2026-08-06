@@ -18,7 +18,10 @@ import sys
 # the generated JS is a build artifact, so it goes to a temp dir rather
 # than next to the script where it would land in the repo
 _TMP = pathlib.Path(tempfile.mkdtemp(prefix="acidcat-bytemaps-"))
-PAGES = sorted(pathlib.Path("docs/formats").glob("*.html"))
+# defaults to the repo copy; pass a directory to check the published site,
+# which is a separate copy and has drifted from this one before
+_DIR = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "docs/formats")
+PAGES = sorted(_DIR.glob("*.html"))
 
 
 def span(text, start, open_ch, close_ch):
