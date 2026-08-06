@@ -160,9 +160,9 @@ watch the test go red, put it back.
 
 A format earns a page in `docs/formats/` once it is walked. Generate it from an
 existing page's shell so the CSS, favicon, theme toggle and byte-map builder
-stay identical -- `scratchpad/build_ableton_anatomy.py` in the session that
-added Ableton shows the splice: keep `<head>`, keep the two `<script>` blocks,
-replace the body and the `SPECS` literal.
+stay identical. `scripts/build_ableton_anatomy.py` is the worked example: keep
+`<head>`, keep the two `<script>` blocks, replace the body and the `SPECS`
+literal, and refuse to write if any leftover from the source page survives.
 
 Two rules for the byte maps:
 
