@@ -22,6 +22,7 @@ confirms it from disk; ``sniff_bytes`` cannot classify a MOD from a head.
 """
 
 from acidcat.core.codecs import ncw as ncwmod
+from acidcat.core.formats import ableton as abletonmod
 
 # containers an ID3v2 tag is known to wrap; the tag then does not make
 # the file an MP3.
@@ -31,7 +32,8 @@ _ID3_WRAPPED_MAGICS = (b"RIFF", b"RF64", b"FORM", b"fLaC", b"MThd")
 # truth every dispatch table keys on; keep it in sync with the returns below (the
 # test suite asserts both directions). "id3-wrapped" is a sentinel, not a format.
 KNOWN_FORMATS = frozenset({
-    "8svx", "adx", "aifc", "aiff", "akp", "albank", "bfdlac", "bitwig", "brstm",
+    "8svx", "adg", "adv", "adx", "aifc", "aiff", "akp", "albank", "alc", "als", "amxd",
+    "asd", "bfdlac", "bitwig", "brstm",
     "cdxa", "cue", "e4b", "e5b", "fc", "flac", "fxp", "gcm", "gf1pat", "hps",
     "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
     "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni", "ogg",
@@ -148,6 +150,12 @@ def sniff_bytes(head):
         return "wt"
     if head[:4] == b"BtWg":
         return "bitwig"
+    if head[:4] == b"ampf":
+        return "amxd"                                  # Max for Live device
+    # two magic bytes would be far too weak on their own; looks_like_asd also
+    # requires the reserved u32 at offset 6 to be zero and a sane entry count.
+    if abletonmod.looks_like_asd(head):
+        return "asd"                                   # Ableton analysis sidecar
     if head[:4] == b"CcnK":
         return "fxp"
     if head[:4] == b"CAT " and head[8:12] == b"REX2":
@@ -233,6 +241,22 @@ def sniff(filepath):
     # a .cue may open with REM/CATALOG lines before FILE; trust the extension
     if fmt is None and filepath.lower().endswith(".cue"):
         return "cue"
+    # every Ableton document except .asd and .amxd is gzipped XML, so the magic
+    # is just gzip's. Identifying it needs one decompressed block, which is why
+    # this lives here rather than in sniff_bytes.
+    if fmt is None and head[:2] == b"\x1f\x8b":
+        ab = abletonmod.sniff_gzip_ableton(filepath)
+        # spelled out rather than returned straight through: KNOWN_FORMATS is
+        # verified against the string literals in THIS file, so an id that only
+        # exists in another module would silently escape that check
+        if ab == "adg":
+            return "adg"
+        if ab == "adv":
+            return "adv"
+        if ab == "alc":
+            return "alc"
+        if ab == "als":
+            return "als"
     # ADX opens with 0x8000 (weak); confirm via the (c)CRI marker before the audio
     if fmt is None and head[:2] == b"\x80\x00":
         from acidcat.core.codecs import adx

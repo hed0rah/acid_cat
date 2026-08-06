@@ -13,7 +13,8 @@ import os
 
 from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import (
-    aiff, akai, albank, amiga, bfdlac, bitwig, gf1pat, emu, flac, fxp, krz, labx, midi, midi2, mp3,
+    ableton, aiff, akai, albank, amiga, bfdlac, bitwig, gf1pat, emu, flac, fxp, krz, labx,
+    midi, midi2, mp3,
     mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
     vital, wav, wt,
 )
@@ -50,6 +51,17 @@ _WALKERS = {
             lambda path, deep: emu.inspect_emu(path, deep)),
     "krz": ("Kurzweil K2000/K2500/K2600 bank",
             lambda path, deep: krz.inspect_krz(path)),
+    "asd": ("Ableton analysis sidecar",
+            lambda path, deep: ableton.inspect_asd(path)),
+    "als": ("Ableton Live Set",
+            lambda path, deep: ableton.inspect_ableton_xml(path, "als")),
+    "alc": ("Ableton Live Clip",
+            lambda path, deep: ableton.inspect_ableton_xml(path, "alc")),
+    "adg": ("Ableton device group / rack",
+            lambda path, deep: ableton.inspect_ableton_xml(path, "adg")),
+    "adv": ("Ableton device preset",
+            lambda path, deep: ableton.inspect_ableton_xml(path, "adv")),
+    "amxd": ("Max for Live device", lambda path, deep: ableton.inspect_amxd(path)),
     "wt": ("Bitwig wavetable", lambda path, deep: wt.inspect_wt(path)),
     "multisample": ("Bitwig multisample",
                     lambda path, deep: multisample.inspect_multisample(path)),
