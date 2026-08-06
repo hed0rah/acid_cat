@@ -226,8 +226,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <tr><td><code>.alc</code></td><td>Live Clip</td><td>gzip + XML <code>&lt;LiveSet&gt;</code></td><td>12</td><td>yes</td></tr>
         <tr><td><code>.adv</code></td><td>device preset</td><td>gzip + XML, device-named root</td><td>9</td><td>yes</td></tr>
         <tr><td><code>.amxd</code></td><td>Max for Live device</td><td><code>ampf</code> chunk chain</td><td>4</td><td>yes</td></tr>
+        <tr><td><code>.agr</code></td><td>groove / quantize</td><td>gzip + XML <code>&lt;Groove&gt;</code></td><td>3</td><td>yes</td></tr>
         </tbody>
       </table>
+      <div class="callout"><b>Live has more document types than these.</b> <code>.ams</code> (Operator meta sound), <code>.abl</code> and <code>.ablbundle</code> (Note) and <code>.ask</code> (theme) are the same gzip + <code>&lt;Ableton&gt;</code> XML shape. None occur in the library this was built from, so rather than guess at them acidcat reports the ROOT CHILD it found &mdash; the element that names the type. An unmapped document says what it is instead of being called a device preset.</div>
       <div class="callout"><b>The sidecar outnumbers everything else 37 to 1.</b> In a producer's library the Ableton footprint is overwhelmingly <code>.asd</code> &mdash; one per analysed sample. Any tool that reports them as unknown is calling a large fraction of the collection noise.</div>
     </div>
 
