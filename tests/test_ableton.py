@@ -394,3 +394,12 @@ def test_real_corpus_parses():
             assert h["monotonic"], n
             ok += 1
     assert seen and ok
+
+
+def test_a_big_endian_file_without_an_overview_is_not_an_error():
+    """Measured over 1,500 specimens: every big-endian .asd is the older
+    generation and none carries an overview block, so the sentinel constant
+    never needs byte-swapping. Absence here is ordinary -- the block is
+    optional even in the newer generation (171 of 1,031)."""
+    raw = build_asd(grid_for(44100, 1.0), order=">")
+    assert ab.overview_trailer(raw, ">") is None
