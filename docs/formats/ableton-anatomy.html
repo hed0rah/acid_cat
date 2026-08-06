@@ -186,7 +186,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">Ableton writes a <b>.asd</b> beside every audio file it analyses. It is usually described as a waveform cache, and that is wrong: it holds <b>warp markers, loop points, onsets, pitch marks and time signature</b> &mdash; Live's whole reading of the audio. The head is a <b>frame-position grid</b> whose last entry is the source file's exact frame count and whose steps never exceed <b>30&nbsp;ms</b> of audio; because that ceiling is a fixed fraction of the sample rate, an <b>orphaned sidecar still describes audio that has been deleted</b>. The body is a serialised object tree whose field names are stored in <b>UTF-16</b>, which is why an ASCII scan makes the file look like noise. Everything here was derived from <b>8,196 real specimens</b> and verified frame-for-frame against the source audio on 22 of them. The other tabs cover the rest of the Live footprint. <b>Hover</b> a field to light its bytes.</p>
+  <p class="plede lede">Ableton writes a <b>.asd</b> beside every audio file it analyses. It is usually described as a waveform cache, and that is wrong: it holds <b>warp markers, loop points, onsets, pitch marks and time signature</b> &mdash; Live's whole reading of the audio. The head is a <b>frame-position grid</b> whose last entry is the source file's exact frame count and whose steps never exceed <b>30&nbsp;ms</b> of audio; because that ceiling is a fixed fraction of the sample rate, an <b>orphaned sidecar still describes audio that has been deleted</b>. The body is a serialised object tree whose field names are stored in <b>UTF-16</b>, which is why an ASCII scan makes the file look like noise. It also states a <b>tempo</b> -- not as a number, but as a mapping from seconds to beats that the tempo falls out of. Everything here was derived from <b>8,196 real specimens</b>, verified frame-for-frame against the source audio on 22, and cross-checked against the Live Sets that wrote them. <b>Hover</b> a field to light its bytes.</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">moss</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -203,6 +203,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <button class="tab" data-p="header">.asd header<small>10 bytes</small></button>
     <button class="tab" data-p="grid">Frame grid<small>the 30 ms rule</small></button>
     <button class="tab" data-p="objects">Object tree<small>UTF-16 names</small></button>
+    <button class="tab" data-p="warp">Warp + tempo<small>the mapping</small></button>
+    <button class="tab" data-p="onsets">Onsets<small>transients</small></button>
     <button class="tab" data-p="liveset">Live Set family<small>.als .alc .adg .adv</small></button>
     <button class="tab" data-p="m4l">Max for Live<small>.amxd</small></button>
     <button class="tab" data-p="impostors">Impostors<small>what lies</small></button>
@@ -254,7 +256,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         </tbody>
       </table>
       <div class="callout"><b>This is the reason to walk the format.</b> An orphaned <code>.asd</code> in a folder is evidence about a file that no longer exists &mdash; its rate, its length, its exact sample count. Nothing else in the toolchain recovers that, because nothing else survives the audio.</div>
-      <div class="callout"><b>What is NOT here: tempo.</b> Live stores warp markers as (sample position, beat time) pairs and derives tempo from them, so an unwarped sample records no tempo at all. Checked against 599 files whose own filenames state their BPM: the number is absent, not hidden. acidcat therefore does not report a tempo from a <code>.asd</code>, rather than reporting a guess.</div>
+      <div class="callout"><b>No tempo NUMBER is stored, but the tempo is recoverable.</b> Searching 599 files whose own filenames state their BPM finds the value absent &mdash; at every byte offset, as f32 and f64, and in derived forms. Live keeps a mapping instead: warp markers pin seconds to beats, and the tempo falls out of any two of them. See the Warp tab.</div>
     </div>
 
     <!-- ===================== OBJECTS ===================== -->
@@ -275,8 +277,34 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <tr><td>staleness</td><td><code>OriginalFileSize</code></td></tr>
         </tbody>
       </table>
-      <div class="callout"><b>Two generations, no version byte.</b> The magic is identical across both, and versioning is carried <i>per object</i> as individual <code>Version</code> ints. The older generation declares <code>InitialBPM</code>, <code>Bpms</code>, <code>BeatTrackState</code> and <code>Tonalities</code>; the newer one drops those for <code>UnbiasedTempoEstimate</code> and an <code>OverViewLevels</code> pyramid. The field set is the only reliable tell.</div>
-      <div class="callout"><b>OriginalFileSize is the staleness check.</b> Live records the source audio's byte size and re-analyses on mismatch &mdash; the same mechanism REAPER uses (mtime + size) arrived at independently. It detects an edit, but cannot re-find the file after a rename: the sidecar is bound to its audio by filename alone, so moving the audio orphans it silently.</div>
+      <div class="callout"><b>Optional sections, not generations.</b> It is tempting to read the field set as a format version. It is not one: over 1,473 sidecars <b>62% declare BOTH</b> the beat-tracking set (<code>InitialBPM</code>, <code>Bpms</code>, <code>BeatTrackState</code>, <code>Tonalities</code>) and the overview set (<code>OverViewLevels</code>, <code>UnbiasedTempoEstimate</code>), so they cannot be generations of one another. Versioning is carried <i>per object</i> as individual <code>Version</code> ints, and there is no global version byte.</div>
+      <div class="callout"><b>OriginalFileSize is the staleness check.</b> Live records the source audio's byte size and re-analyses on mismatch &mdash; the same mechanism REAPER uses (mtime + size), arrived at independently. Of 1,200 sidecars sitting beside their real audio, <b>96% reference its current size</b>; one that does not is describing a version of the file that no longer exists. It detects an edit but cannot re-find the file after a rename: the binding is by filename alone, so moving the audio orphans it silently.</div>
+      <div class="callout"><b>Declared is not stored.</b> This schema is shared with the Live Set, so it names things the sidecar never carries. <code>LoopStart</code>, <code>LoopEnd</code>, <code>IsWarped</code>, <code>WarpMode</code>, <code>Numerator</code> and <code>Denominator</code> are all declared here &mdash; and <code>LoopEnd</code> is <b>absent from 91%</b> of files whose Set states a real one. Loop points belong to a CLIP, and one audio file can back many clips with different loops. What the sidecar holds is per-file ANALYSIS.</div>
+    </div>
+
+    <!-- ===================== WARP + TEMPO ===================== -->
+    <div class="panel" data-panel="warp">
+      <div class="pfacts"><span>record<b>31 bytes</b></span><span>SecTime<b>f64 seconds</b></span><span>BeatTime<b>f64 beats</b></span><span>tempo<b>derived</b></span></div>
+      <p class="plede">A warp marker pins one instant of the recording to one position in the bar. Each record carries its own class name inline, u8-length-prefixed, so the markers are <b>self-locating</b> &mdash; there is no count to find and no offset to derive.</p>
+      <div class="sec">one warp marker (31 bytes)</div>
+      <p class="note">Marker id 1 from a real project sidecar. The Live Set that wrote it states exactly these values.</p>
+      <div id="asd-warp" data-build></div>
+      <div class="callout"><b>The tempo is the mapping, not a number.</b> Nothing in a <code>.asd</code> stores a BPM &mdash; searching 599 files whose own filenames state their tempo finds the value absent, at every byte offset, as f32 and f64, and in derived forms. But two markers give it directly: <code>(beats / seconds) x 60</code>. Here 0.03125 beats in 0.011029411764705883 s is <b>170 BPM</b>, and the Live Set declares 170. Across 40 clips the derivation matched the declared tempo every time, and over a 2,000-file sample it yields only clean musical values: 140, 170, 138, 120, 150, 145, 70, 172.</div>
+      <div class="callout"><b>Most files have none, and that is not a gap.</b> Markers appear in about 3% of a sample library, because a one-shot nobody warped has nothing to pin. Of 879 clips a Live Set marked unwarped, <b>879 had no markers</b>. The presence of this section is not a format version: it appears under Live 9.7 through 12, and one project written by a single version contains sidecars both with and without it &mdash; a <code>.asd</code> is written when the audio is analysed, and outlives the projects that use it.</div>
+    </div>
+
+    <!-- ===================== ONSETS ===================== -->
+    <div class="panel" data-panel="onsets">
+      <div class="pfacts"><span>shape<b>two arrays</b></span><span>positions<b>u32 frames</b></span><span>energies<b>f32</b></span><span>count<b>repeated</b></span></div>
+      <p class="plede">Live's transient detection, stored as two length-prefixed arrays back to back: the count, the frame positions, the count <i>again</i>, then one energy per onset. That repeated count is what identifies the structure in a file with no other landmark.</p>
+      <div class="sec">onset array head (16 bytes)</div>
+      <p class="note">A 13-transient loop. Positions are absolute frame offsets, checkable against the frame count the grid already gave us.</p>
+      <div id="asd-onsets" data-build></div>
+      <div class="sec">warp-engine parameters (32 bytes)</div>
+      <p class="note">Sitting just above the onsets, in the order the Live Set declares them.</p>
+      <div id="asd-clip" data-build></div>
+      <div class="callout"><b>Two traps, both paid for.</b> The arrays are <b>not</b> word-aligned to the end of the frame grid, so a 4-stepped scan walks straight past them. And a count of 1 must be refused: with a single position "strictly increasing" constrains nothing, so any stray pair of equal u32 satisfies the test &mdash; accepting it gave 7 of 14 files a confidently wrong answer. A genuine one-shot is reported as unknown rather than guessed at.</div>
+      <div class="callout"><b>Onsets are not warp markers.</b> Live snaps markers to detected transients, so a marker frequently lands exactly on an onset &mdash; 12 of 57 across five files. The counts are what separate them: one file carries 14 onsets and 9 markers. Reading one as the other looks convincing and is wrong.</div>
     </div>
 
     <!-- ===================== LIVE SET FAMILY ===================== -->
@@ -449,6 +477,59 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"grid[1]",k:"flag",r:[14,17],val:"942",
           body:"Second position. The step from 171 to 942 is 771 frames = 17.5 ms at 44.1 kHz, comfortably under the 30 ms ceiling.",
           note:"Steps shorten around transients and never exceed the cap."}
+      ]
+    ],
+    "asd-warp":["byte",
+      [0x0A,0x57,0x61,0x72,0x70,0x4D,0x61,0x72,0x6B,0x65,0x72,0x01,0x00,0x00,0x00,
+       0x97,0x96,0x96,0x96,0x96,0x96,0x86,0x3F,0x00,0x00,0x00,0x00,0x00,0x00,0xA0,0x3F],
+      [
+        {label:"name length",k:"sync",r:[0,0],val:"10",
+          body:"A u8 length, then the class name in ASCII -- the same convention the type dictionary uses. It is what makes a marker self-locating: no count to find and no offset to derive.",
+          note:"the class DECLARATION carries this literal too, and the bytes after it are denormals. Requiring sane times and a run starting at id 0 separates them."},
+        {label:"class name",k:"sync",r:[1,10],val:"WarpMarker",
+          body:"The class name, inline. Live's serialiser writes it before every instance."},
+        {label:"Id",k:"enum",r:[11,14],val:"1",
+          body:"u32. Matches the Id attribute the Live Set shows for this marker. Markers form a run starting at 0.",
+          note:"0x00000001 little-endian."},
+        {label:"SecTime",k:"flag",r:[15,22],val:"0.011029411764705883",
+          body:"f64: WHERE in the recording, in seconds.",
+          note:"a 17-significant-digit double. Finding it bit for bit is what proved the layout."},
+        {label:"BeatTime",k:"flag",r:[23,30],val:"0.03125",
+          body:"f64: WHAT MUSICAL POSITION that instant sits at, in beats. The pair is the whole idea -- Live stores a mapping from time to musical position, and everything else follows from it.",
+          note:"0.03125 beats in 0.011029... s is 170 BPM, which is exactly the tempo the Live Set declares."}
+      ]
+    ],
+    "asd-onsets":["byte",
+      [0x0D,0x00,0x00,0x00,0xD3,0x05,0x00,0x00,0xA2,0x1F,0x00,0x00,0xF8,0x3B,0x00,0x00],
+      [
+        {label:"count",k:"sync",r:[0,3],val:"13",
+          body:"u32: how many transients Live detected. The same count is repeated after the positions, before the energies -- which is what identifies the structure.",
+          note:"a count of 1 is refused: with a single position, strictly-increasing constrains nothing."},
+        {label:"positions[0]",k:"enum",r:[4,7],val:"1,491",
+          body:"u32 frame offset of the first transient. 1,491 frames is 0.031 s at 48 kHz.",
+          note:"validated against the frame count the grid already gave us."},
+        {label:"positions[1]",k:"enum",r:[8,11],val:"8,098"},
+        {label:"positions[2]",k:"enum",r:[12,15],val:"15,352",
+          body:"Roughly 7,000 frames apart, about 0.15 s -- the pulse of a loop. A one-shot carries a single transient within a few frames of zero."}
+      ]
+    ],
+    "asd-clip":["byte",
+      [0x06,0x00,0x00,0x00,0x00,0x00,0xF0,0x41,0x00,0x00,0x82,0x42,0x00,0x00,0xC8,0x41,
+       0x02,0x00,0x00,0x00,0x00,0x00,0xC8,0x42,0x00,0x00,0xC8,0x42,0x00,0x00,0x00,0x43],
+      [
+        {label:"TransientResolution",k:"enum",r:[0,3],val:"6",
+          body:"u32. An INTEGER among floats, which is why searching for eight consecutive float32 finds nothing here."},
+        {label:"GranularityTones",k:"flag",r:[4,7],val:"30"},
+        {label:"GranularityTexture",k:"flag",r:[8,11],val:"65"},
+        {label:"FluctuationTexture",k:"flag",r:[12,15],val:"25",
+          body:"f32 warp-engine parameters, in the same order the Live Set XML declares them."},
+        {label:"TransientLoopMode",k:"enum",r:[16,19],val:"2",
+          body:"u32, the second integer in the block."},
+        {label:"TransientEnvelope",k:"flag",r:[20,23],val:"100"},
+        {label:"ComplexProFormants",k:"flag",r:[24,27],val:"100"},
+        {label:"ComplexProEnvelope",k:"flag",r:[28,31],val:"128",
+          body:"f32, default 128. This value appears five times per file and was twice mistaken for something else here -- first for the project tempo, then written off as a meaningless constant. It is a warp-engine parameter with a default.",
+          note:"the Live Set XML names it, which is how it was finally identified."}
       ]
     ],
     "asd-name":["byte",
