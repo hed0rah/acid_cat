@@ -166,6 +166,41 @@ def inspect_asd(filepath):
             warns.append(f"{len(present)} declared fields, none of them a "
                          f"recognised analysis field")
 
+        on = abmod.onsets(raw, h["total_frames"], body_off, h["order"])
+        if on:
+            rate = h["sample_rate"]
+            first, last = on["positions"][0], on["positions"][-1]
+            onf = [
+                _f(0, 4, "count", on["count"], "detected transients"),
+                _f(0, 4, "first", f"{first:,} frames"
+                   + (f" = {first / rate:.3f} s" if rate else "")),
+                _f(0, 4, "last", f"{last:,} frames"
+                   + (f" = {last / rate:.3f} s" if rate else "")),
+                _f(0, 0, "positions", ", ".join(f"{p:,}" for p in on["positions"][:12])
+                   + (" ..." if on["count"] > 12 else "")),
+                _f(0, 0, "energies", ", ".join(f"{e:g}" for e in on["energies"][:8])
+                   + (" ..." if on["count"] > 8 else ""),
+                   "TransitionEnergies, one per onset"),
+            ]
+            chunks.append({
+                "id": "onsets", "offset": on["offset"],
+                "size": on["end"] - on["offset"],
+                "summary": (f"{on['count']} transient(s), "
+                            f"{first:,} to {last:,} frames"),
+                "fields": onf, "warnings": [], "payload_base": on["offset"],
+            })
+
+            cp = abmod.clip_params(raw, on["offset"], h["order"])
+            if cp:
+                chunks.append({
+                    "id": "clip", "offset": cp["offset"],
+                    "size": 4 * len(abmod.CLIP_PARAMS),
+                    "summary": "warp-engine parameters",
+                    "fields": [_f(4 * i, 4, n, cp["values"][n])
+                               for i, (n, _k) in enumerate(abmod.CLIP_PARAMS)],
+                    "warnings": [], "payload_base": cp["offset"],
+                })
+
         ov = abmod.overview_trailer(raw, h["order"])
         if ov:
             # channels is the one value here proven against independent ground

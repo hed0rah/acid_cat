@@ -303,6 +303,114 @@ OVERVIEW_MARK = b"\x13SampleOverViewLevel"
 OVERVIEW_BIN_SAMPLES = 64
 
 
+def onsets(raw, total_frames, start, order="<", limit=200_000):
+    """Live's detected transients: (positions, energies), or None.
+
+    The `.als` XML and the `.asd` serialise the same object model -- the XML
+    carries the very field names the binary type dictionary declares -- so the
+    XML says what this structure is. `OnSets` holds `Positions` and
+    `TransitionEnergies`, and on disk that is two length-prefixed arrays back
+    to back:
+
+        u32 n | u32 positions[n] (frame offsets) | u32 n | f32 energies[n]
+
+    Stepped byte by byte, not by four: the arrays are not aligned to the end
+    of the frame grid, so a word-stepped scan walks straight past them.
+
+    Anchored structurally rather than on the clip-parameter block that precedes
+    it, because those parameters are defaults (granularity 30/65/25) and any
+    user who changes one would move the anchor.
+
+    The signature is specific enough to trust: the same count twice, positions
+    strictly increasing, and the last one inside the file's own frame count --
+    which the grid already gave us independently.
+    """
+    pack = order + "I"
+    end = min(len(raw), start + limit)
+    o = start
+    best = None
+    while o + 8 <= end:
+        n = struct.unpack_from(pack, raw, o)[0]
+        # n == 1 is not admissible: with a single position "strictly
+        # increasing" constrains nothing, so any stray pair of equal u32
+        # qualifies. That cost 7 of 14 files a wrong answer. A one-shot with a
+        # single genuine transient is therefore reported as UNKNOWN rather
+        # than guessed at -- see the note in the walker.
+        if not 2 <= n <= 100_000 or o + 8 + 8 * n > len(raw):
+            o += 1
+            continue
+        pos = struct.unpack_from(f"{order}{n}I", raw, o + 4)
+        after = o + 4 + 4 * n
+        if (struct.unpack_from(pack, raw, after)[0] == n
+                and all(b > a for a, b in zip(pos, pos[1:]))
+                and (not total_frames or pos[-1] <= total_frames)):
+            energies = struct.unpack_from(f"{order}{n}f", raw, after + 4)
+            # With n == 1 "strictly increasing" constrains nothing, so a stray
+            # pair of equal u32 anywhere would qualify. The energies are the
+            # second opinion: real ones are ordinary positive magnitudes, while
+            # random bytes read as denormals, infinities or NaN.
+            if all(0.0 < e < 1e7 for e in energies):
+                cand = {"count": n, "positions": list(pos),
+                        "energies": [round(e, 4) for e in energies],
+                        "offset": o, "end": after + 4 + 4 * n}
+                # keep scanning: take the richest structure, not the first
+                # coincidence to satisfy the predicate
+                if best is None or n > best["count"]:
+                    best = cand
+        o += 1
+    return best
+
+
+# The clip parameters, in the order the Live Set XML declares them. Types are
+# mixed -- TransientResolution and TransientLoopMode are integers, the rest
+# floats -- which is why they do not read as one float run.
+CLIP_PARAMS = (
+    ("TransientResolution", "u32"),
+    ("GranularityTones", "f32"),
+    ("GranularityTexture", "f32"),
+    ("FluctuationTexture", "f32"),
+    ("TransientLoopMode", "u32"),
+    ("TransientEnvelope", "f32"),
+    ("ComplexProFormants", "f32"),
+    ("ComplexProEnvelope", "f32"),
+)
+
+
+def clip_params(raw, onset_offset, order="<"):
+    """The clip-parameter block that sits just before the onset arrays.
+
+    Read backwards from the onsets, which are structurally anchored, so this
+    does not depend on any parameter holding its default.
+    """
+    size = sum(4 for _ in CLIP_PARAMS)
+    # the block ends a little before the onset count; find it by matching the
+    # two integer fields, which are small and distinctive among the floats
+    for back in range(16, 140, 4):
+        o = onset_offset - back - size
+        if o < 0:
+            continue
+        vals, ok = {}, True
+        for i, (name, kind) in enumerate(CLIP_PARAMS):
+            at = o + 4 * i
+            if at + 4 > len(raw):
+                ok = False
+                break
+            if kind == "u32":
+                v = struct.unpack_from(order + "I", raw, at)[0]
+                if v > 64:
+                    ok = False
+                    break
+            else:
+                v = round(struct.unpack_from(order + "f", raw, at)[0], 4)
+                if not 0.0 <= v <= 1000.0:
+                    ok = False
+                    break
+            vals[name] = v
+        if ok and vals.get("GranularityTones") is not None:
+            return {"offset": o, "values": vals}
+    return None
+
+
 def overview_trailer(raw, order="<"):
     """{channels, bytes_per_bin, ...} from the overview trailer, or None.
 

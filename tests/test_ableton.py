@@ -459,3 +459,60 @@ def test_the_walker_finds_a_dictionary_past_any_fixed_window(tmp_path):
     objs = [c for c in chunks if c["id"] == "objects"]
     assert objs and "IsWarped" in {f["name"] for f in objs[0]["fields"]}
     assert not any("only the header and frame grid" in w for w in warns)
+
+
+# ── onsets and clip parameters ────────────────────────────────────────────
+
+def _onset_blob(positions, energies):
+    n = len(positions)
+    return (struct.pack("<I", n) + struct.pack(f"<{n}I", *positions)
+            + struct.pack("<I", n) + struct.pack(f"<{n}f", *energies))
+
+
+def test_onsets_are_two_length_prefixed_arrays():
+    """Established from the Live Set XML, which serialises the SAME object
+    model in readable form: OnSets carries Positions and TransitionEnergies.
+    On disk that is count, u32 positions, count again, f32 energies."""
+    blob = bytes(16) + _onset_blob([100, 5000, 9000], [12.5, 30.0, 7.25])
+    on = ab.onsets(blob, 10_000, 0)
+    assert on["count"] == 3
+    assert on["positions"] == [100, 5000, 9000]
+    assert on["energies"] == [12.5, 30.0, 7.25]
+
+
+def test_onsets_outside_the_frame_count_are_refused():
+    """The grid already gave us the true frame count, so it can vet this."""
+    blob = _onset_blob([100, 999_999], [1.0, 2.0])
+    assert ab.onsets(blob, 10_000, 0) is None
+
+
+def test_a_single_onset_is_not_guessed_at():
+    """With n == 1 'strictly increasing' constrains nothing, so any stray pair
+    of equal u32 qualifies -- that gave 7 of 14 files a wrong answer. A
+    one-shot is reported as unknown instead."""
+    blob = _onset_blob([100], [5.0])
+    assert ab.onsets(blob, 10_000, 0) is None
+
+
+def test_the_richest_candidate_wins_not_the_first():
+    """A coincidental match can precede the real structure in the byte stream."""
+    decoy = _onset_blob([10, 20], [1.0, 2.0])
+    real = _onset_blob([100, 200, 300, 400, 500], [1.0, 2.0, 3.0, 4.0, 5.0])
+    on = ab.onsets(decoy + real, 10_000, 0)
+    assert on["count"] == 5
+
+
+def test_onset_scan_is_byte_stepped_not_word_stepped():
+    """The arrays are not aligned to the end of the frame grid; a word-stepped
+    scan walks straight past them and finds nothing."""
+    blob = bytes(3) + _onset_blob([100, 5000], [1.0, 2.0])   # deliberately off-word
+    assert ab.onsets(blob, 10_000, 0) is not None
+
+
+def test_clip_params_mix_ints_and_floats():
+    """TransientResolution and TransientLoopMode are integers and the rest are
+    floats, which is why the block does not read as one float run -- searching
+    for eight consecutive f32 finds nothing."""
+    kinds = [k for _n, k in ab.CLIP_PARAMS]
+    assert kinds.count("u32") == 2 and kinds.count("f32") == 6
+    assert ab.CLIP_PARAMS[0] == ("TransientResolution", "u32")
