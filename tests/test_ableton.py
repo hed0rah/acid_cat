@@ -258,15 +258,33 @@ def test_dictionary_walk_is_bounded():
 
 # ── the overview trailer ──────────────────────────────────────────────────
 
-def _overview(channels, per_bin=None):
+def _overview(channels, per_bin=None, log2=7):
     per_bin = channels * 2 if per_bin is None else per_bin
     # 26 bytes sit between bytes_per_bin and the sentinel
     return (ab.OVERVIEW_MARK
             + struct.pack("<I", per_bin)          # sentinel-26
-            + b"\x00" * 14
+            + bytes(10)
+            + struct.pack("<I", log2)             # sentinel-12
             + struct.pack("<I", channels)         # sentinel-8
-            + b"\x00" * 4                         # sentinel-4
+            + bytes(4)                            # sentinel-4
             + ab.OVERVIEW_SENTINEL)
+
+
+def test_bin_size_is_read_from_the_file_not_inferred():
+    """This was wrong once. An earlier version inferred 64 samples per bin by
+    dividing the frame count by a byte span -- a span that included several KB
+    of unrelated structure. The file states it: SamplesPerBinLog2 is 7, the
+    measured geometry is 128 frames per bin, and the two agree exactly on every
+    specimen carrying an overview.
+    """
+    ov = ab.overview_trailer(_overview(2, log2=7))
+    assert ov["samples_per_bin_log2"] == 7
+    assert ov["bin_samples"] == 128
+
+
+def test_an_absurd_bin_log2_yields_no_bin_size():
+    ov = ab.overview_trailer(_overview(2, log2=99))
+    assert ov["bin_samples"] is None
 
 
 @pytest.mark.parametrize("channels", [1, 2])

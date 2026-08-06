@@ -300,7 +300,6 @@ def type_dictionary(raw, start, end, order="<"):
 # new-generation files carried one. Its absence is ordinary, not a defect.
 OVERVIEW_SENTINEL = bytes.fromhex("ab1e5678")
 OVERVIEW_MARK = b"\x13SampleOverViewLevel"
-OVERVIEW_BIN_SAMPLES = 64
 
 
 def onsets(raw, total_frames, start, order="<", limit=200_000):
@@ -426,14 +425,22 @@ def overview_trailer(raw, order="<"):
         return None
     channels = struct.unpack_from(order + "I", raw, s - 8)[0]
     per_bin = struct.unpack_from(order + "I", raw, s - 26)[0]
+    log2 = struct.unpack_from(order + "I", raw, s - 12)[0]
     if not 1 <= channels <= 32:
         return None
+    # SamplesPerBinLog2 is READ, not inferred. An earlier version inferred 64
+    # from blob sizes and was wrong: the declared value is 7 and the measured
+    # geometry is 128 frames per bin, agreeing exactly on every specimen with
+    # an overview. The inference had divided by a span that included several
+    # KB of unrelated structure.
+    bin_samples = 1 << log2 if 0 < log2 < 32 else None
     return {
         "channels": channels,
         "bytes_per_bin": per_bin,
         "consistent": per_bin == channels * 2,
         "sentinel_at": s,
-        "bin_samples": OVERVIEW_BIN_SAMPLES,
+        "samples_per_bin_log2": log2,
+        "bin_samples": bin_samples,
     }
 
 

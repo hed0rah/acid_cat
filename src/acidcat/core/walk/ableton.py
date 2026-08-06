@@ -205,17 +205,22 @@ def inspect_asd(filepath):
         if ov:
             # channels is the one value here proven against independent ground
             # truth: it matched the source audio on 419 of 419 files that had one
-            bins = (h["total_frames"] + abmod.OVERVIEW_BIN_SAMPLES - 1) \
-                // abmod.OVERVIEW_BIN_SAMPLES if h["total_frames"] else 0
+            per = ov["bin_samples"]
+            bins = ((h["total_frames"] + per - 1) // per
+                    if (h["total_frames"] and per) else 0)
             ovf = [
                 _f(0, 4, "channels", ov["channels"],
                    "verified against the source audio on 419/419 specimens"),
                 _f(0, 4, "bytes_per_bin", ov["bytes_per_bin"],
                    "channels x 2 -- one int16 per channel per bin"),
-                _f(0, 0, "bin_samples", abmod.OVERVIEW_BIN_SAMPLES,
-                   "samples summarised per bin"),
-                _f(0, 0, "bins", f"{bins:,}", "total_frames / bin_samples"),
+                _f(0, 4, "samples_per_bin_log2", ov["samples_per_bin_log2"],
+                   "read from the file, not inferred"),
             ]
+            if per:
+                ovf.append(_f(0, 0, "bin_samples", f"{per:,}",
+                              "1 << the log2 above"))
+                ovf.append(_f(0, 0, "bins", f"{bins:,}",
+                              "total_frames / bin_samples"))
             if not ov["consistent"]:
                 warns.append(
                     f"overview bytes_per_bin is {ov['bytes_per_bin']}, expected "
@@ -223,7 +228,8 @@ def inspect_asd(filepath):
             chunks.append({
                 "id": "overview", "offset": ov["sentinel_at"], "size": 4,
                 "summary": (f"waveform overview, {ov['channels']} channel(s) at "
-                            f"{abmod.OVERVIEW_BIN_SAMPLES} samples/bin"),
+                            + (f"{per:,} samples/bin" if per
+                               else "an unreadable bin size")),
                 "fields": ovf, "warnings": [], "payload_base": ov["sentinel_at"],
             })
 
