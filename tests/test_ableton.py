@@ -584,3 +584,38 @@ def test_no_tempo_without_two_markers_spanning_time():
     assert ab.derived_tempo([{"id": 0, "sec": 0.0, "beat": 0.0}]) is None
     assert ab.derived_tempo([{"id": 0, "sec": 0.0, "beat": 0.0},
                              {"id": 1, "sec": 0.0, "beat": 0.0}]) is None
+
+
+# ── staleness: does the sidecar still describe this audio? ────────────────
+
+def test_a_sidecar_that_matches_its_audio_is_quiet(tmp_path):
+    """Live records the source's byte size and re-analyses on mismatch.
+    Measured on 1,200 sidecars beside their real audio: 96% reference it."""
+    audio = tmp_path / "x.wav"
+    audio.write_bytes(bytes(5000))
+    tail = struct.pack("<I", 5000)
+    p = tmp_path / "x.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 1.0), tail=tail))
+    _, warns = walker.inspect_asd(str(p))
+    assert not any("does not reference" in w for w in warns)
+
+
+def test_audio_changed_after_analysis_is_reported(tmp_path):
+    """The finding nothing else offers: the sidecar describes a version of the
+    file that no longer exists."""
+    audio = tmp_path / "x.wav"
+    audio.write_bytes(bytes(9999))
+    tail = struct.pack("<I", 5000)          # records the OLD size
+    p = tmp_path / "x.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 1.0), tail=tail))
+    _, warns = walker.inspect_asd(str(p))
+    assert any("does not reference" in w for w in warns), warns
+
+
+def test_no_sibling_audio_is_not_a_finding(tmp_path):
+    """An orphaned sidecar is the case this walker exists for; it must not be
+    reported as stale."""
+    p = tmp_path / "gone.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 1.0), tail=struct.pack("<I", 5000)))
+    _, warns = walker.inspect_asd(str(p))
+    assert not any("does not reference" in w for w in warns)

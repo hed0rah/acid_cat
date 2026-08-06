@@ -166,6 +166,17 @@ def inspect_asd(filepath):
             warns.append(f"{len(present)} declared fields, none of them a "
                          f"recognised analysis field")
 
+        # a .asd is named "<audio>.asd" and lives beside its audio, so when the
+        # sibling is there its size can be checked against what Live recorded
+        sibling = filepath[:-4] if filepath.lower().endswith(".asd") else None
+        if sibling and os.path.exists(sibling):
+            ssize = os.path.getsize(sibling)
+            if not abmod.references_size(raw, ssize, h["order"]):
+                warns.append(
+                    f"this sidecar does not reference the current size of "
+                    f"{os.path.basename(sibling)} ({ssize:,} bytes); the audio "
+                    f"was changed after the analysis was written")
+
         marks = abmod.warp_markers(raw, h["order"])
         if marks:
             bpm = abmod.derived_tempo(marks)
