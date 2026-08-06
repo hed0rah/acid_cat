@@ -209,7 +209,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">gapless</span><span class="v">delay + padding, 12 bits each at LAME+21</span></div>
           <div><span class="k">encoder_delay</span><span class="v">576 samples; the decoder adds 529 more (528+1) &mdash; 1105 total front skip</span></div>
           <div><span class="k">misc byte</span><span class="v">at LAME+24: stereo mode, source sample rate, the "unwise settings" bit</span></div>
-          <div><span class="k">preset</span><span class="v">at LAME+29: the -V/-b preset id; dates the encode within LAME's history</span></div>
+          <div><span class="k">preset</span><span class="v">at LAME+26: the -V/-b preset id and surround info (2 bytes); dates the encode within LAME's history</span></div>
           <div><span class="k">music_length / CRCs</span><span class="v">audio byte count, then musicCRC + tagCRC (validate before trusting delay/padding)</span></div>
         </div>
       </div>
@@ -222,6 +222,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div class="kv">
           <div><span class="k">id</span><span class="v">"VBRI"</span></div>
           <div><span class="k">version</span><span class="v">2 bytes at +4</span></div>
+          <div><span class="k">encoder_delay</span><span class="v">2 bytes at +6, in samples</span></div>
+          <div><span class="k">quality</span><span class="v">2 bytes at +8</span></div>
           <div><span class="k">byte_count</span><span class="v">4 bytes at +10</span></div>
           <div><span class="k">frame_count</span><span class="v">4 bytes at +14, marks the stream VBR</span></div>
           <div><span class="k">toc_entries</span><span class="v">2 bytes at +18: seek-table entry count</span></div>
