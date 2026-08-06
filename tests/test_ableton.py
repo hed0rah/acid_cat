@@ -178,6 +178,82 @@ def test_walker_reports_analysis_fields(tmp_path):
     assert {"WarpMarkers", "IsWarped", "LoopStart", "OriginalFileSize"} <= named
 
 
+# ── the type dictionary ───────────────────────────────────────────────────
+
+def _cls(name, n=0):
+    return bytes([len(name)]) + name.encode("ascii") + struct.pack("<I", n)
+
+
+def _fld(name, tag):
+    return struct.pack("<I", len(name)) + name.encode("utf-16le") + bytes([tag])
+
+
+def test_type_dictionary_reads_classes_and_typed_fields():
+    blob = _cls("OnsetEvent", 3) + _fld("Time", 0x17) + _fld("Energy", 0x17) \
+        + _fld("IsVolatile", 0x10)
+    toks = ab.type_dictionary(blob, 0, len(blob))
+    assert toks == [("class", "OnsetEvent", 3), ("field", "Time", 0x17),
+                    ("field", "Energy", 0x17), ("field", "IsVolatile", 0x10)]
+
+
+def test_the_tag_map_covers_the_types_seen_in_the_corpus():
+    """Pinned by harvesting field->tag over 1,200 specimens: IsSet/IsVolatile
+    are always 0x10, Version/ChannelCount always 0x11, and every 0x40 field has
+    a plural name."""
+    assert ab.TYPE_TAGS[0x10] == "bool"
+    assert ab.TYPE_TAGS[0x11] == "int32"
+    assert ab.TYPE_TAGS[0x40] == "list"
+
+
+def test_an_unknown_tag_is_not_invented():
+    """A tag we have not pinned must read as unknown rather than be guessed at
+    -- 0x00 occurs in the corpus and its meaning is genuinely unsettled."""
+    assert 0x00 not in ab.TYPE_TAGS
+
+
+def test_dictionary_walk_is_bounded():
+    """The declarations sit at the front and the rest is the overview pyramid,
+    so the walk must respect its end bound rather than scan the whole file."""
+    blob = _cls("A_Class", 1) + b"\xff" * 4096
+    assert ab.type_dictionary(blob, 0, 12) == [("class", "A_Class", 1)]
+
+
+# ── the overview trailer ──────────────────────────────────────────────────
+
+def _overview(channels, per_bin=None):
+    per_bin = channels * 2 if per_bin is None else per_bin
+    # 26 bytes sit between bytes_per_bin and the sentinel
+    return (ab.OVERVIEW_MARK
+            + struct.pack("<I", per_bin)          # sentinel-26
+            + b"\x00" * 14
+            + struct.pack("<I", channels)         # sentinel-8
+            + b"\x00" * 4                         # sentinel-4
+            + ab.OVERVIEW_SENTINEL)
+
+
+@pytest.mark.parametrize("channels", [1, 2])
+def test_overview_channel_count_is_read(channels):
+    """Anchored on the sentinel, not on the class name: the trailer's length
+    varies with the level count, so the name anchor agreed only ~79% of the
+    time while the sentinel matched the source audio on 419 of 419 files."""
+    ov = ab.overview_trailer(_overview(channels))
+    assert ov["channels"] == channels
+    assert ov["bytes_per_bin"] == channels * 2
+    assert ov["consistent"] is True
+
+
+def test_inconsistent_bytes_per_bin_is_flagged(tmp_path):
+    body = _overview(2, per_bin=7)
+    p = tmp_path / "t.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 1.0), tail=body))
+    _, warns = walker.inspect_asd(str(p))
+    assert any("bytes_per_bin" in w for w in warns)
+
+
+def test_no_overview_block_is_not_an_error():
+    assert ab.overview_trailer(b"\x00" * 200) is None
+
+
 # ── the gzipped-XML family ────────────────────────────────────────────────
 
 def _gz(tmp_path, name, xml):

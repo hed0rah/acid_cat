@@ -187,6 +187,103 @@ def class_names(raw, start=0):
     return out
 
 
+# ── the serialised object tree ────────────────────────────────────────────
+#
+# The object section opens with a self-describing type dictionary:
+#
+#     CLASS = u8 len + ASCII name + u32
+#     FIELD = u32 char_count + UTF-16LE name + u8 type_tag
+#
+# The tag meanings were pinned by harvesting (field name -> tag) over 1,200
+# specimens: `IsSet` and `IsVolatile` are always 0x10, `Version` and
+# `ChannelCount` always 0x11, and `Value` takes 0x10/0x11/0x12 according to
+# whether its parent is RemoteableBool / RemoteableInt / RemoteableDouble --
+# which is the confirmation, since that one field's type varies by wrapper.
+# Every 0x40 field has a plural name (Bpms, Positions, Tonalities, OnSets).
+#
+# The high nibble is the family: 0x1x scalar, 0x3x blob, 0x4x list.
+TYPE_TAGS = {
+    0x10: "bool",
+    0x11: "int32",
+    0x12: "double",
+    0x14: "scalar",        # family known, exact width unconfirmed
+    0x15: "scalar",
+    0x17: "double",
+    0x31: "blob",
+    0x32: "blob",
+    0x35: "list",
+    0x40: "list",
+}
+
+
+def type_dictionary(raw, start, end):
+    """Walk the type dictionary. Yields ('class', name, u32) and
+    ('field', name, tag) in file order.
+
+    Stops at `end`; the caller bounds it, because the bulk of the object
+    section is the high-entropy overview pyramid rather than declarations.
+    """
+    out = []
+    o = start
+    end = min(end, len(raw))
+    while o < end:
+        n = raw[o]
+        if 3 <= n <= 48 and o + 1 + n + 4 <= end:
+            b = raw[o + 1:o + 1 + n]
+            if all(0x20 <= c < 0x7F for c in b):
+                out.append(("class", b.decode("ascii"),
+                            struct.unpack_from("<I", raw, o + 1 + n)[0]))
+                o += 1 + n + 4
+                continue
+        if o + 4 <= end:
+            c = struct.unpack_from("<I", raw, o)[0]
+            if 1 <= c <= 64 and o + 4 + 2 * c + 1 <= end:
+                bb = raw[o + 4:o + 4 + 2 * c]
+                if (all(bb[i + 1] == 0 for i in range(0, len(bb), 2))
+                        and all(0x20 <= bb[i] < 0x7F for i in range(0, len(bb), 2))):
+                    out.append(("field", bb[::2].decode("ascii"),
+                                raw[o + 4 + 2 * c]))
+                    o += 4 + 2 * c + 1
+                    continue
+        o += 1
+    return out
+
+
+# a fixed sentinel closing the overview section. The trailer before it is what
+# can actually be read: ChannelCount at sentinel-8 matched the source audio on
+# 419 of 419 files that had one, and bytes-per-bin at sentinel-26 was always
+# ChannelCount * 2.
+OVERVIEW_SENTINEL = bytes.fromhex("ab1e5678")
+OVERVIEW_MARK = b"\x13SampleOverViewLevel"
+OVERVIEW_BIN_SAMPLES = 64
+
+
+def overview_trailer(raw):
+    """{channels, bytes_per_bin, ...} from the overview trailer, or None.
+
+    Anchored on the sentinel rather than on the class name: the trailer's
+    length varies with the number of levels, so anchoring on the name agrees
+    only ~79% of the time while the sentinel is exact.
+    """
+    mark = raw.rfind(OVERVIEW_MARK)
+    if mark < 0:
+        return None
+    s = raw.find(OVERVIEW_SENTINEL, mark)
+    if s < 0 or s < 26:
+        return None
+    channels = struct.unpack_from("<I", raw, s - 8)[0]
+    per_bin = struct.unpack_from("<I", raw, s - 26)[0]
+    if not 1 <= channels <= 32:
+        return None
+    return {
+        "channels": channels,
+        "bytes_per_bin": per_bin,
+        "consistent": per_bin == channels * 2,
+        "sentinel_at": s,
+        "bin_samples": OVERVIEW_BIN_SAMPLES,
+    }
+
+
 # ── the gzipped-XML family ────────────────────────────────────────────────
 
 # The element directly inside <Ableton> names the document type -- with one

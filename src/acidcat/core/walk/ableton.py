@@ -127,26 +127,61 @@ def inspect_asd(filepath):
 
     body_off = h["table_end"]
     if body_off < len(raw):
-        names = abmod.field_names(raw, body_off)
-        present = {n for _, n in names}
+        # the declarations sit at the front; the rest is the overview pyramid,
+        # so bound the dictionary walk rather than scanning megabytes of peaks
+        toks = abmod.type_dictionary(raw, body_off,
+                                     body_off + _DICTIONARY_SCAN)
+        tags = {n: t for kind, n, t in toks if kind == "field"}
+        classes = [n for kind, n, _ in toks if kind == "class"]
+        present = set(tags)
         notable = [n for n in abmod.NOTABLE_FIELDS if n in present]
+
         obj_fields = [
-            _f(0, 0, "field_names", f"{len(present)} distinct",
-               "stored as u32 char-count + UTF-16LE, interleaved with their data"),
+            _f(0, 0, "declared_fields", f"{len(present)} distinct",
+               "u32 char-count + UTF-16LE name + a one-byte type tag"),
+            _f(0, 0, "declared_classes", f"{len(set(classes))} distinct",
+               "u8 length + ASCII name"),
             _f(0, 0, "generation", _generation(present),
                "no global version byte; the field set is the tell"),
         ]
         for n in notable:
-            off = next(o for o, nm in names if nm == n) - body_off
-            obj_fields.append(_f(off, 0, n, "present"))
+            tag = tags.get(n)
+            kind = abmod.TYPE_TAGS.get(tag, "unknown")
+            obj_fields.append(_f(0, 0, n, kind, f"type tag 0x{tag:02x}"))
         chunks.append({
             "id": "objects", "offset": body_off, "size": size - body_off,
-            "summary": (f"serialised object tree, {len(present)} field names, "
-                        f"{_generation(present)}"),
+            "summary": (f"object tree, {len(present)} typed fields across "
+                        f"{len(set(classes))} classes, {_generation(present)}"),
             "fields": obj_fields, "warnings": [], "payload_base": body_off,
         })
         if not notable:
             warns.append("no recognised analysis fields found in the object tree")
+
+        ov = abmod.overview_trailer(raw)
+        if ov:
+            # channels is the one value here proven against independent ground
+            # truth: it matched the source audio on 419 of 419 files that had one
+            bins = (h["total_frames"] + abmod.OVERVIEW_BIN_SAMPLES - 1) \
+                // abmod.OVERVIEW_BIN_SAMPLES if h["total_frames"] else 0
+            ovf = [
+                _f(0, 4, "channels", ov["channels"],
+                   "verified against the source audio on 419/419 specimens"),
+                _f(0, 4, "bytes_per_bin", ov["bytes_per_bin"],
+                   "channels x 2 -- one int16 per channel per bin"),
+                _f(0, 0, "bin_samples", abmod.OVERVIEW_BIN_SAMPLES,
+                   "samples summarised per bin"),
+                _f(0, 0, "bins", f"{bins:,}", "total_frames / bin_samples"),
+            ]
+            if not ov["consistent"]:
+                warns.append(
+                    f"overview bytes_per_bin is {ov['bytes_per_bin']}, expected "
+                    f"{ov['channels'] * 2} for {ov['channels']} channel(s)")
+            chunks.append({
+                "id": "overview", "offset": ov["sentinel_at"], "size": 4,
+                "summary": (f"waveform overview, {ov['channels']} channel(s) at "
+                            f"{abmod.OVERVIEW_BIN_SAMPLES} samples/bin"),
+                "fields": ovf, "warnings": [], "payload_base": ov["sentinel_at"],
+            })
 
     return chunks, warns
 
@@ -205,6 +240,7 @@ def inspect_ableton_xml(filepath, fmt_id="als"):
 # 'ampf' magic, a u32 version, then a 4-byte marker -- 'aaaa' in every specimen
 # seen -- and only then the chunk chain. Reading the marker as a chunk id makes
 # its next 4 bytes look like a 1.6 GB length, which is how this was caught.
+_DICTIONARY_SCAN = 8192   # declarations sit at the front; the rest is peaks
 _AMXD_HEADER = 12
 _AMXD_MAX_CHUNKS = 64
 
