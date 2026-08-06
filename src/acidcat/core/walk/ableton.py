@@ -140,7 +140,13 @@ def inspect_asd(filepath):
 
         obj_fields = [
             _f(0, 0, "declared_fields", f"{len(present)} distinct",
-               "u32 char-count + UTF-16LE name + a one-byte type tag"),
+               "the SCHEMA, not the contents -- see below"),
+            _f(0, 0, "note", "declared != stored",
+               "this schema is shared with the Live Set, so it names clip "
+               "settings the sidecar does not carry. LoopEnd is declared here "
+               "and absent from 91% of files whose Set states a real one: loop "
+               "points belong to a clip, and one audio file can back many "
+               "clips. What the sidecar holds is per-file ANALYSIS"),
             _f(0, 0, "declared_classes", f"{len(set(classes))} distinct",
                "u8 length + ASCII name"),
             _f(0, 0, "generation", _generation(present),

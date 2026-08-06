@@ -619,3 +619,23 @@ def test_no_sibling_audio_is_not_a_finding(tmp_path):
     p.write_bytes(build_asd(grid_for(44100, 1.0), tail=struct.pack("<I", 5000)))
     _, warns = walker.inspect_asd(str(p))
     assert not any("does not reference" in w for w in warns)
+
+
+def test_the_declared_field_list_is_labelled_as_a_schema(tmp_path):
+    """Declared is not stored.
+
+    The type dictionary is shared with the Live Set, so it names clip settings
+    the sidecar does not carry. LoopEnd is declared in every specimen and is
+    ABSENT from 91% of files whose Set states a real one -- loop points belong
+    to a clip, and one audio file can back many clips. Listing the field names
+    without saying so invites reading "LoopStart" as a value the file holds.
+    """
+    body = b""
+    for n in ("LoopStart", "LoopEnd", "IsWarped"):
+        body += struct.pack("<I", len(n)) + n.encode("utf-16le") + bytes([0x00, 0x11])
+    p = tmp_path / "t.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 1.0), tail=body))
+    chunks, _ = walker.inspect_asd(str(p))
+    objs = [c for c in chunks if c["id"] == "objects"][0]
+    notes = " ".join(f.get("note", "") for f in objs["fields"])
+    assert "declared" in notes.lower() and "clip" in notes.lower()
