@@ -12,9 +12,12 @@ import json
 import pathlib
 import re
 import subprocess
+import tempfile
 import sys
 
-SCRATCH = pathlib.Path(__file__).parent
+# the generated JS is a build artifact, so it goes to a temp dir rather
+# than next to the script where it would land in the repo
+_TMP = pathlib.Path(tempfile.mkdtemp(prefix="acidcat-bytemaps-"))
 PAGES = sorted(pathlib.Path("docs/formats").glob("*.html"))
 
 
@@ -100,7 +103,7 @@ out.forEach(function(o){
 });
 console.log("\n"+out.length+" of "+R.length+" maps have problems");
 """)
-(SCRATCH / "bytemaps.js").write_text("\n".join(js), encoding="utf-8")
-r = subprocess.run(["node", str(SCRATCH / "bytemaps.js")],
+(_TMP / "bytemaps.js").write_text("\n".join(js), encoding="utf-8")
+r = subprocess.run(["node", str(_TMP / "bytemaps.js")],
                    capture_output=True, text=True)
 print(r.stdout or r.stderr[:3000])
