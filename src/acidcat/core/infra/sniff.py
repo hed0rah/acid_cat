@@ -32,7 +32,7 @@ _ID3_WRAPPED_MAGICS = (b"RIFF", b"RF64", b"FORM", b"fLaC", b"MThd")
 # truth every dispatch table keys on; keep it in sync with the returns below (the
 # test suite asserts both directions). "id3-wrapped" is a sentinel, not a format.
 KNOWN_FORMATS = frozenset({
-    "8svx", "adg", "adv", "adx", "aifc", "aiff", "akp", "albank", "alc", "als", "amxd",
+    "8svx", "adg", "adv", "adx", "agr", "aifc", "aiff", "akp", "albank", "alc", "als", "amxd",
     "asd", "bfdlac", "bitwig", "brstm",
     "cdxa", "cue", "e4b", "e5b", "fc", "flac", "fxp", "gcm", "gf1pat", "hps",
     "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
@@ -285,6 +285,8 @@ def sniff(filepath):
         # exists in another module would silently escape that check
         if ab == "adg":
             return "adg"
+        if ab == "agr":
+            return "agr"
         if ab == "adv":
             return "adv"
         if ab == "alc":

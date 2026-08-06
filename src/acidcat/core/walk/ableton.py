@@ -325,6 +325,10 @@ def inspect_ableton_xml(filepath, fmt_id="als"):
 
     ratio = (len(xml) / size) if size else 0
     fields = [_f(0, 0, k, v) for k, v in attrs.items()]
+    child = abmod.root_child(xml[:4096])
+    if child:
+        fields.append(_f(0, 0, "root_child", child,
+                         "the element inside <Ableton>; it names the document type"))
     fields.append(_f(0, 0, "decompressed", f"{len(xml):,} bytes",
                      f"{ratio:.1f}x the {size:,} bytes on disk"))
     root = {"id": "Ableton", "offset": 0, "size": size,

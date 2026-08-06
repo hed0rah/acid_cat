@@ -4,8 +4,12 @@ Two unrelated shapes ship under the Live umbrella:
 
 * ``.asd`` -- the binary per-sample analysis sidecar. Reverse-engineered here
   against 8,196 real specimens; see ``parse_asd_header``.
-* ``.als`` / ``.alc`` / ``.adg`` / ``.adv`` / ``.alp`` -- gzipped XML, with the
-  document type given by the root element's first child.
+* ``.als`` / ``.alc`` / ``.adg`` / ``.adv`` / ``.agr`` -- gzipped XML, with the
+  document type given by the root element's first child. Live has more of
+  these than are mapped here (``.ams`` Operator meta sound, ``.abl`` and
+  ``.ablbundle`` Note, ``.ask`` theme); they share the shape, so an unmapped
+  one is still recognised as Ableton XML and its root child is reported rather
+  than guessed at. ``.alp`` is gzip but an archive, not a document.
 
 ``.amxd`` (Max for Live) is a third, chunked ``ampf`` container.
 
@@ -537,12 +541,14 @@ def overview_trailer(raw, order="<"):
 XML_ROOT_CHILDREN = {
     "LiveSet": "als",               # or alc -- see sniff_gzip_ableton
     "GroupDevicePreset": "adg",
+    "Groove": "agr",
 }
 _XML_LABELS = {
     "als": "Live Set",
     "alc": "Live Clip",
     "adg": "device group / rack",
     "adv": "device preset",
+    "agr": "groove",
 }
 
 
@@ -594,6 +600,10 @@ def sniff_gzip_ableton(path):
         return None
     m = _ROOT_CHILD.search(head)
     child = m.group(1).decode("ascii") if m else ""
+    # Live has more document types than this maps -- .ams (Operator meta
+    # sound), .abl / .ablbundle (Note), .ask (theme). They are the same gzip +
+    # <Ableton> XML shape, so they land here as "adv" and the walker names the
+    # root child it actually found rather than asserting a device preset.
     fid = XML_ROOT_CHILDREN.get(child, "adv")
     # <LiveSet> means set or clip; nothing in the content distinguishes them
     if fid == "als" and path.lower().endswith(".alc"):
@@ -602,6 +612,12 @@ def sniff_gzip_ableton(path):
 
 
 _ATTR = re.compile(rb'(\w+)="([^"]*)"')
+
+
+def root_child(xml_head):
+    """The element directly inside <Ableton>, which names the document type."""
+    m = _ROOT_CHILD.search(xml_head)
+    return m.group(1).decode("ascii") if m else None
 
 
 def header_attributes(xml_head):

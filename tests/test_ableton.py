@@ -639,3 +639,20 @@ def test_the_declared_field_list_is_labelled_as_a_schema(tmp_path):
     objs = [c for c in chunks if c["id"] == "objects"][0]
     notes = " ".join(f.get("note", "") for f in objs["fields"])
     assert "declared" in notes.lower() and "clip" in notes.lower()
+
+
+def test_a_groove_is_recognised(tmp_path):
+    """.agr is the same gzip + <Ableton> XML shape; <Groove> names it."""
+    p = _gz(tmp_path, "q.agr", ROOT + b"<Groove><Name Value=\"32 Quantize\" /></Groove>")
+    assert ab.sniff_gzip_ableton(str(p)) == "agr"
+    assert ab.xml_label("agr") == "groove"
+
+
+def test_an_unmapped_ableton_document_reports_its_root_child(tmp_path):
+    """Live has more XML document types than are mapped -- .ams, .abl, .ask.
+    They share the shape, so one we do not model must still be described
+    rather than silently called a device preset."""
+    p = _gz(tmp_path, "x.ams", ROOT + b"<SomeFutureThing/>")
+    chunks, _ = walker.inspect_ableton_xml(str(p), ab.sniff_gzip_ableton(str(p)))
+    named = {f["name"]: f["value"] for f in chunks[0]["fields"]}
+    assert named.get("root_child") == "SomeFutureThing"

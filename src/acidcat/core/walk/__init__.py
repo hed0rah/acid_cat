@@ -61,6 +61,8 @@ _WALKERS = {
             lambda path, deep: ableton.inspect_ableton_xml(path, "adg")),
     "adv": ("Ableton device preset",
             lambda path, deep: ableton.inspect_ableton_xml(path, "adv")),
+    "agr": ("Ableton groove",
+            lambda path, deep: ableton.inspect_ableton_xml(path, "agr")),
     "amxd": ("Max for Live device", lambda path, deep: ableton.inspect_amxd(path)),
     "wt": ("Bitwig wavetable", lambda path, deep: wt.inspect_wt(path)),
     "multisample": ("Bitwig multisample",
