@@ -154,24 +154,35 @@ def parse_asd_header(raw):
     }
 
 
-def field_names(raw, start=0):
-    """[(offset, name)] for every u32-length-prefixed UTF-16LE field name.
+# the field-name text follows the file's declared byte order too, so a
+# big-endian .asd stores UTF-16BE with a big-endian count. Parsing those files
+# as little-endian finds zero of their 64 field names -- and the walker then
+# reports "no analysis fields", which reads as a fact about the file rather
+# than a fault in the reader.
+_UTF16_RUN_BE = re.compile(rb"(?:\x00[ -~]){3,}")
+
+
+def field_names(raw, start=0, order="<"):
+    """[(offset, name)] for every length-prefixed UTF-16 field name.
 
     These are the serialised object-tree field names. They are interleaved with
     their data rather than gathered in a header, so they double as a map of
     what the file records. The length prefix is what separates a real name from
     an accidental run of ASCII-range UTF-16.
     """
+    big = order == ">"
+    pattern = _UTF16_RUN_BE if big else _UTF16_RUN
+    codec = "utf-16be" if big else "utf-16le"
     out = []
-    for m in _UTF16_RUN.finditer(raw, start):
+    for m in pattern.finditer(raw, start):
         off = m.start()
         if off < 4:
             continue
         try:
-            declared = struct.unpack_from("<I", raw, off - 4)[0]
+            declared = struct.unpack_from(order + "I", raw, off - 4)[0]
         except struct.error:
             continue
-        text = m.group().decode("utf-16le")
+        text = m.group().decode(codec)
         if declared == len(text):
             out.append((off - 4, text))
     return out
@@ -216,13 +227,17 @@ TYPE_TAGS = {
 }
 
 
-def type_dictionary(raw, start, end):
+def type_dictionary(raw, start, end, order="<"):
     """Walk the type dictionary. Yields ('class', name, u32) and
     ('field', name, tag) in file order.
 
     Stops at `end`; the caller bounds it, because the bulk of the object
     section is the high-entropy overview pyramid rather than declarations.
+    Class names are ASCII and so byte-order agnostic; field names are UTF-16 in
+    the file's declared order.
     """
+    big = order == ">"
+    lo, hi = (1, 0) if big else (0, 1)   # text byte / zero byte within each pair
     out = []
     o = start
     end = min(end, len(raw))
@@ -232,16 +247,17 @@ def type_dictionary(raw, start, end):
             b = raw[o + 1:o + 1 + n]
             if all(0x20 <= c < 0x7F for c in b):
                 out.append(("class", b.decode("ascii"),
-                            struct.unpack_from("<I", raw, o + 1 + n)[0]))
+                            struct.unpack_from(order + "I", raw, o + 1 + n)[0]))
                 o += 1 + n + 4
                 continue
         if o + 4 <= end:
-            c = struct.unpack_from("<I", raw, o)[0]
+            c = struct.unpack_from(order + "I", raw, o)[0]
             if 1 <= c <= 64 and o + 4 + 2 * c + 1 <= end:
                 bb = raw[o + 4:o + 4 + 2 * c]
-                if (all(bb[i + 1] == 0 for i in range(0, len(bb), 2))
-                        and all(0x20 <= bb[i] < 0x7F for i in range(0, len(bb), 2))):
-                    out.append(("field", bb[::2].decode("ascii"),
+                if (all(bb[i + hi] == 0 for i in range(0, len(bb), 2))
+                        and all(0x20 <= bb[i + lo] < 0x7F
+                                for i in range(0, len(bb), 2))):
+                    out.append(("field", bb[lo::2].decode("ascii"),
                                 raw[o + 4 + 2 * c]))
                     o += 4 + 2 * c + 1
                     continue
@@ -258,7 +274,7 @@ OVERVIEW_MARK = b"\x13SampleOverViewLevel"
 OVERVIEW_BIN_SAMPLES = 64
 
 
-def overview_trailer(raw):
+def overview_trailer(raw, order="<"):
     """{channels, bytes_per_bin, ...} from the overview trailer, or None.
 
     Anchored on the sentinel rather than on the class name: the trailer's
@@ -271,8 +287,8 @@ def overview_trailer(raw):
     s = raw.find(OVERVIEW_SENTINEL, mark)
     if s < 0 or s < 26:
         return None
-    channels = struct.unpack_from("<I", raw, s - 8)[0]
-    per_bin = struct.unpack_from("<I", raw, s - 26)[0]
+    channels = struct.unpack_from(order + "I", raw, s - 8)[0]
+    per_bin = struct.unpack_from(order + "I", raw, s - 26)[0]
     if not 1 <= channels <= 32:
         return None
     return {

@@ -211,6 +211,44 @@ def test_an_unknown_tag_is_not_invented():
     assert 0x00 not in ab.TYPE_TAGS
 
 
+def test_field_names_follow_the_declared_byte_order():
+    """A big-endian .asd stores UTF-16BE with a big-endian count. Reading those
+    files as little-endian finds zero of their 64 field names, and the walker
+    then reports "no analysis fields" -- which reads as a fact about the file
+    rather than a fault in the reader. 319 of 8,196 specimens are big-endian.
+    """
+    n = "IsWarped"
+    le = struct.pack("<I", len(n)) + n.encode("utf-16le")
+    be = struct.pack(">I", len(n)) + n.encode("utf-16be")
+    assert [x for _, x in ab.field_names(b"\x00\x00" + le, order="<")] == [n]
+    assert [x for _, x in ab.field_names(b"\x00\x00" + be, order=">")] == [n]
+    # and each must NOT read the other's encoding
+    assert ab.field_names(b"\x00\x00" + be, order="<") == []
+    assert ab.field_names(b"\x00\x00" + le, order=">") == []
+
+
+def test_type_dictionary_reads_big_endian_files():
+    name = "IsWarped"
+    blob = (bytes([len("OnsetEvent")]) + b"OnsetEvent" + struct.pack(">I", 1)
+            + struct.pack(">I", len(name)) + name.encode("utf-16be")
+            + bytes([0x10]))
+    toks = ab.type_dictionary(blob, 0, len(blob), order=">")
+    assert toks == [("class", "OnsetEvent", 1), ("field", "IsWarped", 0x10)]
+
+
+def test_a_big_endian_walk_reports_its_object_tree(tmp_path):
+    """End to end: the bug was that header and grid parsed fine while the whole
+    object tree silently vanished."""
+    name = "IsWarped"
+    tail = (struct.pack(">I", len(name)) + name.encode("utf-16be") + bytes([0x10]))
+    p = tmp_path / "be.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 1.0), order=">", tail=tail))
+    chunks, warns = walker.inspect_asd(str(p))
+    objs = [c for c in chunks if c["id"] == "objects"]
+    assert objs and "IsWarped" in {f["name"] for f in objs[0]["fields"]}
+    assert not any("no recognised analysis fields" in w for w in warns)
+
+
 def test_dictionary_walk_is_bounded():
     """The declarations sit at the front and the rest is the overview pyramid,
     so the walk must respect its end bound rather than scan the whole file."""

@@ -102,3 +102,39 @@ class TestSniffFile:
         p = tmp_path / "junk.bin"
         p.write_bytes(bytes([0xFF, 0xFB, 0x00, 0xC0]) + b"\x11" * 500)
         assert sniff(str(p)) is None
+
+
+class TestWeakJsonMagic:
+    """A bare '{' is the weakest magic in the table: it claims every JSON file,
+    and every RTF, since those open "{\rtf". In a real 3,229-file sample library
+    the only content/extension mismatch found was exactly this -- RTF licence
+    agreements reported as walkable Vital presets.
+
+    classify consults sniff before its own foreign-file table, so the `{\rtf`
+    entry already in _FOREIGN_MAGICS was never reached.
+    """
+
+    def _w(self, tmp_path, name, data):
+        p = tmp_path / name
+        p.write_bytes(data)
+        return str(p)
+
+    def test_a_real_vital_preset_is_still_recognised(self, tmp_path):
+        p = self._w(tmp_path, "p.vital",
+                    b'{"synth_version":"1.0.7","preset_name":"x","settings":{}}')
+        assert sniff(p) == "vital"
+
+    def test_rtf_is_not_a_vital_preset(self, tmp_path):
+        p = self._w(tmp_path, "readme.rtf", rb"{\rtf1\ansi\deff0 licence text}")
+        assert sniff(p) != "vital"
+
+    def test_ordinary_json_is_not_a_vital_preset(self, tmp_path):
+        p = self._w(tmp_path, "package.json", b'{"name":"pkg","version":"1.0"}')
+        assert sniff(p) != "vital"
+
+    def test_rtf_reaches_the_foreign_table(self, tmp_path):
+        """The point of the fix: classify must get to name it."""
+        from acidcat.core.forensics import classify as C
+        p = self._w(tmp_path, "readme.rtf", rb"{\rtf1\ansi\deff0 licence text}"
+                    + b"\x00" * 200)
+        assert C.classify(p)["shape"] == C.FOREIGN

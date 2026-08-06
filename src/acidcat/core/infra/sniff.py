@@ -186,6 +186,24 @@ def sniff_bytes(head):
     return None
 
 
+_VITAL_READ = 64 * 1024   # the key sits in the first object, well inside this
+
+
+def _is_vital(filepath):
+    """True when a '{'-leading file really is a Vital preset.
+
+    `synth_version` is the key the Vital parser itself requires -- 'settings'
+    alone is too generic (core/formats/vital.py). Checking the same key here
+    keeps the sniffer and the walker agreeing about what a Vital file is.
+    """
+    try:
+        with open(filepath, "rb") as fh:
+            head = fh.read(_VITAL_READ)
+    except OSError:
+        return False
+    return b'"synth_version"' in head
+
+
 def _id3_wraps_other_container(filepath):
     """True when the leading ID3v2 tag is a wrapper around a different
     known container rather than the tag of an MPEG stream."""
@@ -292,6 +310,14 @@ def sniff(filepath):
     # an MPC .mpcpattern is also bare JSON ('{'); reroute on its extension.
     if fmt == "vital" and filepath.lower().endswith(".mpcpattern"):
         return "mpcpattern"
+    # a bare '{' is the weakest magic here: it claims every JSON file, and every
+    # RTF, since those open "{\rtf". That stole real files -- an RTF licence
+    # agreement in a sample pack classified as a walkable Vital preset, because
+    # classify consults sniff before its own foreign-file table, so the
+    # `{\rtf` entry it already had was never reached. Confirm from the file,
+    # the same way a bare MP3 frame sync is confirmed by a second frame.
+    if fmt == "vital" and not _is_vital(filepath):
+        fmt = None
     # a ZIP whose archive holds multisample.xml is a Bitwig .multisample. This is
     # the one content-sniff that must peek inside the container (the local-file
     # header magic alone cannot tell it from any other zip).

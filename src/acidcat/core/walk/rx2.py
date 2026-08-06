@@ -58,12 +58,27 @@ def inspect_rx2(filepath):
         cid = data[pos:pos + 4]
         clen = _bu32(data, pos + 4)
         cbody = pos + 8
-        if cbody + clen > len(data):
+        if cbody + clen > size:
+            # genuinely past the end of the FILE
             warns.append(f"{cid.decode('latin-1', 'replace')} chunk runs past EOF")
             chunks.append({"id": cid.decode("latin-1", "replace"), "offset": pos,
-                           "size": max(0, len(data) - cbody), "summary": "truncated",
+                           "size": max(0, size - cbody), "summary": "truncated",
                            "fields": [], "warnings": ["size exceeds file"],
                            "payload_base": cbody})
+            break
+        if cbody + clen > len(data):
+            # within the file but past our read window. RX2 embeds the whole
+            # sample in SDAT, so any loop over ~4 MB lands here -- and comparing
+            # against the truncated buffer reported a perfectly good file as
+            # corrupt. Report the chunk at its real size and say we stopped.
+            chunks.append({"id": cid.decode("latin-1", "replace"), "offset": pos,
+                           "size": clen + 8,
+                           "summary": (f"{clen:,} bytes, beyond the "
+                                       f"{_MAX // (1024 * 1024)} MB read window"),
+                           "fields": [], "warnings": [], "payload_base": cbody})
+            warns.append(f"stopped at the {_MAX // (1024 * 1024)} MB read window; "
+                         f"chunks after {cid.decode('latin-1', 'replace')} "
+                         f"were not walked")
             break
         cid_s = cid.decode("latin-1", "replace")
         cfields = []

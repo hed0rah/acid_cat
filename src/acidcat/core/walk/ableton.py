@@ -130,7 +130,7 @@ def inspect_asd(filepath):
         # the declarations sit at the front; the rest is the overview pyramid,
         # so bound the dictionary walk rather than scanning megabytes of peaks
         toks = abmod.type_dictionary(raw, body_off,
-                                     body_off + _DICTIONARY_SCAN)
+                                     body_off + _DICTIONARY_SCAN, h["order"])
         tags = {n: t for kind, n, t in toks if kind == "field"}
         classes = [n for kind, n, _ in toks if kind == "class"]
         present = set(tags)
@@ -157,7 +157,7 @@ def inspect_asd(filepath):
         if not notable:
             warns.append("no recognised analysis fields found in the object tree")
 
-        ov = abmod.overview_trailer(raw)
+        ov = abmod.overview_trailer(raw, h["order"])
         if ov:
             # channels is the one value here proven against independent ground
             # truth: it matched the source audio on 419 of 419 files that had one
