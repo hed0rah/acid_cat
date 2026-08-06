@@ -83,6 +83,9 @@ From a checkout, swap `acidcat` for `-e .`:
 | Serum  | `.SerumPreset` | Preset name, author, tags, description |
 | VST FXP | `.fxp` | Preset kind, plugin id, version, preset name (inspect) |
 | ReCycle | `.rx2` | CAT/REX2 chunks, creator, slice count (inspect) |
+| Ableton | `.asd` | Live's analysis sidecar: warp/loop/onset/time-signature fields, and the frame grid -- which recovers the sample rate, frame count and duration of audio that has been **deleted** (inspect) |
+| Ableton | `.als`, `.alc`, `.adg`, `.adv` | Live Set / Clip / rack / device preset: gzipped XML -- exact Live build, track and clip counts (inspect) |
+| Max for Live | `.amxd` | `ampf` chunk chain around the Max patcher (inspect) |
 | Bitwig WT | `.wt` | Wavetable header: frame count, samples/frame, 16-bit sample block (inspect) |
 | Bitwig | `.bwpreset`, `.bwclip` | Device tree, parameters, clip notes (inspect + index) |
 | Bitwig multisample | `.multisample` | Zone map: per-sample root note, key/velocity range, loop (inspect) |

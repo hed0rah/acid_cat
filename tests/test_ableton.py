@@ -240,18 +240,22 @@ def test_xml_walker_reads_the_creator(tmp_path):
 # ── Max for Live ──────────────────────────────────────────────────────────
 
 def test_amxd_chunk_chain(tmp_path):
+    """The chain starts at 12, after a constant 'aaaa' marker. Treating that
+    marker as a chunk id makes its next 4 bytes read as a 1.6 GB length -- which
+    is exactly how the first version of this walker failed on a real device."""
     p = tmp_path / "d.amxd"
-    p.write_bytes(b"ampf" + struct.pack("<I", 4)
-                  + b"meta" + struct.pack("<I", 4) + b"aaaa"
-                  + b"ptch" + struct.pack("<I", 2) + b"{}")
+    p.write_bytes(b"ampf" + struct.pack("<I", 4) + b"aaaa"
+                  + b"meta" + struct.pack("<I", 4) + struct.pack("<I", 7)
+                  + b"ptch" + struct.pack("<I", 6) + b"mx@c{}")
     chunks, warns = walker.inspect_amxd(str(p))
     assert [c["id"] for c in chunks] == ["ampf", "meta", "ptch"]
-    assert not warns
+    assert not warns, warns
+    assert "JSON at +4" in chunks[2]["summary"]
 
 
 def test_amxd_lying_chunk_length_is_flagged(tmp_path):
     p = tmp_path / "bad.amxd"
-    p.write_bytes(b"ampf" + struct.pack("<I", 4)
+    p.write_bytes(b"ampf" + struct.pack("<I", 4) + b"aaaa"
                   + b"meta" + struct.pack("<I", 0xFFFFFF) + b"aa")
     _, warns = walker.inspect_amxd(str(p))
     assert any("past end of file" in w for w in warns)

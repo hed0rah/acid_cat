@@ -202,48 +202,65 @@ def inspect_ableton_xml(filepath, fmt_id="als"):
 
 # ── Max for Live ──────────────────────────────────────────────────────────
 
+# 'ampf' magic, a u32 version, then a 4-byte marker -- 'aaaa' in every specimen
+# seen -- and only then the chunk chain. Reading the marker as a chunk id makes
+# its next 4 bytes look like a 1.6 GB length, which is how this was caught.
+_AMXD_HEADER = 12
+_AMXD_MAX_CHUNKS = 64
+
+
 def inspect_amxd(filepath):
-    """Walk a Max for Live device: an 'ampf' chunk chain wrapping a Max patcher."""
+    """Walk a Max for Live device: an 'ampf' header then an id/length chain."""
     size = os.path.getsize(filepath)
     with open(filepath, "rb") as fh:
         raw = fh.read(_ASD_READ_CAP)
     warns = []
     if raw[:4] != b"ampf":
         warns.append("missing 'ampf' magic")
+    marker = raw[8:12]
+    if marker != b"aaaa":
+        warns.append(f"marker at offset 8 is {marker!r}, expected b'aaaa'")
 
     chunks = [{
-        "id": "ampf", "offset": 0, "size": min(size, 8),
+        "id": "ampf", "offset": 0, "size": min(size, _AMXD_HEADER),
         "summary": "Ableton Max Patch Format header",
         "fields": [
             _f(0x00, 4, "magic", "ampf"),
             _f(0x04, 4, "version",
                struct.unpack_from("<I", raw, 4)[0] if len(raw) >= 8 else "?"),
+            _f(0x08, 4, "marker", marker.decode("ascii", "replace"),
+               "constant separator before the chunk chain"),
         ],
         "warnings": [], "payload_base": 0,
     }]
 
     # chunk chain: 4-byte id + 4-byte little-endian length
-    off = 8
+    off = _AMXD_HEADER
     seen = 0
-    while off + 8 <= len(raw) and seen < 64:
+    while off + 8 <= len(raw) and seen < _AMXD_MAX_CHUNKS:
         cid = raw[off:off + 4]
         length = struct.unpack_from("<I", raw, off + 4)[0]
         if length > len(raw) - off - 8:
             warns.append(f"chunk '{cid.decode('ascii', 'replace')}' at {off} "
                          f"claims {length:,} bytes, past end of file")
             break
-        body = raw[off + 8:off + 8 + length]
-        text = body[:64].decode("utf-8", "replace").strip("\x00") \
-            if cid in (b"mmap", b"meta", b"ptch") else ""
+        name = cid.decode("ascii", "replace")
+        summary = f"{length:,} bytes"
+        if cid == b"ptch":
+            # the patcher: a short binary preamble, then the Max patch as JSON
+            body = raw[off + 8:off + 8 + min(length, 4096)]
+            brace = body.find(b"{")
+            summary = (f"Max patcher, {length:,} bytes"
+                       + (f", JSON at +{brace}" if brace >= 0 else ", no JSON found"))
         chunks.append({
-            "id": cid.decode("ascii", "replace"), "offset": off,
-            "size": length + 8,
-            "summary": (f"{length:,} bytes" + (f" -- {text[:48]}" if text.isprintable()
-                                               and text else "")),
-            "fields": [], "warnings": [], "payload_base": off + 8,
+            "id": name, "offset": off, "size": length + 8,
+            "summary": summary, "fields": [], "warnings": [],
+            "payload_base": off + 8,
         })
         off += 8 + length
         seen += 1
-    if seen >= 64:
-        warns.append("stopped after 64 chunks; the chain may continue")
+    if seen >= _AMXD_MAX_CHUNKS:
+        warns.append(f"stopped after {_AMXD_MAX_CHUNKS} chunks; the chain may continue")
+    elif off != size and not warns:
+        warns.append(f"chunk chain ends at {off:,} but the file is {size:,} bytes")
     return chunks, warns
