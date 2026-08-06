@@ -14,9 +14,19 @@ alone. Nothing else in the toolchain can do that.
 
 Layout and the 30 ms grain were derived here against 8,196 real specimens and
 verified frame-for-frame against the source audio on 22 of them; see
-core/formats/ableton.py. Live's own tempo is NOT stored as a number -- warp
-markers are (sample position, beat time) pairs and tempo is derived from them,
-so an unwarped sample records no tempo at all.
+core/formats/ableton.py.
+
+Live stores no tempo NUMBER: warp markers map seconds to beats, and the tempo
+is derived from consecutive pairs. Where markers exist that derivation is
+exact -- it reproduced the declared tempo of a Live Set on 40 of 40 clips. An
+unwarped sample carries no markers and therefore no tempo, which is most of a
+sample library: markers appear in about 3% of files, and in 879 of 879 clips
+the Set marked unwarped, the sidecar had none.
+
+The sections are OPTIONAL, not versioned. Do not read the presence of one as a
+format generation -- 62% of files declare both the beat-tracking and overview
+sets, and the same Live version writes sidecars with and without markers,
+because a .asd is written when the audio is analysed and outlives projects.
 
 The `.als`/`.alc`/`.adg`/`.adv`/`.alp` family is gzipped XML and needs no
 reverse engineering; it is walked here so the whole Ableton footprint in a
@@ -33,21 +43,28 @@ from acidcat.core.walk.base import _f
 # capped so a forged count cannot make us allocate on a hostile file.
 _ASD_READ_CAP = 64 * 1024 * 1024
 
-# the two schema generations, told apart by fields only one of them declares
-_GEN_OLD = ("InitialBPM", "Bpms", "BeatTrackState", "Tonalities", "PitchMarks")
-_GEN_NEW = ("UnbiasedTempoEstimate", "OverViewLevels", "AufTaktData",
-            "SamplesPerBinLog2", "PreprocessedDataChunk")
+# Optional sections, NOT format generations. An earlier version of this walker
+# called these "older" and "newer" schema generations and printed that on every
+# file. It was wrong: measured over 1,473 sidecars, 62% declare BOTH sets, so
+# they are not exclusive and cannot be generations. The Live version that wrote
+# the Set does not predict them either -- the `WarpMarker` section appears
+# under Live 9.7 through 12, and one project written by a single version
+# contains sidecars both with and without it, because a .asd is written when
+# the audio is ANALYSED and outlives the projects that use it.
+_SECTIONS = (
+    ("beat tracking", ("InitialBPM", "Bpms", "BeatTrackState", "Tonalities",
+                       "PitchMarks")),
+    ("overview pyramid", ("OverViewLevels", "SamplesPerBinLog2")),
+    ("tempo estimate", ("UnbiasedTempoEstimate", "AufTaktData")),
+    ("warp markers", ("WarpMarker", "SecTime", "BeatTime")),
+)
 
 
-def _generation(names):
-    """Which serialisation generation this file is, from the fields present."""
-    old = sum(1 for n in _GEN_OLD if n in names)
-    new = sum(1 for n in _GEN_NEW if n in names)
-    if new > old:
-        return "newer (overview pyramid, UnbiasedTempoEstimate)"
-    if old > new:
-        return "older (beat-track state, InitialBPM)"
-    return "indeterminate"
+def _sections(names):
+    """Which optional sections this sidecar declares."""
+    got = [label for label, fields in _SECTIONS
+           if any(f in names for f in fields)]
+    return ", ".join(got) if got else "no optional sections"
 
 
 def inspect_asd(filepath):
@@ -149,8 +166,10 @@ def inspect_asd(filepath):
                "clips. What the sidecar holds is per-file ANALYSIS"),
             _f(0, 0, "declared_classes", f"{len(set(classes))} distinct",
                "u8 length + ASCII name"),
-            _f(0, 0, "generation", _generation(present),
-               "no global version byte; the field set is the tell"),
+            _f(0, 0, "sections", _sections(present),
+               "optional sections, not versions -- 62% of files declare both "
+               "the beat-tracking and overview sets, so they cannot be "
+               "generations of one another"),
         ]
         for n in notable:
             tag = tags.get(n)
@@ -159,7 +178,7 @@ def inspect_asd(filepath):
         chunks.append({
             "id": "objects", "offset": body_off, "size": size - body_off,
             "summary": (f"object tree, {len(present)} typed fields across "
-                        f"{len(set(classes))} classes, {_generation(present)}"),
+                        f"{len(set(classes))} classes: {_sections(present)}"),
             "fields": obj_fields, "warnings": [], "payload_base": body_off,
         })
         if not present:
