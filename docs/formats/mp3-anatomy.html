@@ -390,7 +390,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["0","free"],["1","32"],["2","40"],["3","48"],["4","56"],["5","64"],["6","80"],
         ["7","96"],["8","112"],["9","128"],["10","160"],["11","192"],["12","224"],
         ["13","256"],["14","320"],["15","bad"]],
-       body:"Index into the bitrate table for this version+layer (shown: MPEG-1 layer III, kbps). 0 is free-format, 15 invalid; acidcat rejects both.",
+       body:"Index into the bitrate table for this version+layer (shown: MPEG-1 layer III, kbps). 0 is free-format and 15 is invalid; acidcat REJECTS only 15 and fully supports free format, measuring the frame length by sync spacing and reporting the derived kbps.",
        note:"frame_len = (samples/8) * bitrate / sample_rate + padding."},
       {label:"sample rate",k:"enum",r:[20,21],val:"44100 Hz",sel:0,branch:[
         ["0","44100"],["1","48000"],["2","32000"],["3","reserved"]],

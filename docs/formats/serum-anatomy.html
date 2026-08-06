@@ -256,7 +256,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Hover <span class="k-en">zstd_magic</span> &mdash; the Zstandard signature that marks the compressed frame.</p>
       <div id="serum-blob" data-build></div>
       <div class="callout"><b>Zstandard, since Serum 2.</b> Bytes 8&ndash;11 are <code>28 B5 2F FD</code>, the little-endian zstd magic <code>0xFD2FB528</code>. The <code>u32</code> before it (<code>0x0001A95C</code> = 108,892) is the uncompressed size; the byte after the magic is the zstd frame-header descriptor. Serum 1 wrote the blob uncompressed, so its byte-8 signature is absent &mdash; a quick way to tell the two generations apart beyond the <code>product</code> string.</div>
-      <div class="callout"><b>opaque on purpose.</b> acidcat is a structural tool: it reports where the blob is, how big it is, and that it is a zstd frame, but it does not reconstruct the wavetable &mdash; there is no documented interior and no reason to guess. A <code>carve</code> of this region yields the literal blob, replayable back into Serum, byte-for-byte.</div>
+      <div class="callout"><b>opaque on purpose.</b> acidcat is a structural tool: it reports where the blob is and how big it is, but it does not identify the frame type or reconstruct the wavetable &mdash; there is no documented interior and no reason to guess. A <code>carve</code> of this region yields the literal blob, replayable back into Serum, byte-for-byte.</div>
     </div>
 
   </div>

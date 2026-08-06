@@ -182,7 +182,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">CREI</span><span class="v">creator string, e.g. a ReCycle version</span></div>
           <div><span class="k">GLOB</span><span class="v">global: tempo, bars/beats</span></div>
           <div><span class="k">NAME</span><span class="v">loop name</span></div>
-          <div><span class="k">SD</span><span class="v">sample data (the audio)</span></div>
+          <div><span class="k">SINF</span><span class="v">sample info</span></div>
+          <div><span class="k">SDAT</span><span class="v">sample data (the audio)</span></div>
         </div>
       </div>
     </details>
@@ -312,7 +313,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"uint32 BIG-endian: bytes in the group after this field.",
        note:"00 00 08 00 = 0x0800 = 2048."},
       {label:"form",k:"enum",r:[8,11],val:'\'"REX2"\'',
-       body:"The form type. REX2 marks a ReCycle loop; the child chunks (HEAD, CREI, GLOB, SLCE, SD) follow.",
+       body:"The form type. REX2 marks a ReCycle loop; the child chunks (HEAD, CREI, GLOB, SINF, SDAT) follow, with SLCE nested inside a CAT/SLCL sub-group rather than at this level.",
        note:"the slice markers live in a nested CAT/SLCL sub-group."}
     ]);
 })();
