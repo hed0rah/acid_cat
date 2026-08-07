@@ -58,7 +58,7 @@ for p in PAGES:
     if i >= 0:
         j = s.index("{", i)
         table = s[j:span(s, j, "{", "}")]
-        for m in re.finditer(r'"([^"]+)"\s*:\s*\[\s*"(\w+)"\s*,', table):
+        for m in re.finditer(r"""["']([^"']+)["']\s*:\s*\[\s*["'](\w+)["']\s*,""", table):
             arr1 = table.index("[", m.end() - 1)
             e1 = span(table, arr1, "[", "]")
             arr2 = table.index("[", e1)
@@ -66,15 +66,26 @@ for p in PAGES:
             maps.append((p.name, m.group(1), m.group(2),
                          table[arr1:e1], table[arr2:e2]))
 
-    # style B: build("mount","unit",[bytes],[fields])
-    for m in re.finditer(r'build\(\s*"([^"]+)"\s*,\s*"(\w+)"\s*,', s):
+    # style B: build("mount", "unit", [bytes], [fields])
+    #
+    # Both quote styles, because they are BOTH in use and requiring double
+    # quotes silently skipped ten pages while the run still said ALL CLEAN.
+    # A filter that produces a confident negative is the bug this script
+    # exists to catch, so it had to stop doing it itself.
+    for m in re.finditer(r"""build\(\s*["']([^"']+)["']\s*,\s*["'](\w+)["']\s*,""", s):
         arr1 = s.index("[", m.end() - 1)
         e1 = span(s, arr1, "[", "]")
         arr2 = s.index("[", e1)
         e2 = span(s, arr2, "[", "]")
         maps.append((p.name, m.group(1), m.group(2), s[arr1:e1], s[arr2:e2]))
 
+seen = {m[0] for m in maps}
+missing = [p.name for p in PAGES if p.name not in seen]
 print(f"{len(maps)} byte maps across {len(PAGES)} pages")
+if missing:
+    print(f"NO MAPS EXTRACTED from {len(missing)} page(s): {missing}")
+    print("  a page with maps that this script cannot see is the failure mode "
+          "it exists to prevent -- check the call style before trusting a pass.")
 
 js = ["var R=[];"]
 for idx, (page, mount, unit, b, f) in enumerate(maps):
