@@ -43,6 +43,25 @@ _CAVITY = {"PADDING": "FLAC PADDING", "FREE": "MP4 free box", "SKIP": "MP4 skip 
 # whose size includes the 8-byte header
 _CAVITY_PAYLOAD_SIZE = {"PADDING", "JUNK", "PAD"}
 
+# Complete audio containers, for the embedded-media check. Deliberately NOT
+# images: cover art inside a tag is ordinary and flagging it would train people
+# to ignore the rule. An audio file inside an audio file is not ordinary.
+_EMBEDDED_MEDIA = [
+    (b"RIFF", 8, b"WAVE", "WAV"),
+    (b"FORM", 8, b"AIFF", "AIFF"),
+    (b"FORM", 8, b"AIFC", "AIFF-C"),
+    (b"fLaC", 0, b"", "FLAC"),
+    (b"OggS", 0, b"", "Ogg"),
+]
+
+# Top-level keys a JSON-backed preset is known to carry. A key outside this set
+# is either somewhere to hide bytes or a sign the format moved and this decoder
+# did not -- both worth saying out loud, neither worth an alert.
+_JSON_PRESET_KEYS = {
+    "Vital": {"author", "comments", "macro1", "macro2", "macro3", "macro4",
+              "preset_name", "preset_style", "settings", "synth_version"},
+}
+
 
 def _entropy_note(blob):
     """A short characterization for a suspicious blob, or '' when unremarkable.
@@ -53,6 +72,146 @@ def _entropy_note(blob):
     if h >= 7.2:
         return f"; entropy {h:.1f}/8 (encrypted or compressed payload)"
     return ""
+
+
+def _json_object_end(data):
+    """Index just past the top-level JSON object, or None.
+
+    Brace counting has to respect strings and escapes: a preset whose comment
+    contains a brace would otherwise report the object ending early, and every
+    byte after it as trailing data.
+    """
+    start = data.find(b"{")
+    if start < 0:
+        return None
+    depth, i, instr, esc = 0, start, False, False
+    while i < len(data):
+        ch = data[i]
+        if instr:
+            if esc:
+                esc = False
+            elif ch == 0x5C:          # backslash
+                esc = True
+            elif ch == 0x22:          # closing quote
+                instr = False
+        elif ch == 0x22:
+            instr = True
+        elif ch == 0x7B:              # {
+            depth += 1
+        elif ch == 0x7D:              # }
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return None
+
+
+def _json_top_level_keys(data, end):
+    """Top-level keys of the object, without parsing the whole document.
+
+    json.loads on a 100 MB preset builds the entire tree to answer a question
+    about its first level, and a forged one is exactly where that is a bad
+    trade.
+    """
+    keys = []
+    depth, i, instr, esc, cur, in_key = 0, 0, False, False, [], False
+    while i < end and i < len(data):
+        ch = data[i]
+        if instr:
+            if esc:
+                esc = False
+            elif ch == 0x5C:
+                esc = True
+            elif ch == 0x22:
+                instr = False
+                if in_key and depth == 1:
+                    keys.append(bytes(cur).decode("utf-8", "replace"))
+                in_key = False
+                cur = []
+            elif in_key:
+                cur.append(ch)
+        elif ch == 0x22:
+            instr = True
+            in_key = depth == 1
+            cur = []
+        elif ch in (0x7B, 0x5B):      # { [
+            depth += 1
+        elif ch in (0x7D, 0x5D):      # } ]
+            depth -= 1
+        i += 1
+    # a value string at depth 1 is captured too; keep only those a colon follows
+    out = []
+    for k in keys:
+        probe = b'"' + k.encode("utf-8", "replace") + b'"'
+        at = data.find(probe)
+        while at >= 0:
+            j = at + len(probe)
+            while j < len(data) and data[j] in (0x20, 0x09, 0x0A, 0x0D):
+                j += 1
+            if j < len(data) and data[j] == 0x3A:     # colon
+                out.append(k)
+                break
+            at = data.find(probe, at + 1)
+    return out
+
+
+def _find_embedded(filepath, candidates, own, window=1 << 20):
+    """{magic: offset} for each complete container found inside a file.
+
+    One pass for every magic, not one pass each: the I/O is the cost, and
+    searching a handful of short patterns inside a window already in memory is
+    free next to reading the file again. A clean file -- no embedded container,
+    the common case -- used to be read once per magic.
+
+    Windowed rather than slurped. The first version read 16 MB, which put
+    `audit`'s peak over the bound its memory test enforces and stopped scanning
+    at the cap without saying so. The overlap is the longest thing a match
+    needs, so a container straddling a boundary is still seen.
+    """
+    pending = list(candidates)
+    keep = max((len(m) + fa + 4) for m, fa, _f, _n in pending) if pending else 0
+    out = {}
+    with open(filepath, "rb") as fh:
+        base = 0
+        prev = b""
+        while pending:
+            chunk = fh.read(window)
+            if not chunk:
+                break
+            buf = prev + chunk
+            start_abs = base - len(prev)
+            still = []
+            for magic, form_at, form, name in pending:
+                at = _match_in(buf, start_abs, magic, form_at, form, own)
+                if at is None:
+                    still.append((magic, form_at, form, name))
+                else:
+                    out[magic] = at
+            pending = still
+            base += len(chunk)
+            prev = buf[-keep:] if len(buf) > keep else buf
+    return out
+
+
+def _match_in(buf, start_abs, magic, form_at, form, own):
+    """Absolute offset of the first real match in this window, or None."""
+    off = 0
+    while True:
+        at = buf.find(magic, off)
+        if at < 0:
+            return None
+        abs_at = start_abs + at
+        off = at + 1
+        if abs_at <= 0:                       # the file's own header
+            continue
+        if magic == own and abs_at < 16:
+            continue
+        if form:
+            if at + form_at + 4 > len(buf):
+                return None                    # resolve on the next window
+            if buf[at + form_at:at + form_at + 4] != form:
+                continue
+        return abs_at
 
 
 def _declared_end(head):
@@ -486,6 +645,85 @@ def scan(filepath, fmt_label, chunks, warns):
                                  "rule": "wrong_format_tag",
                                  "message": "an APEv2 tag sits on a non-MP3 file "
                                             "(unusual metadata carrier)"})
+
+    # 15. a complete audio container living INSIDE another one. Distinct from
+    # polyglot (appended past the declared end) and cavity_content (bytes in a
+    # spec-ignorable region): here the region is legitimately occupied and
+    # nothing about the size or the structure looks wrong, which is what makes
+    # it worth saying. Images are excluded on purpose -- cover art inside a tag
+    # is ordinary, and flagging it teaches people to ignore the rule.
+    try:
+        with open(filepath, "rb") as f:
+            own = f.read(4)
+        # Ogg stamps OggS on EVERY page, so page 2 of any Ogg looks like an
+        # embedded Ogg -- six of six real Ogg/Opus files tripped this before the
+        # guard. The genuine case, several logical bitstreams in one file, is
+        # what ogg_multistream above is for.
+        wanted = [c for c in _EMBEDDED_MEDIA
+                  if not (c[0] == b"OggS" and fmt_label
+                          and fmt_label.startswith("Ogg"))]
+        hits = _find_embedded(filepath, wanted, own) if wanted else {}
+        for magic, _form_at, _form, name in wanted:
+            at = hits.get(magic)
+            if at is None:
+                continue
+            holder = None
+            for c in chunks:
+                base = c.get("offset") or 0
+                if base <= at < base + (c.get("size") or 0) + 8:
+                    holder = str(c.get("id", "?")).strip()
+                    break
+            where = f" inside {holder!r}" if holder else ""
+            findings.append({"severity": "notice", "offset": at,
+                             "rule": "embedded_standalone_media",
+                             "message": f"a complete {name} container sits "
+                                        f"{at:,} bytes in{where}; a whole file "
+                                        f"inside a file that still parses"})
+    except Exception as e:
+        findings.append({"severity": "warn", "offset": None,
+                         "rule": "check_failed",
+                         "message": f"the embedded_standalone_media check could not run "
+                                    f"({type(e).__name__}); this file was NOT screened for it"})
+
+    # 16/17. JSON-backed presets. The object IS the format -- no length field,
+    # no chunk table, no padding -- so the only two places to put something are
+    # a key nobody reads and the bytes after the closing brace.
+    known = None
+    for family, keys in _JSON_PRESET_KEYS.items():
+        if fmt_label and fmt_label.startswith(family):
+            known = keys
+            break
+    if known is not None:
+        try:
+            with open(filepath, "rb") as f:
+                doc = f.read(min(size, 64 * 1024 * 1024))
+            end = _json_object_end(doc)
+            if end is None:
+                findings.append({"severity": "warn", "offset": 0,
+                                 "rule": "structure",
+                                 "message": "the top-level JSON object never closes"})
+            else:
+                tail = doc[end:].strip()
+                if tail:
+                    findings.append({"severity": "alert", "offset": end,
+                                     "rule": "json_trailing_data",
+                                     "message": f"{len(tail):,} bytes follow the "
+                                                f"top-level object; a parser stops at "
+                                                f"the closing brace and never sees them"
+                                                f"{_entropy_note(tail)}"})
+                extra = [k for k in _json_top_level_keys(doc, end) if k not in known]
+                for k in sorted(set(extra)):
+                    findings.append({"severity": "notice", "offset": 0,
+                                     "rule": "json_unknown_key",
+                                     "message": f"top-level key {k!r} is not part of "
+                                                f"the known {fmt_label} schema "
+                                                f"(carrier, or a format this decoder "
+                                                f"has not caught up with)"})
+        except Exception as e:
+            findings.append({"severity": "warn", "offset": None,
+                             "rule": "check_failed",
+                             "message": f"the json preset checks could not run "
+                                        f"({type(e).__name__}); this file was NOT screened for them"})
 
     # offset is deliberately None on the four "check_failed" rules -- the ones
     # whose whole job is to say "this rule could not run, the file was NOT
