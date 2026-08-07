@@ -155,46 +155,63 @@ def _json_top_level_keys(data, end):
     return out
 
 
-def _find_embedded(filepath, magic, form_at, form, own, window=1 << 20):
-    """Offset of a complete container's magic inside a file, or None.
+def _find_embedded(filepath, candidates, own, window=1 << 20):
+    """{magic: offset} for each complete container found inside a file.
 
-    Windowed rather than slurped: this used to read 16 MB, which put `audit`'s
-    peak over the bound its memory test enforces AND stopped scanning at the
-    cap without saying so. One window at a time costs the same for a 4 KB file
-    and a 4 GB one, and covers all of both.
+    One pass for every magic, not one pass each: the I/O is the cost, and
+    searching a handful of short patterns inside a window already in memory is
+    free next to reading the file again. A clean file -- no embedded container,
+    the common case -- used to be read once per magic.
 
-    The overlap is the longest thing a match needs -- the magic plus the form
-    bytes that follow it -- so a container straddling a window boundary is
-    still seen.
+    Windowed rather than slurped. The first version read 16 MB, which put
+    `audit`'s peak over the bound its memory test enforces and stopped scanning
+    at the cap without saying so. The overlap is the longest thing a match
+    needs, so a container straddling a boundary is still seen.
     """
-    keep = len(magic) + form_at + 4
-    with open(filepath, "rb") as f:
+    pending = list(candidates)
+    keep = max((len(m) + fa + 4) for m, fa, _f, _n in pending) if pending else 0
+    out = {}
+    with open(filepath, "rb") as fh:
         base = 0
         prev = b""
-        while True:
-            chunk = f.read(window)
+        while pending:
+            chunk = fh.read(window)
             if not chunk:
-                return None
+                break
             buf = prev + chunk
-            off = 0
-            while True:
-                at = buf.find(magic, off)
-                if at < 0:
-                    break
-                abs_at = base - len(prev) + at
-                off = at + 1
-                if abs_at <= 0:                       # the file's own header
-                    continue
-                if magic == own and abs_at < 16:
-                    continue
-                if form:
-                    if at + form_at + 4 > len(buf):
-                        break                          # resolve on the next window
-                    if buf[at + form_at:at + form_at + 4] != form:
-                        continue
-                return abs_at
+            start_abs = base - len(prev)
+            still = []
+            for magic, form_at, form, name in pending:
+                at = _match_in(buf, start_abs, magic, form_at, form, own)
+                if at is None:
+                    still.append((magic, form_at, form, name))
+                else:
+                    out[magic] = at
+            pending = still
             base += len(chunk)
             prev = buf[-keep:] if len(buf) > keep else buf
+    return out
+
+
+def _match_in(buf, start_abs, magic, form_at, form, own):
+    """Absolute offset of the first real match in this window, or None."""
+    off = 0
+    while True:
+        at = buf.find(magic, off)
+        if at < 0:
+            return None
+        abs_at = start_abs + at
+        off = at + 1
+        if abs_at <= 0:                       # the file's own header
+            continue
+        if magic == own and abs_at < 16:
+            continue
+        if form:
+            if at + form_at + 4 > len(buf):
+                return None                    # resolve on the next window
+            if buf[at + form_at:at + form_at + 4] != form:
+                continue
+        return abs_at
 
 
 def _declared_end(head):
@@ -638,14 +655,16 @@ def scan(filepath, fmt_label, chunks, warns):
     try:
         with open(filepath, "rb") as f:
             own = f.read(4)
-        for magic, form_at, form, name in _EMBEDDED_MEDIA:
-            # Ogg stamps OggS on EVERY page, so page 2 of any Ogg looks like an
-            # embedded Ogg -- six of six real Ogg/Opus files tripped this before
-            # the guard. The genuine case, several logical bitstreams in one
-            # file, is what ogg_multistream above is for.
-            if magic == b"OggS" and fmt_label and fmt_label.startswith("Ogg"):
-                continue
-            at = _find_embedded(filepath, magic, form_at, form, own)
+        # Ogg stamps OggS on EVERY page, so page 2 of any Ogg looks like an
+        # embedded Ogg -- six of six real Ogg/Opus files tripped this before the
+        # guard. The genuine case, several logical bitstreams in one file, is
+        # what ogg_multistream above is for.
+        wanted = [c for c in _EMBEDDED_MEDIA
+                  if not (c[0] == b"OggS" and fmt_label
+                          and fmt_label.startswith("Ogg"))]
+        hits = _find_embedded(filepath, wanted, own) if wanted else {}
+        for magic, _form_at, _form, name in wanted:
+            at = hits.get(magic)
             if at is None:
                 continue
             holder = None
