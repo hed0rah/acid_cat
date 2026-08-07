@@ -169,6 +169,47 @@ def _d2xy(side, d):
     return x, y
 
 
+_HILBERT_PER_CELL = 64          # bytes sampled per cell when a file is too big
+
+
+def hilbert_from_file(path, order=6, per_cell=_HILBERT_PER_CELL):
+    """``hilbert_grid`` over a FILE, bounded, covering the whole of it.
+
+    Returns ``(grid, side, sampled)``.
+
+    The obvious bounded version reads the first N bytes and maps those, which
+    turns a map of a 2 GB image into a map of its first fragment while the
+    caption still names the full size. Reading a small sample per CELL instead
+    keeps every cell anchored to the offset range it represents, so the picture
+    still spans the file -- at a fixed cost of ``side^2 * per_cell`` bytes, or
+    256 KB at order 6.
+
+    Exact when the file is small enough that each cell's range fits in
+    ``per_cell``; ``sampled`` says which happened.
+    """
+    side = 1 << order
+    cells = side * side
+    grid = [[None] * side for _ in range(side)]
+    n = os.path.getsize(path)
+    if n == 0:
+        return grid, side, False
+    sampled = False
+    with open(path, "rb") as fh:
+        for i in range(cells):
+            lo = i * n // cells
+            hi = max(lo + 1, (i + 1) * n // cells)
+            want = min(per_cell, hi - lo)
+            if hi - lo > want:
+                sampled = True
+            fh.seek(lo)
+            chunk = fh.read(want)
+            if not chunk:
+                continue
+            x, y = _d2xy(side, i)
+            grid[y][x] = sum(chunk) // len(chunk)
+    return grid, side, sampled
+
+
 def hilbert_grid(data, order=5):
     """Lay bytes along a Hilbert space-filling curve into a 2^order square grid;
     each cell is the mean byte of its slice (or None). Adjacent file offsets stay
