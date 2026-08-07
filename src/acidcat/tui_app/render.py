@@ -19,6 +19,7 @@ _BAR_W = 18            # width of the scan progress bar
 _HEX_CAP = 1024        # most bytes to render in the hex pane for one node
 _ROW_CAP = 400         # most per-element rows (events/frames) to list per chunk
 _HEXEDIT_CAP = 512     # refuse editing a byte region bigger than this (pick a field)
+_VIZ_READ = 8 * 1024 * 1024   # bytes the histogram reads; the other views stream
 _UNDO_CAP = 50         # most undo deltas to keep
 _UNDO_BYTES_CAP = 64 * 1024 * 1024   # total delta bytes kept (latest always kept)
 _DIFF_CAP = 200        # most changed regions to list in the pending-changes view

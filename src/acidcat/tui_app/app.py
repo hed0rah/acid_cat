@@ -50,7 +50,7 @@ from acidcat.tui_theme import (
 
 from acidcat.tui_app.render import (
     edit_profile, hex_text, text_field_for, _read, _fuzzy, _hex_rows,
-    _SPIN, _BAR_W, _HEX_CAP, _ROW_CAP, _HEXEDIT_CAP, _UNDO_CAP,
+    _SPIN, _BAR_W, _HEX_CAP, _ROW_CAP, _HEXEDIT_CAP, _UNDO_CAP, _VIZ_READ,
     _UNDO_BYTES_CAP, _DIFF_CAP, _LARGE_FILE, _SCAN_SEG,
 )
 from acidcat.tui_app.screens import (
@@ -1181,37 +1181,74 @@ class AcidcatTUI(App):
             return 72
 
     def _viz_render(self, mode):
-        data = _read(self.work, 0, min(self.fsize, 8 * 1024 * 1024))
-        if not data:
+        if not self.fsize:
             t = Text()
             t.append("  (no bytes to visualize)", style=DIM)
             return t
+        # Entropy and hilbert stream from the file and cover all of it.
+        # Only the histogram still needs bytes in hand, and it now says how
+        # many it read -- this used to read 8 MB and caption every view
+        # "(whole file)", which was false for anything larger.
         if mode == "entropy":
-            return self._viz_entropy(data)
+            return self._viz_entropy()
         if mode == "hilbert":
-            return self._viz_hilbert(data)
-        return self._viz_histogram(data)
+            return self._viz_hilbert()
+        return self._viz_histogram(
+            _read(self.work, 0, min(self.fsize, _VIZ_READ)))
 
-    def _viz_entropy(self, data):
-        ent = viz.windowed_entropy(data, self._viz_width())
+    def _viz_entropy(self):
+        ent, size, sampled = viz.file_entropy(self.work, self._viz_width())
+        if not ent:
+            return Text("  (no bytes to visualize)", style=DIM)
         t = Text()
         t.append("entropy  ", style=f"bold {ACCENT}")
         t.append(f"min {min(ent):.1f}  mean {sum(ent) / len(ent):.1f}  "
-                 f"max {max(ent):.1f} bits/byte  (whole file)\n\n", style=SOFT)
+                 f"max {max(ent):.1f} bits/byte  ", style=SOFT)
+        t.append("(sampled)\n\n" if sampled else "(whole file)\n\n",
+                 style=PEND if sampled else SOFT)
         blocks = " ▁▂▃▄▅▆▇█"
         for e in ent:
             frac = max(0.0, min(1.0, e / 8))
             t.append(blocks[int(frac * (len(blocks) - 1))],
                      style=PALETTE[min(len(PALETTE) - 1, int(frac * len(PALETTE)))])
         t.append("\n")
+        self._viz_mark_container_end(t, len(ent), size)
         return t
 
-    def _viz_hilbert(self, data):
-        grid, side = viz.hilbert_grid(data, order=5)
+    def _viz_mark_container_end(self, t, columns, size):
+        """Draw where the container says it stops.
+
+        A hot band to the RIGHT of this mark is appended data -- the
+        polyglot and trailing-payload tell, and most of the reason to look
+        at an entropy view at all. Without it the eye has no reference for
+        where the file should have ended.
+        """
+        end = self._declared_end()
+        if not end or not size or end >= size:
+            return
+        col = max(0, min(columns - 1, int(end * columns / size)))
+        t.append(" " * col, style=DIM)
+        t.append("^", style=f"bold {PEND}")
+        t.append(f"  container ends at 0x{end:08x}; "
+                 f"{size - end:,} bytes follow\n", style=PEND)
+
+    def _declared_end(self):
+        """Where the outermost walked container claims to stop, or None."""
+        best = None
+        for c in self.chunks:
+            end = (c.get("offset") or 0) + (c.get("size") or 0)
+            if best is None or end > best:
+                best = end
+        return best
+
+    def _viz_hilbert(self):
+        grid, side, sampled = viz.hilbert_from_file(self.work, order=6)
         t = Text()
         t.append("hilbert  ", style=f"bold {ACCENT}")
-        t.append(f"{side}x{side} byte-class map; adjacent cells are adjacent bytes\n\n",
+        t.append(f"{side}x{side} byte-class map; adjacent cells are adjacent bytes  ",
                  style=SOFT)
+        t.append("(sampled)\n\n" if sampled else "(whole file)\n\n",
+                 style=PEND if sampled else SOFT)
         for y in range(0, side, 2):
             for x in range(side):
                 top = grid[y][x]
@@ -1228,7 +1265,10 @@ class AcidcatTUI(App):
     def _viz_histogram(self, data):
         t = Text()
         t.append("byte histogram  ", style=f"bold {ACCENT}")
-        t.append("(0x00 .. 0xff frequency, whole file)\n\n", style=SOFT)
+        capped = len(data) < self.fsize
+        t.append(f"(0x00 .. 0xff frequency over {len(data):,} bytes"
+                 + (", capped)" if capped else ")") + "\n\n",
+                 style=PEND if capped else SOFT)
         for row in viz.byte_histogram(data, width=self._viz_width(), height=8):
             t.append(row + "\n", style=ACCENT)
         return t

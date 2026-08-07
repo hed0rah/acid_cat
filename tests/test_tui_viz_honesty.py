@@ -1,0 +1,96 @@
+"""The byte views must describe what they actually measured.
+
+`_viz_render` read `min(fsize, 8 MB)` and every view captioned itself
+"(whole file)". Over 8 MB that caption was false, and it is the same defect this
+audit has been clearing everywhere else: a cap reported as a fact about the
+file. Entropy and hilbert now stream and cover all of it; the histogram still
+needs bytes in hand and says how many it read.
+
+The container-end marker is the other half. A hot band to the right of it is
+appended data, which is the polyglot tell and most of the reason to look at an
+entropy view at all.
+"""
+
+import os
+import struct
+
+import pytest
+
+from acidcat.tui_app.app import AcidcatTUI
+
+
+class _VizProbe:
+    _viz_entropy = AcidcatTUI._viz_entropy
+    _viz_hilbert = AcidcatTUI._viz_hilbert
+    _viz_mark_container_end = AcidcatTUI._viz_mark_container_end
+    _declared_end = AcidcatTUI._declared_end
+
+    def __init__(self, path, chunks=(), width=72):
+        self.work = path
+        self.fsize = os.path.getsize(path)
+        self.chunks = list(chunks)
+        self._w = width
+
+    def _viz_width(self):
+        return self._w
+
+
+def _wav_plus(path, trailing=b""):
+    pcm = b"\x00\x01" * 4000
+    body = (b"WAVE" + b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, 44100, 88200, 2, 16)
+            + b"data" + struct.pack("<I", len(pcm)) + pcm)
+    path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body + trailing)
+    return str(path)
+
+
+def test_entropy_says_whole_file_when_it_read_the_whole_file(tmp_path):
+    p = _VizProbe(_wav_plus(tmp_path / "a.wav"))
+    assert "(whole file)" in p._viz_entropy().plain
+
+
+def test_entropy_says_sampled_when_it_sampled(tmp_path):
+    big = tmp_path / "big.bin"
+    big.write_bytes(os.urandom(3_000_000))
+    p = _VizProbe(str(big), width=8)
+    out = p._viz_entropy().plain
+    assert "(sampled)" in out, "estimated the curve and captioned it as measured"
+    assert "(whole file)" not in out
+
+
+def test_hilbert_covers_the_file_and_says_how(tmp_path):
+    small = _VizProbe(_wav_plus(tmp_path / "s.wav"))
+    assert "(whole file)" in small._viz_hilbert().plain
+    big = tmp_path / "b.bin"
+    big.write_bytes(os.urandom(2_000_000))
+    assert "(sampled)" in _VizProbe(str(big))._viz_hilbert().plain
+
+
+def test_hilbert_is_64x64(tmp_path):
+    """Order 6 over order 5: four times the cells, at a bounded read."""
+    out = _VizProbe(_wav_plus(tmp_path / "h.wav"))._viz_hilbert().plain
+    assert "64x64" in out
+
+
+def test_the_container_end_is_marked_when_bytes_follow_it(tmp_path):
+    """The polyglot tell. Without the mark the eye has no reference for where
+    the file was supposed to stop."""
+    trailing = os.urandom(20_000)
+    path = _wav_plus(tmp_path / "poly.wav", trailing=trailing)
+    declared = os.path.getsize(path) - len(trailing)
+    chunks = [{"id": "data", "offset": 0, "size": declared}]
+    out = _VizProbe(path, chunks=chunks)._viz_entropy().plain
+    assert "container ends at" in out
+    assert f"{len(trailing):,} bytes follow" in out
+    assert "^" in out
+
+
+def test_no_marker_on_a_file_with_nothing_after_the_container(tmp_path):
+    """It must not cry wolf on every ordinary file."""
+    path = _wav_plus(tmp_path / "clean.wav")
+    chunks = [{"id": "data", "offset": 0, "size": os.path.getsize(path)}]
+    assert "container ends at" not in _VizProbe(path, chunks=chunks)._viz_entropy().plain
+
+
+def test_no_marker_when_nothing_was_walked(tmp_path):
+    path = _wav_plus(tmp_path / "unknown.bin")
+    assert "container ends at" not in _VizProbe(path, chunks=[])._viz_entropy().plain
