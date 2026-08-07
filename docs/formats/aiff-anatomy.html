@@ -350,9 +350,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"BIG-endian, and counting everything after this field -- so file size is this plus 8. Here 2,792,836 + 8 = 2,792,844, the exact file length.",
        note:"read little-endian it is 2,225,349,632. That is the single most common AIFF parsing mistake, and it produces a size that looks almost plausible."},
       {label:"formType",k:"enum",r:[8,11],val:'"AIFF"',sel:0,
-       branch:[["AIFF","uncompressed PCM"],["AIFC","compressed; a FVER chunk and a codec id in COMM are then mandatory"]],
+       branch:[["AIFF","uncompressed PCM, an 18-byte COMM"],["AIFC","a FVER chunk and a compression type in COMM become mandatory -- but that type may be NONE or sowt, which are not compressed at all"]],
        body:"What kind of FORM this is, and the only thing distinguishing an AIFF from any other IFF file. The first four bytes alone identify nothing.",
-       note:"an AIFC still carries .aif or .aiff in practice, so the extension does not tell you whether the samples are compressed."}
+       note:"AIFC is a container, not a codec: it can hold plain PCM. And it still carries .aif or .aiff in practice, so neither the extension nor the form type tells you whether the samples are compressed -- only the compression type in COMM does."}
     ]);
   // SSND: the two fields that stand between the chunk and its audio
   build("aiff-ssnd","byte",
@@ -382,7 +382,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        note:"if this is ODD, a single pad byte follows the payload and is NOT counted here. Advance by 8 + size + (size &amp; 1), or every chunk after the first odd one lands one byte off and the file reads as garbage."},
       {label:"text",k:"rsv",r:[8,13],val:'"Galway"',
        body:"Plain characters, not a Pascal string, and not NUL-terminated. AIFF predates Unicode, so the encoding is unstated and readers assume Latin-1.",
-       note:"the Pascal convention -- a leading length byte -- does appear in AIFF, but in the MARK and INST chunks rather than here."}
+       note:"the Pascal convention -- a leading length byte -- does appear in AIFF, but in MARK, whose marker names are length-prefixed. INST holds no strings at all, only loop points and numbers."}
     ]);
 })();
 </script>

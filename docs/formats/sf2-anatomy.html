@@ -218,7 +218,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">SF2</span><span class="v">16-bit PCM; sample bytes = smpl_offset + start*2 .. end*2</span></div>
           <div><span class="k">sm24 (24-bit)</span><span class="v">a 24-bit SF2 keeps the top 16 bits in smpl and the low byte in a parallel sm24 chunk; a smpl-only read is a 16-bit downgrade</span></div>
           <div><span class="k">SF3</span><span class="v">Ogg-Vorbis streams; sample bytes = smpl_offset + start .. end (a playable .ogg)</span></div>
-          <div><span class="k">acidcat</span><span class="v">each sample gets its real byte offset, so carve --offset extracts it and the hex pane shows it</span></div>
+          <div><span class="k">extraction</span><span class="v">each sample has a real byte offset, so a single sample can be pulled from the blob without decoding the bank</span></div>
           <div><span class="k">padding</span><span class="v">the spec writes &ge;46 zero sample points after each sample; a carve of start..end is clean, the gap between is mandated silence</span></div>
         </div>
       </div>
@@ -233,13 +233,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">layout</span><span class="v">name[20] . start/end/loop_start/loop_end/rate (5 x u32) . pitch(u8) . correction(s8) . link(u16) . type(u16)</span></div>
           <div><span class="k">SF3 twist</span><span class="v">start/end become byte offsets, and type has bit 0x10 set to mark an Ogg sample</span></div>
           <div><span class="k">terminals</span><span class="v">each pdta list ends in a sentinel record -- phdr "EOP", inst "EOI", shdr "EOS" -- structural, not real content</span></div>
-          <div><span class="k">anti-garbage</span><span class="v">acidcat keeps only in-range headers (end within smpl), so a lied index cannot carve past the blob</span></div>
+          <div><span class="k">anti-garbage</span><span class="v">keep only in-range headers (end within smpl), so a lied index cannot reach past the sample blob</span></div>
         </div>
       </div>
     </details>
   </div>
 
-  <div class="sec">what acidcat reads</div>
+  <div class="sec">what the header yields</div>
   <p class="note">The INFO metadata, the smpl blob size, and every shdr record -- each turned into a chunk carrying its real byte offset, so samples are carveable and hex-viewable, and convert lifts them all out.</p>
   <div>
     <details class="region" open>
@@ -365,14 +365,14 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
      0x95,0x58,0x00,0x00, 0x44,0xAC,0x00,0x00, 0x4C, 0x00, 0x00,0x00, 0x01,0x00],
     [
       {label:"sample name",k:"enum",r:[0,19],val:"\"tu 13\"",
-       body:"20-byte ASCII name, null-padded. This is what a player and acidcat list. Here bytes 74 75 20 31 33 spell 'tu 13'.",
+       body:"20-byte ASCII name, null-padded. This is what a player and list. Here bytes 74 75 20 31 33 spell 'tu 13'.",
        note:"trailing bytes are 0x00 padding out to 20."},
       {label:"start",k:"sync",r:[20,23],val:"0",
        body:"u32 LE index into the smpl blob where this sample begins. In SF2 it is a sample index (multiply by 2 for the byte offset); in SF3 it is already a byte offset.",
-       note:"acidcat resolves it to an absolute byte range so the sample is carveable."},
+       note:"resolve it against the smpl chunk's own offset to get an absolute byte range."},
       {label:"end",k:"sync",r:[24,27],val:"22678",
        body:"u32 LE index one past the last sample. 0x00005896 = 22678. The sample length is end - start = 22678 frames.",
-       note:"end must fall inside smpl or acidcat drops the record as garbage."},
+       note:"end must fall inside smpl or the record is garbage."},
       {label:"loop_start",k:"sync",r:[28,31],val:"22144",
        body:"u32 LE index where the sustain loop begins, for held notes. 0x00005680 = 22144.",
        note:"loop_end > loop_start marks a looped sample; otherwise it is a one-shot."},
@@ -399,7 +399,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["| 0x8000","ROM: audio in the engine ROM, not the file"],
         ["| 0x10","SF3: sample is Ogg-Vorbis compressed"]],
        body:"u16 LE sample type. 1 = mono here. SF3 sets bit 0x10 on top of the channel type to mark an Ogg-compressed sample, and repurposes start/end as byte offsets.",
-       note:"acidcat reads bit 0x10 to decide SF2 (PCM) vs SF3 (Ogg) extraction."}
+       note:"bit 0x10 is what separates SF2 (PCM) from SF3 (Ogg) sample data."}
     ]);
 
   // the container: RIFF's byte order, IFF's ancestry
@@ -441,7 +441,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        note:"ISFT is the provenance field: the tool that wrote the bank stamps itself there."},
       {label:"ckSize",k:"enum",r:[4,7],val:"16",
        body:"Little-endian. It counts the terminator, unlike the AIFF text chunks, which count only the characters.",
-       note:"the spec caps an INFO string at 256 bytes including the terminator, so a longer one is a malformed bank rather than a long name."},
+       note:"the spec caps most INFO strings at 256 bytes including the terminators. ICMT, the comment, is the exception at 65,536 -- so a blanket 256-byte check rejects valid banks."},
       {label:"text",k:"rsv",r:[8,22],val:'"Airfont 320 neo"',
        body:"Plain ASCII. The name is 15 characters and the chunk is 16 bytes, because a terminator is mandatory."},
       {label:"terminator",k:"sync",r:[23,23],val:"0x00",

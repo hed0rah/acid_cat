@@ -430,7 +430,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"How many chunk offsets follow. A real music file has thousands."},
       {label:"offset[0]",k:"flag",r:[16,19],val:"44",
        body:"An ABSOLUTE offset from the start of the FILE to this chunk of audio. That is the whole problem: the table does not describe where audio sits relative to anything, only where it sits in this exact byte layout.",
-       note:"Whether an edit breaks them depends on the LAYOUT. With moov AFTER mdat -- the ordinary non-faststart case -- editing tags does not move mdat, so these stay valid and the file can be patched in place. In a faststart file, where moov sits ahead of mdat, changing a tag's length shifts mdat and every offset here has to be rewritten. That is what acidcat's repair recomputes."}
+       note:"Whether an edit breaks them depends on the LAYOUT. With moov AFTER mdat -- the ordinary non-faststart case -- editing tags does not move mdat, so these stay valid and the file can be patched in place. In a faststart file, where moov sits ahead of mdat, changing a tag's length shifts mdat and every offset here has to be rewritten. That is what a repair has to recompute."}
     ]);
 })();
 </script>
