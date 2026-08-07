@@ -190,6 +190,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div class="sec">stco: the chunk offset table (20 bytes, complete)</div>
         <p class="note">Absolute file offsets. This is the structure that breaks when a file is rewritten.</p>
         <div id="mp4-stco"></div>
+        <div class="callout"><b>stco does not locate a sample on its own.</b> It gives the start of each CHUNK. To find sample N you also need <code>stsc</code>, which maps samples to chunks, and <code>stsz</code>, which gives each sample's size. The three together turn a chunk offset into a byte range; any one alone does not. The bytes they point into live in <code>mdat</code>, which holds the raw coded audio and nothing else -- no framing, no index.</div>
+        <div class="callout"><b>Why a tag edit usually does NOT rewrite the file.</b> iTunes deliberately leaves a <code>free</code> atom next to <code>moov</code>. Growing a tag eats padding; shrinking one gives it back. Nothing after it moves, so every <code>stco</code> offset stays correct and the edit is a patch rather than a rewrite. That padding is the mechanism behind in-place tagging, and a writer that ignores it forces a full rewrite for a one-character title change.</div>
 </div></details>
     <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">mdat</span><span class="rspan">media data . raw encoded samples</span></summary>
       <div class="rbody"><p class="note">Raw encoded audio frames with no intrinsic framing. May appear before moov (streaming layout) or after it. The stco/co64 box inside stbl holds absolute file offsets into mdat; duration = sum of the stts sample deltas / mvhd timescale. Because samples are reached only through stsc + stsz + stco/co64, any bytes in mdat that no sample table points at are a legal cavity -- edit leftovers, alignment padding, or a place to hide data.</p></div></details>
@@ -203,6 +205,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       </div>        <div class="sec">a tag, end to end (32 bytes)</div>
         <p class="note">The whole metadata path in one view: a named atom, its data sub-atom, and the text.</p>
         <div id="mp4-ilst"></div>
+        <div class="callout"><b>There is an atom in the way.</b> Walking this tree by hand, <code>ilst</code> is not the first thing inside <code>meta</code>. After meta's four version/flags bytes comes an <code>hdlr</code> handler atom -- <code>mdir</code>/<code>appl</code> for iTunes metadata -- and only then <code>ilst</code>. It declares what kind of metadata follows, and skipping past it is the normal thing to do.</div>
 </div></details>
   </div>
 
@@ -554,7 +557,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"How many chunk offsets follow. A real music file has thousands."},
       {label:"offset[0]",k:"flag",r:[16,19],val:"44",
        body:"An ABSOLUTE offset from the start of the FILE to this chunk of audio. That is the whole problem: the table does not describe where audio sits relative to anything, only where it sits in this exact byte layout.",
-       note:"add a tag, or rewrite one at a different length, and every one of these is wrong -- the audio silently plays from the wrong place or not at all. acidcat repairs them by re-deriving the shift. It is also why moov-at-the-front files must be rewritten wholesale rather than patched."}
+       note:"Whether an edit breaks them depends on the LAYOUT. With moov AFTER mdat -- the ordinary non-faststart case -- editing tags does not move mdat, so these stay valid and the file can be patched in place. In a faststart file, where moov sits ahead of mdat, changing a tag's length shifts mdat and every offset here has to be rewritten. That is what acidcat's repair recomputes."}
     ]);
 
 })();
