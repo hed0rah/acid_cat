@@ -192,9 +192,15 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody"><div class="kv">
         <div><span class="k">header</span><span class="v">"MTrk" + u32 big-endian byte length</span></div>
         <div><span class="k">events</span><span class="v">delta-time (VLQ) + event, repeated to end-of-track</span></div>
-      </div></div></details>
+      </div>        <div class="sec">the track header (8 bytes)</div>
+        <p class="note">The only length in the file, and it is a byte count, not an event count.</p>
+        <div id="midi-mtrk"></div>
+</div></details>
     <details class="region"><summary><span class="chev">&#9656;</span><span class="rname">VLQ delta time</span><span class="rspan">the variable encoding</span></summary>
-      <div class="rbody"><p class="note">Seven payload bits per byte; the high bit set means another byte follows. A VLQ is capped at 4 bytes (28 payload bits), so the largest delta is 0x0FFFFFFF. A parser that loses sync here misreads everything after it. acidcat's running-status bookkeeping is exactly where a one-byte desync once corrupted note counts.</p></div></details>
+      <div class="rbody"><p class="note">Seven payload bits per byte; the high bit set means another byte follows. A VLQ is capped at 4 bytes (28 payload bits), so the largest delta is 0x0FFFFFFF. A parser that loses sync here misreads everything after it. acidcat's running-status bookkeeping is exactly where a one-byte desync once corrupted note counts.</p>        <div class="sec">a two-byte delta time, bit by bit</div>
+        <p class="note">Seven bits of payload per byte. The eighth says whether another byte follows.</p>
+        <div id="midi-vlq"></div>
+</div></details>
     <details class="region"><summary><span class="chev">&#9656;</span><span class="rname">running status</span><span class="rspan">the omitted byte</span></summary>
       <div class="rbody"><p class="note">Consecutive channel events with the same status may drop the repeated status byte; the parser must remember the last one. Most exporters use it.</p></div></details>
     <details class="region"><summary><span class="chev">&#9656;</span><span class="rname">channel voice messages</span><span class="rspan">status 0x80-0xEF . SSSS CCCC</span></summary>
@@ -433,6 +439,33 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   });});
   var initial=(location.hash||"").replace("#","");
   if(initial && document.querySelector('[data-panel="'+initial+'"]')) activate(initial);
+
+  // the track header
+  build("midi-mtrk","byte",
+    [0x4D,0x54,0x72,0x6B,0x00,0x00,0x00,0xF0],
+    [
+      {label:"chunk type",k:"sync",r:[0,3],val:'"MTrk"',
+       body:"A track chunk. MThd declares how many of these follow, and everything a MIDI file plays lives inside them.",
+       note:"the spec requires readers to SKIP any chunk type they do not recognise, using the length below. That is the format's only extension mechanism."},
+      {label:"length",k:"enum",r:[4,7],val:"240",
+       body:"Big-endian, and the number of BYTES in the track, not the number of events. Nothing in the file counts events.",
+       note:"this is the only way to find the next track. Events are variable-length and delimited by nothing, so a reader that loses its place inside a track cannot recover, it can only skip to here + 8 + length."}
+    ]);
+  // a delta time, drawn as bits, because the bits are the point
+  build("midi-vlq","bit",
+    [0x81,0x10],
+    [
+      {label:"continuation",k:"flag",r:[0,0],val:"1 = more follows",
+       body:"The high bit of every byte in a variable-length quantity. Set means another byte belongs to this number; clear means this is the last one.",
+       note:"it is why a MIDI file cannot be seeked. There is no way to know how long a delta time is without reading it, and no way to find an event without reading every event before it."},
+      {label:"payload",k:"enum",r:[1,7],val:"0000001 = 1",
+       body:"Seven bits, most significant group first."},
+      {label:"continuation",k:"sync",r:[8,8],val:"0 = last byte",
+       body:"Clear, so the quantity ends here. A VLQ is at most four bytes, giving 28 bits and a maximum of 0x0FFFFFFF."},
+      {label:"payload",k:"enum",r:[9,15],val:"0010000 = 16",
+       body:"The low seven bits. The value is (1 << 7) | 16 = 144 ticks.",
+       note:"144 ticks, not 0x8110 = 33,040. Reading a VLQ as a plain integer is the single most common Standard MIDI File bug, and it fails silently because the result is still a number."}
+    ]);
 })();
 </script>
 <script>
@@ -558,6 +591,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
+
+
 })();
 
 </script>
