@@ -164,7 +164,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">A Vital preset has no binary header. The whole file is one bare UTF-8 JSON object: nine metadata keys at the top, then <b>settings</b>, the entire synth state, with the wavetable audio riding inside it as base64. Vital is open source (Matt Tytel), so every key can be checked against the synth's own load code; everything below is verified against a real 1.0.7 preset. acidcat dispatches on the <b>0x7B</b> magic plus a fast search for the <b>"synth_version"</b> marker before paying for a full parse. <b>Hover</b> any field to light its exact bytes and read the decode; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
+  <p class="lede">A Vital preset has no binary header. The whole file is one bare UTF-8 JSON object: nine metadata keys at the top, then <b>settings</b>, the entire synth state, with the wavetable audio riding inside it as base64. Vital is open source (Matt Tytel), so every key can be checked against the synth's own load code; everything below is verified against a real 1.0.7 preset. Dispatch on the <b>0x7B</b> magic plus a fast search for the <b>"synth_version"</b> marker before paying for a full parse. <b>Hover</b> any field to light its exact bytes and read the decode; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">iris</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -180,14 +180,14 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">top-level metadata</span><span class="rspan">byte 0 . nine keys + settings</span></summary>
       <div class="rbody">
-        <p class="note">Byte zero is the opening brace, and because keys sort alphabetically the first entry is always author. The opening bytes of the sample, Future_EGuitar.vital:</p>
+        <p class="note">Byte zero is the opening brace, and because keys sort alphabetically the first entry is always author. The opening bytes of the worked example:</p>
         <div id="block-header"></div>
         <div class="kv">
-          <div><span class="k">preset_name</span><span class="v">"Future EGuitar"</span></div>
-          <div><span class="k">author</span><span class="v">"Flamedragonz"</span></div>
+          <div><span class="k">preset_name</span><span class="v">"Bass - Alien"</span></div>
+          <div><span class="k">author</span><span class="v">"Black Lotus Audio"</span></div>
           <div><span class="k">comments</span><span class="v">the browser description; here "Control the dynamics of your guitar with Velocity..."</span></div>
           <div><span class="k">preset_style</span><span class="v">browser category, e.g. Experiment . Bass . Keys . Lead</span></div>
-          <div><span class="k">synth_version</span><span class="v">writing Vital version, "1.0.7" here; the dispatch marker</span></div>
+          <div><span class="k">synth_version</span><span class="v">writing Vital version, "1.0.4" here; the dispatch marker</span></div>
           <div><span class="k">macro1 .. macro4</span><span class="v">the four macro knob labels; "MACRO 1" .. "MACRO 4" when the author never renamed them</span></div>
           <div><span class="k">settings</span><span class="v">one object holding the entire engine; everything else on this page lives inside it</span></div>
         </div>
@@ -243,18 +243,18 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     </details>
   </div>
 
-  <div class="sec">reading it with acidcat</div>
+  <div class="sec">reading it</div>
   <p class="note">Plain JSON means the reader's job is dispatch and selection, not decoding.</p>
   <div>
     <details class="region">
-      <summary><span class="chev">&#9656;</span><span class="rname">inspect behavior</span><span class="rspan">--pretty . deep</span></summary>
+      <summary><span class="chev">&#9656;</span><span class="rname">reader behavior</span><span class="rspan">shallow . deep</span></summary>
       <div class="rbody">
         <div class="kv">
           <div><span class="k">dispatch</span><span class="v">0x7B magic plus a bytes search for "synth_version" before json.loads; arbitrary JSON that merely starts with a brace is rejected without a parse</span></div>
-          <div><span class="k">inspect --pretty</span><span class="v">preset_name, author, comments, preset_style, synth_version, and the four macro labels; one region spanning the whole file</span></div>
+          <div><span class="k">shallow read</span><span class="v">preset_name, author, comments, preset_style, synth_version, and the four macro labels; one region spanning the whole file</span></div>
           <div><span class="k">deep mode</span><span class="v">enumerates osc_1..3 with their wavetable names, the LFO/envelope/effect inventory, and walks the modulation matrix as source -&gt; destination : amount lines</span></div>
-          <div><span class="k">tolerant load</span><span class="v">trailing bytes after the top-level closing brace still load: the parser stops at the object's end, and acidcat surfaces the extra bytes as a warning rather than rejecting the file. Top-level keys outside the Vital schema are an unvalidated side-channel, also flagged</span></div>
-          <div><span class="k">hardening</span><span class="v">a forged deeply nested object raises RecursionError and is caught, matching the Serum walker; the threat model for a JSON preset is DoS, not code execution</span></div>
+          <div><span class="k">tolerant load</span><span class="v">trailing bytes after the top-level closing brace still load: the parser stops at the object's end, so the extra bytes must be flagged rather than silently dropped. Top-level keys outside the Vital schema are an unvalidated side-channel, also flagged</span></div>
+          <div><span class="k">hardening</span><span class="v">a forged deeply nested object exhausts a recursive parser, so the nesting depth must be bounded; the threat model for a JSON preset is DoS, not code execution</span></div>
         </div>
       </div>
     </details>
@@ -365,15 +365,15 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   build("block-header", 'byte',
     [0x7B,
      0x22,0x61,0x75,0x74,0x68,0x6F,0x72,0x22,0x3A,
-     0x22,0x46,0x6C,0x61,0x6D,0x65,0x64,0x72,0x61,0x67,0x6F,0x6E,0x7A,0x22],
+     0x22,0x42,0x6C,0x61,0x63,0x6B,0x20,0x4C,0x6F,0x74,0x75,0x73,0x20,0x41,0x75,0x64,0x69,0x6F,0x22],
     [
       {label:"magic",k:"sync",r:[0,0],val:"\"{\" 0x7B",
        body:"The entire header is one byte: the opening brace of a bare JSON object. There is no version field, no length, no chunk table; the format is the object.",
-       note:"0x7B alone is too generic, so acidcat also requires the \"synth_version\" key before treating the file as Vital."},
+       note:"0x7B alone is too generic; the \"synth_version\" key is what confirms a Vital file."},
       {label:"first key",k:"enum",r:[1,9],val:"\"author\":",
        body:"Keys are written in alphabetical order, so author always leads. The same ordering pushes settings, 95 percent of the bytes, ahead of synth_version at the tail.",
-       note:"in the sample the synth_version marker sits at byte 96,285 of 96,309: search the whole file, not the head."},
-      {label:"value",k:"enum",r:[10,23],val:"\"Flamedragonz\"",
+       note:"in this preset the synth_version marker sits at byte 1,756,926 of 1,756,950 -- 24 bytes from the end. Search the whole file, never the head."},
+      {label:"value",k:"enum",r:[10,28],val:"\"Black Lotus Audio\"",
        body:"A plain JSON string. All nine top-level metadata values are strings; the numbers live inside settings."}
     ]);
 
@@ -402,7 +402,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["voice","velocity . note . aftertouch . slide"],
         ["perform","mod_wheel . pitch_wheel"]],
        body:"Envelope 2 drives oscillator 1's level. An empty string here means the slot is unused: 18 of the 64 in the sample are.",
-       note:"acidcat's deep mode prints the wired slots as source -> destination : amount lines."},
+       note:"a full matrix read pairs each wired slot with its amount: source -> destination : amount."},
       {label:"slot close",k:"sync",r:[45,45],val:"}",
        body:"The depth is not in the slot. This is slot 3, and its amount lives back in the flat parameters: modulation_3_amount = 0.2928932, with modulation_3_bipolar, _power, _stereo, and _bypass beside it.",
        note:"reading the matrix therefore takes two lookups: the wiring from the array, the depth from the scalars."}

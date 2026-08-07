@@ -182,7 +182,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">The Amiga gave home computers real sampled sound in <b>1985</b>, and a whole family of music formats grew around it &mdash; all <b>big-endian</b>, because the Amiga is a Motorola 68000. This page covers the four that the tracker walker (MOD/XM/IT) does <i>not</i>: <b>SMUS</b>, the Sonix musical score (an IFF <code>FORM</code>, sibling of AIFF); <b>OKT</b>, the Oktalyzer 8-channel tracker; <b>MED</b> / OctaMED (magic <code>MMD0</code>&ndash;<code>MMD3</code>); and <b>Future Composer</b>, a synth-driver chiptune (<code>SMOD</code> / <code>FC14</code>). IFF &mdash; EA's Interchange File Format, born on the Amiga &mdash; is the direct ancestor of RIFF/WAV. The tabs open each, drawn byte by byte from real specimens. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">The Amiga gave home computers real sampled sound in <b>1985</b>, and a whole family of music formats grew around it &mdash; all <b>big-endian</b>, because the Amiga is a Motorola 68000. This page covers the four outside the mainstream tracker family (MOD/XM/IT): <b>SMUS</b>, the Sonix musical score (an IFF <code>FORM</code>, sibling of AIFF); <b>OKT</b>, the Oktalyzer 8-channel tracker; <b>MED</b> / OctaMED (magic <code>MMD0</code>&ndash;<code>MMD3</code>); and <b>Future Composer</b>, a synth-driver chiptune (<code>SMOD</code> / <code>FC14</code>). IFF &mdash; EA's Interchange File Format, born on the Amiga &mdash; is the direct ancestor of RIFF/WAV. The tabs open each, drawn byte by byte from real files. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">cobalt</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -204,7 +204,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">Two shapes cover these four formats. <b>SMUS</b> is an <b>IFF</b> file &mdash; the same <code>FORM</code> + tagged-chunk structure as AIFF, big-endian &mdash; so it reads like a cousin of the formats acidcat already walks. The other three are <b>modules</b>: <b>OKT</b> (Oktalyzer) uses IFF-style id+size chunks after an <code>OKTASONG</code> magic; <b>MED</b> and <b>Future Composer</b> are <b>pointer-based</b>, a fixed header of offsets into song/pattern/sample regions. acidcat decodes the IFF ones fully and summarises the pointer-based ones at the header. The specimens below are real cassie-corpus files.</p>
+      <p class="plede">Two shapes cover these four formats. <b>SMUS</b> is an <b>IFF</b> file &mdash; the same <code>FORM</code> + tagged-chunk structure as AIFF, big-endian &mdash; so it reads like a cousin of AIFF and 8SVX. The other three are <b>modules</b>: <b>OKT</b> (Oktalyzer) uses IFF-style id+size chunks after an <code>OKTASONG</code> magic; <b>MED</b> and <b>Future Composer</b> are <b>pointer-based</b>, a fixed header of offsets into song/pattern/sample regions. The IFF ones decode fully; the pointer-based ones give up only their header without chasing offsets.</p>
 
       <div class="sec">the four, at a glance</div>
       <div class="tree">
@@ -222,9 +222,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="y">chiptune</span><span><b>Future Composer</b> &mdash; not a sample tracker but a <b>synth driver</b>: tiny files that generate sound from waveform/frequency tables at playback, the roots of chiptune.</span></div>
       </div>
 
-      <div class="callout"><b>IFF is the granddaddy.</b> The <code>FORM</code> / 4-byte-id / big-endian-size / word-padded structure of SMUS is exactly what AIFF and 8SVX use, and RIFF/WAV is the little-endian rewrite of it. acidcat walks SMUS with the same IFF reader it uses for AIFF &mdash; only the chunk meanings differ.</div>
+      <div class="callout"><b>IFF is the granddaddy.</b> The <code>FORM</code> / 4-byte-id / big-endian-size / word-padded structure of SMUS is exactly what AIFF and 8SVX use, and RIFF/WAV is the little-endian rewrite of it. SMUS reads with the same IFF reader as AIFF &mdash; only the chunk meanings differ.</div>
       <div class="callout"><b>eight channels from four.</b> The Amiga's Paula chip has four hardware voices; OKT and OctaMED double that to eight by mixing two software voices per hardware channel. That is why OKT's <code>CMOD</code> chunk stores per-channel <i>split</i> flags &mdash; a set flag turns one hardware channel into two voices.</div>
-      <div class="callout"><b>pointer-based, so header-only.</b> MED and FC do not lay their data out in walkable chunks &mdash; they open with a table of absolute offsets into song, pattern, and sample regions, meant to be chased in RAM. acidcat recognises them and summarises the header (magic, module length, sequence length); a full pattern/sample decode is deferred work, honestly flagged rather than half-done.</div>
+      <div class="callout"><b>pointer-based, so header-only.</b> MED and FC do not lay their data out in walkable chunks &mdash; they open with a table of absolute offsets into song, pattern, and sample regions, meant to be chased in RAM. The header (magic, module length, sequence length) reads directly; a full pattern/sample decode means chasing those offsets by hand.</div>
     </div>
 
     <!-- ===================== SMUS ===================== -->
@@ -237,7 +237,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">SHDR chunk (id + size + 4-byte body)</div>
       <p class="note">Hover <span class="k-en">ctTrack</span> &mdash; this score has 5 note tracks.</p>
       <div id="smus-shdr" data-build></div>
-      <div class="callout"><b>same envelope as AIFF.</b> <code>FORM</code>, a big-endian size, a 4-byte form type, then word-padded chunks &mdash; SMUS shares its container with AIFF and 8SVX exactly. Only the chunk vocabulary (<code>SHDR</code>, <code>TRAK</code>, <code>INS1</code>, Sonix's private <code>SNX1</code>) is score-specific. acidcat walks it with the same IFF reader.</div>
+      <div class="callout"><b>same envelope as AIFF.</b> <code>FORM</code>, a big-endian size, a 4-byte form type, then word-padded chunks &mdash; SMUS shares its container with AIFF and 8SVX exactly. Only the chunk vocabulary (<code>SHDR</code>, <code>TRAK</code>, <code>INS1</code>, Sonix's private <code>SNX1</code>) is score-specific. Any IFF reader walks it unchanged.</div>
       <div class="callout"><b>instruments are names, tracks are events.</b> An <code>INS1</code> chunk registers an instrument the score references (<code>"acoustic guitar"</code>, <code>"fender Bass"</code>...); the <code>TRAK</code> chunks are the actual note streams, one per voice. So a SMUS file is a small sequence, not a sample bank &mdash; the sounds come from Sonix's own instrument set.</div>
     </div>
 
@@ -251,23 +251,23 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">CMOD chunk (id + size + four channel words)</div>
       <p class="note">Hover a channel word &mdash; each non-zero word splits one hardware channel into two voices.</p>
       <div id="okt-cmod" data-build></div>
-      <div class="callout"><b>CMOD is the eight-channel switch.</b> The Amiga has four hardware voices. Each of CMOD's four words is a per-channel flag: <b>0</b> leaves the channel as one voice, <b>non-zero</b> splits it into two. All four split here, so this song plays <b>8 voices</b> &mdash; the Oktalyzer signature. acidcat sums them to report the voice count.</div>
-      <div class="callout"><b>samples are 32-byte records.</b> The <code>SAMP</code> chunk is a flat table &mdash; its size divided by 32 is the sample count (36 here). Each entry names a sample and gives its length and loop. acidcat reads the count and the first name; the sample PCM sits in later regions the module points to.</div>
+      <div class="callout"><b>CMOD is the eight-channel switch.</b> The Amiga has four hardware voices. Each of CMOD's four words is a per-channel flag: <b>0</b> leaves the channel as one voice, <b>non-zero</b> splits it into two. All four split here, so this song plays <b>8 voices</b> &mdash; the Oktalyzer signature. Summing them gives the voice count.</div>
+      <div class="callout"><b>samples are 32-byte records.</b> The <code>SAMP</code> chunk is a flat table &mdash; its size divided by 32 is the sample count (36 here). Each entry names a sample and gives its length and loop. The count and the names come free; the sample PCM sits in later regions the module points to.</div>
     </div>
 
     <!-- ===================== MED + FC ===================== -->
     <div class="panel" data-panel="medfc">
       <div class="pfacts"><span>MED<b>MMD0&ndash;MMD3</b></span><span>FC<b>SMOD / FC14</b></span><span>shape<b>pointer tables</b></span><span>decode<b>header-level</b></span></div>
-      <p class="plede">MED/OctaMED and Future Composer are <b>pointer-based</b> rather than chunked: after a short magic and a length, the header is a table of absolute offsets into the song, pattern, sample and (for FC) waveform regions &mdash; laid out to be chased in memory, not walked as chunks. acidcat recognises both by magic and summarises the header; a full decode is honest future work. The maps are the real headers of an OctaMED module and a Future Composer tune.</p>
+      <p class="plede">MED/OctaMED and Future Composer are <b>pointer-based</b> rather than chunked: after a short magic and a length, the header is a table of absolute offsets into the song, pattern, sample and (for FC) waveform regions &mdash; laid out to be chased in memory, not walked as chunks. Both are identified by magic, and the header summarises cheaply; a full decode means chasing the tables. The maps are the headers of an OctaMED module and a Future Composer tune.</p>
       <div class="sec">MED header (MMD0, first 16 bytes)</div>
       <p class="note">Hover <span class="k-en">modlen</span> &mdash; the declared module length, checked against the file size.</p>
       <div id="med-hdr" data-build></div>
       <div class="sec">Future Composer header (FC14, first 16 bytes)</div>
       <p class="note">The magic dates the version; the words after it are region lengths/offsets.</p>
       <div id="fc-hdr" data-build></div>
-      <div class="callout"><b>the magic dates the version.</b> MED steps <code>MMD0</code> &rarr; <code>MMD1</code> &rarr; <code>MMD2</code> &rarr; <code>MMD3</code> across MED, OctaMED, OctaMED Pro and SoundStudio; Future Composer is <code>SMOD</code> (v1.3) or <code>FC14</code> (v1.4). acidcat maps the four bytes straight to the variant name &mdash; the one field these header-only formats give up cheaply.</div>
-      <div class="callout"><b>modlen is a file-integrity check.</b> The MMDx header's <code>modlen</code> should equal the file length; acidcat compares them and warns on a mismatch &mdash; a quick tell for a truncated module. Future Composer instead leads with region lengths (sequence, pattern, sample tables) that a player adds up to find each section.</div>
-      <div class="callout"><b>why header-only is the honest call.</b> Chasing the pointer tables into pattern and sample data is real work with real ambiguity across the MMDx revisions. Rather than half-decode and risk wrong output on a reference page, acidcat reports what it can verify &mdash; magic, variant, length &mdash; and marks the rest as deferred.</div>
+      <div class="callout"><b>the magic dates the version.</b> MED steps <code>MMD0</code> &rarr; <code>MMD1</code> &rarr; <code>MMD2</code> &rarr; <code>MMD3</code> across MED, OctaMED, OctaMED Pro and SoundStudio; Future Composer is <code>SMOD</code> (v1.3) or <code>FC14</code> (v1.4). The four bytes map straight to the variant name &mdash; the one field these header-only formats give up cheaply.</div>
+      <div class="callout"><b>modlen is a file-integrity check.</b> The MMDx header's <code>modlen</code> should equal the file length; a mismatch is a quick tell for a truncated module. Future Composer instead leads with region lengths (sequence, pattern, sample tables) that a player adds up to find each section.</div>
+      <div class="callout"><b>why the header is where it stops.</b> Chasing the pointer tables into pattern and sample data carries real ambiguity across the MMDx revisions. Magic, variant and module length are the fields that verify cleanly; the regions past them need version-specific handling.</div>
     </div>
 
   </div>
@@ -367,12 +367,12 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   }
 
   // byte-map specs, built lazily the first time a tab is shown. every byte value
-  // below is copied verbatim from real cassie-corpus Amiga specimens.
+  // below is copied verbatim from real Amiga files.
   var SPECS={
     "smus-form":["byte",
       [0x46,0x4F,0x52,0x4D, 0x00,0x00,0x0A,0xDE, 0x53,0x4D,0x55,0x53],
       [
-        {label:"magic",k:"sync",r:[0,3],val:"\"FORM\"",body:"The IFF group signature -- the same wrapper AIFF and 8SVX use. acidcat routes on FORM + the SMUS form type."},
+        {label:"magic",k:"sync",r:[0,3],val:"\"FORM\"",body:"The IFF group signature -- the same wrapper AIFF and 8SVX use. FORM plus the SMUS form type identifies the file."},
         {label:"form_size",k:"sync",r:[4,7],val:"2,782",body:"BIG-endian u32: the FORM body size, everything after this pair. IFF sizes are big-endian; the Amiga is a 68000.",note:"0x00000ADE = 2782."},
         {label:"form_type",k:"sync",r:[8,11],val:"\"SMUS\"",body:"The FORM type: SMUS = Sonix musical score. This is what tells it apart from an AIFF or 8SVX FORM."}
       ]],
@@ -388,7 +388,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     "okt-magic":["byte",
       [0x4F,0x4B,0x54,0x41,0x53,0x4F,0x4E,0x47],
       [
-        {label:"magic",k:"sync",r:[0,7],val:"\"OKTASONG\"",body:"The 8-byte Oktalyzer signature -- a single token, no version field. acidcat sniffs it to route the file; the IFF-style chunks begin immediately after."}
+        {label:"magic",k:"sync",r:[0,7],val:"\"OKTASONG\"",body:"The 8-byte Oktalyzer signature -- a single token, no version field. The IFF-style chunks begin immediately after it."}
       ]],
     "okt-cmod":["byte",
       [0x43,0x4D,0x4F,0x44, 0x00,0x00,0x00,0x08, 0x00,0x01, 0x00,0x01, 0x00,0x01, 0x00,0x01],
@@ -398,25 +398,25 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"channel[0]",k:"enum",r:[8,9],val:"1 (split)",body:"BIG-endian u16 for hardware channel 0. Non-zero = split into two voices; 0 = one voice. 1 here.",note:"a split word doubles this channel."},
         {label:"channel[1]",k:"enum",r:[10,11],val:"1 (split)",body:"Channel 1 split flag. 1 = two voices."},
         {label:"channel[2]",k:"enum",r:[12,13],val:"1 (split)",body:"Channel 2 split flag. 1 = two voices."},
-        {label:"channel[3]",k:"enum",r:[14,15],val:"1 (split)",body:"Channel 3 split flag. 1 = two voices. All four split -> 8 voices total, the Oktalyzer signature.",note:"acidcat sums 2-per-split, 1-per-single to report the voice count."}
+        {label:"channel[3]",k:"enum",r:[14,15],val:"1 (split)",body:"Channel 3 split flag. 1 = two voices. All four split -> 8 voices total, the Oktalyzer signature.",note:"sum 2 per split and 1 per single for the voice count."}
       ]],
     "med-hdr":["byte",
       [0x4D,0x4D,0x44,0x30, 0x00,0x01,0xC5,0x7A, 0x00,0x00,0x00,0x34, 0x00,0x00,0x00,0x00],
       [
         {label:"magic",k:"sync",r:[0,3],val:"\"MMD0\"",sel:0,branch:[["MMD0","MED"],["MMD1","OctaMED"],["MMD2","OctaMED Pro"],["MMD3","OctaMED SoundStudio"]],
-          body:"The MED/OctaMED signature. The last digit steps with the software generation, which acidcat maps straight to the variant name.",note:"MMD0 = the original MED."},
-        {label:"modlen",k:"enum",r:[4,7],val:"116,090",body:"BIG-endian u32: the declared module length. acidcat checks it against the real file size and warns on a mismatch -- a truncation tell.",note:"0x0001C57A = 116090, matching the file."},
+          body:"The MED/OctaMED signature. The last digit steps with the software generation, which names the variant.",note:"MMD0 = the original MED."},
+        {label:"modlen",k:"enum",r:[4,7],val:"116,090",body:"BIG-endian u32: the declared module length. It should equal the real file size; a mismatch is a truncation tell.",note:"0x0001C57A = 116090, matching the file."},
         {label:"song_ptr",k:"flag",r:[8,11],val:"52",body:"BIG-endian u32: an absolute file offset to the song structure -- the first of the pointer table that makes MED pointer-based rather than chunked.",note:"0x00000034 = 52."},
-        {label:"psecnum / pseq",k:"rsv",r:[12,15],val:"0",body:"Two UWORDs (play section, sequence) used only by MMD2; 0 in this MMD0. The full pointer table (patterns, samples, expansion) continues; acidcat summarises at the header."}
+        {label:"psecnum / pseq",k:"rsv",r:[12,15],val:"0",body:"Two UWORDs (play section, sequence) used only by MMD2; 0 in this MMD0. The full pointer table (patterns, samples, expansion) continues past this point."}
       ]],
     "fc-hdr":["byte",
       [0x46,0x43,0x31,0x34, 0x00,0x00,0x03,0xDC, 0x00,0x00,0x04,0x90, 0x00,0x00,0x04,0xC0],
       [
         {label:"magic",k:"sync",r:[0,3],val:"\"FC14\"",sel:0,branch:[["SMOD","Future Composer 1.3"],["FC14","Future Composer 1.4"]],
-          body:"The Future Composer signature. SMOD is v1.3, FC14 is v1.4 -- a synth-driver chiptune, not a sample tracker.",note:"acidcat maps the magic to the version."},
+          body:"The Future Composer signature. SMOD is v1.3, FC14 is v1.4 -- a synth-driver chiptune, not a sample tracker.",note:"the magic alone gives the version."},
         {label:"seq_length",k:"enum",r:[4,7],val:"988",body:"BIG-endian u32: the sequence-table length in bytes -- the first of the region sizes a player sums to locate each section.",note:"0x000003DC = 988."},
         {label:"pattern_offset",k:"flag",r:[8,11],val:"1,168",body:"BIG-endian u32: the offset (or length) of the pattern region. Part of the offset table FC uses in place of chunks.",note:"0x00000490 = 1168."},
-        {label:"pattern_length",k:"flag",r:[12,15],val:"1,216",body:"BIG-endian u32: the next region word. acidcat surfaces the header; the waveform/frequency-table decode is deferred.",note:"0x000004C0 = 1216."}
+        {label:"pattern_length",k:"flag",r:[12,15],val:"1,216",body:"BIG-endian u32: the next region word. The waveform and frequency-table decode lies past the header.",note:"0x000004C0 = 1216."}
       ]]
   };
 

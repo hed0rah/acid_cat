@@ -325,7 +325,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   // metadata block header: final VORBIS_COMMENT, length 304  ->  84 00 01 30
   build("block-hdr","bit",[0x84,0x00,0x01,0x30],[
     {label:"last-block flag",k:"flag",r:[0,0],val:"1 (last)",sel:1,branch:[["0","more blocks follow"],["1","final metadata block"]],
-      body:"The high bit of byte 0. When set, the audio frames begin right after this block.",note:"a walk that never sees this set is malformed; acidcat lints it."},
+      body:"The high bit of byte 0. When set, the audio frames begin right after this block.",note:"a walk that never sees this set is reading a malformed file."},
     {label:"block type",k:"enum",r:[1,7],val:"4 = VORBIS_COMMENT",sel:4,branch:[
       ["0","STREAMINFO"],["1","PADDING"],["2","APPLICATION"],["3","SEEKTABLE"],
       ["4","VORBIS_COMMENT"],["5","CUESHEET"],["6","PICTURE"],["127","invalid"]],

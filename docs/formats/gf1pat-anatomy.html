@@ -225,7 +225,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="y">now</span><span><b>outlived the hardware.</b> <b>TiMidity++</b>, <b>WildMIDI</b> and <b>DOSBox</b> still render MIDI through GF1 patch sets &mdash; the format became a soft-synth patch standard long after the card was gone.</span></div>
       </div>
 
-      <div class="callout"><b>walk by size, not by offset.</b> Every level is a fixed-width header carrying a child <i>count</i>, not a table of pointers. A reader advances by adding <code>129</code> (patch), then per instrument <code>63</code>, per layer <code>47</code>, per sample <code>96 + data_size</code>. The PCM for a sample sits in the <code>data_size</code> bytes immediately after its 96-byte header &mdash; there is no separate audio region. acidcat's walker degrades cleanly on a short or forged count and never raises.</div>
+      <div class="callout"><b>walk by size, not by offset.</b> Every level is a fixed-width header carrying a child <i>count</i>, not a table of pointers. A reader advances by adding <code>129</code> (patch), then per instrument <code>63</code>, per layer <code>47</code>, per sample <code>96 + data_size</code>. The PCM for a sample sits in the <code>data_size</code> bytes immediately after its 96-byte header &mdash; there is no separate audio region.</div>
       <div class="callout"><b>RAM streaming, not a bank.</b> The GUS had no ROM voices &mdash; to make a sound it first <i>loaded</i> the instrument's samples into card RAM. So a patch is deliberately one instrument: a game or tracker uploads only the patches a piece needs. This is the opposite trade from a SoundFont, which carries the whole orchestra in one file and never streams.</div>
       <div class="callout"><b>little-endian throughout.</b> Sizes, counts, rates and the frequency words are all little-endian &mdash; the GUS is an ISA card in an x86 PC. Read it the way you read RIFF/WAV, and the opposite way from a Kurzweil <code>.KRZ</code> or an E-mu <code>.E4B</code>, both of which are big-endian 68k machines.</div>
     </div>
@@ -238,9 +238,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Example: <code>ALTOSAX.PAT</code>. Hover the <span class="k-en">magic</span> for the version split.</p>
       <div id="gf1-sig" data-build></div>
       <div class="sec">counts (bytes 0x52&ndash;0x5C)</div>
-      <p class="note">The header fields at offset 82&ndash;92 that the walker reads to size the nest.</p>
+      <p class="note">The header fields at offset 82&ndash;92 that size the nest.</p>
       <div id="gf1-counts" data-build></div>
-      <div class="callout"><b>the version lives in the magic.</b> The trailing digits of <code>"GF1PATCH110"</code> are the format version &mdash; <b>1.10</b> here, <b>1.00</b> in the oldest patches. acidcat sniffs the first 8 bytes (<code>"GF1PATCH"</code>) to route the file, then reads the full 12 to report the exact version. The 10-byte <code>"ID#000002"</code> that follows is a fixed internal structure id, not a per-file value.</div>
+      <div class="callout"><b>the version lives in the magic.</b> The trailing digits of <code>"GF1PATCH110"</code> are the format version &mdash; <b>1.10</b> here, <b>1.00</b> in the oldest patches. The first 8 bytes (<code>"GF1PATCH"</code>) identify the format; the full 12 give the exact version. The 10-byte <code>"ID#000002"</code> that follows is a fixed internal structure id, not a per-file value.</div>
       <div class="callout"><b>waveforms is the sample total.</b> <code>instruments</code> (here 1) counts the top-level instruments; <code>waveforms</code> (here 3) is the <i>total</i> number of samples across all layers &mdash; a cross-check for the walk. The <code>data_size</code> word is the summed PCM byte total. <code>voices</code> and <code>channels</code> are card-mixing hints, not structural, and carry fixed quirk values in most factory patches.</div>
     </div>
 
@@ -252,9 +252,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Example: Instrument #0, "Alto Sax". The remaining 40 bytes are reserved.</p>
       <div id="gf1-inst" data-build></div>
       <div class="sec">layer header (first 7 of 47 bytes)</div>
-      <p class="note">Example: Layer 0. Hover <span class="k-en">samples</span> &mdash; it is what the walker loops on.</p>
+      <p class="note">Example: Layer 0. Hover <span class="k-en">samples</span> &mdash; it is the count a reader loops on.</p>
       <div id="gf1-layer" data-build></div>
-      <div class="callout"><b>layers are the split mechanism.</b> A single instrument can stack multiple <b>layers</b>, each a full set of samples, to build velocity crossfades or key splits &mdash; the GF1 mixes the active layers. Most factory patches use one layer; the field exists so a richer instrument (a multi-velocity piano) can carry several. The <code>samples</code> byte in the layer is the innermost count the walker iterates.</div>
+      <div class="callout"><b>layers are the split mechanism.</b> A single instrument can stack multiple <b>layers</b>, each a full set of samples, to build velocity crossfades or key splits &mdash; the GF1 mixes the active layers. Most factory patches use one layer; the field exists so a richer instrument (a multi-velocity piano) can carry several. The <code>samples</code> byte in the layer is the innermost count of the nest.</div>
     </div>
 
     <!-- ===================== SAMPLE HEADER ===================== -->
@@ -264,7 +264,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">sample header (bytes 0x00&ndash;0x3B)</div>
       <p class="note">Example: sample "NoName" from <code>ALTOSAX.PAT</code> &mdash; 16-bit, looped, 22321 Hz. Hover <span class="k-en">modes</span> for the bit flags.</p>
       <div id="gf1-sample" data-build></div>
-      <div class="callout"><b>the modes byte.</b> One byte, eight independent flags &mdash; <code>0x01</code> 16-bit, <code>0x02</code> unsigned, <code>0x04</code> loop-enable, <code>0x08</code> ping-pong (bidirectional loop), <code>0x10</code> reverse, <code>0x20</code> sustain, <code>0x40</code> envelope, <code>0x80</code> clamped-release. Here <code>0x67</code> = 16-bit + unsigned + loop + sustain + envelope. acidcat reads bits 0 and 1 to pull the PCM correctly (width and sign); getting either wrong turns the audio to noise.</div>
+      <div class="callout"><b>the modes byte.</b> One byte, eight independent flags &mdash; <code>0x01</code> 16-bit, <code>0x02</code> unsigned, <code>0x04</code> loop-enable, <code>0x08</code> ping-pong (bidirectional loop), <code>0x10</code> reverse, <code>0x20</code> sustain, <code>0x40</code> envelope, <code>0x80</code> clamped-release. Here <code>0x67</code> = 16-bit + unsigned + loop + sustain + envelope. Bits 0 and 1 set the PCM width and sign; getting either wrong turns the audio to noise.</div>
       <div class="callout"><b>frequencies are milliHertz.</b> <code>low_frequency</code>, <code>high_frequency</code> and <code>root_frequency</code> are fixed-point <b>Hz &times; 1000</b>. Here root = <code>164813</code> = <b>164.813 Hz</b> (~E3, the pitch the sample was recorded at), spanning <code>26.986 Hz</code> (~A0) to <code>399.765 Hz</code> (~G4) &mdash; the key range this sample covers before the next one takes over. The GF1 pitches each key by ratio from <code>root_frequency</code>, not from a MIDI note number.</div>
       <div class="callout"><b>loop points are byte offsets.</b> <code>loop_start</code> and <code>loop_end</code> are offsets into this sample's PCM in <i>bytes</i>, with the <code>fractions</code> byte giving a sub-byte remainder for fine loop tuning &mdash; not sample indices. For a 16-bit sample the reader rounds them to even byte boundaries. Loop is only honoured when <code>modes &amp; 0x04</code> is set; here it is, so playback loops over <code>[5998, 7082]</code>.</div>
     </div>
@@ -373,15 +373,15 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       [
         {label:"magic",k:"sync",r:[0,11],val:"\"GF1PATCH110\"",sel:0,branch:[["GF1PATCH110","version 1.10"],["GF1PATCH100","version 1.00 (older)"]],
           body:"The patch signature, ASCII, 12 bytes including a trailing null. The last three digits are the format version.",
-          note:"acidcat sniffs the first 8 bytes (\"GF1PATCH\") to route the file, then reads the full 12 for the exact version."},
+          note:"the first 8 bytes (\"GF1PATCH\") identify the format; the full 12 give the exact version."},
         {label:"gravis_id",k:"rsv",r:[12,21],val:"\"ID#000002\"",body:"A fixed 10-byte internal structure id, \"ID#000002\", the same in every patch. Not a per-file value.",note:"present so a loader could version the on-disk struct layout; constant in practice."}
       ]],
     "gf1-counts":["byte",
       [0x01, 0x04, 0x0E, 0x03,0x00, 0x7F,0x00, 0xE0,0x2B,0x00,0x00],
       [
-        {label:"instruments",k:"enum",r:[0,0],val:"1",body:"Number of top-level instrument records that follow the header. The walker loops this many times.",note:"absolute file offset 82."},
+        {label:"instruments",k:"enum",r:[0,0],val:"1",body:"Number of top-level instrument records that follow the header. A reader loops this many times.",note:"absolute file offset 82."},
         {label:"voices",k:"rsv",r:[1,1],val:"4",body:"A card-mixing hint (active voice count), not structural. Fixed/quirk in most factory patches.",note:"offset 83."},
-        {label:"channels",k:"rsv",r:[2,2],val:"14",body:"Another mixing hint. Carries a constant quirk value (14) across the factory set; acidcat surfaces it without interpreting.",note:"offset 84."},
+        {label:"channels",k:"rsv",r:[2,2],val:"14",body:"Another mixing hint. Carries a constant quirk value (14) across the factory set; not structural.",note:"offset 84."},
         {label:"waveforms",k:"enum",r:[3,4],val:"3",body:"little-endian u16: the TOTAL sample (waveform) count across all layers -- a cross-check for the walk. This patch has 3.",note:"0x0003; offset 85-86."},
         {label:"master_volume",k:"flag",r:[5,6],val:"127",body:"little-endian u16: the patch master volume, 0-127.",note:"0x007F; offset 87-88."},
         {label:"data_size",k:"enum",r:[7,10],val:"11,232",body:"little-endian u32: the summed PCM byte total across every sample in the patch.",note:"0x00002BE0 = 11232; offset 89-92."}
@@ -400,7 +400,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"layer_duplicate",k:"rsv",r:[0,0],val:"0",body:"A flag for a duplicated layer (voice doubling). 0 in this patch."},
         {label:"layer_id",k:"enum",r:[1,1],val:"0",body:"The layer index within the instrument. 0 = the first layer."},
         {label:"layer_size",k:"enum",r:[2,5],val:"11,232",body:"little-endian u32: total bytes of this layer, its sample headers plus their PCM.",note:"0x00002BE0 = 11232."},
-        {label:"samples",k:"enum",r:[6,6],val:"3",body:"The number of sample records in this layer -- the innermost count the walker iterates. Each is a 96-byte header followed by its PCM.",note:"the remaining 40 bytes of the 47-byte record are reserved."}
+        {label:"samples",k:"enum",r:[6,6],val:"3",body:"The number of sample records in this layer -- the innermost count of the nest. Each is a 96-byte header followed by its PCM.",note:"the remaining 40 bytes of the 47-byte record are reserved."}
       ]],
     "gf1-sample":["byte",
       [0x4E,0x6F,0x4E,0x61,0x6D,0x65,0x00, 0x00, 0xE4,0x1B,0x00,0x00, 0x6E,0x17,0x00,0x00, 0xAA,0x1B,0x00,0x00, 0x31,0x57, 0x6A,0x69,0x00,0x00, 0x95,0x19,0x06,0x00, 0xCD,0x83,0x02,0x00, 0x00,0x02, 0x06, 0x3F,0x3F,0xC4,0x8D,0x8D,0xD6, 0xE8,0xF3,0xF6,0xC0,0xD0,0x08, 0x00,0xFF,0x32, 0x28,0xC8,0x08, 0x67, 0x3C,0x00, 0x00,0x04],
@@ -414,7 +414,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"low_frequency",k:"flag",r:[22,25],val:"26.986 Hz",body:"little-endian u32, milliHertz (Hz x 1000): the LOW edge of the pitch range this sample covers before a neighbouring sample takes over.",note:"0x0000696A = 26986 -> 26.986 Hz (~A0)."},
         {label:"high_frequency",k:"flag",r:[26,29],val:"399.765 Hz",body:"little-endian u32, milliHertz: the HIGH edge of this sample's pitch range.",note:"0x00061995 = 399765 -> 399.765 Hz (~G4)."},
         {label:"root_frequency",k:"enum",r:[30,33],val:"164.813 Hz",body:"little-endian u32, milliHertz: the pitch the sample was RECORDED at. The GF1 pitches each key by ratio from this, not from a MIDI note number.",note:"0x000283CD = 164813 -> 164.813 Hz (~E3)."},
-        {label:"tune",k:"rsv",r:[34,35],val:"512",body:"little-endian i16: a fine-tune value. TiMidity and most players ignore it; surfaced, not applied.",note:"0x0200 = 512."},
+        {label:"tune",k:"rsv",r:[34,35],val:"512",body:"little-endian i16: a fine-tune value. TiMidity and most players ignore it.",note:"0x0200 = 512."},
         {label:"balance",k:"rsv",r:[36,36],val:"6",body:"Pan/balance, 0-15 with 7 = center. 6 here = very slightly left."},
         {label:"envelope_rate",k:"flag",r:[37,42],val:"6 stages",body:"Six bytes: the attack/decay/release RATES of the GF1's on-card 6-stage volume envelope, one per stage.",note:"3F 3F C4 8D 8D D6 -- the card plays this envelope in hardware."},
         {label:"envelope_offset",k:"flag",r:[43,48],val:"6 stages",body:"Six bytes: the target LEVELS the envelope ramps to at each of the six stages.",note:"E8 F3 F6 C0 D0 08."},

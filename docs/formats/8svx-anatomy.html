@@ -163,7 +163,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">FORM</span><span class="rspan">0x00 . 12 bytes . drawn below</span></summary>
       <div class="rbody"><div class="kv">
         <div><span class="k">magic</span><span class="v">"FORM"</span></div>
-        <div><span class="k">size</span><span class="v">u32 BIG-endian = file size - 8 (a real corpus writer undercounts this by 12; acidcat trusts the chunks and flags it)</span></div>
+        <div><span class="k">size</span><span class="v">u32 BIG-endian = file size - 8 (some writers undercount this by 12; trust the chunk chain and flag the mismatch)</span></div>
         <div><span class="k">form type</span><span class="v">"8SVX"</span></div>
       </div></div></details>
     <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">VHDR</span><span class="rspan">voice header . 20 bytes . drawn below</span></summary>
@@ -180,7 +180,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">AUTH</span><span class="v">author credit</span></div>
       </div></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">ANNO / (c)</span><span class="rspan">annotation, copyright</span></summary>
-      <div class="rbody"><p class="note">ANNO is the Amiga-side ISFT: ~90% of 8SVX files stamp their authoring tool here (Audio Master, PERFECT SOUND, SoundZAP, MED...). Tool-populated by convention, not rule, so it also carries human stamps. acidcat surfaces it as the writer tell.</p></div></details>
+      <div class="rbody"><p class="note">ANNO is the Amiga-side ISFT: ~90% of 8SVX files stamp their authoring tool here (Audio Master, PERFECT SOUND, SoundZAP, MED...). Tool-populated by convention, not rule, so it also carries human stamps. It is the format's authoring-tool tell.</p></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">ATAK / RLSE</span><span class="rspan">amplitude envelope</span></summary>
       <div class="rbody"><div class="kv">
         <div><span class="k">ATAK</span><span class="v">attack envelope: an array of (duration word, 32-bit Fixed dest-volume) pairs</span></div>
@@ -193,7 +193,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="sec">FORM header (12 bytes)</div>
-  <p class="note">Example: nothing.sam.8svx (written by Audio Master).</p>
+  <p class="note">Worked example: a voice written by Audio Master.</p>
   <div id="form-hdr"></div>
 
   <div class="sec">VHDR voice header (20 bytes)</div>
@@ -201,8 +201,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   <div id="vhdr-map"></div>
 
   <div class="callout"><b>the shared atom, older than RIFF.</b> 8SVX is the same chunk grammar WAV uses &mdash; a <b>4-byte id</b>, a <b>size</b>, a <b>payload</b>, and a <b>pad byte</b> on odd lengths &mdash; but big-endian, six years earlier. Microsoft's RIFF (1991) is literally this reversed for the little-endian PC. The map is one-to-one: <b>FORM&rarr;RIFF</b>, <b>VHDR&rarr;fmt</b>, <b>BODY&rarr;data</b>, <b>ANNO&rarr;ISFT</b>, <b>NAME&rarr;INAM</b>, <b>AUTH&rarr;IART</b>. Learn 8SVX and you have already read WAV.</div>
-  <div class="callout"><b>Fibonacci-delta compression.</b> With sCompression = 1 the BODY is not raw PCM: it opens with a padding byte and a first sample, then each following byte holds two 4-bit codes that index a fixed table <code>[-34,-21,-13,-8,-5,-3,-2,-1,0,1,2,3,5,8,13,21]</code>, added to a running accumulator &mdash; the positive codes 1,2,3,5,8,13,21 are the Fibonacci numbers, hence the name. 2:1 compression, lossy, and a distinct decoder path &mdash; roughly 1 file in 1300 uses it. acidcat flags it from the VHDR and reports the raw sample count from the header, not the byte count.</div>
-  <div class="callout"><b>ANNO as a provenance surface.</b> Because the tool signs the ANNO, the corpus yields a fingerprint catalogue: <b>AudioMaster</b> versions split by <i>string spacing</i> ("Audio Master II" spaced vs "AudioMasterIII" unspaced) and field padding; <b>PERFECT SOUND</b> embeds a vendor phone number; <b>SoundZAP</b> a pre-1995 email; Linel's Sound FX truncates mid-word at a fixed buffer size &mdash; the truncation point itself a tell. The Amiga-side of acidcat's provenance engine starts here.</div>
+  <div class="callout"><b>Fibonacci-delta compression.</b> With sCompression = 1 the BODY is not raw PCM: it opens with a padding byte and a first sample, then each following byte holds two 4-bit codes that index a fixed table <code>[-34,-21,-13,-8,-5,-3,-2,-1,0,1,2,3,5,8,13,21]</code>, added to a running accumulator &mdash; the positive codes 1,2,3,5,8,13,21 are the Fibonacci numbers, hence the name. 2:1 compression, lossy, and a distinct decoder path &mdash; roughly 1 file in 1300 uses it. The VHDR flag is the only signal, and the sample count comes from the header, not the byte count.</div>
+  <div class="callout"><b>ANNO as a provenance surface.</b> Because the tool signs the ANNO, the field yields a fingerprint catalogue: <b>AudioMaster</b> versions split by <i>string spacing</i> ("Audio Master II" spaced vs "AudioMasterIII" unspaced) and field padding; <b>PERFECT SOUND</b> embeds a vendor phone number; <b>SoundZAP</b> a pre-1995 email; Linel's Sound FX truncates mid-word at a fixed buffer size &mdash; the truncation point itself a tell. Amiga-side provenance detection starts here.</div>
 
   <footer><span>acidcat / 8svx anatomy</span><span>iff/8svx . amiga 8-bit voice . VHDR + BODY, big-endian</span><span><a href="https://hed0rah.github.io">hed0rah</a> &middot; <a href="https://x.com/r3l0z">r3l0z</a></span></footer>
 </div>
@@ -301,12 +301,12 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     dcol.style.minHeight=(maxH+6)+"px";
   }
 
-  // FORM header, verified: nothing.sam.8svx -- form body 5616 bytes
+  // FORM header from a real 8SVX voice -- form body 5616 bytes
   build("form-hdr", 'byte',
     [0x46,0x4F,0x52,0x4D, 0x00,0x00,0x15,0xF0, 0x38,0x53,0x56,0x58],
     [
       {label:"magic",k:"sync",r:[0,3],val:"\"FORM\"",body:"The IFF container signature. Every IFF file -- 8SVX, AIFF, ILBM, ANIM -- opens with FORM; the form type at byte 8 says which."},
-      {label:"form_size",k:"enum",r:[4,7],val:"5616",body:"Size of the form body in bytes, u32 BIG-endian (note the byte order: the same field is little-endian in RIFF). Should be file length - 8.",note:"0x000015F0 = 5616. An undercount is a real writer fingerprint in this corpus; acidcat trusts the chunks and flags the mismatch."},
+      {label:"form_size",k:"enum",r:[4,7],val:"5616",body:"Size of the form body in bytes, u32 BIG-endian (note the byte order: the same field is little-endian in RIFF). Should be file length - 8.",note:"0x000015F0 = 5616. An undercount is a real writer fingerprint; trust the chunk chain and flag the mismatch."},
       {label:"form_type",k:"sync",r:[8,11],val:"\"8SVX\"",body:"The IFF form type: 8SVX = 8-bit sampled voice. This is what a reader branches on, the analogue of WAVE after RIFF."}
     ]);
 
@@ -320,7 +320,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"samplesPerSec",k:"enum",r:[12,13],val:"9016 Hz",body:"Playback sample rate, u16 BIG-endian. There is no separate bit-depth field: 8SVX is always 8-bit signed.",note:"0x2338 = 9016. Amiga sample rates are quirky because they derive from the hardware timer, not round numbers."},
       {label:"ctOctave",k:"enum",r:[14,14],val:"1",body:"Number of octaves of waveform stored in BODY. The Amiga could not resample cheaply in real time, so a multi-octave voice ships each octave pre-rendered, highest first, every octave down twice the length of the one above."},
       {label:"sCompression",k:"flag",r:[15,15],val:"0 = none",sel:0,branch:[["0","none -- raw 8-bit signed PCM"],["1","Fibonacci-delta (4-bit, 2:1, lossy)"]],
-        body:"How BODY is encoded. 0 is raw 8-bit signed PCM; 1 is Fibonacci-delta, a 4-bit table-indexed delta code decoded 2 samples per byte.",note:"a value other than 0 or 1 is warned (2, an exponential-delta variant, is seen in the wild but not in the 1985 spec); acidcat never silently treats compressed bytes as PCM."},
+        body:"How BODY is encoded. 0 is raw 8-bit signed PCM; 1 is Fibonacci-delta, a 4-bit table-indexed delta code decoded 2 samples per byte.",note:"a value other than 0 or 1 is warned (2, an exponential-delta variant, is seen in the wild but not in the 1985 spec); compressed bytes must never be treated as PCM."},
       {label:"volume",k:"enum",r:[16,19],val:"0x10000 (1.0x)",body:"Default playback volume as a 16.16 fixed-point number: the integer part is the whole, the low 16 bits the fraction. Unity gain is 0x10000.",note:"0x00010000 = 1.0. The Amiga's Paula chip took a 0-64 volume, so players scale this down."}
     ]);
 })();

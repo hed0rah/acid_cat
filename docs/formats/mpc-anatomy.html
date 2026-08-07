@@ -207,16 +207,16 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
 
   <!-- ===================== OVERVIEW ===================== -->
   <div class="panel on" data-panel="overview">
-    <p class="lede">The Akai MPC line spans nearly four decades of sampler formats, from 12-bit floppy sounds to gzipped JSON kits. Every binary format is <b>little-endian</b>. This sheet collects them; the tabs open each one's byte layout. <span class="k-en">Akai red</span> = verified against real files, <span class="k-fl">amber</span> = documented but needs a hardware specimen to confirm. The single most useful test artifact is a kit that ships the <b>same sounds across generations</b> (a Rosetta stone): identical sample names in an unknown binary reveal its record structure.</p>
+    <p class="lede">The Akai MPC line spans nearly four decades of sampler formats, from 12-bit floppy sounds to gzipped JSON kits. Every binary format is <b>little-endian</b>. This sheet collects them; the tabs open each one's byte layout. <span class="k-en">Akai red</span> = verified against real files, <span class="k-fl">amber</span> = documented but needs a hardware specimen to confirm.</p>
 
     <div class="sec">format &times; generation matrix</div>
     <table class="matrix">
-      <thead><tr><th>format</th><th>hardware / software</th><th>container</th><th>samples / PCM</th><th>acidcat</th></tr></thead>
+      <thead><tr><th>format</th><th>hardware / software</th><th>container</th><th>samples / PCM</th><th>status</th></tr></thead>
       <tbody>
-        <tr><td class="f">.snd</td><td>MPC2000, 2000XL <span class="part">(3000?)</span></td><td>binary, 38 or 42-byte header + PCM</td><td>16-bit signed LE, stereo <b>non-interleaved</b>, 44.1k native</td><td class="st veri">verified (16 files)</td></tr>
+        <tr><td class="f">.snd</td><td>MPC2000, 2000XL <span class="part">(3000?)</span></td><td>binary, 38 or 42-byte header + PCM</td><td>16-bit signed LE, stereo <b>non-interleaved</b>, 44.1k native</td><td class="st veri">verified</td></tr>
         <tr><td class="f">.pgm</td><td>MPC2000, 2000XL, 3000</td><td>binary, 17-byte name-table</td><td>references .snd by name</td><td class="st part">sw-export verified</td></tr>
         <tr><td class="f">.PGM</td><td>MPC1000, 2500</td><td>binary, "MPC1000 PGM 1.00" magic, 64&times;164B pads</td><td>references .WAV by name</td><td class="st veri">verified (factory default)</td></tr>
-        <tr><td class="f">.WAV</td><td>MPC1000/2500/5000</td><td>standard RIFF/WAVE</td><td>16-bit LE, interleaved (normal WAV)</td><td class="st veri">covered (WAV walker)</td></tr>
+        <tr><td class="f">.WAV</td><td>MPC1000/2500/5000</td><td>standard RIFF/WAVE</td><td>16-bit LE, interleaved (normal WAV)</td><td class="st veri">standard RIFF</td></tr>
         <tr><td class="f">.50s</td><td>MPC500 / JJOS</td><td>binary, "S80p" magic</td><td>program + embedded PCM (135 KB)</td><td class="st need">needs RE</td></tr>
         <tr><td class="f">program</td><td>MPC4000</td><td>Akai Z-series engine (APRG)</td><td>references .WAV</td><td class="st need">needs specimen</td></tr>
         <tr><td class="f">.mpcpattern</td><td>MPC 2.x / 3.x software</td><td>bare JSON</td><td>sequence events, no audio</td><td class="st veri">both schemas</td></tr>
@@ -224,21 +224,21 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
         <tr><td class="f">.xpn</td><td>MPC 2.x / 3.x software</td><td>ZIP package</td><td>bundles programs + .WAV + art</td><td class="st veri">verified</td></tr>
         <tr><td class="f">.xtd</td><td>MPC 3.x / Force</td><td>gzip + ACVS + JSON</td><td>references .WAV by name+path</td><td class="st veri">verified</td></tr>
         <tr><td class="f">.s3p</td><td>Akai S3000 (adjacent)</td><td>binary, "PSYSSS30" (a tool export)</td><td>proprietary charset, no ASCII</td><td class="st need">needs tool-ID / charset</td></tr>
-        <tr><td class="f">.akp</td><td>Akai S5000/S6000 (adjacent)</td><td>RIFF/APRG (IFF)</td><td>references .WAV</td><td class="st veri">verified (101 files)</td></tr>
+        <tr><td class="f">.akp</td><td>Akai S5000/S6000 (adjacent)</td><td>RIFF/APRG (IFF)</td><td>references .WAV</td><td class="st veri">verified</td></tr>
       </tbody>
     </table>
 
-    <div class="sec">what we need from hardware-written files</div>
+    <div class="sec">hardware-written files: what is unconfirmed</div>
     <div class="callout"><b>the software-export vs hardware-native question</b>
-    Our vintage <b>.pgm</b> / <b>.snd</b> specimens are <b>software exports</b> (a converter writing files <i>for</i> the hardware). A file written <i>by</i> the actual machine may differ. To confirm, we want files saved on-device by:
-    <br>&bull; an <b>MPC2000 / 2000XL</b> (SCSI/floppy save) -- confirms the hardware .pgm layout (documented as name-table at 0x05 with note + mixer records) and whether the .snd header is 42 bytes there
-    <br>&bull; an <b>MPC3000</b> -- is its .SND/.PGM the same family as the 2000 or its own?
-    <br>&bull; an <b>MPC4000</b> program -- confirm it is the AKAI/APRG format (the .akp walker would then cover it)
-    <br>&bull; an <b>MPC5000</b> .PGM -- the extended MPC1000 variant
-    <br>&bull; more <b>MPC500 .50s</b> and, if we chase it, <b>MPC60</b> 12-bit sounds</div>
+    The vintage <b>.pgm</b> / <b>.snd</b> layouts here are drawn from <b>software exports</b> (a converter writing files <i>for</i> the hardware). A file written <i>by</i> the actual machine may differ. Unconfirmed against on-device files:
+    <br>&bull; <b>MPC2000 / 2000XL</b> (SCSI/floppy save) -- the hardware .pgm layout (documented as name-table at 0x05 with note + mixer records) and whether the .snd header is 42 bytes there
+    <br>&bull; <b>MPC3000</b> -- whether its .SND/.PGM is the same family as the 2000 or its own
+    <br>&bull; <b>MPC4000</b> program -- whether it is the AKAI/APRG format
+    <br>&bull; <b>MPC5000</b> .PGM -- the extended MPC1000 variant
+    <br>&bull; <b>MPC500 .50s</b> and <b>MPC60</b> 12-bit sounds</div>
 
     <div class="sec">the 5 format eras (~20 models collapse to these)</div>
-    <p class="note">acidcat needs ~5 format families, not 20 walkers. The time sinks are the intra-era forks (software-vs-hardware .pgm, JJOS variants), not new models.</p>
+    <p class="note">The ~20 models collapse to ~5 format families. The forks that matter are intra-era (software-vs-hardware .pgm, JJOS variants), not new models.</p>
     <div class="kv">
       <div><span class="k">1 . Linn floppy</span><span class="v">MPC60 (1988, 12-bit), 60mkII, MPC3000 (1994, 16-bit) -- old .snd + .pgm, floppy/SCSI</span></div>
       <div><span class="k">2 . 2000 / 2000XL</span><span class="v">1997-2000, floppy + SCSI/SmartMedia -- 38/42-byte .snd, 07 00 name-table .pgm; the sw-vs-hw fork lives here</span></div>
@@ -256,14 +256,14 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       <div>header<b>38 or 42 bytes</b></div>
       <div>status<b class="veri">verified &times;16</b></div>
     </div>
-    <p class="lede">The MPC2000 sound: a fixed header then raw <b>16-bit signed little-endian PCM</b>. Stereo is stored <b>non-interleaved</b> (the full left block, then the full right). The header size is variant-dependent -- classic hardware is 42 bytes, the exports we have use a compact 38-byte header -- so acidcat resolves it by size-fit: header + frames &times; channels &times; 2 must land exactly on EOF. The register map below is a real kick from the CPM7 kit (38-byte). <b>Hover</b> any byte to read the field.</p>
+    <p class="lede">The MPC2000 sound: a fixed header then raw <b>16-bit signed little-endian PCM</b>. Stereo is stored <b>non-interleaved</b> (the full left block, then the full right). The header size is variant-dependent -- classic hardware is 42 bytes, software exports a compact 38-byte header -- so it resolves by size-fit: header + frames &times; channels &times; 2 must land exactly on EOF. The register map below is a real kick from the CPM7 kit (38-byte). <b>Hover</b> any byte to read the field.</p>
 
     <div class="sec">header + PCM</div>
-    <p class="note">Fields verified across all 16 kit sounds. The channel byte at 0x15 discriminates perfectly (0 mono / 1 stereo), and the frame count times the channel stride hits the file size to the byte.</p>
+    <p class="note">The channel byte at 0x15 discriminates perfectly (0 mono / 1 stereo), and the frame count times the channel stride hits the file size to the byte.</p>
     <div id="snd-hdr" data-build></div>
 
     <div class="callout"><b>the 42-byte classic variant</b>
-    A hardware-written .snd is documented as a 42-byte header: it keeps the same name/level/channel fields but the <b>total frame count moves to 0x1e</b>, and it adds an explicit loop length (0x22), loop mode (0x26), and sample rate (0x28, u16). acidcat handles both by size-fit; a real on-device .snd would let us confirm the classic field set directly.</div>
+    A hardware-written .snd is documented as a 42-byte header: it keeps the same name/level/channel fields but the <b>total frame count moves to 0x1e</b>, and it adds an explicit loop length (0x22), loop mode (0x26), and sample rate (0x28, u16). Both resolve by size-fit; the classic field set is documented but not confirmed against an on-device file.</div>
   </div>
 
   <!-- ===================== PGM 1000 ===================== -->
@@ -283,8 +283,8 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
     <p class="note">Real layer 0 of pad 0 (a velocity-switched kick: this layer plays velocities 70-127, layer 1 the softer 0-69). Offsets verified against a factory-default program.</p>
     <div id="pgm1000-lay" data-build></div>
 
-    <div class="sec">pad parameters (documented, not yet surfaced)</div>
-    <p class="note">After the four layers (+0x60 in the pad), the pad carries voice overlap + mute group, amp attack/decay, two filters, mixer level/pan, output routing, and FX send. The footer at 0x2918 holds the per-pad MIDI-note table, the note-to-pad map (64 = unassigned), the MIDI program number, and two Q-Link slider records. acidcat surfaces the layers today; these are a mechanical enrichment.</p>
+    <div class="sec">pad parameters (documented)</div>
+    <p class="note">After the four layers (+0x60 in the pad), the pad carries voice overlap + mute group, amp attack/decay, two filters, mixer level/pan, output routing, and FX send. The footer at 0x2918 holds the per-pad MIDI-note table, the note-to-pad map (64 = unassigned), the MIDI program number, and two Q-Link slider records.</p>
   </div>
 
   <!-- ===================== PGM 2000 ===================== -->
@@ -295,13 +295,13 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       <div>records<b>16-char name + 1</b></div>
       <div>status<b class="need">sw-export only</b></div>
     </div>
-    <p class="lede">The older MPC2000/2000XL/3000 program -- a different format that shares the <b>.pgm</b> extension with the MPC1000 form (acidcat tells them apart on the MPC1000 magic). The specimens we have are <b>software exports</b>: a table of 17-byte records (a 16-character space-padded sample name + one trailing byte) starting at offset 2, terminated by an empty name. The program references its sounds (the sibling .snd files) by these names.</p>
+    <p class="lede">The older MPC2000/2000XL/3000 program -- a different format that shares the <b>.pgm</b> extension with the MPC1000 form (the MPC1000 magic tells them apart). The <b>software-export</b> form is a table of 17-byte records (a 16-character space-padded sample name + one trailing byte) starting at offset 2, terminated by an empty name. The program references its sounds (the sibling .snd files) by these names.</p>
 
     <div class="sec">name-table record</div>
     <div id="pgm2000-rec" data-build></div>
 
-    <div class="callout"><b>hardware-native layout -- needs a specimen</b>
-    Paul Kellett's hardware documentation describes a different arrangement for a file written <b>by the machine</b>: lead bytes (0x07, 0x04), a sample count at 0x02, the name table at <b>0x05</b>, a (0x1E,0x00) section marker, then a 16-char program name, 25-byte per-note records (notes 35-98: sample index, play mode, velocity/decay switch, tune, filter, envelopes) and 6-byte mixer records. We have no on-device file, so acidcat parses the verified 0x02 software-export table only. <b>A hardware-written MPC2000 .pgm is the single most useful specimen to get.</b></div>
+    <div class="callout"><b>hardware-native layout -- unconfirmed</b>
+    Paul Kellett's hardware documentation describes a different arrangement for a file written <b>by the machine</b>: lead bytes (0x07, 0x04), a sample count at 0x02, the name table at <b>0x05</b>, a (0x1E,0x00) section marker, then a 16-char program name, 25-byte per-note records (notes 35-98: sample index, play mode, velocity/decay switch, tune, filter, envelopes) and 6-byte mixer records. That arrangement is documented but not confirmed against an on-device file; only the 0x02 software-export table is verified.</div>
   </div>
 
   <!-- ===================== PATTERN ===================== -->
@@ -370,7 +370,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       <div>era<b>MPC 2.x + 3.x</b></div>
       <div>status<b class="veri">verified</b></div>
     </div>
-    <p class="lede">An expansion package: a ZIP bundling an <code>Expansion.xml</code> manifest with the .xpm programs, .WAV samples, and cover art. Note the programs inside a distributed .xpn are usually <b>deflated</b>, so a carve of a program region yields a raw deflate stream, not the literal .xpm (flagged per-entry).</p>
+    <p class="lede">An expansion package: a ZIP bundling an <code>Expansion.xml</code> manifest with the .xpm programs, .WAV samples, and cover art. Note the programs inside a distributed .xpn are usually <b>deflated</b>, so a carve of a program region yields a raw deflate stream, not the literal .xpm.</p>
     <div class="sec">structure</div>
     <div class="kv">
       <div><span class="k">Expansion.xml</span><span class="v">manifest: title, manufacturer, type, version, identifier, description, cover img</span></div>
@@ -405,7 +405,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
 
   <footer>
     <span>acidcat / mpc + akai anatomy</span>
-    <span><a href="https://hed0rah.github.io/wanted-mpc.html" style="color:var(--enum);border-color:var(--enum)">&#9873; hardware specimens wanted</a></span>
+    <span>snd . pgm . mpcpattern . xpm . xpn . xtd</span>
   <span><a href="https://hed0rah.github.io">hed0rah</a> &middot; <a href="https://x.com/r3l0z">r3l0z</a></span></footer>
 
 </div>
@@ -511,14 +511,14 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       [0x01,0x02,0x43,0x50,0x4d,0x37,0x5f,0x6b,0x31,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x00,0x64,0x00,0x01,0x00,0x00,0x00,0x00,0x68,0x1a,0x00,0x00,0x68,0x1a,0x00,0x00,0x00,0x00,0x00,0x00],
       [
         {label:"validity",k:"sync",r:[0,0],val:"1",body:"A leading 1 marks a valid MPC2000 sound."},
-        {label:"type",k:"enum",r:[1,1],val:"2 (compact)",sel:0,branch:[["2","compact export header (38 bytes)"],["4","classic hardware header (42 bytes)"]],body:"The type byte differs between exports and on-device files; acidcat accepts any value under 5 and resolves the header size by fit.",note:"classic hardware writes 4 here."},
+        {label:"type",k:"enum",r:[1,1],val:"2 (compact)",sel:0,branch:[["2","compact export header (38 bytes)"],["4","classic hardware header (42 bytes)"]],body:"The type byte differs between exports and on-device files; any value under 5 is valid and the header size resolves by fit.",note:"classic hardware writes 4 here."},
         {label:"name",k:"enum",r:[2,17],val:"\"CPM7_k1\"",body:"16-byte sample name, space-padded, no extension."},
         {label:"pad",k:"rsv",r:[18,18],val:"0",body:"Unused."},
         {label:"level",k:"flag",r:[19,19],val:"100",body:"Playback level, 0-200 (100 = unity)."},
         {label:"tune",k:"flag",r:[20,20],val:"0",body:"Tune, signed, 10-cent steps."},
         {label:"channels",k:"enum",r:[21,21],val:"stereo",sel:1,branch:[["0","mono"],["1","stereo"]],body:"Discriminates perfectly across the kit. Stereo PCM is stored non-interleaved: the whole left block then the whole right.",note:"stereo stride = frames x 2 x 2 bytes."},
         {label:"start",k:"sync",r:[22,25],val:"0",body:"Sample start point, in frames (u32 LE)."},
-        {label:"frame count",k:"enum",r:[26,29],val:"6760",body:"Sample length in frames per channel (u32 LE) -- acidcat reads it here and confirms it by fit. Per the classic-header docs this offset is the end point and 0x1e the frame count; they are equal in every unlooped specimen we have, so the two cannot be told apart from this file.",note:"38 + 6760 x 2 x 2 = 27078 = the file size, exactly."},
+        {label:"frame count",k:"enum",r:[26,29],val:"6760",body:"Sample length in frames per channel (u32 LE), confirmed by fit. Per the classic-header docs this offset is the end point and 0x1e the frame count; the two are equal in an unlooped sound, so they cannot be told apart from this file.",note:"38 + 6760 x 2 x 2 = 27078 = the file size, exactly."},
         {label:"length (copy)",k:"sync",r:[30,33],val:"6760",body:"A second copy of the length (the canonical frame count in the classic layout). Equal to the field above when there is no loop."},
         {label:"loop length",k:"rsv",r:[34,37],val:"0",body:"Loop length in frames; 0 = no loop (loop start = end - loop length). PCM begins at byte 38; the classic 42-byte header adds loop mode, beats, and sample rate before its PCM at byte 42."}
       ]],
@@ -527,13 +527,13 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       [
         {label:"file size",k:"sync",r:[0,1],val:"0x2A04",body:"Total file size (u16 LE) = 10756. A fixed-size format, so this doubles as a validity check.",note:"0x2A04 = 10756 bytes."},
         {label:"pad",k:"rsv",r:[2,3],val:"0",body:"Padding."},
-        {label:"magic",k:"sync",r:[4,19],val:"\"MPC1000 PGM 1.00\"",body:"The 16-byte format signature. acidcat sniffs on this at offset 4; the MPC500/2500 share it."},
+        {label:"magic",k:"sync",r:[4,19],val:"\"MPC1000 PGM 1.00\"",body:"The 16-byte format signature, at offset 4 rather than 0; the MPC500/2500 share it."},
         {label:"pad",k:"rsv",r:[20,23],val:"0",body:"Header padding; the 64-pad array begins at byte 24."}
       ]],
     "pgm1000-lay":["byte",
       [0x43,0x50,0x4d,0x37,0x5f,0x6b,0x31,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x82,0x40,0x00,0x64,0x46,0x7f,0x00,0x00,0x00,0x00],
       [
-        {label:"sample name",k:"enum",r:[0,15],val:"\"CPM7_k1\"",body:"16-byte name, NUL-terminated, referencing an external .WAV. An empty name means the layer is unused. Bytes after the terminator are uninitialized.",note:"acidcat reads to the first NUL."},
+        {label:"sample name",k:"enum",r:[0,15],val:"\"CPM7_k1\"",body:"16-byte name, NUL-terminated, referencing an external .WAV. An empty name means the layer is unused. Bytes after the terminator are uninitialized.",note:"the name ends at the first NUL."},
         {label:"pad",k:"rsv",r:[16,16],val:"0",body:"Padding."},
         {label:"level",k:"flag",r:[17,17],val:"100",body:"Layer level, 0-100."},
         {label:"vel lower",k:"enum",r:[18,18],val:"70",body:"Velocity range, lower bound (0-127). This layer covers loud hits, 70-127."},

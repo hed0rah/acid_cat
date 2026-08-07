@@ -164,7 +164,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">NCW is the sample format inside Kontakt instruments: PCM audio, losslessly compressed. The file is a fixed little-endian header, a block table, and a run of delta/bit-packed audio blocks that reconstruct the original samples exactly. No ASCII magic here; the file opens with the 4-byte sentinel <b>01 A8 9E D6</b> (a newer <b>01 A8 9E D7</b> writer variant is documented but acidcat does not yet accept it). Everything below is field-verified against a real Kontakt library .ncw. <b>Hover</b> any field to light its exact bytes and read the decode; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
+  <p class="lede">NCW is the sample format inside Kontakt instruments: PCM audio, losslessly compressed. The file is a fixed little-endian header, a block table, and a run of delta/bit-packed audio blocks that reconstruct the original samples exactly. No ASCII magic here; the file opens with the 4-byte sentinel <b>01 A8 9E D6</b> (a newer <b>01 A8 9E D7</b> writer variant also exists). No official spec; the layout below is field-verified against real Kontakt library content. <b>Hover</b> any field to light its exact bytes and read the decode; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">ember</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -176,18 +176,18 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="sec">file regions</div>
-  <p class="note">Top to bottom, what a reader walks. The audio parameters a producer wants sit in the first 32 bytes; acidcat inspect decodes them and derives the duration without touching the compressed body.</p>
+  <p class="note">Top to bottom, what a reader walks. The audio parameters a producer wants sit in the first 32 bytes; duration follows from them without touching the compressed body.</p>
   <div>
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">fixed header</span><span class="rspan">0x00 . 120 bytes . drawn below</span></summary>
       <div class="rbody">
-        <p class="note">All integers little-endian. The first 32 bytes carry the magic, the audio parameters, and three offsets that lay out the rest of the file; the remainder of the 120-byte header is zero in the files examined. The worked example is the corpus file: 2 channels, 24-bit, 48000 Hz, 439295 samples.</p>
+        <p class="note">All integers little-endian. The first 32 bytes carry the magic, the audio parameters, and three offsets that lay out the rest of the file; the remainder of the 120-byte header is zero in all known files. The worked example is 2 channels, 24-bit, 48000 Hz, 439295 samples.</p>
         <div id="block-header"></div>
         <div class="kv">
-          <div><span class="k">magic</span><span class="v">01 A8 9E D6 at offset 0 (matched); 01 A8 9E D7 is a newer-writer variant, not yet handled</span></div>
+          <div><span class="k">magic</span><span class="v">01 A8 9E D6 at offset 0, the classic sentinel; 01 A8 9E D7 is a newer-writer variant</span></div>
           <div><span class="k">audio params</span><span class="v">channels u16 @ 0x08 . bits u16 @ 0x0A . sample_rate u32 @ 0x0C . num_samples u32 @ 0x10</span></div>
           <div><span class="k">layout offsets</span><span class="v">block table @ the u32 at 0x14, audio data @ the u32 at 0x18, body size in the u32 at 0x1C</span></div>
-          <div><span class="k">cross-check</span><span class="v">data_offset + data_size = file size; 3556 + 1909184 = 1912740 on the corpus file</span></div>
+          <div><span class="k">cross-check</span><span class="v">data_offset + data_size = file size; 3556 + 1909184 = 1912740 in the worked example</span></div>
         </div>
       </div>
     </details>
@@ -198,7 +198,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note">Between the header and the audio sits an index: one u32 offset per compressed block, relative to the start of the audio body, plus a final entry marking its end. Random access falls out for free; a player seeks the table, not the stream.</p>
         <div class="kv">
           <div><span class="k">entry</span><span class="v">u32 little-endian, offset from data_offset</span></div>
-          <div><span class="k">corpus file</span><span class="v">859 entries at 0x78: 858 blocks plus the end sentinel, ascending from 0 to 1909184</span></div>
+          <div><span class="k">example</span><span class="v">859 entries at 0x78: 858 blocks plus the end sentinel, ascending from 0 to 1909184</span></div>
           <div><span class="k">block span</span><span class="v">each block covers 512 sample frames; 858 x 512 = 439296, one frame past num_samples, so the last block runs short</span></div>
           <div><span class="k">sizing</span><span class="v">entry deltas give each block's compressed byte size; they vary block to block with the material</span></div>
         </div>
@@ -206,7 +206,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     </details>
 
     <details class="region" open>
-      <summary><span class="chev">&#9656;</span><span class="rname">compressed audio body</span><span class="rspan">data_offset . opaque to acidcat</span></summary>
+      <summary><span class="chev">&#9656;</span><span class="rname">compressed audio body</span><span class="rspan">data_offset . compressed blocks</span></summary>
       <div class="rbody">
         <p class="note">The samples themselves, packed block by block. Each block is delta/bit-packed: store the differences between neighbouring samples, then keep only as many bits per delta as the block actually needs. Quiet or smooth material packs tight; noise barely shrinks. Decoding reconstructs the original PCM exactly; this is lossless, not perceptual.</p>
         <div class="kv">
@@ -216,21 +216,21 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">stereo</span><span class="v">flag 0x01 = mid/side; L = mid+side, R = mid-side, decorrelated the way FLAC does it</span></div>
           <div><span class="k">float</span><span class="v">flag 0x02 = the samples are 32-bit IEEE float, not integers (WAV fmt tag 3 on the way out)</span></div>
           <div><span class="k">guarantee</span><span class="v">bit-exact PCM out; the WAV that went in comes back whole</span></div>
-          <div><span class="k">acidcat</span><span class="v">the inspect walker leaves the body opaque; convert / extract runs the full lossless decode</span></div>
+          <div><span class="k">reading</span><span class="v">the header decodes without touching the body; full PCM requires running the block decoder</span></div>
         </div>
       </div>
     </details>
   </div>
 
-  <div class="sec">what acidcat reads</div>
-  <p class="note">The header is enough. Four fields in, one division out, and a corrupt file gets rejected instead of cataloged with a nonsense duration.</p>
+  <div class="sec">reading the header</div>
+  <p class="note">The header is enough. Four fields in, one division out, and out-of-range values are the tell for a corrupt file.</p>
   <div>
     <details class="region" open>
-      <summary><span class="chev">&#9656;</span><span class="rname">header decode + validation</span><span class="rspan">inspect . index</span></summary>
+      <summary><span class="chev">&#9656;</span><span class="rname">header decode + validation</span><span class="rspan">first 32 bytes</span></summary>
       <div class="rbody">
         <div class="kv">
           <div><span class="k">read</span><span class="v">channels, bit depth, sample rate, sample count from the fixed header</span></div>
-          <div><span class="k">derive</span><span class="v">duration = num_samples / sample_rate; 439295 / 48000 = 9.152 s on the corpus file</span></div>
+          <div><span class="k">derive</span><span class="v">duration = num_samples / sample_rate; 439295 / 48000 = 9.152 s</span></div>
           <div><span class="k">validate</span><span class="v">channels 1-32 . bits in {8, 16, 24, 32} . sample_rate 8000-384000 . num_samples 1 to 2e9</span></div>
           <div><span class="k">on failure</span><span class="v">the file is rejected as corrupt rather than shown with an absurd duration</span></div>
         </div>
@@ -339,7 +339,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     dcol.style.minHeight=(maxH+6)+"px";
   }
 
-  // ncw fixed header, first 32 bytes of the corpus file: 2ch 24-bit 48000 Hz
+  // ncw fixed header, first 32 bytes: 2ch 24-bit 48000 Hz
   build("block-header", 'byte',
     [0x01,0xA8,0x9E,0xD6,
      0x31,0x01,0x00,0x00,
@@ -351,34 +351,34 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
      0xC0,0x21,0x1D,0x00],
     [
       {label:"magic",k:"sync",r:[0,3],val:"01 A8 9E D6",sel:0,branch:[
-        ["..D6","classic sentinel; matched, most library content"],
-        ["..D7","newer writer variant; documented, not yet accepted"]],
+        ["..D6","classic sentinel; most library content"],
+        ["..D7","newer writer variant; documented, less common"]],
        body:"Four bytes open the file: the little-endian sentinel 0xD69EA801. Not ASCII, not human-readable, just a signature. A file that does not start with the D6 sentinel is declined.",
-       note:"acidcat currently matches only the D6 sentinel; the D7 variant is real but not yet handled."},
+       note:"the D6 sentinel covers most library content; the D7 variant is a later writer."},
       {label:"header tag",k:"rsv",r:[4,7],val:"0x131",
-       body:"Four bytes between the magic and the audio parameters: a block-header / version area. Reads 0x131 on the corpus file. Left uninterpreted; nothing downstream depends on it.",
+       body:"Four bytes between the magic and the audio parameters: a block-header / version area. Reads 0x131 in the worked example. Purpose undocumented; nothing else depends on it.",
        note:"treated as reserved until a second value shows up in the wild."},
       {label:"channels",k:"enum",r:[8,9],val:"2",
        body:"u16 little-endian channel count. Stereo here; Kontakt libraries carry mono and stereo NCW side by side.",
-       note:"acidcat accepts 1-32; anything outside rejects the header."},
+       note:"the plausible range is 1-32; anything outside means a bad header."},
       {label:"bits_per_sample",k:"enum",r:[10,11],val:"24",sel:2,branch:[
         ["8","8-bit PCM"],
         ["16","16-bit PCM"],
         ["24","24-bit PCM: this file"],
         ["32","32-bit PCM"]],
        body:"u16 little-endian bit depth of the original PCM. The compression is lossless, so this is also the bit depth that comes back out.",
-       note:"acidcat accepts only {8, 16, 24, 32}."},
+       note:"only {8, 16, 24, 32} occur."},
       {label:"sample_rate",k:"enum",r:[12,15],val:"48000 Hz",
        body:"u32 little-endian sample rate. 0x0000BB80 = 48000. Together with num_samples this is all a catalog needs for duration.",
-       note:"acidcat accepts 8000-384000 Hz."},
+       note:"the plausible range is 8000-384000 Hz."},
       {label:"num_samples",k:"enum",r:[16,19],val:"439295",
        body:"u32 little-endian count of sample frames in the decoded audio. 0x0006B3FF = 439295 frames; divided by the rate that is 9.152 seconds.",
-       note:"acidcat accepts 1 to 2e9 and derives duration = num_samples / sample_rate."},
+       note:"duration = num_samples / sample_rate; a sane bound is 1 to 2e9."},
       {label:"table_offset",k:"sync",r:[20,23],val:"120",
-       body:"u32 little-endian: where the block table begins, which is also the size of this fixed header. 120 on the files examined; bytes 0x20-0x77 are zero.",
+       body:"u32 little-endian: where the block table begins, which is also the size of this fixed header. Always 120; bytes 0x20-0x77 are zero.",
        note:"the header is padded well past the fields drawn here."},
       {label:"data_offset",k:"sync",r:[24,27],val:"3556",
-       body:"u32 little-endian: where the compressed audio body begins. Everything between table_offset and here is the block table; 3436 bytes on the corpus file, 859 u32 entries.",
+       body:"u32 little-endian: where the compressed audio body begins. Everything between table_offset and here is the block table; 3436 bytes here, 859 u32 entries.",
        note:"858 blocks of 512 frames cover the 439295 samples, plus one end-sentinel entry."},
       {label:"data_size",k:"sync",r:[28,31],val:"1909184",
        body:"u32 little-endian byte count of the compressed audio body. The last block-table entry equals this value, and data_offset + data_size equals the file size: 3556 + 1909184 = 1912740.",

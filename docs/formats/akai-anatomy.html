@@ -222,26 +222,26 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="y">1988</span><span><b>Akai S1000</b> &mdash; the studio-standard hardware sampler of its era. Its program/keygroup model (a key map of velocity-split zones) is the ancestor of the <code>.akp</code> layout.</span></div>
         <div><span class="y">1998</span><span><b>S5000 / S6000</b> &mdash; the generation that saved programs to disk as <code>.akp</code> (RIFF/APRG), samples as <code>.wav</code>, and multis as <code>.akm</code>. A three-file split: mapping, audio, and arrangement.</span></div>
         <div><span class="y">keygroup</span><span><b>the unit of an Akai program.</b> A keygroup owns a key range and up to four velocity <b>zones</b>; the sampler picks the zone by how hard the key is struck. Layering four sampled velocities per key is how the S-series got its realism.</span></div>
-        <div><span class="y">now</span><span><b>read by converters.</b> Chicken Systems Translator, Extreme Sample Converter and others still parse <code>.akp</code> to migrate S-series libraries into soft samplers. acidcat surfaces the map and the referenced sample names.</span></div>
+        <div><span class="y">now</span><span><b>read by converters.</b> Chicken Systems Translator, Extreme Sample Converter and others still parse <code>.akp</code> to migrate S-series libraries into soft samplers.</span></div>
       </div>
 
-      <div class="callout"><b>nested IFF, not flat.</b> Most RIFF files are one level deep. An Akai program is two: a <code>kgrp</code> chunk's payload is <i>itself</i> a stream of IFF chunks (<code>kloc</code>, <code>env</code>, <code>filt</code>, <code>zone</code>). acidcat walks the outer chunks, then re-enters each <code>kgrp</code> to walk its inner ones &mdash; the same IFF reader, recursed one level.</div>
-      <div class="callout"><b>RIFF size is unreliable.</b> Akai typically writes <code>0x00000000</code> for the RIFF size field rather than the real body length &mdash; a firmware quirk. A strict RIFF reader that trusts the size reads nothing; acidcat falls back to the actual file length and walks the chunks regardless. It is one of those places a real specimen corrects a spec.</div>
-      <div class="callout"><b>the samples are elsewhere.</b> A <code>zone</code> stores a sample <i>name</i>, not audio &mdash; the S6000 loads the matching <code>.wav</code> from the same volume. So acidcat treats the zones as references: it lists which samples a program needs (here <code>"12 STRING G5"</code>), and a missing sibling <code>.wav</code> is a broken program, not a broken file.</div>
+      <div class="callout"><b>nested IFF, not flat.</b> Most RIFF files are one level deep. An Akai program is two: a <code>kgrp</code> chunk's payload is <i>itself</i> a stream of IFF chunks (<code>kloc</code>, <code>env</code>, <code>filt</code>, <code>zone</code>). A reader walks the outer chunks, then re-enters each <code>kgrp</code> to walk its inner ones &mdash; the same IFF reader, recursed one level.</div>
+      <div class="callout"><b>RIFF size is unreliable.</b> Akai typically writes <code>0x00000000</code> for the RIFF size field rather than the real body length &mdash; a firmware quirk. A strict RIFF reader that trusts the size reads nothing; the real bound is the file length, so the chunks are walked regardless.</div>
+      <div class="callout"><b>the samples are elsewhere.</b> A <code>zone</code> stores a sample <i>name</i>, not audio &mdash; the S6000 loads the matching <code>.wav</code> from the same volume. So the zones are references: they name the samples a program needs, and a missing sibling <code>.wav</code> is a broken program, not a broken file.</div>
     </div>
 
     <!-- ===================== RIFF + PRG ===================== -->
     <div class="panel" data-panel="header">
       <div class="pfacts"><span>form<b>RIFF "APRG"</b></span><span>riff size<b>0 (quirk)</b></span><span>prg<b>program header</b></span><span>counts<b>keygroups</b></span></div>
-      <p class="plede">The file opens like any RIFF &mdash; a <b>RIFF</b> magic, a size, a form type &mdash; but the form type is <b>APRG</b> (Akai program) and the size field is left <b>zero</b>. The first chunk, <b>prg</b>, is the program header: its bytes carry the MIDI program number and the declared <b>keygroup count</b>, which acidcat cross-checks against the number of <code>kgrp</code> chunks it actually finds. Both maps are from a real S6000 program.</p>
+      <p class="plede">The file opens like any RIFF &mdash; a <b>RIFF</b> magic, a size, a form type &mdash; but the form type is <b>APRG</b> (Akai program) and the size field is left <b>zero</b>. The first chunk, <b>prg</b>, is the program header: its bytes carry the MIDI program number and the declared <b>keygroup count</b>, which should match the number of <code>kgrp</code> chunks the file actually holds. Both maps are from a real S6000 program.</p>
       <div class="sec">RIFF header (12 bytes)</div>
       <p class="note">Hover <span class="k-en">riff_size</span> &mdash; zero, not the body length.</p>
       <div id="akai-riff" data-build></div>
       <div class="sec">prg chunk (id + size + 6-byte body)</div>
       <p class="note">The program header. Hover <span class="k-en">keygroups</span> &mdash; declared 9, matching the 9 kgrp chunks.</p>
       <div id="akai-prg" data-build></div>
-      <div class="callout"><b>trust the file, not the size.</b> Because <code>riff_size</code> is 0, acidcat sizes the walk from the actual file length and reads chunks until it runs out &mdash; the same degrade-gracefully rule the WAV walker uses for a stale RIFF size. Every Akai program does this, so it is expected, not an error.</div>
-      <div class="callout"><b>prg declares, kgrp confirms.</b> The <code>prg</code> body's third byte is the <b>keygroup count</b> (9 here). acidcat compares it to the number of <code>kgrp</code> chunks it walks; a mismatch is warned, catching a truncated or hand-edited program. The second byte is the MIDI program number the sampler assigns.</div>
+      <div class="callout"><b>trust the file, not the size.</b> Because <code>riff_size</code> is 0, the walk is sized from the actual file length and chunks are read until they run out &mdash; the same degrade-gracefully rule a stale RIFF size calls for in WAV. Every Akai program does this, so it is expected, not an error.</div>
+      <div class="callout"><b>prg declares, kgrp confirms.</b> The <code>prg</code> body's third byte is the <b>keygroup count</b> (9 here). It should equal the number of <code>kgrp</code> chunks present; a mismatch marks a truncated or hand-edited program. The second byte is the MIDI program number the sampler assigns.</div>
     </div>
 
     <!-- ===================== KGRP + KLOC ===================== -->
@@ -252,7 +252,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Hover <span class="k-en">low_key</span> / <span class="k-en">high_key</span> &mdash; this keygroup covers MIDI notes 88-127.</p>
       <div id="akai-kloc" data-build></div>
       <div class="callout"><b>a keygroup is a key window plus velocity layers.</b> <code>kloc</code> sets the window (low..high MIDI note); the four <code>zone</code> chunks that follow are the velocity layers within it. A program spreads keygroups across the keyboard, each a slice of the range &mdash; nine of them here, covering the guitar top to bottom.</div>
-      <div class="callout"><b>the same walker, one level down.</b> There is nothing special about the inner chunks: they are ordinary IFF (4-byte id, little-endian u32 size, payload, word-padded). acidcat re-enters the <code>kgrp</code> body with the same chunk iterator it used at the top level &mdash; recursion, not a second parser.</div>
+      <div class="callout"><b>the same reader, one level down.</b> There is nothing special about the inner chunks: they are ordinary IFF (4-byte id, little-endian u32 size, payload, word-padded). The <code>kgrp</code> body is re-entered with the same chunk iterator used at the top level &mdash; recursion, not a second parser.</div>
     </div>
 
     <!-- ===================== ZONE ===================== -->
@@ -262,8 +262,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">zone chunk (id + size + flag + name)</div>
       <p class="note">Hover <span class="k-en">sample_name</span> &mdash; the external <code>.wav</code> this zone references.</p>
       <div id="akai-zone" data-build></div>
-      <div class="callout"><b>length-prefixed, not null-terminated.</b> The zone names its sample as <code>[flag][length][bytes]</code> &mdash; byte 1 is the name length, and exactly that many ASCII bytes follow. A length of <b>0</b> means an empty zone (no sample for that velocity band); acidcat skips those and lists only the real references.</div>
-      <div class="callout"><b>this is the reference graph edge.</b> The zone is where an Akai program points outward: <code>"12 STRING G5"</code> is a filename the S6000 resolves on the same volume. acidcat collects every distinct zone name as the program's sample dependency list &mdash; the set of <code>.wav</code>s you need alongside the <code>.akp</code> for it to make sound.</div>
+      <div class="callout"><b>length-prefixed, not null-terminated.</b> The zone names its sample as <code>[flag][length][bytes]</code> &mdash; byte 1 is the name length, and exactly that many ASCII bytes follow. A length of <b>0</b> means an empty zone (no sample for that velocity band), so only a non-zero length names a real reference.</div>
+      <div class="callout"><b>this is the reference graph edge.</b> The zone is where an Akai program points outward: the stored name is a filename the S6000 resolves on the same volume. Every distinct zone name belongs to the program's sample dependency list &mdash; the set of <code>.wav</code>s you need alongside the <code>.akp</code> for it to make sound.</div>
     </div>
 
   </div>
@@ -363,13 +363,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   }
 
   // byte-map specs, built lazily the first time a tab is shown. every byte value
-  // below is copied verbatim from a real S6000 program (12 STRING 4.AKP).
+  // below is copied verbatim from a real S6000 keygroup program.
   var SPECS={
     "akai-riff":["byte",
       [0x52,0x49,0x46,0x46, 0x00,0x00,0x00,0x00, 0x41,0x50,0x52,0x47],
       [
-        {label:"magic",k:"sync",r:[0,3],val:"\"RIFF\"",body:"The RIFF container signature, little-endian family. acidcat routes on RIFF + the APRG form type."},
-        {label:"riff_size",k:"flag",r:[4,7],val:"0",body:"little-endian u32: the RIFF body size -- but Akai writes 0 here rather than the real length, a firmware quirk. acidcat falls back to the actual file size and walks the chunks anyway.",note:"0x00000000; a strict reader trusting this would read nothing."},
+        {label:"magic",k:"sync",r:[0,3],val:"\"RIFF\"",body:"The RIFF container signature, little-endian family. RIFF plus the APRG form type identifies the file."},
+        {label:"riff_size",k:"flag",r:[4,7],val:"0",body:"little-endian u32: the RIFF body size -- but Akai writes 0 here rather than the real length, a firmware quirk. The actual file size is the only usable bound; walk the chunks anyway.",note:"0x00000000; a strict reader trusting this would read nothing."},
         {label:"form_type",k:"sync",r:[8,11],val:"\"APRG\"",body:"The RIFF form type: APRG = Akai program. This is what distinguishes an .akp from any other RIFF file."}
       ]],
     "akai-prg":["byte",
@@ -378,8 +378,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"chunk_id",k:"sync",r:[0,3],val:"\"prg \"",body:"The program-header chunk id (trailing space). First chunk after the RIFF header."},
         {label:"chunk_size",k:"sync",r:[4,7],val:"6",body:"little-endian u32: the prg payload size, 6 bytes.",note:"0x00000006 = 6."},
         {label:"version",k:"rsv",r:[8,8],val:"1",body:"prg byte 0: a structure/version constant, 1 in S5000/S6000 programs."},
-        {label:"midi_program",k:"enum",r:[9,9],val:"4",body:"prg byte 1: the MIDI program number the sampler assigns to this program.",note:"acidcat surfaces it as midi_program."},
-        {label:"keygroups",k:"enum",r:[10,10],val:"9",body:"prg byte 2: the DECLARED number of keygroups. acidcat compares it to the count of kgrp chunks it actually walks and warns on a mismatch.",note:"9 here, matching the 9 kgrp chunks."},
+        {label:"midi_program",k:"enum",r:[9,9],val:"4",body:"prg byte 1: the MIDI program number the sampler assigns to this program.",note:""},
+        {label:"keygroups",k:"enum",r:[10,10],val:"9",body:"prg byte 2: the DECLARED number of keygroups. It should equal the count of kgrp chunks actually present; a mismatch means a damaged program.",note:"9 here, matching the 9 kgrp chunks."},
         {label:"reserved",k:"rsv",r:[11,13],val:"00 02 00",body:"The remaining prg bytes -- program-wide flags, not decoded field by field."}
       ]],
     "akai-kloc":["byte",
@@ -398,8 +398,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"chunk_id",k:"sync",r:[0,3],val:"\"zone\"",body:"A velocity-zone chunk id. Up to four per keygroup."},
         {label:"chunk_size",k:"sync",r:[4,7],val:"46",body:"little-endian u32: the zone payload size, 46 bytes (the name plus tuning/level params).",note:"0x0000002E = 46."},
         {label:"flag",k:"rsv",r:[8,8],val:"1",body:"zone byte 0: a presence/mode flag. 1 = an active zone."},
-        {label:"name_len",k:"enum",r:[9,9],val:"12",body:"zone byte 1: the length of the sample name that follows. 0x0C = 12. A length of 0 marks an empty zone, which acidcat skips.",note:"length-prefixed, not null-terminated."},
-        {label:"sample_name",k:"flag",r:[10,21],val:"\"12 STRING G5\"",body:"The name of the external .wav this zone plays. The program references it; the audio lives in a sibling file. acidcat collects every distinct zone name as the program's sample dependency list.",note:"12 ASCII bytes; the zone's tuning/level params follow (not drawn)."}
+        {label:"name_len",k:"enum",r:[9,9],val:"12",body:"zone byte 1: the length of the sample name that follows. 0x0C = 12. A length of 0 marks an empty zone.",note:"length-prefixed, not null-terminated."},
+        {label:"sample_name",k:"flag",r:[10,21],val:"\"12 STRING G5\"",body:"The name of the external .wav this zone plays. The program references it; the audio lives in a sibling file. The distinct zone names are the program's sample dependency list.",note:"12 ASCII bytes; the zone's tuning/level params follow (not drawn)."}
       ]]
   };
 

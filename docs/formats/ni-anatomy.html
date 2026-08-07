@@ -164,7 +164,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">Native Instruments presets are three containers wearing one badge. The <b>NISound "hsin"</b> tree carries Massive <b>.nmsv</b>, Absynth <b>.nabs</b>, FM8, Reaktor, and modern Kontakt <b>.nki</b>; the older <b>.ksd</b> document shell (old Absynth, KORE, FM8) wraps zlib chunks around plain XML; and <b>.nksf</b> is a RIFF form full of MessagePack. The formats are community-documented; everything below was re-derived from byte-level facts against real presets, nothing else. The metadata a producer wants is plain in all three: no decompression is needed to read an hsin preset name. <b>Hover</b> any field to light its exact bytes and read the decode; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
+  <p class="lede">Native Instruments presets are three containers wearing one badge. The <b>NISound "hsin"</b> tree carries Massive <b>.nmsv</b>, Absynth <b>.nabs</b>, FM8, Reaktor, and modern Kontakt <b>.nki</b>; the older <b>.ksd</b> document shell (old Absynth, KORE, FM8) wraps zlib chunks around plain XML; and <b>.nksf</b> is a RIFF form full of MessagePack. The formats are community-documented; everything below is byte-verified against real presets. The metadata a producer wants is plain in all three: no decompression is needed to read an hsin preset name. <b>Hover</b> any field to light its exact bytes and read the decode; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">brick</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -177,7 +177,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="sec">family 1 . NISound "hsin" container</div>
-  <p class="note">An EBML-like tree of size-prefixed frames, everything little-endian. Each frame opens with a 0x30-byte header (its own size, the "hsin" magic, a UUID), then a stack of DSIN-domain item records, then child frames. The item chain in every preset examined:</p>
+  <p class="note">An EBML-like tree of size-prefixed frames, everything little-endian. Each frame opens with a 0x30-byte header (its own size, the "hsin" magic, a UUID), then a stack of DSIN-domain item records, then child frames. The item chain runs:</p>
   <div class="tree"><b>hsin</b> root frame . frame_size = file size<br>&nbsp;&nbsp;<b>DSIN 118</b> RepositoryRoot<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>DSIN 101</b> Authoring Application &nbsp;.&nbsp; appID 7 = Massive . version "1.3.1.0"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>DSIN 108</b> SoundInfoItem &nbsp;.&nbsp; "nicecombo" . author . vendor . description . "Massive"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>DSIN 121</b> ControllerAssignments<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>DSIN 116</b> EncryptionItem<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>DSIN 115</b> SubtreeItem &nbsp;.&nbsp; FastLZ payload, a whole hsin container inside</div>
   <div>
     <details class="region" open>
@@ -188,7 +188,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div class="kv">
           <div><span class="k">extensions</span><span class="v">.nmsv (Massive) . .nabs (Absynth) . FM8 . Reaktor . modern Kontakt .nki/.nkm</span></div>
           <div><span class="k">worked example</span><span class="v">nicecombo.nmsv: name "nicecombo", product Massive, version 1.3.1.0</span></div>
-          <div><span class="k">second sample</span><span class="v">John ananew.nabs: name "John ananew", product Absynth, version 5.0.0.0</span></div>
+          <div><span class="k">second sample</span><span class="v">an Absynth .nabs: inner name, product Absynth, version 5.0.0.0</span></div>
         </div>
       </div>
     </details>
@@ -209,7 +209,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div class="kv">
           <div><span class="k">item 101 layout</span><span class="v">u32 appID, u32, version pascal string, e.g. 7 . "1.3.1.0"</span></div>
           <div><span class="k">item 108 layout</span><span class="v">name . author . vendor . description . app name, in that order; empty fields are a bare zero count</span></div>
-          <div><span class="k">acidcat reads</span><span class="v">name, product, version, author, vendor; positional, bounds-checked, mostly-ASCII filter against binary noise</span></div>
+          <div><span class="k">readable fields</span><span class="v">name, product, version, author, vendor; positional, so every count must be bounds-checked</span></div>
         </div>
       </div>
     </details>
@@ -217,10 +217,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region opt">
       <summary><span class="chev">&#9656;</span><span class="rname">FastLZ subtree</span><span class="rspan">item 115 . synth state . opaque by default</span></summary>
       <div class="rbody">
-        <p class="note">The SubtreeItem holds the actual patch. Its payload header is drawn below (nicecombo.nmsv); after it comes a FastLZ level-1 stream that decompresses to a complete nested hsin container of raw synth parameter state. acidcat inspect --verbose runs the decompression and reports the inner container; by default it stays opaque, because the metadata never needed it.</p>
+        <p class="note">The SubtreeItem holds the actual patch. Its payload header is drawn below (nicecombo.nmsv); after it comes a FastLZ level-1 stream that decompresses to a complete nested hsin container of raw synth parameter state. The metadata never requires that decompression; the inner container matters only for the synth state itself.</p>
         <div id="block-fastlz"></div>
         <div class="kv">
-          <div><span class="k">worked example</span><span class="v">nicecombo.nmsv: 1595 bytes of FastLZ open to a 6017-byte inner hsin; John ananew.nabs opens to 13442 bytes</span></div>
+          <div><span class="k">worked example</span><span class="v">a Massive .nmsv: 1595 bytes of FastLZ open to a 6017-byte inner hsin; an Absynth .nabs opens to 13442 bytes</span></div>
           <div><span class="k">hardening</span><span class="v">decompression output is capped, so a forged size field cannot balloon memory</span></div>
         </div>
       </div>
@@ -252,7 +252,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">commonAttr</span><span class="v">Author ("not set" here, filtered out) . Vendor . Bankname . Comment . Rating (2) . Color</span></div>
           <div><span class="k">TechnicalAttr</span><span class="v">DeviceType "Instrument" . Plugins/Plugin "FM8" . CPU/memory hints</span></div>
           <div><span class="k">MusicalAttr</span><span class="v">Tempo (0 = unset) . Genre . Key . Scale . TimeSignature</span></div>
-          <div><span class="k">acidcat reads</span><span class="v">name, author, vendor, bank, comment, plugin, device_type, tempo, genre, key; regex over the XML, no entity expansion possible</span></div>
+          <div><span class="k">readable fields</span><span class="v">name, author, vendor, bank, comment, plugin, device_type, tempo, genre, key; plain XML, no entity expansion</span></div>
         </div>
       </div>
     </details>
@@ -287,8 +287,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div class="kv">
           <div><span class="k">NICA</span><span class="v">controller assignment stub; 5 bytes in this file</span></div>
           <div><span class="k">PLID</span><span class="v">msgpack again: VST.magic, VST3.uid, pluginName "Massive X"; pins the preset to its plugin</span></div>
-          <div><span class="k">PCHK</span><span class="v">the raw plugin state chunk; a zlib stream sits inside. acidcat leaves it opaque</span></div>
-          <div><span class="k">acidcat reads</span><span class="v">name, author, vendor, comment, device_type, bankchain (joined as bank); the msgpack decoder is depth-capped and bounds-checked</span></div>
+          <div><span class="k">PCHK</span><span class="v">the raw plugin state chunk; a zlib stream sits inside, plugin-private</span></div>
+          <div><span class="k">readable fields</span><span class="v">name, author, vendor, comment, device_type, bankchain (joined as bank); a msgpack decoder must be depth-capped</span></div>
         </div>
       </div>
     </details>
@@ -409,19 +409,19 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"u64 little-endian: the total size of this frame, children included. For the root frame it equals the file size, which is the cheapest sanity check the format offers.",
        note:"every frame in the tree, at every depth, opens with its own u64 size."},
       {label:"header_version",k:"sync",r:[8,11],val:"1",
-       body:"u32 little-endian header version. Every file examined reads 1."},
+       body:"u32 little-endian header version. Constant 1 in practice."},
       {label:"magic",k:"sync",r:[12,15],val:"\"hsin\"",
        body:"The magic sits at offset 0x0C, behind the frame size, so a sniffer that only reads offset 0 misses it. Four ASCII bytes, byte-reversed as NI likes to write its codes.",
        note:"shared by .nmsv, .nabs, FM8, Reaktor, and modern Kontakt .nki/.nkm files."},
       {label:"const",k:"rsv",r:[16,19],val:"1",
-       body:"u32 constant 1 in every frame examined. Left uninterpreted."},
+       body:"u32 constant 1 in every frame. Left uninterpreted."},
       {label:"const",k:"rsv",r:[20,23],val:"0",
-       body:"u32 constant 0 in every frame examined. Left uninterpreted."},
+       body:"u32 constant 0 in every frame. Left uninterpreted."},
       {label:"uuid",k:"enum",r:[24,39],val:"16-byte uuid",
        body:"Sixteen bytes of frame identity. Differs per frame and per file; useful as a fingerprint, not needed to walk the tree."},
       {label:"data_size",k:"enum",r:[40,47],val:"0x96 = 150",
        body:"u64 little-endian: the size of this frame's own item stack and data. Whatever remains of frame_size after it is child frames. Here 0x30 + 150 lands exactly on the next frame's first byte.",
-       note:"frame_size and data_size disagreeing with the file length is how acidcat rejects truncated or forged files."}
+       note:"frame_size and data_size disagreeing with the file length marks a truncated or forged file."}
     ]);
 
   // one DSIN item record: RepositoryRoot, item 118
@@ -443,10 +443,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["121","ControllerAssignments"],
         ["116","EncryptionItem: wrapper, no encryption observed"],
         ["115","SubtreeItem: FastLZ payload, the synth state"]],
-       body:"u32 little-endian item type. The stack nests these by size until the innermost item's data begins; the six IDs in the table cover every preset examined.",
+       body:"u32 little-endian item type. The stack nests these by size until the innermost item's data begins; the six IDs in the table are the ones in common use.",
        note:"0x76 = 118: this record is the RepositoryRoot."},
       {label:"version",k:"sync",r:[8,11],val:"1",
-       body:"u32 item version. Reads 1 throughout the corpus."},
+       body:"u32 item version. Reads 1 throughout."},
       {label:"inner_size",k:"enum",r:[12,19],val:"0x48 = 72",
        body:"u64 little-endian: how many bytes this item record wraps, the next record included. Walking the stack is nothing but chasing these sizes inward."}
     ]);
@@ -458,7 +458,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     [
       {label:"char_count",k:"sync",r:[0,3],val:"9",
        body:"u32 little-endian: the number of UTF-16LE code units that follow, not bytes. An empty field is a bare zero count, four bytes and gone.",
-       note:"acidcat bounds-checks every count before reading and requires mostly-ASCII printable text, so binary noise that happens to decode is not mistaken for metadata."},
+       note:"bounds-check every count before reading; binary noise can decode as UTF-16, so a printable-text test keeps it out of the metadata."},
       {label:"chars",k:"enum",r:[4,21],val:"\"nicecombo\"",
        body:"Nine UTF-16LE code units: the preset name as the browser shows it. Author, vendor, and description follow positionally in item 108, then the app name closes the run."}
     ]);
@@ -473,9 +473,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"marker",k:"sync",r:[0,3],val:"1",
        body:"u32 constant 1 opening the SubtreeItem payload."},
       {label:"compressed",k:"flag",r:[4,4],val:"0x01",
-       body:"One byte flagging the payload as compressed. Every subtree in the corpus carries it."},
+       body:"One byte flagging the payload as compressed. Set on every subtree."},
       {label:"uncompressed_size",k:"enum",r:[5,8],val:"0x1781 = 6017",
-       body:"u32 little-endian: the size the FastLZ stream must decompress to. acidcat treats a mismatch as a failed candidate and moves on.",
+       body:"u32 little-endian: the size the FastLZ stream must decompress to. A mismatch means the stream is not a valid subtree.",
        note:"the decompressor is output-capped, so a forged size cannot be used as a decompression bomb."},
       {label:"compressed_size",k:"enum",r:[9,12],val:"0x63B = 1595",
        body:"u32 little-endian: the length of the FastLZ level-1 stream that follows. Those 1595 bytes open into a complete nested hsin container, a preset within the preset, holding the raw synth parameter state."}
@@ -504,7 +504,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"u32 little-endian: the length of the zlib stream that follows the two size fields."},
       {label:"uncompressed_size",k:"enum",r:[20,23],val:"1042",
        body:"u32 little-endian: what the stream inflates to. Here, 1042 bytes tagged \" LMX\" (XML, reversed a third time) holding the plain NI_DOC_HEADER document.",
-       note:"acidcat inflates with an output cap and requires NI_DOC_HEADER in the result before trusting the stream."}
+       note:"inflate with an output cap; NI_DOC_HEADER in the result confirms the stream."}
     ]);
 
   // nksf opening: RIFF header + the NISI chunk head, New_Init_2.nksf
@@ -524,14 +524,14 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"form type",k:"sync",r:[8,11],val:"\"NIKS\"",
        body:"The form type is the real signature: RIFF with form NIKS is a .nksf preset. Everything after it is chunks."},
       {label:"chunk id",k:"sync",r:[12,15],val:"\"NISI\"",
-       body:"The NI Sound Info chunk, first in every file examined. Carries the whole browser card in one MessagePack map."},
+       body:"The NI Sound Info chunk, first in the form. Carries the whole browser card in one MessagePack map."},
       {label:"chunk size",k:"enum",r:[16,19],val:"0x92 = 146",
        body:"u32 little-endian NISI payload size: a u32 version plus 142 bytes of msgpack."},
       {label:"NISI version",k:"sync",r:[20,23],val:"1",
        body:"u32 chunk-format version in front of the msgpack data."},
       {label:"map head",k:"enum",r:[24,24],val:"fixmap, 7 pairs",
        body:"0x87: a MessagePack fixmap of seven key/value pairs. In this file: author, bankchain, comment, deviceType, name, uuid, vendor.",
-       note:"acidcat decodes it with a minimal depth-capped msgpack reader; only the types this map uses are implemented."}
+       note:"a minimal depth-capped msgpack reader covers it: only fixstr, str8, fixmap and fixarray appear."}
     ]);
 
   // one msgpack entry from the NISI map: name = "New Init 2"

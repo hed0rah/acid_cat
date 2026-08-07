@@ -225,7 +225,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
       <div class="callout"><b>the path is half the metadata.</b> Before reading a single byte of an entry, its zip path already gives engine, factory-vs-user, bank and preset name: <code>Pigments/User/'Solstice'/90s - Solstice</code>. acidcat parses the path for identity and the archive body for the rest &mdash; two sources that cross-check each other. The preset name ends the path with no file extension, so acidcat keys off the path <i>shape</i>: any entry three or more levels deep is a preset, the shallower ones (the cover) are assets.</div>
       <div class="callout"><b>STORED means carveable.</b> Because entries are uncompressed, a <code>carve</code> of a preset's byte region is the <i>literal</i> Boost archive &mdash; drop it back into Analog Lab and it replays. acidcat records each preset's real offset and size, so the bank doubles as a directory of extractable presets.</div>
-      <div class="callout"><b>a cover ships with the bank.</b> Commercial banks include a top-level <code>.png</code>/<code>.jpg</code> cover (the artwork you see in a store listing). acidcat surfaces it as the bank's cover image, distinct from the preset entries.</div>
+      <div class="callout"><b>a cover ships with the bank.</b> Commercial banks include a top-level <code>.png</code>/<code>.jpg</code> cover (the artwork you see in a store listing). It is the bank's cover image, distinct from the preset entries.</div>
     </div>
 
     <!-- ===================== ZIP ENTRY ===================== -->
@@ -247,7 +247,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Hover <span class="k-en">len_prefix</span> &mdash; 22, the length of the class name that follows.</p>
       <div id="labx-boost" data-build></div>
       <div class="callout"><b>every string is length-prefixed.</b> Boost text serialization writes a string as its byte count, a space, then the bytes &mdash; so <code>22 serialization::archive</code> means &ldquo;a 22-byte string: serialization::archive&rdquo;, and <code>20 Low Notes - Solstice</code> is the 20-byte preset name. That length prefix is how acidcat pulls a value that itself contains spaces without guessing where it ends.</div>
-      <div class="callout"><b>the metadata is right there.</b> After the header, the archive lists the fields acidcat surfaces: preset name, bank, author, a comment, a Unix save time, the engine version, and a Characteristics/Genres/Styles tag blob. No decryption, no binary layout &mdash; the same tokens a human can read are what land in the index. A forged or truncated archive simply fails to yield them, and acidcat says so.</div>
+      <div class="callout"><b>the metadata is right there.</b> After the header, the archive lists its readable fields: preset name, bank, author, a comment, a Unix save time, the engine version, and a Characteristics/Genres/Styles tag blob. No decryption, no binary layout &mdash; the same tokens a human can read are what land in the index. A forged or truncated archive simply fails to yield them, and acidcat says so.</div>
     </div>
 
   </div>
@@ -352,7 +352,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     "labx-zip":["byte",
       [0x50,0x4B,0x03,0x04, 0x00,0x00, 0x00,0x00, 0x00,0x00, 0x55,0x44, 0xFA,0x5A, 0xA7,0x0C,0xD5,0x0E, 0x8B,0x14,0x00,0x00, 0x8B,0x14,0x00,0x00, 0x2A,0x00, 0x00,0x00],
       [
-        {label:"signature",k:"sync",r:[0,3],val:"PK 03 04",body:"The ZIP local-file-header signature. Every entry in the archive starts with it; acidcat routes the file as a zip on the leading PK."},
+        {label:"signature",k:"sync",r:[0,3],val:"PK 03 04",body:"The ZIP local-file-header signature. Every entry in the archive starts with it, and the leading PK is what identifies the file as a zip."},
         {label:"version",k:"rsv",r:[4,5],val:"0",body:"little-endian u16: the ZIP version needed to extract. 0 for a plain stored entry."},
         {label:"flags",k:"rsv",r:[6,7],val:"0",body:"little-endian u16: general-purpose bit flags (encryption, streaming). 0 here."},
         {label:"method",k:"enum",r:[8,9],val:"0 (STORED)",body:"little-endian u16: the compression method. 0 = STORED (no compression) -- so the entry data is the literal Boost archive.",note:"Analog Lab writes every preset STORED."},

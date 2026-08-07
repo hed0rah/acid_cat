@@ -184,7 +184,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note">The wrapper, drawn above: magic, size, and the RMID form type.</p>
         <div id="block-head"></div>
               <div class="sec">a complete file (first 24 of 46 bytes)</div>
-        <p class="note">Two formats with opposite byte orders, one inside the other. A minimal but spec-exact specimen.</p>
+        <p class="note">Two formats with opposite byte orders, one inside the other. Minimal but spec-exact.</p>
         <div id="rmid-all"></div>
 </div>
     </details>
@@ -204,7 +204,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region">
       <summary><span class="chev">&#9656;</span><span class="rname">wrapped MIDI</span><span class="rspan">big-endian . MThd + MTrk</span></summary>
       <div class="rbody">
-        <p class="note">Inside the data chunk: a complete SMF. acidcat delegates it to the MIDI walker with offsets shifted into place, so the MThd/MTrk detail shows through at correct file positions.</p>
+        <p class="note">Inside the data chunk: a complete SMF. It parses as an ordinary MIDI file once every offset is shifted by the start of the data chunk body.</p>
         <div class="kv">
           <div><span class="k">MThd</span><span class="v">format, track count, division (big-endian)</span></div>
           <div><span class="k">MTrk</span><span class="v">the track events</span></div>
@@ -342,7 +342,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"LITTLE-endian, counting everything after this field. 8 + 38 = 46, the file size."},
       {label:"form type",k:"enum",r:[8,11],val:'"RMID"',
        body:"What makes this a MIDI file rather than a WAV. Bytes 0 to 3 are identical in both, so a sniffer that stops at 'RIFF' cannot tell them apart.",
-       note:"acidcat reads the form type before choosing a walker, which is why an .rmid does not arrive at the WAV parser."},
+       note:"the form type has to be read before choosing a parser, or an .rmid lands in the WAV path."},
       {label:"chunk id",k:"sync",r:[12,15],val:'"data"',
        body:"One chunk, named exactly as in a WAV, holding something that is not audio at all: a complete standard MIDI file, byte for byte."},
       {label:"chunk size",k:"enum",r:[16,19],val:"26",

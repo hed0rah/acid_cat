@@ -204,7 +204,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region">
       <summary><span class="chev">&#9656;</span><span class="rname">payload</span><span class="rspan">0x38 . plugin-specific</span></summary>
       <div class="rbody">
-        <p class="note">For FxCk, num_params float32 values. For FPCh (this file), a uint32 BE chunk_size at 0x38 then that many opaque bytes the plugin owns. Not portable across plugins; acidcat reports it as a region, not decoded.</p>
+        <p class="note">For FxCk, num_params float32 values. For FPCh (this file), a uint32 BE chunk_size at 0x38 then that many opaque bytes the plugin owns. Not portable across plugins; only the plugin that wrote it can interpret the bytes.</p>
         <div class="kv">
           <div><span class="k">FxCk</span><span class="v">num_params * float32</span></div>
           <div><span class="k">FPCh</span><span class="v">chunk_size (uint32 BE) + opaque plugin blob</span></div>
@@ -354,7 +354,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        note:"the same magic opens .fxb bank files; the field after next is what tells them apart."},
       {label:"byteSize",k:"flag",r:[4,7],val:"8,225",
        body:"The spec says this counts everything AFTER the magic and this field -- file size minus 8, so 8,217 for this file. It reads 8,225: the full file size. The plugin that wrote it is off by eight.",
-       note:"measured across 736 presets: 734 from one vendor write the full file size, 2 from another write the spec value. Both conventions are live, so this field cannot be trusted as a bound -- validate against the real file size instead."},
+       note:"both conventions are live: most writers store the full file size, a minority store the spec value. This field cannot be trusted as a bound -- validate against the real file size instead."},
       {label:"fxMagic",k:"enum",r:[8,11],val:'"FPCh"',sel:1,
        branch:[["FxCk","a program stored as an array of float parameters"],["FPCh","a program stored as one opaque chunk"],["FxBk","a bank of FxCk programs"],["FBCh","a bank stored as one opaque chunk"]],
        body:"Which of four shapes the rest of the file takes. FPCh means the plugin serialises its own state and the host cannot interpret it.",

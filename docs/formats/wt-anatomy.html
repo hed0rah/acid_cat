@@ -206,10 +206,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region opt">
       <summary><span class="chev">&#9656;</span><span class="rname">wave-length variants</span><span class="rspan">frame_samples in the wild</span></summary>
       <div class="rbody">
-        <p class="note">frame_samples is not fixed. Across the 5,787 files measured for this page, 2048 dominates.</p>
+        <p class="note">frame_samples is not fixed. 2048 is by far the most common.</p>
         <div class="kv">
-          <div><span class="k">2048</span><span class="v">5,273 of 5,787 . the usual resolution</span></div>
-          <div><span class="k">256</span><span class="v">513 of 5,787 . lower-resolution tables</span></div>
+          <div><span class="k">2048</span><span class="v">the usual resolution, by far the most common</span></div>
+          <div><span class="k">256</span><span class="v">lower-resolution tables, the next most common</span></div>
           <div><span class="k">1024</span><span class="v">rare</span></div>
           <div><span class="k">not vawt</span><span class="v">the BWBM beat-map chunk lives inside a WAV; this is its own file</span></div>
         </div>
@@ -334,7 +334,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"flags",k:"flag",r:[10,11],val:"0x0000",sel:0,
        branch:[["0x01","is_sample -- a one-shot, not a wavetable"],["0x02","loop_sample"],["0x04","int16 payload; CLEAR means float32"],["0x08","int16 full scale is +/-32768, not +/-16384"],["0x10","a null-terminated &lt;wtmeta&gt; XML block follows the samples"]],
        body:"Bit 0x04 is the ONLY thing that gives the sample width. Clear, as here, means float32, so the payload is 12 + 64 x 2048 x 4 = 524,300 bytes -- exactly this file.",
-       note:"this word was long read as a data_offset that was 'always 12'. Bitwig writes int16 at full scale, which is 0x04|0x08 = 0x000C, and 12 decimal IS 0x000C -- so across Bitwig's entire 5,636-file factory library the flags word is the constant 12 and the misreading explains every byte you can see. It breaks on the first Surge file: 151 of those measured are float32 with flags 0x0000, and an int16-only parser calls every one corrupt. Measured over 5,787 files: the flag-aware width fits all of them, int16-only fits 5,636, float32-only fits 151."}
+       note:"this word was long read as a data_offset that was 'always 12'. Bitwig writes int16 at full scale, which is 0x04|0x08 = 0x000C, and 12 decimal IS 0x000C -- so across Bitwig's factory library the flags word is the constant 12 and the misreading explains every byte you can see. It breaks on the first Surge file: those are float32 with flags 0x0000, and an int16-only parser calls every one corrupt. The flag-aware width is the only reading that fits both producers' files."}
     ]);
 })();
 </script>

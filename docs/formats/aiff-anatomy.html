@@ -164,11 +164,14 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">size</span><span class="v">u32 BIG-endian = file size - 8</span></div>
         <div><span class="k">form type</span><span class="v">"AIFF" (PCM) or "AIFC" (compressed)</span></div>
         <div><span class="k">signed size</span><span class="v">the IFF size field is signed by spec (Pascal-compatible), a ~2 GB nominal ceiling; unsigned use is common but a deviation</span></div>
-      </div></div></details>
+      </div>        <div class="sec">the container header (12 bytes)</div>
+        <p class="note">Byte for byte the shape of a RIFF header, and the opposite byte order.</p>
+        <div id="aiff-form"></div>
+</div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">FVER</span><span class="rspan">aifc version . 4 bytes</span></summary>
       <div class="rbody"><p class="note">Required in AIFC, absent in plain AIFF. One u32 timestamp naming the format version; the only defined value is <b>0xA2805140</b>, the Mac epoch (seconds since 1904-01-01) encoding of 23 May 1990. Readers compare it exactly.</p></div></details>
     <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">COMM</span><span class="rspan">common . drawn below</span></summary>
-      <div class="rbody"><p class="note">Channels, frame count, bit depth, and the 80-bit sample rate. AIFC adds a 4-char compression type and a pascal-string name after the rate; acidcat validates the type against its known set and warns on anything else. See the byte map below.</p><div class="kv">
+      <div class="rbody"><p class="note">Channels, frame count, bit depth, and the 80-bit sample rate. AIFC adds a 4-char compression type and a pascal-string name after the rate; the type must be checked against the known set before any decode. See the byte map below.</p><div class="kv">
         <div><span class="k">uncompressed</span><span class="v">NONE, twos, sowt, raw&nbsp;, in24/in32, 42ni/23ni, fl32/fl64: frames are real frames, duration is exact</span></div>
         <div><span class="k">sowt</span><span class="v">&ldquo;twos&rdquo; reversed: little-endian PCM inside the big-endian container. Assume big-endian samples and it decodes to full-scale noise</span></div>
         <div><span class="k">packet-coded</span><span class="v">alaw/ulaw, ima4, MAC3/MAC6, QDMC/QDM2, Qclp: frames count packets, duration is only approximate and flagged ~</span></div>
@@ -178,8 +181,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody"><div class="kv">
         <div><span class="k">offset</span><span class="v">u32, bytes to the first frame (usually 0)</span></div>
         <div><span class="k">block_size</span><span class="v">u32, block alignment (usually 0)</span></div>
-        <div><span class="k">audio</span><span class="v">size - 8 - offset bytes; acidcat clamps to bytes present</span></div>
-      </div></div></details>
+        <div><span class="k">audio</span><span class="v">size - 8 - offset bytes; clamp to the bytes actually present</span></div>
+      </div>        <div class="sec">the audio chunk header (16 bytes)</div>
+        <p class="note">Two fields sit between the chunk and its samples. Skipping them is the classic AIFF bug.</p>
+        <div id="aiff-ssnd"></div>
+</div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">MARK / INST</span><span class="rspan">markers, instrument</span></summary>
       <div class="rbody"><div class="kv">
         <div><span class="k">MARK</span><span class="v">u16 count, then id + position + pascal-string name</span></div>
@@ -193,17 +199,17 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">text</span><span class="v">u16 count, then count bytes, padded to even</span></div>
       </div></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">AESD</span><span class="rspan">aes3 channel status</span></summary>
-      <div class="rbody"><p class="note">A verbatim 24-byte AES3 channel-status block. acidcat decodes byte 0: bit 0 professional/consumer, bit 1 audio/non-audio, bits 2-4 emphasis, bits 6-7 sample rate (48000 / 44100 / 32000 / unindicated).</p></div></details>
+      <div class="rbody"><p class="note">A verbatim 24-byte AES3 channel-status block. Byte 0 carries: bit 0 professional/consumer, bit 1 audio/non-audio, bits 2-4 emphasis, bits 6-7 sample rate (48000 / 44100 / 32000 / unindicated).</p></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">APPL</span><span class="rspan">application data</span></summary>
       <div class="rbody"><div class="kv">
         <div><span class="k">signature</span><span class="v">4-byte OSType naming the owning application</span></div>
         <div><span class="k">data</span><span class="v">application-defined; "pdos" and "stoc" begin it with a pascal string naming the app/structure</span></div>
       </div></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">basc</span><span class="rspan">apple loops tempo</span></summary>
-      <div class="rbody"><p class="note">Apple Loops metadata: version, beat count, root key, scale, time signature. No official spec; layout field-verified against indexed loops. acidcat derives bpm = beats / (frames / rate) * 60, which matched the filename bpm on every test file.</p></div></details>
+      <div class="rbody"><p class="note">Apple Loops metadata: version, beat count, root key, scale, time signature. No official spec; layout field-verified against indexed loops. Tempo is not stored directly: bpm = beats / (frames / rate) * 60.</p></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">cate / trns / FLLR</span><span class="rspan">apple loops companions</span></summary>
       <div class="rbody"><div class="kv">
-        <div><span class="k">cate</span><span class="v">category/descriptor taxonomy (instrument, genre); summarized, not yet field-parsed</span></div>
+        <div><span class="k">cate</span><span class="v">category/descriptor taxonomy (instrument, genre); no published field layout</span></div>
         <div><span class="k">trns</span><span class="v">transient/slice table used for time-stretching; the REX hiding inside AIFF</span></div>
         <div><span class="k">FLLR</span><span class="v">filler/padding so metadata can be rewritten in place</span></div>
       </div></div></details>
@@ -212,7 +218,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">NAME / AUTH</span><span class="v">plain text: title, author</span></div>
         <div><span class="k">(c) / ANNO</span><span class="v">copyright, annotation</span></div>
         <div><span class="k">ID3</span><span class="v">an embedded ID3v2 tag, same as MP3 carries</span></div>
-      </div></div></details>
+      </div>        <div class="sec">a text chunk, and the pad byte (14 bytes)</div>
+        <p class="note">The length counts the text. It does not count the byte that may follow it.</p>
+        <div id="aiff-text"></div>
+</div></details>
   </div>
 
   <div class="sec">COMM chunk</div>
@@ -326,8 +335,54 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"sample_rate",k:"enum",r:[8,17],val:"44100 Hz",sel:3,branch:[
         ["sign","1 bit"],["exponent","15 bits, bias 16383"],["mantissa","64 bits, explicit leading 1"],
         ["value","2^(exp-16383) * mantissa / 2^63"]],
-        body:"An 80-bit IEEE-754 extended-precision float, a 68k-era Apple format. Python's struct has no code for it, so acidcat reassembles it by hand from the exponent and the explicit 64-bit mantissa.",
+        body:"An 80-bit IEEE-754 extended-precision float, a 68k-era Apple format. No mainstream language unpacks it natively, so it must be rebuilt from the exponent and the explicit 64-bit mantissa.",
         note:"40 0E AC 44 00.. : exponent 0x400E = 16398 = 16383 + 15; mantissa / 2^63 = 0xAC44 / 2^15 = 1.3458.., times 2^15 = 44100. an explicit leading mantissa bit, unlike float64. an all-ones exponent (IEEE inf/NaN) decodes to 0 = unset, never a rate."}
+    ]);
+
+  // the container header: RIFF's shape, IFF's byte order
+  build("aiff-form","byte",
+    [0x46,0x4F,0x52,0x4D,0x00,0x2A,0x9D,0x84,0x41,0x49,0x46,0x46],
+    [
+      {label:"ckID",k:"sync",r:[0,3],val:'"FORM"',
+       body:"Electronic Arts' Interchange File Format, 1985. Everything in an AIFF is an IFF chunk: four-character id, big-endian length, payload.",
+       note:"Microsoft's RIFF is this format with the integers reversed, which is why the two look identical and parse differently."},
+      {label:"ckSize",k:"enum",r:[4,7],val:"2,792,836",
+       body:"BIG-endian, and counting everything after this field -- so file size is this plus 8. Here 2,792,836 + 8 = 2,792,844, the exact file length.",
+       note:"read little-endian it is 2,225,349,632. That is the single most common AIFF parsing mistake, and it produces a size that looks almost plausible."},
+      {label:"formType",k:"enum",r:[8,11],val:'"AIFF"',sel:0,
+       branch:[["AIFF","uncompressed PCM"],["AIFC","compressed; a FVER chunk and a codec id in COMM are then mandatory"]],
+       body:"What kind of FORM this is, and the only thing distinguishing an AIFF from any other IFF file. The first four bytes alone identify nothing.",
+       note:"an AIFC still carries .aif or .aiff in practice, so the extension does not tell you whether the samples are compressed."}
+    ]);
+  // SSND: the two fields that stand between the chunk and its audio
+  build("aiff-ssnd","byte",
+    [0x53,0x53,0x4E,0x44,0x00,0x2A,0x9D,0x50,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00],
+    [
+      {label:"ckID",k:"sync",r:[0,3],val:'"SSND"',
+       body:"Sound data. One per file, and it is the only chunk that must be present alongside COMM."},
+      {label:"ckSize",k:"enum",r:[4,7],val:"2,792,784",
+       body:"Big-endian. This counts the eight bytes of offset and blockSize as well as the samples, so the audio is ckSize - 8 - offset bytes long.",
+       note:"the frame count in COMM is the authoritative length. If the two disagree, the file is damaged."},
+      {label:"offset",k:"flag",r:[8,11],val:"0",
+       body:"THE TRAP. Samples do not begin at the payload; they begin `offset` bytes into it. Nearly every writer sets 0, so a parser that ignores this field works everywhere until it does not.",
+       note:"the bytes it skips are alignment padding, not audio. Reading them as samples produces a click at the head of the file."},
+      {label:"blockSize",k:"rsv",r:[12,15],val:"0",
+       body:"The block alignment `offset` is measured against. Zero means the samples are not block-aligned, which is the normal case.",
+       note:"blockSize 0 with a non-zero offset is contradictory, and a file that does it cannot be trusted about anything else."}
+    ]);
+  // a text chunk, and the padding rule that governs every chunk
+  build("aiff-text","byte",
+    [0x4E,0x41,0x4D,0x45,0x00,0x00,0x00,0x06,0x47,0x61,0x6C,0x77,0x61,0x79],
+    [
+      {label:"ckID",k:"sync",r:[0,3],val:'"NAME"',
+       body:"One of five text chunks: NAME, AUTH, (c) for copyright, ANNO for a free annotation, and in practice an ID3 chunk borrowed from MP3.",
+       note:"the copyright id is literally the three characters '(c)' followed by a SPACE. An id is always four bytes, spaces included."},
+      {label:"ckSize",k:"enum",r:[4,7],val:"6",
+       body:"Big-endian, and it counts the text only. There is no terminator: the length is the sole bound.",
+       note:"if this is ODD, a single pad byte follows the payload and is NOT counted here. Advance by 8 + size + (size &amp; 1), or every chunk after the first odd one lands one byte off and the file reads as garbage."},
+      {label:"text",k:"rsv",r:[8,13],val:'"Galway"',
+       body:"Plain characters, not a Pascal string, and not NUL-terminated. AIFF predates Unicode, so the encoding is unstated and readers assume Latin-1.",
+       note:"the Pascal convention -- a leading length byte -- does appear in AIFF, but in the MARK and INST chunks rather than here."}
     ]);
 })();
 </script>
@@ -454,6 +509,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
+
+
+
+
 })();
 
 </script>

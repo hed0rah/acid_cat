@@ -232,15 +232,15 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="y">68k</span><span><b>big-endian throughout.</b> The K-series runs a Motorola 68000, so every size, id, and sample word is big-endian &mdash; the opposite of the little-endian RIFF/WAV world and of E-mu's E4B.</span></div>
       </div>
 
-      <div class="callout"><b>the type-in-the-hash trick.</b> Every object's 16-bit <b>hash</b> packs both a type and an id: <code>hash = (type &lt;&lt; 10) | id</code>. So <code>0x98C8</code> is <code>(38 &lt;&lt; 10) | 200</code> &mdash; type 38 (Sample), id 200. The reader recovers <code>type = hash &gt;&gt; 10</code> and <code>id = hash &amp; 0x3FF</code>. Hardware-confirmed types: 36 Program, 37 Keymap, 38 Sample; inferred from corpus object names (tentative): 28 Studio/FX, 39 Setup, 25 Master. The three id spaces (sample/keymap/program) all start at 200 and can collide harmlessly &mdash; the type qualifies the id.</div>
-      <div class="callout"><b>walk by the negative length.</b> Each object opens with a <b>signed 32-bit blocksize stored negative</b> &mdash; a reader advances to the next object by adding <code>&minus;blocksize</code> to its position. The walk ends at an <code>int32 = 0</code>. After that marker sits one contiguous PCM region, word-addressed as <code>osize + word_index &times; 2</code>. acidcat's walker never raises across all 242 corpus banks, even on a forged length.</div>
+      <div class="callout"><b>the type-in-the-hash trick.</b> Every object's 16-bit <b>hash</b> packs both a type and an id: <code>hash = (type &lt;&lt; 10) | id</code>. So <code>0x98C8</code> is <code>(38 &lt;&lt; 10) | 200</code> &mdash; type 38 (Sample), id 200. The reader recovers <code>type = hash &gt;&gt; 10</code> and <code>id = hash &amp; 0x3FF</code>. Hardware-confirmed types: 36 Program, 37 Keymap, 38 Sample; inferred from object names (tentative): 28 Studio/FX, 39 Setup, 25 Master. The three id spaces (sample/keymap/program) all start at 200 and can collide harmlessly &mdash; the type qualifies the id.</div>
+      <div class="callout"><b>walk by the negative length.</b> Each object opens with a <b>signed 32-bit blocksize stored negative</b> &mdash; a reader advances to the next object by adding <code>&minus;blocksize</code> to its position. The walk ends at an <code>int32 = 0</code>. After that marker sits one contiguous PCM region, word-addressed as <code>osize + word_index &times; 2</code>. A forged blocksize can point anywhere, so each step must be bounded to the file.</div>
       <div class="callout"><b>RAM &ne; file.</b> The K2000's live SysEx object dump returns a fixed-layout <i>RAM</i> object, not this tagged-segment disk format &mdash; the firmware converts on load and save. These bytes describe the <b>.KRZ file</b>, the form a librarian or converter sees on disk.</div>
     </div>
 
     <!-- ===================== PRAM ===================== -->
     <div class="panel" data-panel="pram">
       <div class="pfacts"><span>magic<b>"PRAM"</b></span><span>size<b>32 bytes</b></span><span>endian<b>big</b></span><span>osize<b>points at PCM</b></span></div>
-      <p class="plede">The 32-byte file header. Four things matter: the <b>PRAM</b> magic, the <b>osize</b> pointer to where the PCM sample region begins (which is also the end of the object section), and the <b>software version</b> that dates the bank. The remaining words are reserved &mdash; the mpc2emu writer leaves them zero, but hardware-saved banks carry non-zero values whose meaning is not pinned down, so acidcat surfaces them without guessing.</p>
+      <p class="plede">The 32-byte file header. Four things matter: the <b>PRAM</b> magic, the <b>osize</b> pointer to where the PCM sample region begins (which is also the end of the object section), and the <b>software version</b> that dates the bank. The remaining words are reserved &mdash; the mpc2emu writer leaves them zero, but hardware-saved banks carry non-zero values whose meaning is not pinned down.</p>
       <div class="sec">PRAM header (32 bytes)</div>
       <p class="note">Example: <code>e3_bass.krz</code> &mdash; a small 4-object bank, K2000 OS v2.08.</p>
       <div id="pram-hdr" data-build></div>
@@ -265,20 +265,20 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Example: Sample #200, 16-bit mono, 39101 Hz, looped, root C2. Hover <span class="k-en">sf_flags</span> for the loop encoding.</p>
       <div id="sample-body" data-build></div>
       <div class="callout"><b>the inverted loop bit (HW-confirmed).</b> <code>Soundfilehead.flags</code> is <code>0x70</code> when <b>looped</b> and <code>0xF0</code> when <b>one-shot</b> &mdash; the loop on/off bit <code>0x80</code> is <b>inverted</b> (set = one-shot). The <code>0x10|0x20|0x40</code> bits are the load + playback-enable set; <code>0x40</code> alone loads the sample but produces <i>no sound</i> (the original "silent KRZ" bug). For a looped sample <code>sampleEnd</code> is the <b>loop end</b> word, not the PCM end.</div>
-      <div class="callout"><b>rate from period.</b> There is no sample-rate field. <code>samplePeriod</code> is a big-endian u32 = <code>round(1e9 / rate)</code> in nanoseconds; acidcat recovers <code>rate = round(1e9 / period)</code>. Here <code>0x000063E7 = 25575 ns &rarr; 39101 Hz</code>.</div>
+      <div class="callout"><b>rate from period.</b> There is no sample-rate field. <code>samplePeriod</code> is a big-endian u32 = <code>round(1e9 / rate)</code> in nanoseconds, so <code>rate = round(1e9 / period)</code>. Here <code>0x000063E7 = 25575 ns &rarr; 39101 Hz</code>.</div>
     </div>
 
     <!-- ===================== KEYMAP ===================== -->
     <div class="panel" data-panel="keymap">
       <div class="pfacts"><span>header<b>28 B</b></span><span>entries<b>128 keys</b></span><span>method<b>0x03 / 0x13</b></span><span>maps<b>key -&gt; sample</b></span></div>
-      <p class="plede">A Keymap is one voice's key-to-sample map: a 28-byte header, then up to 128 fixed-size key entries. Each entry names the <b>Sample id</b> to play for that key (the K2000 auto-transposes it from the sample root). The entry width is set by the <b>method</b> field &mdash; and it is not the same across the corpus, which is where a real specimen teaches more than a spec.</p>
+      <p class="plede">A Keymap is one voice's key-to-sample map: a 28-byte header, then up to 128 fixed-size key entries. Each entry names the <b>Sample id</b> to play for that key (the K2000 auto-transposes it from the sample root). The entry width is set by the <b>method</b> field &mdash; and it is not the same in every bank, so the stride must be read, never assumed.</p>
       <div class="sec">KKeymap header (28 bytes)</div>
       <p class="note">Example: Keymap #200 from <code>e3_bass.krz</code>. Hover <span class="k-en">method</span> and <span class="k-en">entry_size</span>.</p>
       <div id="keymap-hdr" data-build></div>
       <div class="sec">key entry (3 bytes, method 0x03)</div>
       <p class="note">One key's mapping. This bank uses <b>method 0x03</b> &mdash; a 3-byte entry with no per-key tuning.</p>
       <div id="keymap-entry" data-build></div>
-      <div class="callout"><b>two entry layouts in the wild.</b> The modern K2000 (and the mpc2emu writer) save <b>method 0x0013</b>: a 5-byte entry, <code>tuning[i16] &#124; sampleID[u16] &#124; SSNr[u8]</code>. But this 2013 Sweetwater bank uses <b>method 0x0003</b>: a 3-byte entry, <code>sampleID[u16] &#124; SSNr[u8]</code> with <b>no tuning prefix</b> &mdash; so the Sample id sits at offset 0, not offset 2. A reader that hard-codes the 5-byte layout reads the wrong bytes here (it lands on <code>0x0100 = 256</code> instead of the real <code>0x00C8 = 200</code>). The <code>entry_size</code> field is the authoritative stride; the <code>method</code> low nibble bit <code>0x10</code> is what adds the tuning word.</div>
+      <div class="callout"><b>two entry layouts in the wild.</b> The modern K2000 (and the mpc2emu writer) save <b>method 0x0013</b>: a 5-byte entry, <code>tuning[i16] &#124; sampleID[u16] &#124; SSNr[u8]</code>. But other banks use <b>method 0x0003</b>: a 3-byte entry, <code>sampleID[u16] &#124; SSNr[u8]</code> with <b>no tuning prefix</b> &mdash; so the Sample id sits at offset 0, not offset 2. A reader that hard-codes the 5-byte layout reads the wrong bytes here (it lands on <code>0x0100 = 256</code> instead of the real <code>0x00C8 = 200</code>). The <code>entry_size</code> field is the authoritative stride; the <code>method</code> low nibble bit <code>0x10</code> is what adds the tuning word.</div>
     </div>
 
     <!-- ===================== PROGRAM ===================== -->
@@ -288,18 +288,18 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">program stream (first 24 bytes: PGM + FX)</div>
       <p class="note">Example: Program #200. Hover <span class="k-en">pgm_tag</span> / <span class="k-en">fx_tag</span> to see the two segment boundaries.</p>
       <div id="program-seg" data-build></div>
-      <div class="callout"><b>segment lengths (data bytes after the tag).</b> <code>0x08</code> PGM / <code>0x09</code> LYR = 15; <code>0x0F</code> FX = 7 (the exact-tag exception &mdash; it lives in the 0x08 family but is short); <code>0x18</code> FUN = 3; <code>0x10</code> ASR / <code>0x14</code> LFO / <code>0x68</code> KDFX = 7; <code>0x20</code> ENC / <code>0x50</code> HOB = 15; <code>0x40</code> CAL / <code>0x78</code> KB3 = 31. acidcat counts <b>LYR (0x09)</b> tags for the layer count; the per-parameter VAST decode (filter, envelopes, LFO) is a deferred follow-up.</div>
-      <div class="callout"><b>CAL holds the keymap link.</b> Each layer's <b>CAL</b> (0x40, 31 bytes) references its Keymap id in bytes <code>[11,12]</code> only &mdash; a second keymap slot at <code>[7,8]</code> must stay zero, or the K2000 claims two keymaps per layer and goes silent past four layers (acidcat does not yet decode this offset). This is the Program &rarr; Keymap edge of the reference graph.</div>
+      <div class="callout"><b>segment lengths (data bytes after the tag).</b> <code>0x08</code> PGM / <code>0x09</code> LYR = 15; <code>0x0F</code> FX = 7 (the exact-tag exception &mdash; it lives in the 0x08 family but is short); <code>0x18</code> FUN = 3; <code>0x10</code> ASR / <code>0x14</code> LFO / <code>0x68</code> KDFX = 7; <code>0x20</code> ENC / <code>0x50</code> HOB = 15; <code>0x40</code> CAL / <code>0x78</code> KB3 = 31. Counting <b>LYR (0x09)</b> tags gives the layer count; the per-parameter VAST decode (filter, envelopes, LFO) is undocumented.</div>
+      <div class="callout"><b>CAL holds the keymap link.</b> Each layer's <b>CAL</b> (0x40, 31 bytes) references its Keymap id in bytes <code>[11,12]</code> only &mdash; a second keymap slot at <code>[7,8]</code> must stay zero, or the K2000 claims two keymaps per layer and goes silent past four layers. This is the Program &rarr; Keymap edge of the reference graph.</div>
     </div>
 
     <!-- ===================== SROM ===================== -->
     <div class="panel" data-panel="srom">
       <div class="pfacts"><span>magic<b>"SROM"</b></span><span>not<b>PRAM</b></span><span>content<b>effects / sample ROM</b></span></div>
-      <p class="plede">Not every <b>.krz</b> is a PRAM bank. Effects and sample-ROM files use a different, simpler container that opens with <b>SROM</b> instead of PRAM &mdash; a magic, a declared size, then a zero-filled body (in this specimen). acidcat recognizes it and surfaces the header rather than mis-parsing it as an object bank; a full SROM body decode is future work.</p>
+      <p class="plede">Not every <b>.krz</b> is a PRAM bank. Effects and sample-ROM files use a different, simpler container that opens with <b>SROM</b> instead of PRAM &mdash; a magic, a declared size, then a zero-filled body. The header must be read on its own terms rather than parsed as an object bank; the SROM body layout is undocumented.</p>
       <div class="sec">SROM header (8 bytes)</div>
       <p class="note">Example: <code>verbhall.krz</code>, a reverb-hall effects file.</p>
       <div id="srom-hdr" data-build></div>
-      <div class="callout"><b>sniff both magics.</b> acidcat routes a <code>.krz</code> to the Kurzweil walker on either <b>PRAM</b> or <b>SROM</b> at offset 0. Files like <code>flangefx</code>, <code>gatedvrb</code>, <code>verbhall</code>, and <code>chorus</code> are SROM; the rest of a soundset is PRAM. Anything else at offset 0 is declined, not force-fit.</div>
+      <div class="callout"><b>two magics to sniff.</b> A <code>.krz</code> is Kurzweil on either <b>PRAM</b> or <b>SROM</b> at offset 0. Files like <code>flangefx</code>, <code>gatedvrb</code>, <code>verbhall</code>, and <code>chorus</code> are SROM; the rest of a soundset is PRAM. Anything else at offset 0 is not a Kurzweil bank.</div>
     </div>
 
   </div>
@@ -412,12 +412,12 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       [
         {label:"magic",k:"sync",r:[0,3],val:"\"PRAM\"",sel:0,branch:[["PRAM","object bank"],["SROM","effects / sample-ROM (see SROM tab)"]],
           body:"The bank signature, ASCII. \"PRAM\" is an object database; \"SROM\" is the effects/sample-ROM container.",
-          note:"acidcat sniffs the first 4 bytes and routes either magic to the Kurzweil walker."},
+          note:"either magic at offset 0 identifies a Kurzweil file."},
         {label:"osize (pcm_offset)",k:"enum",r:[4,7],val:"1028",body:"BIG-endian i32: the absolute byte offset where the PCM sample region begins -- which is also the end of the object section. Written last, patched in after all objects are laid out.",
           note:"0x00000404 = 1028. If osize == filesize, the bank has objects but no samples."},
-        {label:"reserved",k:"rsv",r:[8,11],val:"0x00001F14",body:"Reserved header word. The mpc2emu writer emits 0; this hardware-saved bank carries a non-zero value whose meaning is not pinned down.",note:"surfaced, never interpreted -- the walker does not guess."},
+        {label:"reserved",k:"rsv",r:[8,11],val:"0x00001F14",body:"Reserved header word. The mpc2emu writer emits 0; this hardware-saved bank carries a non-zero value whose meaning is not pinned down.",note:"no documented meaning; carry it through, do not interpret it."},
         {label:"reserved",k:"rsv",r:[12,15],val:"0x0001E0E8",body:"Reserved header word, likewise non-zero in hardware banks and 0 from mpc2emu."},
-        {label:"software_version",k:"enum",r:[16,19],val:"208 (v2.08)",body:"BIG-endian i32: the K2000 OS version times 100. acidcat prints it as v2.08.",note:"0x000000D0 = 208. mpc2emu writes 353 (v3.53); the corpus ranges v1.00 .. v3.54."},
+        {label:"software_version",k:"enum",r:[16,19],val:"208 (v2.08)",body:"BIG-endian i32: the K2000 OS version times 100, so 208 is v2.08.",note:"0x000000D0 = 208. mpc2emu writes 353 (v3.53); observed versions span v1.00 .. v3.54."},
         {label:"reserved",k:"rsv",r:[20,31],val:"0x03100000..",body:"Trailing 12 reserved bytes. Zero from the writer; hardware banks vary. Not interpreted."}
       ]],
     "object-hdr":["byte",
@@ -439,11 +439,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       [0x00,0x01, 0x00,0x00, 0x00,0x08, 0x00, 0x00,0x00,0x00,0x00,0x00, 0x30, 0x70, 0x00,0x00, 0x14,0x24, 0x00,0x00, 0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 0x00,0x01,0x35,0x06, 0x00,0x01,0x91,0x94, 0x00,0x08, 0x00,0x12, 0x00,0x00,0x63,0xE7],
       [
         {label:"base_id",k:"rsv",r:[0,1],val:"1",body:"KSample header: always 1 in every real soundset. A structural constant, not a reference."},
-        {label:"num_headers",k:"enum",r:[2,3],val:"0 (mono)",body:"Soundfilehead count minus one: 0 = one header (mono). A stereo sample sets this to 1 and appends a second Soundfilehead.",note:"mpc2emu and this specimen are mono-only."},
+        {label:"num_headers",k:"enum",r:[2,3],val:"0 (mono)",body:"Soundfilehead count minus one: 0 = one header (mono). A stereo sample sets this to 1 and appends a second Soundfilehead.",note:"the mpc2emu writer emits mono only."},
         {label:"headers_ofs",k:"rsv",r:[4,5],val:"8",body:"Offset to the first Soundfilehead. Always 8."},
         {label:"ks_flags",k:"flag",r:[6,6],val:"0x00 (mono)",body:"KSample flags. Bit 0 is the STEREO flag (not needsLoad). 0 here = mono."},
         {label:"reserved",k:"rsv",r:[7,11],val:"0x00..",body:"ks1 + copyID + ks2, all zero. Completes the 12-byte KSample header."},
-        {label:"root_key",k:"enum",r:[12,12],val:"48 = C2",body:"Soundfilehead: the MIDI root note. The K2000 auto-transposes each key relative to this pitch.",note:"0x30 = 48; acidcat labels it C2."},
+        {label:"root_key",k:"enum",r:[12,12],val:"48 = C2",body:"Soundfilehead: the MIDI root note. The K2000 auto-transposes each key relative to this pitch.",note:"0x30 = 48 = C2."},
         {label:"sf_flags",k:"flag",r:[13,13],val:"0x70 = loop",sel:0,branch:[["0x70","looped"],["0xF0","one-shot"],["0x40 only","loads but silent (bug)"]],
           body:"Soundfilehead flags. 0x70 = looped, 0xF0 = one-shot. The loop on/off bit 0x80 is INVERTED: set = one-shot. The 0x10|0x20|0x40 bits are the load + playback-enable set.",
           note:"0x40 alone loads the sample but produces no sound -- the original silent-KRZ bug (HW-confirmed)."},
@@ -455,8 +455,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"loop_start",k:"enum",r:[28,31],val:"79110",body:"BIG-endian i32: for a looped sample, the loop start as a PCM word offset.",note:"0x00013506 = 79110 words."},
         {label:"sample_end",k:"enum",r:[32,35],val:"102804",body:"BIG-endian i32: for a looped sample this is the LOOP END word, not the PCM end -- the K2000 loops over [loop_start, sample_end]. For a one-shot both collapse onto the PCM end.",note:"0x00019194 = 102804 words."},
         {label:"offset_to_env",k:"rsv",r:[36,37],val:"8",body:"offsetToEnvelope = 8 (mono, one header)."},
-        {label:"alt_offset_to_env",k:"rsv",r:[38,39],val:"18",body:"altOffsetToEnvelope = 6 in the writer; 18 (0x12) in this specimen. Followed by two 12-byte Envelope structs (not drawn)."},
-        {label:"sample_period",k:"enum",r:[40,43],val:"25575 -> 39101 Hz",body:"BIG-endian u32 = round(1e9 / sample_rate) in nanoseconds. There is no rate field; acidcat recovers rate = round(1e9 / period).",note:"0x000063E7 = 25575 -> 39101 Hz."}
+        {label:"alt_offset_to_env",k:"rsv",r:[38,39],val:"18",body:"altOffsetToEnvelope = 6 from the mpc2emu writer, 18 (0x12) here. Followed by two 12-byte Envelope structs (not drawn)."},
+        {label:"sample_period",k:"enum",r:[40,43],val:"25575 -> 39101 Hz",body:"BIG-endian u32 = round(1e9 / sample_rate) in nanoseconds. There is no rate field; recover rate = round(1e9 / period).",note:"0x000063E7 = 25575 -> 39101 Hz."}
       ]],
     "keymap-hdr":["byte",
       [0x00,0x00, 0x00,0x03, 0x00,0x00, 0x00,0x64, 0x00,0x7F, 0x00,0x03, 0x00,0x10,0x00,0x0E,0x00,0x0C,0x00,0x0A,0x00,0x08,0x00,0x06,0x00,0x04,0x00,0x02],
@@ -468,7 +468,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"base_pitch",k:"rsv",r:[4,5],val:"0",body:"basePitch = 0 in every real production soundset."},
         {label:"cents_per_entry",k:"enum",r:[6,7],val:"100",body:"Cents between adjacent keys: 100 = one semitone per key. 0x64 = 100."},
         {label:"entries_per_vel",k:"enum",r:[8,9],val:"127",body:"NUM_KEYS - 1. 0x7F = 127."},
-        {label:"entry_size",k:"enum",r:[10,11],val:"3",body:"Bytes per key entry -- the authoritative stride for walking the entries. 3 here (matching method 0x03); 5 for method 0x13.",note:"acidcat reads this field rather than assuming a width."},
+        {label:"entry_size",k:"enum",r:[10,11],val:"3",body:"Bytes per key entry -- the authoritative stride for walking the entries. 3 here (matching method 0x03); 5 for method 0x13.",note:"read this field rather than assuming a width."},
         {label:"Level[8]",k:"rsv",r:[12,27],val:"velocity levels",body:"Eight big-endian i16 velocity-level words, (8 - j)*2 for j in 0..7 -- the single-velocity-level encoding a reader decodes back to one level spanning all 8 buckets.",note:"0x0010,0x000E,... = 16,14,12,10,8,6,4,2."}
       ]],
     "keymap-entry":["byte",
@@ -483,7 +483,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       [
         {label:"pgm_tag",k:"sync",r:[0,0],val:"0x08 PGM",body:"The program-globals segment tag. Segment length is keyed by tag & 0xF8: the 0x08 family is 15 data bytes.",note:"the stream is PGM FX once, then LYR...CAL HOB HOB HOB HOB per layer, ending at int16 = 0."},
         {label:"mode",k:"enum",r:[1,1],val:"2 = K2000",body:"PGM data byte 0: the synth mode. 2 = K2000."},
-        {label:"num_layers",k:"enum",r:[2,2],val:"1",body:"PGM data byte 1: the layer count. One LYR segment, one CAL (and thus one keymap reference) per layer.",note:"acidcat also derives this by counting LYR (0x09) tags."},
+        {label:"num_layers",k:"enum",r:[2,2],val:"1",body:"PGM data byte 1: the layer count. One LYR segment, one CAL (and thus one keymap reference) per layer.",note:"counting LYR (0x09) tags gives the same number."},
         {label:"reserved",k:"rsv",r:[3,3],val:"0",body:"PGM data byte 2, unused here."},
         {label:"bend_range",k:"enum",r:[4,4],val:"0x37 = 55",body:"PGM data byte 3: the pitch-bend range."},
         {label:"portamento",k:"enum",r:[5,5],val:"0x40 = 64",body:"PGM data byte 4: portamento."},
@@ -494,8 +494,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     "srom-hdr":["byte",
       [0x53,0x52,0x4F,0x4D, 0x00,0x00,0x06,0x60],
       [
-        {label:"magic",k:"sync",r:[0,3],val:"\"SROM\"",body:"The effects / sample-ROM signature, ASCII -- a different container from PRAM. acidcat recognizes it and surfaces the header instead of mis-parsing it as an object bank."},
-        {label:"size",k:"enum",r:[4,7],val:"1632",body:"BIG-endian u32: the declared file size. Followed by a zero-filled body in this specimen; a full SROM decode is future work.",note:"0x00000660 = 1632 bytes."}
+        {label:"magic",k:"sync",r:[0,3],val:"\"SROM\"",body:"The effects / sample-ROM signature, ASCII -- a different container from PRAM. It must not be parsed as an object bank."},
+        {label:"size",k:"enum",r:[4,7],val:"1632",body:"BIG-endian u32: the declared file size. Followed by a zero-filled body; the SROM body layout is undocumented.",note:"0x00000660 = 1632 bytes."}
       ]]
   };
 

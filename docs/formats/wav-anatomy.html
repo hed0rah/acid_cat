@@ -236,7 +236,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="y">2015</span><span><b>BW64</b> (ITU-R BS.2088-0) &mdash; RF64 generalized, tied to the Audio Definition Model (chna/axml).</span></div>
       </div>
       <div class="callout"><b>the shared grammar.</b> Every format on these tabs is the same atom: a <b>4-byte id</b>, a <b>size</b>, a <b>payload</b>, and a <b>pad byte</b> when the size is odd &mdash; excluded from the size that owns it, but counted inside the parent that contains it, the asymmetry (inherited from IFF) behind most off-by-one bugs in the family. Only three things vary across the family &mdash; the byte order (IFF/AIFF big-endian, RIFF little-endian), the width of the size field (32-bit, or 64-bit in RF64/Wave64/DSDIFF), and whether the id is a 4-character code or a 16-byte GUID (Wave64). Learn the atom once and every dialect reads the same.</div>
-      <div class="callout"><b>the three normative WAVE rules.</b> Of everything a writer can do, only these are guaranteed: the file opens with <b>RIFF</b> (or RF64); the form type is <b>WAVE</b>; and <b>fmt precedes data</b>. Chunk order is otherwise free, the declared RIFF size is often stale, and acidcat lints every claim against the bytes that are actually present rather than trusting the header.</div>
+      <div class="callout"><b>the three normative WAVE rules.</b> Of everything a writer can do, only these are guaranteed: the file opens with <b>RIFF</b> (or RF64); the form type is <b>WAVE</b>; and <b>fmt precedes data</b>. Chunk order is otherwise free, the declared RIFF size is often stale, and every claim in the header has to be checked against the bytes actually present.</div>
     </div>
 
     <!-- ===================== WAVE ===================== -->
@@ -260,7 +260,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
             <div><span class="k">0xFFFFFFFF</span><span class="v">RF64 sentinel, resolved via the ds64 sample_count; warned if ds64 is absent</span></div>
           </div></div></details>
         <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">data</span><span class="rspan">the audio payload</span></summary>
-          <div class="rbody"><p class="note">Interleaved PCM samples. duration = data_size / (rate * channels * bytes_per_sample). A declared size past EOF is linted, and acidcat derives duration from the bytes present, not the claim.</p></div></details>
+          <div class="rbody"><p class="note">Interleaved PCM samples. duration = data_size / (rate * channels * bytes_per_sample). A declared size past EOF is a corruption tell; derive duration from the bytes present, not the claim.</p></div></details>
         <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">acid</span><span class="rspan">loop metadata . drawn below</span></summary>
           <div class="rbody"><p class="note">The project's namesake: Sonic Foundry ACID tempo, beats, meter, and root note. No official spec; layout field-verified against real ACIDized packs. See the byte map below.</p></div></details>
         <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">smpl</span><span class="rspan">sampler root + loops . record drawn below</span></summary>
@@ -315,7 +315,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== RIFF ===================== -->
     <div class="panel" data-panel="riff">
       <div class="pfacts"><span>magic<b>"RIFF" / "RIFX"</b></span><span>size<b>u32, 4 GB cap</b></span><span>1991<b>MS + IBM</b></span></div>
-      <p class="plede">The container itself: 12 bytes that every WAV opens with. <b>"RIFF"</b>, a 32-bit little-endian size, and a form type <b>"RIFF"</b> wraps IFF's grammar with the byte order flipped for the Intel PC &mdash; the little-endian concession that gave it the name <b>Reverse IFF</b>. A rare big-endian variant, <b>RIFX</b>, keeps everything else the same and flips only the number encoding. The riff_size field claims the file length minus 8, but writers routinely leave it stale, so acidcat lints it rather than trusting it.</p>
+      <p class="plede">The container itself: 12 bytes that every WAV opens with. <b>"RIFF"</b>, a 32-bit little-endian size, and a form type <b>"RIFF"</b> wraps IFF's grammar with the byte order flipped for the Intel PC &mdash; the little-endian concession that gave it the name <b>Reverse IFF</b>. A rare big-endian variant, <b>RIFX</b>, keeps everything else the same and flips only the number encoding. The riff_size field claims the file length minus 8, but writers routinely leave it stale, so it is a hint rather than a bound.</p>
       <div class="sec">RIFF header (12 bytes)</div>
       <p class="note">Example: a small WAVE file, 2,092 bytes total.</p>
       <div id="riff-hdr" data-build></div>
@@ -335,11 +335,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== RF64 / ds64 ===================== -->
     <div class="panel" data-panel="rf64">
       <div class="pfacts"><span>magic<b>"RF64"</b></span><span>sizes<b>u64 in ds64</b></span><span>2007<b>EBU Tech 3306</b></span></div>
-      <p class="plede">The large-file answer that stays RIFF. A file over 4&nbsp;GB flips its magic from <b>RIFF</b> to <b>RF64</b>, writes <b>0xFFFFFFFF</b> as a sentinel in the 32-bit size fields, and adds a <b>ds64</b> chunk as the first chunk carrying the real 64-bit sizes. A clever writer reserves a <b>JUNK</b> chunk of exactly the ds64 size up front while the file is small, then overwrites it in place with ds64 if the recording crosses 4&nbsp;GB &mdash; so the file never has to be rewritten. (ffmpeg goes one further: it reserves a 28-byte JUNK placeholder right after <b>fmt</b> &mdash; not the ds64 spec slot, which is the first chunk before fmt &mdash; then overwrites it with ds64 in place if the file crosses 4&nbsp;GB. A 28-byte JUNK right after fmt is itself an ffmpeg fingerprint acidcat reads.)</p>
+      <p class="plede">The large-file answer that stays RIFF. A file over 4&nbsp;GB flips its magic from <b>RIFF</b> to <b>RF64</b>, writes <b>0xFFFFFFFF</b> as a sentinel in the 32-bit size fields, and adds a <b>ds64</b> chunk as the first chunk carrying the real 64-bit sizes. A clever writer reserves a <b>JUNK</b> chunk of exactly the ds64 size up front while the file is small, then overwrites it in place with ds64 if the recording crosses 4&nbsp;GB &mdash; so the file never has to be rewritten. (ffmpeg goes one further: it reserves a 28-byte JUNK placeholder right after <b>fmt</b> &mdash; not the ds64 spec slot, which is the first chunk before fmt &mdash; then overwrites it with ds64 in place if the file crosses 4&nbsp;GB. A 28-byte JUNK right after fmt is itself an ffmpeg fingerprint.)</p>
       <div class="sec">ds64 fixed area (28 bytes)</div>
       <p class="note">Example: a 4.3 GB recording &mdash; just past the u32 ceiling, which is the whole point.</p>
       <div id="ds64-map" data-build></div>
-      <div class="callout"><b>the override table.</b> After the 28-byte fixed area, table_length records follow, each a 4-byte chunk id + a u64 size &mdash; for any non-data chunk that also carries the 0xFFFFFFFF sentinel. Usually zero: only the data chunk is large. A sentinel with no ds64 override is a corruption acidcat lints.</div>
+      <div class="callout"><b>the override table.</b> After the 28-byte fixed area, table_length records follow, each a 4-byte chunk id + a u64 size &mdash; for any non-data chunk that also carries the 0xFFFFFFFF sentinel. Usually zero: only the data chunk is large. A sentinel with no ds64 override is a corruption.</div>
       <div class="callout"><b>BW64.</b> ITU-R BS.2088 generalizes RF64 as <b>BW64</b> (magic "BW64"), adding the Audio Definition Model via the <b>chna</b> and <b>axml</b> chunks for object/immersive audio. The ds64 mechanism is unchanged.</div>
     </div>
 
@@ -356,7 +356,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== AIFF ===================== -->
     <div class="panel" data-panel="aiff">
       <div class="pfacts"><span>magic<b>"FORM" .. "AIFF"</b></span><span>endian<b>big</b></span><span>1988<b>Apple</b></span></div>
-      <p class="plede">The mirror image. AIFF is IFF-for-audio done by Apple in 1988 &mdash; the same FORM/chunk grammar as RIFF, but <b>big-endian</b> throughout (the 68k Mac's byte order, the one IFF kept and RIFF reversed). Its <b>COMM</b> chunk is the analogue of fmt, and it stores the sample rate in the strangest field in the whole family: an <b>80-bit IEEE-754 extended-precision float</b>, a format Python's struct cannot unpack, which acidcat reassembles by hand.</p>
+      <p class="plede">The mirror image. AIFF is IFF-for-audio done by Apple in 1988 &mdash; the same FORM/chunk grammar as RIFF, but <b>big-endian</b> throughout (the 68k Mac's byte order, the one IFF kept and RIFF reversed). Its <b>COMM</b> chunk is the analogue of fmt, and it stores the sample rate in the strangest field in the whole family: an <b>80-bit IEEE-754 extended-precision float</b>, a format no mainstream language unpacks natively, so it has to be rebuilt by hand.</p>
       <div class="sec">COMM chunk (18 bytes)</div>
       <p class="note">Example: 16-bit stereo at 44100 Hz, 88200 frames.</p>
       <div id="aiff-comm" data-build></div>
@@ -473,10 +473,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           ["0x0001","PCM"],["0x0002","MS ADPCM"],["0x0003","IEEE float"],["0x0006","A-law"],["0x0007","mu-law"],
           ["0x0011","IMA ADPCM"],["0x0055","MPEG layer III"],["0xFFFE","extensible (GUID)"]],
           body:"The codec. PCM here. 0xFFFE extends the chunk with a sub-format GUID.",
-          note:"acidcat reads tag, channels, rate, bits; non-PCM uses the fact chunk for sample count."},
+          note:"tag, channels, rate and bits come from here; non-PCM uses the fact chunk for sample count."},
         {label:"channels",k:"enum",r:[2,3],val:"2",body:"Channel count. Samples are interleaved L,R,L,R."},
         {label:"sample_rate",k:"enum",r:[4,7],val:"44100 Hz",body:"Frames per second, u32 little-endian. 0xAC44 = 44100."},
-        {label:"avg_bytes_per_sec",k:"enum",r:[8,11],val:"176400",body:"sample_rate * block_align. A decoder hint; acidcat lints it against the computed value.",note:"44100 * 4 = 176400."},
+        {label:"avg_bytes_per_sec",k:"enum",r:[8,11],val:"176400",body:"sample_rate * block_align. A decoder hint; check it against the computed value.",note:"44100 * 4 = 176400."},
         {label:"block_align",k:"enum",r:[12,13],val:"4",body:"Bytes per sample frame = channels * bits/8. One L+R pair is 4 bytes here."},
         {label:"bits_per_sample",k:"enum",r:[14,15],val:"16",body:"Bit depth per sample. 8 unsigned, 16/24/32 signed LE, or 32/64 float when tag is 3."}
       ]],
@@ -486,14 +486,14 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"type_flags",k:"flag",r:[0,3],val:"root set (0x02)",sel:1,branch:[
           ["0x01","one-shot (not a loop)"],["0x02","root note valid"],["0x04","tempo stretch"],["0x08","disk-based"]],
           body:"Bitmask. 0x02 here: this is a loop with a valid root note. The one-shot bit, when set, is unreliable in the wild.",
-          note:"acidcat trusts num_beats only when one-shot is clear, or when beats reconcile with duration."},
+          note:"num_beats is trustworthy only when the one-shot flag is clear and beats reconcile with duration."},
         {label:"root_note",k:"enum",r:[4,5],val:"60 = C4",body:"MIDI root note of the loop. 60 is middle C. 0 is treated as unset."},
         {label:"unknown1",k:"rsv",r:[6,7],val:"0x8000",body:"Reserved/observed constant. Not interpreted."},
         {label:"unknown2",k:"rsv",r:[8,11],val:"0.0 (f32)",body:"Reserved float, observed 0.0 across vendors."},
         {label:"num_beats",k:"enum",r:[12,15],val:"8",body:"Beat count of the loop. With tempo gives expected duration: beats / tempo * 60.",note:"the field sits at 0x0C, after the unknown float; reading beats at 0x08 yields 0."},
         {label:"meter_denominator",k:"enum",r:[16,17],val:"4",body:"Lower number of the time signature (the 4 in 4/4)."},
         {label:"meter_numerator",k:"enum",r:[18,19],val:"4",body:"Upper number of the time signature."},
-        {label:"tempo",k:"enum",r:[20,23],val:"120.0 BPM",body:"Original tempo as an IEEE-754 float. 0x42F00000 = 120.0.",note:"acidcat warns if tempo is outside 40-300 or disagrees with beats and duration."}
+        {label:"tempo",k:"enum",r:[20,23],val:"120.0 BPM",body:"Original tempo as an IEEE-754 float. 0x42F00000 = 120.0.",note:"a tempo outside 40-300, or one disagreeing with beats and duration, is suspect."}
       ]],
     "block-smpl":["byte",
       [0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 0xE8,0x03,0x00,0x00, 0x2B,0xB0,0x00,0x00, 0x00,0x00,0x00,0x80, 0x00,0x00,0x00,0x00],
@@ -513,9 +513,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       [
         {label:"magic",k:"sync",r:[0,3],val:"\"RIFF\"",sel:0,branch:[["RIFF","little-endian"],["RIFX","big-endian"],["RF64","64-bit (see RF64 tab)"]],
           body:"The container signature. \"RIFF\" is little-endian; \"RIFX\" flips every multi-byte value to big-endian; \"RF64\" signals the large-file variant.",
-          note:"acidcat sniffs the first 4 bytes, then requires the form type at 0x08 to be WAVE."},
+          note:"the first 4 bytes are not enough; the form type at 0x08 must also read WAVE."},
         {label:"riff_size",k:"enum",r:[4,7],val:"2084",body:"u32 LE = total file size minus 8 (the 8 bytes of magic + this field). 0x0824 = 2084.",
-          note:"routinely left stale by writers; acidcat lints it against the real length and never trusts the claim."},
+          note:"routinely left stale by writers; check it against the real length, never trust the claim."},
         {label:"form_type",k:"sync",r:[8,11],val:"\"WAVE\"",body:"The RIFF form. WAVE for audio; AVI, RMID, RDIB, sfbk (SoundFont), DLS are other forms a reader branches on here."}
       ]],
     "fmt-ext":["byte",
@@ -533,7 +533,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           ["0x1","FL front left"],["0x2","FR front right"],["0x4","FC center"],["0x8","LFE"],["0x10","BL back left"],["0x20","BR back right"]],
           body:"Speaker bitmask, low bit first: FL FR FC LFE BL BR FLC FRC BC SL SR ... 0x3 = front L + R (plain stereo).",
           note:"the order of the samples follows the mask bit order, not the channel index."},
-        {label:"sub_format",k:"sync",r:[24,39],val:"PCM GUID",body:"16-byte GUID: the leading 2 bytes are the real format tag (0x0001 = PCM) and the fixed 14-byte tail 00 00 00 00 10 00 80 00 00 AA 00 38 9B 71 marks it a standard KSDATAFORMAT_SUBTYPE.",note:"a non-standard tail (an unofficial codec GUID) is warned by acidcat."}
+        {label:"sub_format",k:"sync",r:[24,39],val:"PCM GUID",body:"16-byte GUID: the leading 2 bytes are the real format tag (0x0001 = PCM) and the fixed 14-byte tail 00 00 00 00 10 00 80 00 00 AA 00 38 9B 71 marks it a standard KSDATAFORMAT_SUBTYPE.",note:"a non-standard tail is an unofficial codec GUID, outside the KSDATAFORMAT set."}
       ]],
     "ds64-map":["byte",
       [0xA0,0xCB,0x4C,0x00,0x01,0x00,0x00,0x00, 0x00,0xCB,0x4C,0x00,0x01,0x00,0x00,0x00, 0xC0,0x32,0x13,0x40,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00],
@@ -562,7 +562,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"sample_rate",k:"enum",r:[8,17],val:"44100 Hz",sel:3,branch:[
           ["sign","1 bit"],["exponent","15 bits, bias 16383"],["mantissa","64 bits, explicit leading 1"],
           ["value","2^(exp-16383) * mantissa / 2^63"]],
-          body:"An 80-bit IEEE-754 extended-precision float, a 68k-era Apple format. Python's struct has no code for it, so acidcat reassembles it by hand from the exponent and the explicit 64-bit mantissa.",
+          body:"An 80-bit IEEE-754 extended-precision float, a 68k-era Apple format. No mainstream language unpacks it natively, so it must be rebuilt from the exponent and the explicit 64-bit mantissa.",
           note:"40 0E AC 44 00.. : exponent 0x400E = 16398 = 16383 + 15; mantissa 0xAC44 / 2^15 = 1.3458.., times 2^15 = 44100. an explicit leading mantissa bit, unlike float64. an all-ones exponent (IEEE inf/NaN) decodes to 0 = unset, never a rate."}
       ]]
   };

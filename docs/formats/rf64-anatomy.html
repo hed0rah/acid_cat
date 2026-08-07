@@ -159,7 +159,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">RF64 is RIFF/WAVE grown past 4 GB. A plain WAV stores its sizes in 32-bit fields, which top out at 4 GB. RF64 keeps the exact WAV chunk layout but writes the sentinel <b>0xFFFFFFFF</b> into the RIFF and data size fields, and adds one mandatory chunk right after the header: <b>ds64</b>, carrying the real sizes as 64-bit integers. A reader that sees 0xFFFFFFFF must go read ds64 instead. BW64 (the newer name, EBU Tech 3306) is the same structure. This matters to a tool: trust the 32-bit field and you compute a 4.29 GB size for every RF64 file, which is exactly the bug acidcat's forensic scan once had until it learned to read ds64. The record drawn below is a real ds64 body. <b>Hover</b> any field to light its bytes; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
+  <p class="lede">RF64 is RIFF/WAVE grown past 4 GB. A plain WAV stores its sizes in 32-bit fields, which top out at 4 GB. RF64 keeps the exact WAV chunk layout but writes the sentinel <b>0xFFFFFFFF</b> into the RIFF and data size fields, and adds one mandatory chunk right after the header: <b>ds64</b>, carrying the real sizes as 64-bit integers. A reader that sees 0xFFFFFFFF must go read ds64 instead. BW64 (the newer name, EBU Tech 3306) is the same structure. This matters: trust the 32-bit field and you compute a 4.29 GB size for every RF64 file, and any scan bounded by that size silently covers nothing. The record drawn below is a real ds64 body. <b>Hover</b> any field to light its bytes; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">steel</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -181,7 +181,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div class="kv">
           <div><span class="k">magic</span><span class="v">"RF64" (or "BW64") at 0x00, "WAVE" at 0x08</span></div>
           <div><span class="k">riff size</span><span class="v">u32 at 0x04 = 0xFFFFFFFF (sentinel); the real 64-bit size is in ds64</span></div>
-          <div><span class="k">acidcat</span><span class="v">sees the sentinel and reads ds64 for the true end, so the trailing/forensic scan runs correctly</span></div>
+          <div><span class="k">reader</span><span class="v">on seeing the sentinel, must read ds64 for the true end before scanning anything</span></div>
         </div>
       </div>
     </details>
@@ -194,7 +194,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div class="kv">
           <div><span class="k">layout</span><span class="v">riffSize(u64) . dataSize(u64) . sampleCount(u64) . tableLength(u32) . then tableLength override entries</span></div>
           <div><span class="k">override table</span><span class="v">each entry is a 4cc + u64: the real size of another chunk that also holds the 0xFFFFFFFF sentinel</span></div>
-          <div><span class="k">cross-check</span><span class="v">riffSize + 8 should equal the file length; acidcat uses this as the real container end</span></div>
+          <div><span class="k">cross-check</span><span class="v">riffSize + 8 should equal the file length; this is the real container end</span></div>
         </div>
       </div>
     </details>
@@ -212,17 +212,17 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     </details>
   </div>
 
-  <div class="sec">what acidcat reads</div>
+  <div class="sec">reading it safely</div>
   <p class="note">The same as WAV, plus the ds64 override. The important part is defensive: never trust the 0xFFFFFFFF sentinel as a real size.</p>
   <div>
     <details class="region" open>
-      <summary><span class="chev">&#9656;</span><span class="rname">ds64-aware decode</span><span class="rspan">inspect . carve . repair</span></summary>
+      <summary><span class="chev">&#9656;</span><span class="rname">ds64-aware decode</span><span class="rspan">read . scan . repair</span></summary>
       <div class="rbody">
         <div class="kv">
           <div><span class="k">read</span><span class="v">the 64-bit riff/data sizes and sample count from ds64, and the WAV fmt/data as usual</span></div>
-          <div><span class="k">container end</span><span class="v">_rf64_end reads ds64's riffSize so carve --trailing and the anomaly scan use the real end</span></div>
-          <div><span class="k">the bug</span><span class="v">without ds64 the sentinel makes the declared end ~4.29 GB, so the trailing/polyglot scan silently never ran -- fixed</span></div>
-          <div><span class="k">repair</span><span class="v">RF64 sizes live in ds64, so the WAV size-cascade repair reads them there rather than the sentinels</span></div>
+          <div><span class="k">container end</span><span class="v">ds64's riffSize is the real end; a trailing-data or polyglot scan must bound itself there</span></div>
+          <div><span class="k">the trap</span><span class="v">without ds64 the sentinel makes the declared end ~4.29 GB, so a scan past the declared end silently finds nothing</span></div>
+          <div><span class="k">repair</span><span class="v">RF64 sizes live in ds64, so a WAV size-cascade repair must rewrite them there, not at the sentinels</span></div>
         </div>
       </div>
     </details>
@@ -338,7 +338,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     [
       {label:"riff_size",k:"enum",r:[0,7],val:"88306",
        body:"u64 LE: the real size of the whole container, replacing the RF64 header's 0xFFFFFFFF sentinel. 0x000158F2 = 88306; plus 8 equals the file length.",
-       note:"acidcat uses this as the true container end for carve --trailing and the anomaly scan."},
+       note:"this is the true container end; a trailing-data scan must bound itself here."},
       {label:"data_size",k:"enum",r:[8,15],val:"88200",
        body:"u64 LE: the real byte size of the data chunk. 0x00015888 = 88200. When the audio is under 4 GB (as here) the data chunk's own 32-bit size is also valid; over 4 GB it holds 0xFFFFFFFF and this is the truth.",
        note:"1 second of 44100 Hz stereo 16-bit = 176400 bytes; this mono file is 88200."},

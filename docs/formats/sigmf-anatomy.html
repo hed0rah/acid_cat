@@ -220,11 +220,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="y">2017</span><span><b>SigMF</b> &mdash; drafted at a DARPA Hackfest and stewarded by the <b>GNU Radio</b> project to end the chaos of undocumented <code>.iq</code> dumps. One open schema for &ldquo;what is in this pile of samples&rdquo;.</span></div>
         <div><span class="y">split</span><span><b>meta / data.</b> The <code>.sigmf-meta</code> JSON and the <code>.sigmf-data</code> stream are a pair, joined by base name &mdash; exactly like a detached WAV header sitting beside raw PCM.</span></div>
         <div><span class="y">bare IQ</span><span><b>the unlabeled cousins.</b> <code>.cu8</code>, <code>.cs16</code>, GQRX <code>.raw</code>, PortaPack <code>.C16</code> + <code>.TXT</code> &mdash; the same headerless stream with geometry inferred from the extension, a sidecar, or the filename.</span></div>
-        <div><span class="y">bridge</span><span><b>audio meets RF.</b> IQ is complex-valued audio; the SigMF <code>sample_rate</code> is the capture bandwidth. The same statistics acidcat runs on PCM &mdash; DC offset, clipping &mdash; apply unchanged, which is why the RF format lives in an audio tool.</span></div>
+        <div><span class="y">bridge</span><span><b>audio meets RF.</b> IQ is complex-valued audio; the SigMF <code>sample_rate</code> is the capture bandwidth. The same statistics used on PCM &mdash; DC offset, clipping &mdash; apply unchanged, which is why RF and audio tooling overlap.</span></div>
       </div>
 
-      <div class="callout"><b>the header is a sidecar.</b> Because the geometry is in a separate JSON, the <code>.sigmf-data</code> file is <i>pure</i> samples &mdash; no magic, no offsets, nothing to sniff. You cannot read it without the meta, the same way raw PCM is meaningless without knowing its rate and width. acidcat anchors its walk on the meta and treats the data plane as the sample stream it describes.</div>
-      <div class="callout"><b>captures are byte regions.</b> Each capture's <code>sample_start</code> times the datatype's bytes-per-sample is a byte offset into the data file, so a capture (or an annotation) is a real, carveable segment. acidcat surfaces each as a region &mdash; <code>carve --offset</code> pulls one tuned segment out of a multi-gigabyte capture.</div>
+      <div class="callout"><b>the header is a sidecar.</b> Because the geometry is in a separate JSON, the <code>.sigmf-data</code> file is <i>pure</i> samples &mdash; no magic, no offsets, nothing to sniff. You cannot read it without the meta, the same way raw PCM is meaningless without knowing its rate and width. A reader has to anchor on the meta and treat the data plane as the sample stream it describes.</div>
+      <div class="callout"><b>captures are byte regions.</b> Each capture's <code>sample_start</code> times the datatype's bytes-per-sample is a byte offset into the data file, so a capture (or an annotation) is a real, extractable segment. One tuned segment can be pulled out of a multi-gigabyte capture from offset and length alone.</div>
       <div class="callout"><b>frequency is the RF twist.</b> The one field with no audio analogue is <code>core:frequency</code> on each capture &mdash; the center frequency the radio was tuned to (8.428 GHz here). It is why the stream is split into captures at all: a scan that retunes writes a new capture at each frequency, all in one data file.</div>
     </div>
 
@@ -235,8 +235,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">meta JSON, opening bytes</div>
       <p class="note">Plain ASCII. Hover <span class="k-en">datatype_key</span> &mdash; the field that decides how the data stream is read.</p>
       <div id="sigmf-meta" data-build></div>
-      <div class="callout"><b>the datatype is the whole ballgame.</b> Without <code>core:datatype</code>, the <code>.sigmf-data</code> bytes are meaningless &mdash; it alone says whether a byte pair is a complex int16 or half of a float. acidcat parses it into a geometry (complex/real, int/uint/float, bit width, endianness) before touching the data. The Datatype tab breaks the string down.</div>
-      <div class="callout"><b>sha512 makes it verifiable.</b> The global <code>core:sha512</code> is a hash of the entire data file, so a recording is tamper-evident: recompute it and you know the samples are intact. acidcat can verify it, but only on request &mdash; hashing a multi-gigabyte capture is deep-gated, not run by default.</div>
+      <div class="callout"><b>the datatype is the whole ballgame.</b> Without <code>core:datatype</code>, the <code>.sigmf-data</code> bytes are meaningless &mdash; it alone says whether a byte pair is a complex int16 or half of a float. It must be parsed into a geometry (complex/real, int/uint/float, bit width, endianness) before touching the data. The Datatype tab breaks the string down.</div>
+      <div class="callout"><b>sha512 makes it verifiable.</b> The global <code>core:sha512</code> is a hash of the entire data file, so a recording is tamper-evident: recompute it and you know the samples are intact. Verification is opt-in in practice &mdash; hashing a multi-gigabyte capture is expensive enough to skip by default.</div>
     </div>
 
     <!-- ===================== DATATYPE ===================== -->
@@ -246,7 +246,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">datatype string "ci16_le" (7 bytes)</div>
       <p class="note">Hover each letter &mdash; every character is one decision in the grammar.</p>
       <div id="sigmf-dtype" data-build></div>
-      <div class="callout"><b>parametric, not a lookup table.</b> WAV enumerates format tags (1 = PCM, 3 = float, ...); SigMF <i>composes</i> the type from parts. <code>cu8</code> is complex unsigned 8-bit (2 B/sample, no endian needed); <code>rf32_le</code> is real float32; <code>ru8</code> and <code>ri16_le</code> are the real counterparts; <code>ci16_be</code> is big-endian complex int16. Real and complex both take a leading letter &mdash; there is no bare form, and acidcat parses the grammar with a single regex that rejects a type missing its <code>c</code>/<code>r</code> prefix, or a multibyte type that omits its endian suffix.</div>
+      <div class="callout"><b>parametric, not a lookup table.</b> WAV enumerates format tags (1 = PCM, 3 = float, ...); SigMF <i>composes</i> the type from parts. <code>cu8</code> is complex unsigned 8-bit (2 B/sample, no endian needed); <code>rf32_le</code> is real float32; <code>ru8</code> and <code>ri16_le</code> are the real counterparts; <code>ci16_be</code> is big-endian complex int16. Real and complex both take a leading letter &mdash; there is no bare form. The grammar is regular: a type missing its <code>c</code>/<code>r</code> prefix, or a multibyte type without its endian suffix, is invalid.</div>
       <div class="callout"><b>complex means interleaved.</b> The leading <code>c</code> is why the data stream reads <code>I Q I Q ...</code> &mdash; each sample is two components, in-phase then quadrature. That is identical to how a stereo WAV interleaves left and right; here the two channels are the real and imaginary parts of one complex signal.</div>
     </div>
 
@@ -257,8 +257,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">data stream, first 2 complex samples (8 bytes)</div>
       <p class="note">Hover a pair &mdash; I then Q, each a little-endian int16. Sample 0 = (&minus;4, 2).</p>
       <div id="sigmf-data" data-build></div>
-      <div class="callout"><b>meaningless without the meta.</b> These eight bytes could be four int16s, two float16s, or one part of a wider type &mdash; only <code>core:datatype</code> resolves it. That is the whole trade SigMF makes: keep the data plane utterly plain, and put every interpretation decision in the sidecar. Lose the meta and you are back to guessing geometry, exactly the problem acidcat's <code>locate --analyze</code> solves for headerless PCM.</div>
-      <div class="callout"><b>the same audio statistics apply.</b> DC offset (a non-zero mean on I or Q) and clipping (components pinned at the type's limit) are the identical health checks acidcat runs on PCM audio &mdash; the deep-gated stats sample the first 8 MB and report them per component. IQ is complex audio, so the audio toolbox transfers wholesale; only <code>core:frequency</code> has no PCM analogue. One wrinkle: an unsigned datatype is offset-binary, so its zero sits at half-scale &mdash; <code>cu8</code> (the RTL-SDR native format) reads silence as <b>0x80</b>, not 0x00.</div>
+      <div class="callout"><b>meaningless without the meta.</b> These eight bytes could be four int16s, two float16s, or one part of a wider type &mdash; only <code>core:datatype</code> resolves it. That is the whole trade SigMF makes: keep the data plane utterly plain, and put every interpretation decision in the sidecar. Lose the meta and you are back to guessing geometry, exactly the problem headerless PCM has always posed.</div>
+      <div class="callout"><b>the same audio statistics apply.</b> DC offset (a non-zero mean on I or Q) and clipping (components pinned at the type's limit) are the identical health checks used on PCM audio &mdash; both are measured per component, I and Q separately. IQ is complex audio, so the audio toolbox transfers wholesale; only <code>core:frequency</code> has no PCM analogue. One wrinkle: an unsigned datatype is offset-binary, so its zero sits at half-scale &mdash; <code>cu8</code> (the RTL-SDR native format) reads silence as <b>0x80</b>, not 0x00.</div>
     </div>
 
   </div>
@@ -367,7 +367,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         {label:"global_key",k:"enum",r:[1,8],val:"\"global\"",body:"The first top-level key. The global object holds the fields that make the raw data readable -- datatype, sample_rate, version, sha512, hardware."},
         {label:"colon",k:"rsv",r:[9,9],val:":",body:"JSON key/value separator."},
         {label:"global_obj",k:"sync",r:[10,10],val:"{",body:"The brace opening the global object's own key/value pairs."},
-        {label:"datatype_key",k:"enum",r:[11,25],val:"\"core:datatype\"",body:"The core:datatype key -- the single most important field. Its value decides how every byte of the .sigmf-data stream is read. All SigMF keys live under the core: namespace.",note:"acidcat parses its value into a sample geometry before touching the data."},
+        {label:"datatype_key",k:"enum",r:[11,25],val:"\"core:datatype\"",body:"The core:datatype key -- the single most important field. Its value decides how every byte of the .sigmf-data stream is read. All SigMF keys live under the core: namespace.",note:"its value must be parsed into a sample geometry before touching the data."},
         {label:"colon2",k:"rsv",r:[26,26],val:":",body:"Separator before the datatype value (\"ci16_le\", broken down on the Datatype tab)."}
       ]],
     "sigmf-dtype":["byte",
@@ -381,7 +381,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           note:"determines how a component's bits are interpreted."},
         {label:"bits",k:"enum",r:[2,3],val:"16",body:"The bit width of each component: 8, 16, 32, or 64. 16 here -- so each I or Q is an int16.",note:"complex int16 -> 4 bytes per sample."},
         {label:"endian",k:"flag",r:[4,6],val:"_le",sel:0,branch:[["_le","little-endian"],["_be","big-endian"]],
-          body:"The byte-order suffix, required for any width above 8 bits. _le = little-endian. acidcat rejects a multibyte datatype that omits it -- the spec mandates the suffix.",note:"an 8-bit type needs no suffix (one byte has no order)."}
+          body:"The byte-order suffix, required for any width above 8 bits. _le = little-endian. The spec mandates the suffix, so a multibyte datatype without it is invalid.",note:"an 8-bit type needs no suffix (one byte has no order)."}
       ]],
     "sigmf-data":["byte",
       [0xFC,0xFF, 0x02,0x00, 0xFD,0xFF, 0x03,0x00],

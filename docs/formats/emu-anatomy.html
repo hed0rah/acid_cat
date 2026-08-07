@@ -193,22 +193,22 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
 
   <!-- ===================== OVERVIEW ===================== -->
   <div class="panel on" data-panel="overview">
-    <p class="lede">E-MU's samplers wrote an <b>IFF-like <code>FORM</code> container</b> with <b>big-endian chunk sizes</b> from the EOS era onward. Two generations share acidcat's walker: the EOS hardware <b>.E4B</b> (form-type <code>E4B0</code>, ASCII names) and the Emulator X / Proteus X software <b>.exb</b> bank + <b>.ebl</b> sample library (form-type <code>E5B0</code>, UTF-16LE names). <span class="k-en">E-mu blue</span> = verified against real files, <span class="k-fl">amber</span> = inferred.</p>
+    <p class="lede">E-MU's samplers wrote an <b>IFF-like <code>FORM</code> container</b> with <b>big-endian chunk sizes</b> from the EOS era onward. Two generations share the container: the EOS hardware <b>.E4B</b> (form-type <code>E4B0</code>, ASCII names) and the Emulator X / Proteus X software <b>.exb</b> bank + <b>.ebl</b> sample library (form-type <code>E5B0</code>, UTF-16LE names). <span class="k-en">E-mu blue</span> = verified against real files, <span class="k-fl">amber</span> = inferred.</p>
 
     <div class="sec">format &times; generation matrix</div>
     <table class="matrix">
-      <thead><tr><th>format</th><th>who wrote it</th><th>container</th><th>names / PCM</th><th>acidcat</th></tr></thead>
+      <thead><tr><th>format</th><th>who wrote it</th><th>container</th><th>names / PCM</th><th>status</th></tr></thead>
       <tbody>
-        <tr><td class="f">.E4B</td><td>EOS hardware (EIV, E4XT, E5000, E6400)</td><td>FORM <b>E4B0</b> + TOC1, flat E4P1 presets</td><td>ASCII names, E3S1 16-bit PCM</td><td class="st veri">verified (48 real banks)</td></tr>
-        <tr><td class="f">.exb</td><td>Emulator X / Proteus X (software)</td><td>FORM <b>E5B0</b> + TOC2, presets + links</td><td>UTF-16LE, no embedded PCM</td><td class="st veri">verified (169 banks)</td></tr>
-        <tr><td class="f">.ebl</td><td>Emulator X / Proteus X SamplePool</td><td>FORM <b>E5B0</b> + TOC2, one E5S1</td><td>UTF-16LE, 16/32-bit split-channel</td><td class="st veri">verified (17k+ files)</td></tr>
+        <tr><td class="f">.E4B</td><td>EOS hardware (EIV, E4XT, E5000, E6400)</td><td>FORM <b>E4B0</b> + TOC1, flat E4P1 presets</td><td>ASCII names, E3S1 16-bit PCM</td><td class="st veri">verified</td></tr>
+        <tr><td class="f">.exb</td><td>Emulator X / Proteus X (software)</td><td>FORM <b>E5B0</b> + TOC2, presets + links</td><td>UTF-16LE, no embedded PCM</td><td class="st veri">verified</td></tr>
+        <tr><td class="f">.ebl</td><td>Emulator X / Proteus X SamplePool</td><td>FORM <b>E5B0</b> + TOC2, one E5S1</td><td>UTF-16LE, 16/32-bit split-channel</td><td class="st veri">verified</td></tr>
         <tr><td class="f">.prog</td><td>Proteus X program</td><td>zlib / deflate stream (not IFF)</td><td>compressed</td><td class="st need">separate format</td></tr>
         <tr><td class="f">.s3p</td><td>Akai S3000 (import content)</td><td>"PSYSSS30" magic</td><td>Akai charset, no ASCII</td><td class="st need">see MPC sheet</td></tr>
       </tbody>
     </table>
 
     <div class="callout blue"><b>the bank / SamplePool split</b>
-    An Emulator X <b>.exb</b> bank holds only presets (<code>E5P1</code>) and <b>sample links</b> (<code>E5SL</code>) -- confirmed across the corpus, <b>0 of 169</b> banks embed any sample. The actual PCM lives in a sibling <code>SamplePool/</code> of <b>.ebl</b> files, each an E5B0 container wrapping one <code>E5S1</code>. A link's index resolves to a pool entry. acidcat reads a bank and a library independently.</div>
+    An Emulator X <b>.exb</b> bank holds only presets (<code>E5P1</code>) and <b>sample links</b> (<code>E5SL</code>); it never embeds sample data. The actual PCM lives in a sibling <code>SamplePool/</code> of <b>.ebl</b> files, each an E5B0 container wrapping one <code>E5S1</code>. A link's index resolves to a pool entry. Bank and library are read independently.</div>
 
     <div class="sec">the E4 &rarr; E5 lineage</div>
     <p class="note">The <code>E4B0</code> &rarr; <code>E5B0</code> bump in the form-type is the cleanest marker of the hardware-to-software jump: same container shape, restructured preset, Unicode names. The <code>E3S1</code> sample tag in E4B is itself inherited from the Emulator 3 lineage, so the tags trace the family tree.</p>
@@ -220,7 +220,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
     </div>
 
     <div class="callout"><b>reading a native EOS CD-ROM</b>
-    An EOS factory disc is <b>not ISO9660</b> -- it opens with the <code>EMU3</code> filesystem magic, so it will not mount as a normal drive. But the <b>.E4B</b> banks sit inside contiguously: scan the raw image for <code>FORM....E4B0</code> headers and carve <code>form_size + 12</code> bytes. That is how the 48-bank E4B0 validation set was pulled from the <i>Producer Series Vol. 4</i> disc without mounting it.</div>
+    An EOS factory disc is <b>not ISO9660</b> -- it opens with the <code>EMU3</code> filesystem magic, so it will not mount as a normal drive. But the <b>.E4B</b> banks sit inside contiguously: scan the raw image for <code>FORM....E4B0</code> headers and carve <code>form_size + 12</code> bytes. Carving that way recovers whole banks from a factory disc image without an EOS machine.</div>
   </div>
 
   <!-- ===================== FORM ===================== -->
@@ -237,7 +237,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
     <div id="e5b-form" data-build></div>
 
     <div class="callout"><b>word-alignment is inconsistent</b>
-    EOS <b>.E4B</b> pads odd-sized chunks to a word (a trailing <code>0x00</code>); the Proteus X software banks (<i>Mo'Phatt</i>, <i>Orbit</i>, <i>Proteus 2000</i>) do <b>not</b>. A walker that assumes IFF padding lands one byte past the next tag and desyncs. acidcat resolves it adaptively: after an odd chunk it consumes the pad byte only if skipping it does not already land on a valid tag.</div>
+    EOS <b>.E4B</b> pads odd-sized chunks to a word (a trailing <code>0x00</code>); the Proteus X software banks (<i>Mo'Phatt</i>, <i>Orbit</i>, <i>Proteus 2000</i>) do <b>not</b>. A reader that assumes IFF padding lands one byte past the next tag and desyncs. The fix is adaptive: after an odd chunk, consume the pad byte only if skipping it does not already land on a valid tag.</div>
   </div>
 
   <!-- ===================== TOC2 ===================== -->
@@ -248,7 +248,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       <div>name<b>UTF-16LE @ 0x0e</b></div>
       <div>status<b class="veri">verified</b></div>
     </div>
-    <p class="lede">The table of contents: one fixed <b>78-byte</b> entry per content chunk (a bank's <code>TOC2</code> size is always a multiple of 78). Each entry names a chunk and gives its authoritative <b>file offset</b>, which acidcat also cross-checks against the linear chunk chain to catch corruption. This mirrors E4B's 32-byte <code>TOC1</code> exactly; E5 only widens the name to UTF-16. First 24 of 78 bytes shown.</p>
+    <p class="lede">The table of contents: one fixed <b>78-byte</b> entry per content chunk (a bank's <code>TOC2</code> size is always a multiple of 78). Each entry names a chunk and gives its authoritative <b>file offset</b>, which can be cross-checked against the linear chunk chain to catch corruption. This mirrors E4B's 32-byte <code>TOC1</code> exactly; E5 only widens the name to UTF-16. First 24 of 78 bytes shown.</p>
 
     <div class="sec">TOC2 entry</div>
     <div id="toc2-entry" data-build></div>
@@ -270,7 +270,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
     <div class="sec">E5P1 body head + Phdr</div>
     <div id="e5p1-head" data-build></div>
 
-    <p class="note">acidcat surfaces the preset name and sub-chunk inventory. The E-MU naming convention packs a fixed-width name with a 2-3 char tag (<code>kyb</code>/<code>lnk</code> for the keyboard-map vs link variants of a kit) and a GM-drum note number (<code>36</code> kick, <code>38</code> snare).</p>
+    <p class="note">The preset name and sub-chunk inventory are the readable surface. The E-MU naming convention packs a fixed-width name with a 2-3 char tag (<code>kyb</code>/<code>lnk</code> for the keyboard-map vs link variants of a kit) and a GM-drum note number (<code>36</code> kick, <code>38</code> snare).</p>
   </div>
 
   <!-- ===================== E5S1 ===================== -->
@@ -281,7 +281,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       <div>PCM<b>16/32-bit split-channel</b></div>
       <div>status<b class="veri">name + rate verified</b></div>
     </div>
-    <p class="lede">The sample chunk (one per <b>.ebl</b>). A leading flag, then a UTF-16LE name at <b>0x06</b>. Further in, a block of per-channel length / loop byte-offsets (stereo is stored as <b>split channel blocks</b>, not interleaved), then the sample rate at <b>0x6a</b>. Across 800 sampled files, 100% decoded a valid name and a plausible rate. Header identity bytes shown below.</p>
+    <p class="lede">The sample chunk (one per <b>.ebl</b>). A leading flag, then a UTF-16LE name at <b>0x06</b>. Further in, a block of per-channel length / loop byte-offsets (stereo is stored as <b>split channel blocks</b>, not interleaved), then the sample rate at <b>0x6a</b>. Header identity bytes shown below.</p>
 
     <div class="sec">E5S1 identity header</div>
     <div id="e5s1-hdr" data-build></div>
@@ -290,8 +290,8 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
     <div class="kv">
       <div><span class="k">0x48+</span><span class="v">start / end / loop byte-offsets, repeated per channel (split-channel) -- <span class="k-fl">inferred</span></span></div>
       <div><span class="k">0x6a &nbsp;u32 LE</span><span class="v">sample rate, Hz -- here 44,100; E-mu's reduced ROM rates (25000, 30000, 39579) are common -- <span class="k-en">verified</span></span></div>
-      <div><span class="k">0x75 &nbsp;u8</span><span class="v">bytes-per-sample: 0x02 = 16-bit (ebl-reading reports 16 or 32-bit, never 24) -- <span class="k-en">verified</span></span></div>
-      <div><span class="k">PCM</span><span class="v">16- or 32-bit signed, split-channel; exact start offset is Phase 2</span></div>
+      <div><span class="k">0x75 &nbsp;u8</span><span class="v">bytes-per-sample: 0x02 = 16-bit (only 16- or 32-bit occur, never 24) -- <span class="k-en">verified</span></span></div>
+      <div><span class="k">PCM</span><span class="v">16- or 32-bit signed, split-channel; exact start offset undetermined</span></div>
     </div>
   </div>
 
@@ -315,7 +315,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       <div>magic<b>"FORM" + "E4B0"</b></div>
       <div>form size<b>filesize - 12</b></div>
       <div>toc<b>TOC1, 32-byte, ASCII</b></div>
-      <div>status<b class="veri">verified (48 real banks)</b></div>
+      <div>status<b class="veri">verified</b></div>
     </div>
     <p class="lede">The EOS hardware bank, one generation older. Same <code>FORM</code> container, but form-type <code>E4B0</code>, a <b>filesize - 12</b> size quirk (it excludes the 4-byte form-type), a 32-byte ASCII <code>TOC1</code>, flat <code>E4P1</code> presets (a fixed header + packed voices that resolve zones to samples by index), and <code>E3S1</code> 16-bit PCM samples. A hardware-saved bank ends with an <code>EMSt</code> master-setup chunk; CD-streamed banks omit it and pad the last sample's tail.</p>
 
@@ -323,7 +323,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
     <div id="e4b-form" data-build></div>
 
     <div class="sec">E3S1 sample header (identity)</div>
-    <p class="note">A real E3S1 from a synthetic test bank. E4 uses <b>ASCII</b> names (E5 widened to UTF-16); the <code>_A2</code> suffix encodes the sample's root note. The numeric fields follow: sample rate at 0x36 (u32 LE), a loop-flag word at 0x3c, and loop start / end offsets.</p>
+    <p class="note">An E3S1 identity header. E4 uses <b>ASCII</b> names (E5 widened to UTF-16); the <code>_A2</code> suffix encodes the sample's root note. The numeric fields follow: sample rate at 0x36 (u32 LE), a loop-flag word at 0x3c, and loop start / end offsets.</p>
     <div id="e3s1-hdr" data-build></div>
   </div>
 
@@ -331,7 +331,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
 
   <footer>
     <span>acidcat / e-mu anatomy</span>
-    <span><a href="https://hed0rah.github.io/wanted.html" style="color:var(--enum);border-color:var(--enum)">&#9873; specimens wanted</a></span>
+    <span>e-mu emulator . e4b / e5b . EMU4 form . TOC-addressed chunks</span>
     <span><a href="https://hed0rah.github.io">hed0rah</a> &middot; <a href="https://x.com/r3l0z">r3l0z</a></span>
   </footer>
 
@@ -444,7 +444,7 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
       [
         {label:"tag",k:"sync",r:[0,3],val:"\"E5P1\"",body:"The tag of the chunk this entry points to (E5P1 preset, E5S1 sample, or E5SL link)."},
         {label:"data_size",k:"sync",r:[4,7],val:"2504",body:"The pointed chunk's data size, big-endian u32."},
-        {label:"file_offset",k:"enum",r:[8,11],val:"0x284",body:"Absolute offset of the chunk's tag, big-endian u32. Authoritative -- a reader can seek straight here. acidcat cross-checks every TOC offset against the linear chunk chain; a mismatch flags corruption.",note:"the same check pinpointed a broken E4B repair fixture."},
+        {label:"file_offset",k:"enum",r:[8,11],val:"0x284",body:"Absolute offset of the chunk's tag, big-endian u32. Authoritative -- a reader can seek straight here. Cross-check every TOC offset against the linear chunk chain; a mismatch flags corruption.",note:"a mismatch between the two is the earliest tell of a damaged bank."},
         {label:"index",k:"flag",r:[12,13],val:"0",body:"A 0-based index within the chunk's kind, big-endian u16."},
         {label:"name",k:"enum",r:[14,23],val:"\"TRUCK1SPRING\"",body:"UTF-16LE name, a 64-byte field (32 code units) running to byte 77. It starts at 0x0e -- decoding from 0x0c hits the index's null and returns empty.",note:"only the head of the 64-byte name is shown."}
       ]],
@@ -455,13 +455,13 @@ footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color
         {label:"sub-tag",k:"sync",r:[2,5],val:"\"Phdr\"",body:"The first sub-chunk tag: the preset header. E5P1 is a nested IFF container -- typically nine sub-chunks (Phdr, E5IC, E5CL, E5MP, EXPs, and four LISTs)."},
         {label:"sub-size",k:"sync",r:[6,9],val:"142",body:"The Phdr sub-chunk's data size, big-endian u32."},
         {label:"phdr lead",k:"rsv",r:[10,13],val:"1",body:"A leading field inside Phdr (00000001); the name follows at sub-body offset 4."},
-        {label:"name",k:"enum",r:[14,23],val:"\"TRUCK1SPRING\"",body:"The preset name, UTF-16LE, inside Phdr. This is the only E5P1 field acidcat decodes today.",note:"voice/zone data lives in the LIST sub-chunks -- Phase 2."}
+        {label:"name",k:"enum",r:[14,23],val:"\"TRUCK1SPRING\"",body:"The preset name, UTF-16LE, inside Phdr.",note:"voice/zone data lives in the LIST sub-chunks."}
       ]],
     "e5s1-hdr":["byte",
       [0x00,0x00,0x00,0x00,0x01,0x00,0x54,0x00,0x52,0x00,0x55,0x00,0x43,0x00,0x4b,0x00,0x31,0x00,0x53,0x00,0x50,0x00,0x52,0x00],
       [
         {label:"reserved",k:"rsv",r:[0,3],val:"0",body:"Leading zero word."},
-        {label:"flag",k:"flag",r:[4,5],val:"0x0001",body:"A flag word; 0x0001 observed across the corpus."},
+        {label:"flag",k:"flag",r:[4,5],val:"0x0001",body:"A flag word; 0x0001 observed."},
         {label:"name",k:"enum",r:[6,23],val:"\"TRUCK1SPRING\"",body:"UTF-16LE sample name, a 64-byte field starting at 0x06. The raw bytes interleave with nulls -- it is UTF-16LE, not the UTF-8 some converters assume.",note:"rate, loop points, and bit depth follow (see 'later fields')."}
       ]],
     "e5sl":["byte",

@@ -381,7 +381,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        note:"signed; -50..+50 in practice."},
       {label:"sample_link",k:"rsv",r:[42,43],val:"0",
        body:"u16 LE index of the paired sample for a stereo link. Meaningful only when type marks left or right; 0 here for a mono sample.",
-       note:"acidcat surfaces it; ignored for mono."},
+       note:"Present but ignored for mono."},
       {label:"sample_type",k:"flag",r:[44,45],val:"1  (mono)",sel:0,branch:[
         ["0x0001","mono: this sample"],
         ["0x0002","right channel"],

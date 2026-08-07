@@ -175,7 +175,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="sec">file regions</div>
-  <p class="note">Top to bottom, what a reader walks. The metadata a producer wants sits right behind the header; acidcat inspect (and inspect --pretty) decodes it and flags the embedded-asset zip.</p>
+  <p class="note">Top to bottom, what a reader walks. The metadata a producer wants sits right behind the header, ahead of the opaque device tree and any embedded-asset zip.</p>
   <div>
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">BtWg header</span><span class="rspan">0x00 . drawn below</span></summary>
@@ -217,7 +217,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region">
       <summary><span class="chev">&#9656;</span><span class="rname">module / device tree</span><span class="rspan">after the meta block . opaque</span></summary>
       <div class="rbody">
-        <p class="note">The Grid and device graph: a nested CONTENTS/MODULES/N/CONTENTS/... structure holding every module in the patch. Plain inspect reads the meta block alone; deep mode (--verbose / --frames) walks this tree too, listing module/device names in pre-order, named device parameters in raw internal units, and an addressable structure tree built from the Grid paths.</p>
+        <p class="note">The Grid and device graph: a nested CONTENTS/MODULES/N/CONTENTS/... structure holding every module in the patch. The meta block can be read without touching this tree; walking it yields module and device names in pre-order, named device parameters in raw internal units, and an addressable structure tree built from the Grid paths.</p>
         <div class="kv">
           <div><span class="k">nesting</span><span class="v">CONTENTS &gt; MODULES &gt; N &gt; CONTENTS, recursively</span></div>
           <div><span class="k">module names</span><span class="v">e.g. Pitch Shifter . Stereo Split/Merge . All-pass Delay . Peak Limiter</span></div>
@@ -229,7 +229,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region opt">
       <summary><span class="chev">&#9656;</span><span class="rname">embedded asset zip</span><span class="rspan">"embed files" on . PK 03 04</span></summary>
       <div class="rbody">
-        <p class="note">With "embed files" enabled, every referenced asset is packed into a DEFLATE ZIP embedded in the preset. Unzip it and the referenced files come back whole. acidcat inspect flags the archive when it is present.</p>
+        <p class="note">With "embed files" enabled, every referenced asset is packed into a DEFLATE ZIP embedded in the preset. Unzip it and the referenced files come back whole.</p>
         <div class="kv">
           <div><span class="k">magic</span><span class="v">PK 03 04, standard local-file header</span></div>
           <div><span class="k">compression</span><span class="v">DEFLATE</span></div>
@@ -363,8 +363,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"Four ASCII bytes open the container. Shared by .bwpreset, .bwclip, and .bwmodulator; a file that does not start here is not this format.",
        note:".bwimpulse looks like family but starts fLaC: it is a plain FLAC file, decode it as one."},
       {label:"format/version",k:"enum",r:[4,13],val:"0003000200",
-       body:"Ten ASCII digits carrying the container format and writer version. Every Studio 6.x file examined reads 0003000200.",
-       note:"a run of ASCII hex digits follows these chars; the content varies per file and acidcat leaves it uninterpreted."}
+       body:"Ten ASCII digits carrying the container format and writer version. Studio 6.x files read 0003000200.",
+       note:"a run of ASCII hex digits follows these chars; the content varies per file and is left uninterpreted."}
     ]);
 
   // one tagged meta entry: device_name = "Drum Machine"
@@ -386,7 +386,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["0x01","1-byte int"],
         ["0x19","array: u32-BE count + items (referenced_*_ids)"]],
        body:"One type byte announces the value encoding. Every string key in the meta block carries 0x08; the same self-describing scheme also uses 0x07 for big-endian doubles (a clip's bpm, beat_length), 0x01 for a byte, and 0x19 for count-prefixed arrays like the referenced_*_ids dependency lists.",
-       note:"acidcat inspect decodes device, creator, category, tags, description, and version from these entries."},
+       note:"device, creator, category, tags, description, and version all come from these entries."},
       {label:"value_len",k:"sync",r:[16,19],val:"12",
        body:"u32 big-endian: the byte count of the value. \"Drum Machine\" is 12 bytes."},
       {label:"value",k:"enum",r:[20,31],val:"\"Drum Machine\"",

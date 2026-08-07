@@ -180,7 +180,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">ZIP archive</span><span class="rspan">0x00 . PK 03 04</span></summary>
       <div class="rbody">
-        <p class="note">Standard ZIP local-file-header magic. This is the one Bitwig type not identified by leading magic alone (a JAR or any zip shares PK); acidcat peeks the central directory for multisample.xml to confirm.</p>
+        <p class="note">Standard ZIP local-file-header magic. This is the one Bitwig type not identified by leading magic alone (a JAR or any zip shares PK); the central directory must be checked for multisample.xml to confirm.</p>
         <div class="kv">
           <div><span class="k">magic</span><span class="v">PK\\x03\\x04</span></div>
           <div><span class="k">entries</span><span class="v">multisample.xml + member WAV/FLAC files</span></div>
@@ -195,7 +195,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region">
       <summary><span class="chev">&#9656;</span><span class="rname">the CRC quirk</span><span class="rspan">why ZipFile.read raises</span></summary>
       <div class="rbody">
-        <p class="note">Bitwig writes each entry with a CRC-32 that does not match the data, so Python's ZipFile.read raises BadZipFile. acidcat reads entries by seeking past the 30-byte local header (plus filename + extra), bypassing the CRC check. The central directory, and namelist(), are unaffected.</p>
+        <p class="note">Bitwig writes each entry with a CRC-32 that does not match the data, so Python's ZipFile.read raises BadZipFile. Read entries by seeking past the 30-byte local header (plus filename + extra), bypassing the CRC check. The central directory, and namelist(), are unaffected.</p>
         <div class="kv">
           <div><span class="k">symptom</span><span class="v">BadZipFile: Bad CRC-32</span></div>
           <div><span class="k">fix</span><span class="v">seek to header_offset, skip local header, read compress_size bytes</span></div>
@@ -223,10 +223,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region">
       <summary><span class="chev">&#9656;</span><span class="rname">member samples</span><span class="rspan">one per zone</span></summary>
       <div class="rbody">
-        <p class="note">Ordinary WAVs (occasionally FLAC/AIFF), stored in the zip. Each can itself be walked by the WAV walker after extraction; the multisample layer is purely the zone map over them.</p>
+        <p class="note">Ordinary WAVs (occasionally FLAC/AIFF), stored in the zip. Each parses as a standalone file once extracted; the multisample layer is purely the zone map over them.</p>
         <div class="kv">
           <div><span class="k">files</span><span class="v"><name>.wav per zone</span></div>
-          <div><span class="k">acidcat</span><span class="v">reports name, zone count, member count, and per-zone root/key/velocity/loop</span></div>
+          <div><span class="k">recoverable</span><span class="v">instrument name, zone count, member count, and per-zone root/key/velocity/loop</span></div>
         </div>
       </div>
     </details>

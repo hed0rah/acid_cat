@@ -159,7 +159,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">A tracker module is a small filesystem pretending to be a song: a header, a pattern order, the pattern data, then the instrument samples, all in one file. The three formats differ in signature and rigidity but share that shape. <b>MOD</b> has no leading magic at all; the only reliable tell is four bytes at offset 1080, and the audio location is computed, not stored. <b>XM</b> opens with the string "Extended Module: " and a self-describing header you must walk block by block. <b>S3M</b> hides its signature entirely &mdash; the "SCRM" magic sits 44 bytes in, after the title &mdash; and reaches its instruments and patterns through DOS <i>paragraph</i> pointers, a 16-bit value shifted left four. <b>IT</b> opens with "IMPM" and, uniquely, stores explicit on-disk pointer tables: one offset per instrument, sample, and pattern. The record drawn below is a real IT <b>IMPS</b> sample header; its <b>sample pointer</b> is an absolute file offset to the PCM, the pointer acidcat follows and carves. <b>Hover</b> any field to light its bytes; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
+  <p class="lede">A tracker module is a small filesystem pretending to be a song: a header, a pattern order, the pattern data, then the instrument samples, all in one file. The three formats differ in signature and rigidity but share that shape. <b>MOD</b> has no leading magic at all; the only reliable tell is four bytes at offset 1080, and the audio location is computed, not stored. <b>XM</b> opens with the string "Extended Module: " and a self-describing header you must walk block by block. <b>S3M</b> hides its signature entirely &mdash; the "SCRM" magic sits 44 bytes in, after the title &mdash; and reaches its instruments and patterns through DOS <i>paragraph</i> pointers, a 16-bit value shifted left four. <b>IT</b> opens with "IMPM" and, uniquely, stores explicit on-disk pointer tables: one offset per instrument, sample, and pattern. The record drawn below is a real IT <b>IMPS</b> sample header; its <b>sample pointer</b> is an absolute file offset to the PCM, the pointer a reader follows to the audio. <b>Hover</b> any field to light its bytes; <b>click</b> a field with a <span class="k-en">+</span> to open its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">moss</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -172,7 +172,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="sec">the four formats</div>
-  <p class="note">Same skeleton -- header, order, patterns, samples -- four ways of laying it out. acidcat maps all four down to the byte offset of every embedded sample, so each is carveable.</p>
+  <p class="note">Same skeleton -- header, order, patterns, samples -- four ways of laying it out. All four resolve down to the byte offset of every embedded sample, so each one is extractable.</p>
   <div>
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">ProTracker MOD</span><span class="rspan">.mod . no signature</span></summary>
@@ -197,7 +197,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">signature</span><span class="v">"Extended Module: " (17 bytes) at offset 0</span></div>
           <div><span class="k">0x1A marker</span><span class="v">a DOS EOF byte at offset 37, after the 20-byte module name and before the tracker string -- so TYPE stops cleanly</span></div>
           <div><span class="k">header</span><span class="v">song length, channels, patterns, instruments, tempo/BPM, 256-byte order table</span></div>
-          <div><span class="k">samples</span><span class="v">delta-encoded PCM; acidcat resolves each sample's byte offset by walking the blocks</span></div>
+          <div><span class="k">samples</span><span class="v">delta-encoded PCM; each sample's byte offset comes from walking the blocks</span></div>
         </div>
       </div>
     </details>
@@ -218,10 +218,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">Impulse Tracker IT</span><span class="rspan">.it . pointer tables . drawn below</span></summary>
       <div class="rbody">
-        <p class="note">The richest. After the "IMPM" header and the order list come three explicit tables: one 32-bit offset per instrument, sample, and pattern. These are absolute file offsets, a tiny on-disk filesystem. Following a sample-table entry lands on an IMPS sample header (below), whose sample pointer at +72 is a further absolute offset to the PCM. IT is a two-level pointer structure, and acidcat annotates both levels as followable xrefs, flagging one that dangles past EOF.</p>
+        <p class="note">The richest. After the "IMPM" header and the order list come three explicit tables: one 32-bit offset per instrument, sample, and pattern. These are absolute file offsets, a tiny on-disk filesystem. Following a sample-table entry lands on an IMPS sample header (below), whose sample pointer at +72 is a further absolute offset to the PCM. IT is a two-level pointer structure; both levels are followable xrefs, and either can dangle past EOF.</p>
         <div id="block-imps"></div>
         <div class="kv">
-          <div><span class="k">offset tables</span><span class="v">ins / smp / pat pointers, u32 absolute file offsets -- acidcat follows them (the x key in the TUI)</span></div>
+          <div><span class="k">offset tables</span><span class="v">ins / smp / pat pointers, u32 absolute file offsets into the module</span></div>
           <div><span class="k">IMPS record</span><span class="v">80 bytes: magic, name, length, C5 speed, flags, and the sample pointer</span></div>
           <div><span class="k">sample data</span><span class="v">8/16-bit, mono/stereo, optionally IT-compressed; the pointer names where it lives</span></div>
         </div>
@@ -229,17 +229,17 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     </details>
   </div>
 
-  <div class="sec">what acidcat reads</div>
-  <p class="note">Header, pattern order, and every embedded sample at its real byte offset -- so a sample is a carveable region, and IT's pointer tables are followable. Decoding XM/IT delta or IT compression to playable audio is out of scope; this maps structure and extracts.</p>
+  <div class="sec">what the structure yields</div>
+  <p class="note">Header, pattern order, and every embedded sample at its real byte offset -- so a sample is an extractable region, and IT's pointer tables are followable. Decoding XM/IT delta or IT compression to playable audio is a step beyond mapping the structure.</p>
   <div>
     <details class="region" open>
-      <summary><span class="chev">&#9656;</span><span class="rname">inspect + carve</span><span class="rspan">tracker</span></summary>
+      <summary><span class="chev">&#9656;</span><span class="rname">structure + samples</span><span class="rspan">tracker</span></summary>
       <div class="rbody">
         <div class="kv">
           <div><span class="k">read</span><span class="v">title/tracker/version, channel and pattern counts, tempo, and the sample list</span></div>
-          <div><span class="k">byte offset</span><span class="v">each sample carries its resolved range; carve --offset lifts the raw PCM out</span></div>
-          <div><span class="k">IT pointers</span><span class="v">offset-table entries and the IMPS sample pointer are xrefs; the TUI follows them with x</span></div>
-          <div><span class="k">MOD detection</span><span class="v">no leading magic, so acidcat confirms MOD from disk by the offset-1080 tell</span></div>
+          <div><span class="k">byte offset</span><span class="v">each sample carries its resolved range; the raw PCM lifts straight out of it</span></div>
+          <div><span class="k">IT pointers</span><span class="v">offset-table entries and the IMPS sample pointer are both xrefs into the file</span></div>
+          <div><span class="k">MOD detection</span><span class="v">no leading magic, so a MOD is confirmed only by the offset-1080 tell</span></div>
         </div>
       </div>
     </details>
@@ -357,7 +357,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     [
       {label:"magic",k:"sync",r:[0,3],val:"\"IMPS\"",
        body:"Every IT sample header opens with the four ASCII bytes 'IMPS'. A sample-offset table entry points here.",
-       note:"acidcat validates the magic before trusting a header the offset table points at."},
+       note:"validate the magic before trusting a header the offset table points at."},
       {label:"dos_filename",k:"rsv",r:[4,15],val:"\"guita.wav\"",
        body:"12-byte legacy DOS 8.3 filename, space-padded. Historical; the real name is the 26-byte field below.",
        note:""},
@@ -372,16 +372,16 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["0x08","compressed (IT214)"],
         ["0x10","use loop"]],
        body:"u8 bitfield. 0x11 = bit0 (has sample) + bit4 (loop): an 8-bit, mono, uncompressed, looped sample.",
-       note:"acidcat reads bit1/bit2 for byte size and bit3 to know it is IT-compressed (decode out of scope)."},
+       note:"bits 1 and 2 give the byte size; bit 3 marks IT214 compression."},
       {label:"default_volume",k:"enum",r:[19,19],val:"64",
        body:"u8 default playback volume, 0-64. 0x40 = 64.",note:""},
       {label:"sample name",k:"enum",r:[20,45],val:"\"guita.wav\"",
-       body:"26-byte sample name, null/space padded. This is what acidcat and a player list.",
+       body:"26-byte sample name, null/space padded. This is the name a player lists.",
        note:"often a source filename, a nice provenance breadcrumb."},
       {label:"convert",k:"rsv",r:[46,46],val:"0x01",
-       body:"u8 Cvt conversion flags. Bit 0 set means the sample PCM is stored SIGNED (unsigned when clear); higher bits cover delta encoding, byte order and bit depth. 0x01 here is plain signed PCM, the modern-IT norm.",note:"acidcat surfaces the byte without interpreting it."},
+       body:"u8 Cvt conversion flags. Bit 0 set means the sample PCM is stored SIGNED (unsigned when clear); higher bits cover delta encoding, byte order and bit depth. 0x01 here is plain signed PCM, the modern-IT norm.",note:""},
       {label:"default_pan",k:"rsv",r:[47,47],val:"0x00",
-       body:"u8 default pan; bit 7 enables it. 0x00 here, so no default pan is set. Left uninterpreted by acidcat.",note:""},
+       body:"u8 default pan; bit 7 enables it. 0x00 here, so no default pan is set.",note:""},
       {label:"length",k:"enum",r:[48,51],val:"2018",
        body:"u32 LE length in sample points. 0x000007E2 = 2018 points.",
        note:"byte length = length x (2 if 16-bit) x (2 if stereo); mono 8-bit here, so 2018 bytes."},
@@ -397,13 +397,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"sustain_end",k:"rsv",r:[68,71],val:"0",
        body:"u32 LE sustain-loop end.",note:""},
       {label:"sample_pointer",k:"sync",r:[72,75],val:"0x00004C86",
-       body:"u32 LE ABSOLUTE FILE OFFSET to this sample's PCM. 0x00004C86 = 19590. This is the pointer acidcat annotates as an xref: follow it in the TUI with x, and a value past EOF is flagged as dangling.",
+       body:"u32 LE ABSOLUTE FILE OFFSET to this sample's PCM. 0x00004C86 = 19590. This is the xref that reaches the audio: follow it to the PCM, and a value past EOF is a dangling pointer.",
        note:"the OFFSET-kind field at the heart of IT: a tiny filesystem entry pointing at the audio."},
       {label:"vibrato",k:"rsv",r:[76,79],val:"0 0 0 0",
        body:"Four bytes: vibrato speed, depth, rate, waveform. All zero here.",note:""}
     ]);
 
-  // real S3M header: "TECHNO" (303.s3m), first 48 bytes -- title through the SCRM magic
+  // real S3M header from a ScreamTracker 3 module, "TECHNO", first 48 bytes -- title through the SCRM magic
   build("block-s3m", 'byte',
     [0x54,0x45,0x43,0x48,0x4E,0x4F,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
      0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -436,15 +436,15 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["0x4xxx","Schism Tracker"],
         ["0x5xxx","OpenMPT"]],
        body:"u16 LE 'created with tracker': the high nibble is the program, the low bits the version. 0x1320 = ScreamTracker 3.20.",
-       note:"acidcat maps the high nibble (cwt >> 12) to the writer -- a provenance breadcrumb."},
+       note:"the high nibble (cwt >> 12) names the writer -- a provenance breadcrumb."},
       {label:"sample_format",k:"flag",r:[42,43],val:"2 (unsigned)",sel:1,branch:[
         ["1","signed PCM"],
         ["2","unsigned PCM"]],
        body:"u16 LE file-format info. 1 = signed samples, 2 = unsigned. Most ST3 modules are unsigned -- read this or the decoded audio inverts.",
        note:"the S3M gotcha, the counterpart to MOD's word-length lengths."},
       {label:"magic",k:"sync",r:[44,47],val:"\"SCRM\"",
-       body:"The ScreamTracker signature -- 44 bytes into the file, sitting after the 28-byte title. acidcat confirms an S3M by these four bytes at 0x2C, not by anything at offset 0.",
-       note:"the only format on this page whose magic is not at the start."}
+       body:"The ScreamTracker signature -- 44 bytes into the file, sitting after the 28-byte title. An S3M is confirmed by these four bytes at 0x2C, not by anything at offset 0.",
+       note:"the only one of these formats whose magic is not at the start."}
     ]);
 })();
 </script>

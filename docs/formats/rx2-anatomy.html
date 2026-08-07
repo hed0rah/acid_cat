@@ -165,7 +165,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">An <b>.rx2</b> is a Propellerhead ReCycle loop: an IFF-style <b>CAT</b> group whose form type is <b>REX2</b>, holding <b>big-endian</b> chunks. ReCycle slices a drum or instrument loop into transient-aligned segments and stores the slice markers so a host can retrigger each and follow tempo. The markers hide in a <b>nested CAT/SLCL</b> group. The format was never openly published: for years the only way to read a REX2 was Propellerhead's NDA-licensed <b>REX Shared Library</b> SDK, so this walker is reverse-engineered. <b>Hover</b> any field or byte to light its span and read the decode. Color marks kind (see the key).</p>
+  <p class="lede">An <b>.rx2</b> is a Propellerhead ReCycle loop: an IFF-style <b>CAT</b> group whose form type is <b>REX2</b>, holding <b>big-endian</b> chunks. ReCycle slices a drum or instrument loop into transient-aligned segments and stores the slice markers so a host can retrigger each and follow tempo. The markers hide in a <b>nested CAT/SLCL</b> group. The format was never openly published: for years the only way to read a REX2 was Propellerhead's NDA-licensed <b>REX Shared Library</b> SDK, so it is reverse-engineered. <b>Hover</b> any field or byte to light its span and read the decode. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">umber</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -192,7 +192,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">chunks</span><span class="rspan">CREI . GLOB . NAME . RECY . SINF . SDAT</span></summary>
       <div class="rbody">
-        <p class="note">Big-endian IFF chunks: a 4-byte id, a 4-byte size, then the body (padded to even). acidcat decodes the legible strings and reports the rest as regions.</p>
+        <p class="note">Big-endian IFF chunks: a 4-byte id, a 4-byte size, then the body (padded to even). The legible strings decode as text; the remaining bodies are opaque payload.</p>
         <div class="kv">
           <div><span class="k">framing</span><span class="v">id[4] + size[4] BE + body (even-padded)</span></div>
           <div><span class="k">CREI</span><span class="v">creator string, e.g. a ReCycle version</span></div>
@@ -207,10 +207,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region">
       <summary><span class="chev">&#9656;</span><span class="rname">slice list</span><span class="rspan">nested CAT / SLCL</span></summary>
       <div class="rbody">
-        <p class="note">The transient slice markers do not sit at the top level: they live in a nested CAT group whose form is SLCL, one SLCE per slice. acidcat recurses into it to count slices; a flat top-level walk would miss them.</p>
+        <p class="note">The transient slice markers do not sit at the top level: they live in a nested CAT group whose form is SLCL, one SLCE per slice. A reader must recurse into it to count slices; a flat top-level walk misses them.</p>
         <div class="kv">
           <div><span class="k">nesting</span><span class="v">CAT (SLCL) -> SLCE, SLCE, ...</span></div>
-          <div><span class="k">slice count</span><span class="v">recursed, depth-bounded against a malformed file</span></div>
+          <div><span class="k">slice count</span><span class="v">one SLCE per slice, counted inside the nested group</span></div>
           <div><span class="k">SLCE</span><span class="v">one transient-aligned slice marker</span></div>
         </div>
       </div>
