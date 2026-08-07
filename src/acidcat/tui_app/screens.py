@@ -139,7 +139,14 @@ class ConfirmScreen(ModalScreen):
     #confmsg { color: #C9CDD3; padding-bottom: 1; }
     #confbtns { height: auto; }
     """
-    BINDINGS = [("escape", "cancel", "cancel")]
+    # save and discard were reachable by mouse only, on the one prompt that
+    # stands between the user and losing an edit.
+    BINDINGS = [
+        ("s", "save", "save"),
+        ("d", "discard", "discard"),
+        ("c", "cancel", "cancel"),
+        ("escape", "cancel", "cancel"),
+    ]
 
     def __init__(self, prompt):
         super().__init__()
@@ -149,12 +156,21 @@ class ConfirmScreen(ModalScreen):
         with Vertical(id="confbox"):
             yield Static(Text(self.prompt, style=f"bold {PEND}"), id="confmsg")
             with Horizontal(id="confbtns"):
-                yield Button("save", id="save", variant="success")
-                yield Button("discard", id="discard", variant="error")
-                yield Button("cancel", id="cancel")
+                yield Button("save  (s)", id="save", variant="success")
+                yield Button("discard  (d)", id="discard", variant="error")
+                yield Button("cancel  (c)", id="cancel")
+
+    def on_mount(self):
+        self.query_one("#save", Button).focus()
 
     def on_button_pressed(self, event):
         self.dismiss(event.button.id if event.button.id != "cancel" else None)
+
+    def action_save(self):
+        self.dismiss("save")
+
+    def action_discard(self):
+        self.dismiss("discard")
 
     def action_cancel(self):
         self.dismiss(None)
@@ -197,6 +213,7 @@ class HelpScreen(ModalScreen):
             ("o", "open another file"),
             ("l", "locate audio regions in a blob / disk image (auto for a blob)"),
             ("u", "from a region, go back up to the region browser"),
+            ("+", "on a '... more rows' line, list more of that chunk's rows"),
             ("esc", "cancel the current edit / prompt"),
             ("q", "quit"),
         ]
@@ -569,3 +586,52 @@ class PromptScreen(ModalScreen):
         self.dismiss(None)
 
 
+
+
+class YesNoScreen(ModalScreen):
+    """A plain proceed/cancel prompt. dismiss()es True or False.
+
+    ConfirmScreen answers a three-way save/discard/cancel question, which is the
+    wrong shape for "are you sure". Kept separate rather than overloading it,
+    so neither prompt has to explain which of its buttons do not apply.
+    """
+
+    CSS = """
+    YesNoScreen { align: center middle; }
+    #ynbox { width: 66; height: auto; border: round #FF4D00;
+             background: #16181C; padding: 1 2; }
+    #ynmsg { color: #C9CDD3; padding-bottom: 1; }
+    #ynbtns { height: auto; }
+    """
+    # The buttons are a convenience, not the interface: this prompt guards a
+    # loudness hazard, so it has to be answerable without a mouse.
+    BINDINGS = [
+        ("y", "yes", "yes"),
+        ("n", "cancel", "no"),
+        ("escape", "cancel", "cancel"),
+    ]
+
+    def __init__(self, prompt, yes_label="play anyway"):
+        super().__init__()
+        self.prompt = prompt
+        self.yes_label = yes_label
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="ynbox"):
+            yield Static(Text(self.prompt, style=f"bold {PEND}"), id="ynmsg")
+            with Horizontal(id="ynbtns"):
+                yield Button(f"{self.yes_label}  (y)", id="yes", variant="warning")
+                yield Button("cancel  (n)", id="cancel")
+
+    def on_mount(self):
+        # focus the SAFE choice, so a reflexive enter cancels rather than plays
+        self.query_one("#cancel", Button).focus()
+
+    def on_button_pressed(self, event):
+        self.dismiss(event.button.id == "yes")
+
+    def action_yes(self):
+        self.dismiss(True)
+
+    def action_cancel(self):
+        self.dismiss(False)

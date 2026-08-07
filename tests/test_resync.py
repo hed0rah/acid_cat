@@ -18,7 +18,7 @@ from acidcat.core.forensics import resync
 from acidcat.core.walk import walk_file
 from acidcat.core.walk.base import Unsupported
 
-WAV = os.path.join("data", "test_formats", "generated", "src.wav")
+from conftest import CORPUS_WAV as WAV
 
 
 @pytest.fixture

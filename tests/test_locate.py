@@ -187,7 +187,7 @@ def test_locate_reports_one_region_per_embedded_file(tmp_path):
     """End to end: an image with real containers must yield one region each, not
     a container plus a shadow blob."""
     import os
-    wav = os.path.join("data", "test_formats", "generated", "src.wav")
+    from conftest import CORPUS_WAV as wav
     if not os.path.isfile(wav):
         import pytest
         pytest.skip("test corpus WAV not present")

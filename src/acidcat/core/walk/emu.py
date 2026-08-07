@@ -217,6 +217,10 @@ def _e4_walk_voices(body, idx_to_name):
     num_voices = _bu16(body, 20) if len(body) >= 22 else 0
     total_zones, refs, note = 0, [], ""
     off = _PRES_HDR
+    if num_voices > _VOICE_CAP:
+        # the E5 path announces this; the E4 path did not, so a big preset
+        # silently reported fewer voices than it has
+        note = f"voice list truncated at {_VOICE_CAP} of {num_voices} voices"
     for vi in range(min(num_voices, _VOICE_CAP)):
         if off + _VOICE_FIXED > len(body):
             note = (f"voice {vi} runs past the preset body "
@@ -275,6 +279,9 @@ def _walk_e4b(data, size):
             n_entries = csize // _TOC1_ENTRY
             fields, toc_offsets = [], []
             body = data[base:base + min(csize, _TOC_LIST_CAP * _TOC1_ENTRY)]
+            if n_entries > _TOC_LIST_CAP:
+                cw.append(f"{n_entries} TOC entries; listing first "
+                          f"{_TOC_LIST_CAP}")
             for i in range(min(n_entries, _TOC_LIST_CAP)):
                 e = body[i * _TOC1_ENTRY:(i + 1) * _TOC1_ENTRY]
                 if len(e) < 30:
@@ -321,6 +328,9 @@ def _walk_e4b(data, size):
                     uniq.append((nm, lo, hi))
             for j, (nm, lo, hi) in enumerate(uniq[:_REF_CAP]):
                 fields.append(_f(None, 0, f"sample[{j}]", nm, f"keys {lo}-{hi}"))
+            if len(uniq) > _REF_CAP:
+                cw.append(f"{len(uniq)} referenced samples; showing first "
+                          f"{_REF_CAP}")
             if note:
                 cw.append(note)
             chunks.append({"id": f"E4P1[{pi}]", "offset": off, "size": csize,
@@ -606,6 +616,9 @@ def _walk_e5b(data, size, deep=False):
             n_entries = csize // _TOC2_ENTRY
             fields, toc_offsets = [], []
             body = data[base:base + min(csize, _TOC_LIST_CAP * _TOC2_ENTRY)]
+            if n_entries > _TOC_LIST_CAP:
+                cw.append(f"{n_entries} TOC entries; listing first "
+                          f"{_TOC_LIST_CAP}")
             for i in range(min(n_entries, _TOC_LIST_CAP)):
                 e = body[i * _TOC2_ENTRY:(i + 1) * _TOC2_ENTRY]
                 if len(e) < 14:

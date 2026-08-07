@@ -68,6 +68,63 @@ def test_a_partial_tail_sample_is_not_counted(extra):
     assert fast[1] == (len(data) // bps)          # whole samples only
 
 
+@pytest.mark.parametrize("bps", [1, 2, 3, 4])
+def test_a_span_past_the_end_of_the_buffer(bps):
+    """A DECLARED size that overruns the file is the commonest damage acidcat
+    describes, so it reaches here as a span past the end of the buffer.
+
+    Every span in this test file was (0, len(data)), so neither path was ever
+    asked for bytes that are not there. numpy raised ValueError -- a raw
+    traceback out of `audit` on any truncated WAV -- and the loop did something
+    quieter and worse: sliced short and counted samples that do not exist.
+    """
+    pytest.importorskip("numpy")
+    data = bytes(range(256)) * 4
+    spans = [(0, len(data) + 500)]                # declared far past the end
+    fast = I._or_reduce_numpy(data, spans, bps, "little")
+    assert fast is not None
+    assert fast[1] == len(data) // bps            # only samples that exist
+
+    # The reference loop is deliberately naive, and here it shows why the clamp
+    # cannot live in one path only: given the same overrunning span it walks off
+    # the end and reports MORE samples than the buffer holds.
+    assert _loop(data, spans, bps, "little")[1] > len(data) // bps
+    # against a span clamped to the buffer, the two agree exactly
+    assert fast == _loop(data, [(0, len(data))], bps, "little")
+
+
+def test_effective_bits_clamps_a_declared_size_past_the_end():
+    """The clamp belongs in the caller, so BOTH paths see a real span."""
+    data = bytes(range(256)) * 4
+    eff, examined = I._effective_bits(data, 0, len(data) + 10_000, 2, "little")
+    assert examined == len(data) // 2
+    assert eff is None or 0 < eff <= 16
+
+
+def test_effective_bits_clamps_on_the_fallback_path_too(monkeypatch):
+    """Without numpy there is no crash to notice, only a wrong number.
+
+    A guard inside the numpy helper alone would leave the fallback counting
+    samples past the end of the buffer, and `examined` is printed to the user
+    as "{n:,} samples" and gated against 1024 -- so the base install, which is
+    the one WITHOUT numpy, would quietly report a bit depth it derived partly
+    from bytes that do not exist.
+    """
+    import builtins
+    real = builtins.__import__
+
+    def blocked(name, *a, **k):
+        if name == "numpy":
+            raise ImportError("numpy is not installed")
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+    data = bytes(range(256)) * 4
+    assert I._or_reduce_numpy(data, [(0, 4)], 2, "little") is None    # fallback live
+    _eff, examined = I._effective_bits(data, 0, len(data) + 10_000, 2, "little")
+    assert examined == len(data) // 2
+
+
 def test_multiple_spans_accumulate():
     """_effective_bits samples 64 blocks end-to-end, not one range."""
     pytest.importorskip("numpy")

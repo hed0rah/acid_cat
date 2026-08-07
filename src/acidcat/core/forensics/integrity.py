@@ -65,6 +65,10 @@ def _or_reduce_numpy(data, spans, bytes_per_sample, byteorder):
     per_pos = bytearray(bytes_per_sample)
     examined = 0
     for lo, hi in spans:
+        # defensive: np.frombuffer is strict where slicing is forgiving, so a
+        # span past the end raises here and silently shortens there. The caller
+        # already clamps; this keeps the helper from being the crashing one.
+        hi = min(hi, len(data))
         n = (hi - lo) // bytes_per_sample
         if n <= 0:
             continue
@@ -84,6 +88,14 @@ def _effective_bits(data, start, size, bytes_per_sample, byteorder):
     from the lowest data-carrying bit. ``byteorder`` is "little" (WAV) or "big"
     (AIFF), so the low byte is masked wherever it actually sits. Returns
     (effective_bits, examined) or (None, examined)."""
+    # `size` is DECLARED, and a declared size that overruns the file is the
+    # single most common damage acidcat exists to describe -- so it must be
+    # clamped to what is actually here before either path reads it. Unclamped,
+    # numpy raised ValueError (a raw traceback out of `audit` on any truncated
+    # WAV or AIFF) and the pure-Python fallback quietly did something worse:
+    # sliced short near the end, OR'd samples that were not there, and counted
+    # them in `examined`, which is printed to the user as "{n:,} samples".
+    size = min(size, max(0, len(data) - start))
     size -= size % bytes_per_sample
     acc = 0
     examined = 0

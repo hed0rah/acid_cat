@@ -22,6 +22,7 @@ confirms it from disk; ``sniff_bytes`` cannot classify a MOD from a head.
 """
 
 from acidcat.core.codecs import ncw as ncwmod
+from acidcat.core.formats import ableton as abletonmod
 
 # containers an ID3v2 tag is known to wrap; the tag then does not make
 # the file an MP3.
@@ -31,7 +32,8 @@ _ID3_WRAPPED_MAGICS = (b"RIFF", b"RF64", b"FORM", b"fLaC", b"MThd")
 # truth every dispatch table keys on; keep it in sync with the returns below (the
 # test suite asserts both directions). "id3-wrapped" is a sentinel, not a format.
 KNOWN_FORMATS = frozenset({
-    "8svx", "adx", "aifc", "aiff", "akp", "albank", "bfdlac", "bitwig", "brstm",
+    "8svx", "adg", "adv", "adx", "agr", "aifc", "aiff", "akp", "albank", "alc", "als", "amxd",
+    "asd", "bfdlac", "bitwig", "brstm",
     "cdxa", "cue", "e4b", "e5b", "fc", "flac", "fxp", "gcm", "gf1pat", "hps",
     "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
     "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni", "ogg",
@@ -66,6 +68,23 @@ AUDIO_CONTAINERS = {
 
 # distinct leading magics of the audio containers, in first-seen order (the scan
 # patterns for locate's signature sweep); and the id set locate accepts.
+# Chunk/block ids whose payload IS the sample data, as the walkers emit them.
+# One definition, because more than one surface needs to answer "are these bytes
+# audio": the TUI colours them and refuses to audition anything else without
+# asking, and a caller reinterpreting arbitrary bytes as PCM wants the same
+# answer. Structural, not statistical -- inside a walked container the chunk id
+# is the ground truth, and no heuristic beats it.
+AUDIO_PAYLOAD_IDS = frozenset({
+    "data",     # RIFF/WAVE, RF64
+    "SSND",     # AIFF/AIFC
+    "BODY",     # IFF 8SVX
+    "smpl",     # not audio itself, but sampler loop points over it
+})
+# `smpl` describes the audio rather than being it; kept separate so a caller can
+# ask the strict question.
+AUDIO_SAMPLE_IDS = AUDIO_PAYLOAD_IDS - {"smpl"}
+
+
 AUDIO_CONTAINER_MAGICS = tuple(dict.fromkeys(m for m, _ext in AUDIO_CONTAINERS.values()))
 AUDIO_CONTAINER_FMTS = frozenset(AUDIO_CONTAINERS)
 AUDIO_CONTAINER_EXT = {fid: ext for fid, (_m, ext) in AUDIO_CONTAINERS.items()}
@@ -131,6 +150,12 @@ def sniff_bytes(head):
         return "wt"
     if head[:4] == b"BtWg":
         return "bitwig"
+    if head[:4] == b"ampf":
+        return "amxd"                                  # Max for Live device
+    # two magic bytes would be far too weak on their own; looks_like_asd also
+    # requires the reserved u32 at offset 6 to be zero and a sane entry count.
+    if abletonmod.looks_like_asd(head):
+        return "asd"                                   # Ableton analysis sidecar
     if head[:4] == b"CcnK":
         return "fxp"
     if head[:4] == b"CAT " and head[8:12] == b"REX2":
@@ -159,6 +184,40 @@ def sniff_bytes(head):
         if mp3mod.decode_frame_header(head[:4]) is not None:
             return "mp3"
     return None
+
+
+_VITAL_WINDOW = 64 * 1024
+_VITAL_KEY = b'"synth_version"'
+
+
+def _is_vital(filepath):
+    """True when a '{'-leading file really is a Vital preset.
+
+    `synth_version` is the key the Vital parser itself requires -- 'settings'
+    alone is too generic (core/formats/vital.py). Checking the same key here
+    keeps the sniffer and the walker agreeing about what a Vital file is.
+
+    Both ENDS are searched, and that is the whole subtlety. Vital serialises
+    its JSON with keys in alphabetical order, so `settings` -- a wavetable and
+    base64 blob that is routinely hundreds of KB -- always precedes
+    `synth_version`, which lands about 24 bytes from EOF. Measured on 40 real
+    presets: the key was at `filesize - 24` in every one, and files ran from
+    170 KB to 3.2 MB. A head-only check finds it in none of them, which made
+    the sniffer stricter than the parser and left `inspect` unable to reach
+    any real preset.
+    """
+    try:
+        with open(filepath, "rb") as fh:
+            head = fh.read(_VITAL_WINDOW)
+            if _VITAL_KEY in head:
+                return True
+            size = fh.seek(0, 2)
+            if size <= _VITAL_WINDOW:
+                return False                      # the head already was the file
+            fh.seek(size - _VITAL_WINDOW)
+            return _VITAL_KEY in fh.read(_VITAL_WINDOW)
+    except OSError:
+        return False
 
 
 def _id3_wraps_other_container(filepath):
@@ -216,6 +275,24 @@ def sniff(filepath):
     # a .cue may open with REM/CATALOG lines before FILE; trust the extension
     if fmt is None and filepath.lower().endswith(".cue"):
         return "cue"
+    # every Ableton document except .asd and .amxd is gzipped XML, so the magic
+    # is just gzip's. Identifying it needs one decompressed block, which is why
+    # this lives here rather than in sniff_bytes.
+    if fmt is None and head[:2] == b"\x1f\x8b":
+        ab = abletonmod.sniff_gzip_ableton(filepath)
+        # spelled out rather than returned straight through: KNOWN_FORMATS is
+        # verified against the string literals in THIS file, so an id that only
+        # exists in another module would silently escape that check
+        if ab == "adg":
+            return "adg"
+        if ab == "agr":
+            return "agr"
+        if ab == "adv":
+            return "adv"
+        if ab == "alc":
+            return "alc"
+        if ab == "als":
+            return "als"
     # ADX opens with 0x8000 (weak); confirm via the (c)CRI marker before the audio
     if fmt is None and head[:2] == b"\x80\x00":
         from acidcat.core.codecs import adx
@@ -251,6 +328,14 @@ def sniff(filepath):
     # an MPC .mpcpattern is also bare JSON ('{'); reroute on its extension.
     if fmt == "vital" and filepath.lower().endswith(".mpcpattern"):
         return "mpcpattern"
+    # a bare '{' is the weakest magic here: it claims every JSON file, and every
+    # RTF, since those open "{\rtf". That stole real files -- an RTF licence
+    # agreement in a sample pack classified as a walkable Vital preset, because
+    # classify consults sniff before its own foreign-file table, so the
+    # `{\rtf` entry it already had was never reached. Confirm from the file,
+    # the same way a bare MP3 frame sync is confirmed by a second frame.
+    if fmt == "vital" and not _is_vital(filepath):
+        fmt = None
     # a ZIP whose archive holds multisample.xml is a Bitwig .multisample. This is
     # the one content-sniff that must peek inside the container (the local-file
     # header magic alone cannot tell it from any other zip).

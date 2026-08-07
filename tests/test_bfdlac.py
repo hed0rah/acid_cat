@@ -4,6 +4,7 @@ import struct
 
 from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import walk_file
+from acidcat.core.walk import bfdlac
 from acidcat.core.walk.bfdlac import inspect_bfdlac
 
 
@@ -91,3 +92,35 @@ def test_not_bfdc_rejected(tmp_path):
     chunks, warns = inspect_bfdlac(_write(tmp_path, "x.bfdlac", data))
     assert chunks == []
     assert warns and "BFDC" in warns[0]
+
+
+def test_a_file_larger_than_the_read_cap_is_not_called_truncated(tmp_path):
+    """A short READ is not a short FILE.
+
+    The walker reads at most _READ_CAP bytes, so comparing a chunk's declared
+    size against that buffer reports a perfectly good file as truncated once
+    its audio outgrows the cap. rx2 had the identical defect and it called 7 of
+    347 real files corrupt; those files were all fine.
+    """
+    payload = bfdlac._READ_CAP + 1024 * 1024
+    body = (b"fmt " + struct.pack(">I", 20)
+            + struct.pack(">IIIII", 24, 1, 100, 44100, 2)
+            + b"data" + struct.pack(">I", payload) + b"\x00" * payload)
+    p = tmp_path / "big.bfdlac"
+    p.write_bytes(b"BFDC" + struct.pack(">I", len(body)) + body)
+
+    chunks, _ = bfdlac.inspect_bfdlac(str(p))
+    notes = [w for c in chunks for w in c.get("warnings", [])]
+    assert any("read window" in w for w in notes), notes
+    assert not any("truncated" in w for w in notes), notes
+
+
+def test_a_genuinely_short_file_still_says_truncated(tmp_path):
+    """The other half: the fix must not silence a real defect."""
+    body = b"data" + struct.pack(">I", 5_000_000) + b"\x00" * 64
+    p = tmp_path / "short.bfdlac"
+    p.write_bytes(b"BFDC" + struct.pack(">I", len(body)) + body)
+
+    chunks, _ = bfdlac.inspect_bfdlac(str(p))
+    notes = [w for c in chunks for w in c.get("warnings", [])]
+    assert any("truncated" in w for w in notes), notes
