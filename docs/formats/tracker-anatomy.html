@@ -186,7 +186,16 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">loop length</span><span class="v">words like length; a value of 1 (2 bytes) is the "no loop" sentinel, not a 2-byte loop</span></div>
           <div><span class="k">gotcha</span><span class="v">lengths are in words, so double them for bytes; samples are signed 8-bit PCM</span></div>
         </div>
-      </div>
+              <div class="sec">a sample slot (30 bytes at 0x50)</div>
+        <p class="note">Three of these six fields are counted in words. Reading them as bytes halves the audio.</p>
+        <div id="mod-sample"></div>
+        <div class="sec">song length and the order table (8 bytes at 0x3B6)</div>
+        <p class="note">Two bytes, one of which almost nothing honours.</p>
+        <div id="mod-order"></div>
+        <div class="sec">the format tag (4 bytes at 0x438)</div>
+        <p class="note">1080 bytes into the file, and the only thing that says how many channels there are.</p>
+        <div id="mod-magic"></div>
+</div>
     </details>
 
     <details class="region" open>
@@ -446,6 +455,55 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"The ScreamTracker signature -- 44 bytes into the file, sitting after the 28-byte title. An S3M is confirmed by these four bytes at 0x2C, not by anything at offset 0.",
        note:"the only one of these formats whose magic is not at the start."}
     ]);
+
+  // a sample slot: the word-counted fields that catch every first-time reader
+  build("mod-sample","byte",
+    [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+     0x00,0x00,0x00,0x00,0x00,0x00,0x13,0x3D,0x00,0x40,0x0C,0xB8,0x06,0x74],
+    [
+      {label:"name",k:"rsv",r:[0,21],val:"empty",
+       body:"22 bytes, space or NUL padded, and not required to hold a name at all. Because a player displays this list, authors used the empty slots as a message board -- greetings, credits and liner notes live in sample names.",
+       note:"a slot with a name and a zero length is text, not audio. It is the format's only free-text field."},
+      {label:"length",k:"enum",r:[22,23],val:"4,925 words = 9,850 bytes",
+       body:"BIG-endian, and counted in WORDS. Every length, loop start and loop length in a MOD is halved like this, because the Amiga's DMA fetched 16 bits at a time.",
+       note:"read it as bytes and you get exactly half the sample. The maximum is 65,535 words, so a single MOD sample cannot exceed 128 KB."},
+      {label:"finetune",k:"flag",r:[24,24],val:"0",
+       body:"A SIGNED 4-bit value in the low nibble: -8 to +7, in sixteenths of a semitone. The high nibble is unused.",
+       note:"stored as 0-15, so 8-15 mean -8 to -1. Treating it as unsigned detunes half the samples sharp."},
+      {label:"volume",k:"enum",r:[25,25],val:"64",
+       body:"0 to 64, not 0 to 127 and not 0 to 255. 64 is full scale.",
+       note:"a value above 64 is out of range; players clamp it, which hides the corruption."},
+      {label:"repeat start",k:"flag",r:[26,27],val:"3,256 words = 6,512 bytes",
+       body:"Big-endian, in words again, measured from the start of the sample."},
+      {label:"repeat length",k:"flag",r:[28,29],val:"1,652 words = 3,304 bytes",
+       body:"Also in words. A value of 1 means NO loop -- a two-byte loop is the idiom for 'not looping', because zero was not available.",
+       note:"so the test for a looping sample is repeat length greater than 1, never greater than 0."}
+    ]);
+  // the order table, and the restart byte nobody honours
+  build("mod-order","byte",
+    [0x03,0x7F,0x02,0x00,0x01,0x00,0x00,0x00],
+    [
+      {label:"song length",k:"enum",r:[0,0],val:"3",
+       body:"How many entries of the 128-byte order table actually play. The table is always 128 bytes; this says where the song ends.",
+       note:"1 to 128. Patterns beyond this point still exist in the file and are a common hiding place for unused work."},
+      {label:"restart",k:"rsv",r:[1,1],val:"127",
+       body:"Nominally the order position to jump to when the song ends. In practice ProTracker wrote 127 here regardless, and players ignore it.",
+       note:"a field that is simultaneously present, documented and meaningless is worth knowing about: do not use it to detect anything."},
+      {label:"order[0]",k:"enum",r:[2,2],val:"2",
+       body:"The first pattern to play. Order entries are pattern numbers, so a pattern can repeat and patterns can be skipped entirely."},
+      {label:"order[1..5]",k:"flag",r:[3,7],val:"0, 1, 0, 0, 0",
+       body:"The table continues to 128 entries. The HIGHEST value anywhere in it -- not the song length -- is what tells you how many patterns to read before the sample data begins.",
+       note:"that scan is mandatory. Pattern data is 1024 bytes per pattern and there is no count field anywhere; miscount it and the samples decode as noise."}
+    ]);
+  // the tag, 1080 bytes in
+  build("mod-magic","byte",
+    [0x4D,0x2E,0x4B,0x2E],
+    [
+      {label:"format tag",k:"sync",r:[0,3],val:'"M.K."',sel:0,
+       branch:[["M.K.","31 samples, 4 channels -- the ProTracker standard"],["M!K!","same, but the order table needs more than 64 patterns"],["4CHN / 6CHN / 8CHN","that many channels"],["xxCH","two digits, e.g. 16CH or 32CH"],["(absent)","the original 15-sample Ultimate Soundtracker, no tag at all"]],
+       body:"The only channel-count field in the format, and it sits at offset 1080 -- after the title, all 31 sample slots and the order table. Everything before it must be parsed on faith.",
+       note:"the original 1987 format had no tag and 15 samples. So a file WITHOUT this tag is not corrupt, it is older, and its header is 465 bytes shorter. Deciding between the two means checking whether the bytes here look like a tag at all."}
+    ]);
 })();
 </script>
 <script>
@@ -571,6 +629,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
+
+
+
+
 })();
 
 </script>

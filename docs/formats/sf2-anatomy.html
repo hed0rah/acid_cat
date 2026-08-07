@@ -185,7 +185,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">size</span><span class="v">u32 LE at 0x04 = file length - 8</span></div>
           <div><span class="k">children</span><span class="v">LIST INFO, LIST sdta, LIST pdta -- in that order</span></div>
         </div>
-      </div>
+              <div class="sec">the container header (12 bytes)</div>
+        <p class="note">RIFF, so little-endian throughout -- the opposite of its IFF ancestor.</p>
+        <div id="sf2-riff"></div>
+</div>
     </details>
 
     <details class="region" open>
@@ -198,7 +201,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">isng / ISFT</span><span class="v">target sound engine . the editor that wrote it (a provenance tell)</span></div>
           <div><span class="k">IENG / ICOP / ICMT</span><span class="v">author . copyright . comment</span></div>
         </div>
-      </div>
+              <div class="sec">ifil, the version word (12 bytes)</div>
+        <p class="note">Two numbers that decide whether the samples are PCM or Vorbis.</p>
+        <div id="sf2-ifil"></div>
+        <div class="sec">a text chunk (24 bytes)</div>
+        <p class="note">Every INFO string is NUL-terminated and padded to an even length.</p>
+        <div id="sf2-inam"></div>
+</div>
     </details>
 
     <details class="region" open>
@@ -234,13 +243,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   <p class="note">The INFO metadata, the smpl blob size, and every shdr record -- each turned into a chunk carrying its real byte offset, so samples are carveable and hex-viewable, and convert lifts them all out.</p>
   <div>
     <details class="region" open>
-      <summary><span class="chev">&#9656;</span><span class="rname">inspect + convert</span><span class="rspan">soundfont</span></summary>
+      <summary><span class="chev">&#9656;</span><span class="rname">reading a bank</span><span class="rspan">soundfont</span></summary>
       <div class="rbody">
         <div class="kv">
           <div><span class="k">read</span><span class="v">version, INFO metadata, sample count, and each sample's rate / duration / loop</span></div>
           <div><span class="k">byte offset</span><span class="v">each sample chunk carries its real range in smpl (start*2 for SF2, start for SF3)</span></div>
-          <div><span class="k">convert</span><span class="v">acidcat convert font.sf2 -> a folder of WAVs; font.sf3 -> a folder of .ogg streams</span></div>
-          <div><span class="k">SF3 note</span><span class="v">Vorbis-to-PCM decode needs a codec acidcat does not bundle, so SF3 extracts the Ogg verbatim</span></div>
+          <div><span class="k">convert</span><span class="v">an .sf2 yields PCM WAVs; an .sf3 yields the .ogg streams verbatim</span></div>
+          <div><span class="k">SF3 note</span><span class="v">SF3 samples are whole Ogg Vorbis streams, so turning one into PCM needs a Vorbis decoder</span></div>
           <div><span class="k">provenance</span><span class="v">an SF3 fingerprints as MuseScore sf3convert (Ogg samples + omitted RIFF padding) even when the ISFT string names the original editor</span></div>
         </div>
       </div>
@@ -392,6 +401,53 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"u16 LE sample type. 1 = mono here. SF3 sets bit 0x10 on top of the channel type to mark an Ogg-compressed sample, and repurposes start/end as byte offsets.",
        note:"acidcat reads bit 0x10 to decide SF2 (PCM) vs SF3 (Ogg) extraction."}
     ]);
+
+  // the container: RIFF's byte order, IFF's ancestry
+  build("sf2-riff","byte",
+    [0x52,0x49,0x46,0x46,0xDE,0x86,0x2D,0x01,0x73,0x66,0x62,0x6B],
+    [
+      {label:"ckID",k:"sync",r:[0,3],val:'"RIFF"',
+       body:"A SoundFont is a RIFF file. Everything is little-endian, unlike the AIFF/IFF family it otherwise resembles chunk for chunk.",
+       note:"the first four bytes are shared with WAV, AVI and dozens of others. They identify the container, never the format."},
+      {label:"ckSize",k:"enum",r:[4,7],val:"19,760,862",
+       body:"Little-endian, counting everything after this field, so file size is this plus 8.",
+       note:"a SoundFont routinely runs to hundreds of megabytes, and this field is 32-bit. There is no RF64-style escape here: a bank cannot exceed 4 GB."},
+      {label:"formType",k:"enum",r:[8,11],val:'"sfbk"',
+       body:"SoundFont bank. This is what separates a SoundFont from a WAV, and it sits at offset 8, not offset 0.",
+       note:"three LIST chunks must follow, in order: INFO, sdta, pdta. A bank missing any of them is malformed."}
+    ]);
+  // ifil: the field that decides how the samples are encoded
+  build("sf2-ifil","byte",
+    [0x69,0x66,0x69,0x6C,0x04,0x00,0x00,0x00,0x02,0x00,0x01,0x00],
+    [
+      {label:"ckID",k:"sync",r:[0,3],val:'"ifil"',
+       body:"The first chunk inside LIST INFO, and a mandatory one. It states which SoundFont specification the bank was written to."},
+      {label:"ckSize",k:"enum",r:[4,7],val:"4",
+       body:"Always 4: two 16-bit numbers."},
+      {label:"wMajor",k:"enum",r:[8,9],val:"2",
+       body:"Major version. 2 for every SoundFont in circulation; 1 was a different, incompatible format."},
+      {label:"wMinor",k:"enum",r:[10,11],val:"1",sel:0,
+       branch:[["2.01","the common baseline"],["2.04","adds 24-bit samples via an sm24 chunk"],["2.x as SF3","samples are whole Ogg Vorbis streams, not PCM"]],
+       body:"Minor version, and the one that matters. 2.04 permits a second sample chunk holding the low bytes of 24-bit audio; the SF3 convention keeps this header and replaces the PCM entirely with Ogg Vorbis.",
+       note:"SF3 is not a version number -- an SF3 file still says 2.x here. The only reliable tell is that each sample region begins with the OggS magic."}
+    ]);
+  // an INFO string, and the rule every one of them follows
+  build("sf2-inam","byte",
+    [0x49,0x4E,0x41,0x4D,0x10,0x00,0x00,0x00,0x41,0x69,0x72,0x66,0x6F,0x6E,0x74,0x20,
+     0x33,0x32,0x30,0x20,0x6E,0x65,0x6F,0x00],
+    [
+      {label:"ckID",k:"sync",r:[0,3],val:'"INAM"',
+       body:"The bank name. Its siblings are isng (the target engine), IPRD (product), IENG (author), ICOP (copyright), ICMT (comment) and ISFT (writing software).",
+       note:"ISFT is the provenance field: the tool that wrote the bank stamps itself there."},
+      {label:"ckSize",k:"enum",r:[4,7],val:"16",
+       body:"Little-endian. It counts the terminator, unlike the AIFF text chunks, which count only the characters.",
+       note:"the spec caps an INFO string at 256 bytes including the terminator, so a longer one is a malformed bank rather than a long name."},
+      {label:"text",k:"rsv",r:[8,22],val:'"Airfont 320 neo"',
+       body:"Plain ASCII. The name is 15 characters and the chunk is 16 bytes, because a terminator is mandatory."},
+      {label:"terminator",k:"sync",r:[23,23],val:"0x00",
+       body:"Every INFO string is NUL-terminated AND padded to an even length. A 15-character name needs one NUL to terminate, which happens to make 16, so no pad follows.",
+       note:"a 16-character name would need a terminator AND a pad byte, giving an 18-byte chunk. Getting that wrong desynchronises every chunk after it."}
+    ]);
 })();
 </script>
 <script>
@@ -517,6 +573,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
+
+
+
+
 })();
 
 </script>
