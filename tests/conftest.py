@@ -119,3 +119,21 @@ def real_file(name):
 SAMPLE_WAV = os.path.join(
     os.path.dirname(__file__), "..", "data", "samples", "Drum_Loop.wav"
 )
+
+# data/test_formats/ is gitignored and 16 MB, so a fresh clone used to skip 64
+# tests -- the whole TUI suite and every tagging round-trip. data/fixtures/ is
+# a committed 34 KB stand-in: real encoder output, a third of a second each.
+# Prefer the big corpus when it is present so local runs still exercise it.
+SMALL_FIXTURES = os.path.join(os.path.dirname(__file__), "..", "data", "fixtures")
+
+
+def corpus_or_fixture(name, small):
+    """Path to the corpus file `name`, or the committed stand-in `small`."""
+    big = os.path.join(FIXTURES_DIR, name)
+    if os.path.isfile(big):
+        return big
+    return os.path.join(SMALL_FIXTURES, small)
+
+
+# a plain WAV for the tests that just need real audio to point at
+CORPUS_WAV = corpus_or_fixture(os.path.join("generated", "src.wav"), "tone.wav")

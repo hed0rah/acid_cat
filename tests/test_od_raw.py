@@ -46,7 +46,7 @@ def test_unknown_format_is_dumped_not_refused(tmp_path, capsys):
 
 def test_walkable_file_still_gets_the_annotated_layout(tmp_path, capsys):
     """The fallback must not cost the structural dump for real formats."""
-    wav = os.path.join("data", "test_formats", "generated", "src.wav")
+    from conftest import CORPUS_WAV as wav
     if not os.path.isfile(wav):
         pytest.skip("test corpus WAV not present")
     rc = odcmd.run(_Args(wav))
@@ -90,7 +90,7 @@ def test_region_selects_a_located_blob(tmp_path, capsys):
     """--region N dumps what `locate` found, so an RE workflow does not need a
     manual offset copy-paste."""
     # a blob with a real WAV embedded partway in, so locate has something to find
-    wav = os.path.join("data", "test_formats", "generated", "src.wav")
+    from conftest import CORPUS_WAV as wav
     if not os.path.isfile(wav):
         pytest.skip("test corpus WAV not present")
     payload = open(wav, "rb").read()
@@ -105,7 +105,7 @@ def test_region_selects_a_located_blob(tmp_path, capsys):
 
 
 def test_region_out_of_range_is_a_usage_error(tmp_path, capsys):
-    wav = os.path.join("data", "test_formats", "generated", "src.wav")
+    from conftest import CORPUS_WAV as wav
     if not os.path.isfile(wav):
         pytest.skip("test corpus WAV not present")
     p = tmp_path / "blob.img"
@@ -119,7 +119,7 @@ def test_region_out_of_range_is_a_usage_error(tmp_path, capsys):
 def test_closed_pipe_exits_cleanly():
     """`acidcat od big | head` must not traceback. Windows raises OSError
     EINVAL here rather than BrokenPipeError, which the handler has to know."""
-    src = os.path.join("data", "test_formats", "generated", "src.wav")
+    from conftest import CORPUS_WAV as src
     if not os.path.isfile(src):
         pytest.skip("test corpus WAV not present")
     env = dict(os.environ, PYTHONPATH=os.path.join(os.getcwd(), "src"))

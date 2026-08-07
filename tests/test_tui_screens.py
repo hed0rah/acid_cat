@@ -12,7 +12,8 @@ import shutil
 
 import pytest
 
-WAV = os.path.join("data", "test_formats", "generated", "src.wav")
+_BIG = os.path.join("data", "test_formats", "generated", "src.wav")
+WAV = _BIG if os.path.isfile(_BIG) else os.path.join("data", "fixtures", "tone.wav")
 
 
 def _drive(scenario):

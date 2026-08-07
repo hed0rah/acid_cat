@@ -147,7 +147,8 @@ def test_tagged_easy_fields_roundtrip(name, suffix, tmp_path):
     # setup step; assert the values actually land and the audio is untouched
     mutagen = pytest.importorskip("mutagen")
     import os
-    p = os.path.join("data/test_formats", name)
+    from conftest import corpus_or_fixture
+    p = corpus_or_fixture(name, "tone" + suffix)
     if not os.path.isfile(p):
         pytest.skip(f"no {suffix} fixture")
     data = open(p, "rb").read()
