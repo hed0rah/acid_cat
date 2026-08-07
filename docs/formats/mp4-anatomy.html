@@ -184,7 +184,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">trak</span><span class="v">one per track; audio track contains mdia &gt; minf &gt; stbl &gt; stsd</span></div>
         <div><span class="k">stsd</span><span class="v">sample description: "mp4a" = AAC, "alac" = Apple Lossless</span></div>
         <div><span class="k">udta / ilst</span><span class="v">iTunes tag atoms nested under moov &gt; udta &gt; meta &gt; ilst</span></div>
-      </div></div></details>
+      </div>        <div class="sec">mvhd: where the duration comes from (first 32 bytes)</div>
+        <p class="note">A FullBox. timescale and duration are the only two fields most readers want.</p>
+        <div id="mp4-mvhd"></div>
+        <div class="sec">stco: the chunk offset table (20 bytes, complete)</div>
+        <p class="note">Absolute file offsets. This is the structure that breaks when a file is rewritten.</p>
+        <div id="mp4-stco"></div>
+</div></details>
     <details class="region req"><summary><span class="chev">&#9656;</span><span class="rname">mdat</span><span class="rspan">media data . raw encoded samples</span></summary>
       <div class="rbody"><p class="note">Raw encoded audio frames with no intrinsic framing. May appear before moov (streaming layout) or after it. The stco/co64 box inside stbl holds absolute file offsets into mdat; duration = sum of the stts sample deltas / mvhd timescale. Because samples are reached only through stsc + stsz + stco/co64, any bytes in mdat that no sample table points at are a legal cavity -- edit leftovers, alignment padding, or a place to hide data.</p></div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">free / skip</span><span class="rspan">padding . in-place edit slack</span></summary>
@@ -194,7 +200,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">path</span><span class="v">moov &gt; udta &gt; meta &gt; ilst &gt; &#169;nam, &#169;ART, &#169;day, aART, trkn, covr</span></div>
         <div><span class="k">covr</span><span class="v">artwork: nested data atom, type flag 0x0D = JPEG, 0x0E = PNG</span></div>
         <div><span class="k">note</span><span class="v">meta is a FullBox (version + 3-byte flags precede its children) in ISO-BMFF; in QuickTime (.mov) meta is a plain container with no version/flags, so a parser must sniff (peek whether the first child is a valid box) rather than assume</span></div>
-      </div></div></details>
+      </div>        <div class="sec">a tag, end to end (32 bytes)</div>
+        <p class="note">The whole metadata path in one view: a named atom, its data sub-atom, and the text.</p>
+        <div id="mp4-ilst"></div>
+</div></details>
   </div>
 
   <div class="sec">box header</div>
@@ -476,6 +485,78 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+  // mvhd from a real m4a: timescale 1000, duration 15858 -> 15.858 s
+  build("mp4-mvhd","byte",
+    [0x00,0x00,0x00,0x6C,0x6D,0x76,0x68,0x64,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+     0x00,0x00,0x00,0x00,0x00,0x00,0x03,0xE8,0x00,0x00,0x3D,0xF2,0x00,0x01,0x00,0x00],
+    [
+      {label:"size",k:"sync",r:[0,3],val:"108",
+       body:"Box size including these four bytes and the type."},
+      {label:"type",k:"sync",r:[4,7],val:'"mvhd"',
+       body:"Movie header. One per file, inside moov."},
+      {label:"version",k:"enum",r:[8,8],val:"0",sel:0,
+       branch:[["0","times and duration are 32-bit"],["1","times and duration are 64-bit, and every field below shifts by 12 bytes"]],
+       body:"mvhd is a FullBox: a version byte and three flag bytes come before any real field. Version 1 widens THREE fields -- both times and the duration. timescale stays u32 in both, which is the easy thing to get wrong when writing the v1 path.",
+       note:"the same version/flags prefix appears on stco, stsd, meta and many others."},
+      {label:"flags",k:"rsv",r:[9,11],val:"0x000000",
+       body:"Three bytes. Unused for mvhd."},
+      {label:"creation time",k:"rsv",r:[12,15],val:"0",
+       body:"Seconds since midnight, 1 JANUARY 1904 -- not 1970. A file written now reads about 3.8 billion; a reader using the Unix epoch is off by 66 years.",
+       note:"zero here because the encoder did not set it, which is extremely common."},
+      {label:"modification time",k:"rsv",r:[16,19],val:"0"},
+      {label:"timescale",k:"enum",r:[20,23],val:"1,000",
+       body:"Ticks per second. It is arbitrary per file: 1000 means durations are in milliseconds, 44100 would mean samples.",
+       note:"a duration means nothing without this field, which is why both must be read together."},
+      {label:"duration",k:"enum",r:[24,27],val:"15,858",
+       body:"Length in timescale units. 15858 / 1000 = 15.858 seconds.",
+       note:"0xFFFFFFFF means unknown, which live streams and some fragmented files use."},
+      {label:"rate",k:"flag",r:[28,31],val:"1.0",
+       body:"Playback rate as 16.16 fixed point: 0x00010000 is 1.0. Then volume as 8.8 fixed at +32, ten bytes of reserved, and a 36-byte transformation matrix at +44 that nothing outside video ever reads."}
+    ]);
+
+  // the whole tag path in 32 bytes
+  build("mp4-ilst","byte",
+    [0x00,0x00,0x00,0x1E,0xA9,0x6E,0x61,0x6D,0x00,0x00,0x00,0x16,0x64,0x61,0x74,0x61,
+     0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x47,0x61,0x6C,0x77,0x61,0x79,0x00,0x00],
+    [
+      {label:"atom size",k:"sync",r:[0,3],val:"30",
+       body:"The named atom, including its data child."},
+      {label:"atom name",k:"enum",r:[4,7],val:"0xA9 n a m",
+       body:"The tag key. Apple prefixes the classic ones with 0xA9, the copyright sign -- so a title is not \"nam\" but \"(c)nam\". Siblings: (c)ART artist, (c)alb album, trkn track, covr artwork.",
+       note:"0xA9 is a single byte, not a UTF-8 sequence, which is why grepping for the text form finds nothing."},
+      {label:"data size",k:"sync",r:[8,11],val:"22",
+       body:"Every value lives in a data sub-atom. The key never holds the value directly."},
+      {label:"data",k:"sync",r:[12,15],val:'"data"',
+       body:"Always literally 'data'. A freeform tag instead uses a ---- atom holding mean, name and data."},
+      {label:"type-set + type",k:"enum",r:[16,19],val:"set 0, type 1 = UTF-8",sel:1,
+       branch:[["0","binary / implicit"],["1","UTF-8 text"],["13","JPEG image"],["14","PNG image"],["21","signed BE integer"],["22","unsigned int -- Apple QTFF table; rare in the wild"]],
+       body:"Not one field but two: a type-SET byte then a 3-byte type code. Set 0 is the well-known table. Cover art is this same structure with type 13 or 14, so an image and a title differ only by this number.",
+       note:"13=JPEG and 14=PNG are what real .m4a files contain. Bento4's header labels them GIF and JPEG from an older numbering -- do not trust that table for iTunes tags."},
+      {label:"locale",k:"rsv",r:[20,23],val:"0",
+       body:"Two u16 fields, not one: a country code then a language code. Zero means unspecified, which is what essentially every writer emits.",
+       note:"so the payload always begins at data+16."},
+      {label:"payload",k:"flag",r:[24,31],val:'"Galway"',
+       body:"The value, with no terminator -- its length is the data atom size minus the 16 bytes of header. UTF-8 here because the type says so.",
+       note:"the two trailing bytes belong to the next atom; the payload is six bytes."}
+    ]);
+
+  // stco: what acidcat repairs
+  build("mp4-stco","byte",
+    [0x00,0x00,0x00,0x14,0x73,0x74,0x63,0x6F,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x2C],
+    [
+      {label:"size",k:"sync",r:[0,3],val:"20"},
+      {label:"type",k:"sync",r:[4,7],val:'"stco"',
+       body:"Chunk offset table. The 64-bit sibling is co64, used once a file passes 4 GB."},
+      {label:"version + flags",k:"rsv",r:[8,11],val:"0",
+       body:"A FullBox again."},
+      {label:"entry count",k:"enum",r:[12,15],val:"1",
+       body:"How many chunk offsets follow. A real music file has thousands."},
+      {label:"offset[0]",k:"flag",r:[16,19],val:"44",
+       body:"An ABSOLUTE offset from the start of the FILE to this chunk of audio. That is the whole problem: the table does not describe where audio sits relative to anything, only where it sits in this exact byte layout.",
+       note:"add a tag, or rewrite one at a different length, and every one of these is wrong -- the audio silently plays from the wrong place or not at all. acidcat repairs them by re-deriving the shift. It is also why moov-at-the-front files must be rewritten wholesale rather than patched."}
+    ]);
+
 })();
 
 </script>

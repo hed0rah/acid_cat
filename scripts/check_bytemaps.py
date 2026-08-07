@@ -21,7 +21,8 @@ _TMP = pathlib.Path(tempfile.mkdtemp(prefix="acidcat-bytemaps-"))
 # defaults to the repo copy; pass a directory to check the published site,
 # which is a separate copy and has drifted from this one before
 _DIR = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "docs/formats")
-PAGES = sorted(_DIR.glob("*.html"))
+# index.html is a listing page, not a datasheet -- it has no maps by design
+PAGES = [p for p in sorted(_DIR.glob("*.html")) if p.name != "index.html"]
 
 
 def span(text, start, open_ch, close_ch):
