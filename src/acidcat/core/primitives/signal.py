@@ -67,15 +67,25 @@ def entropy_from_counts(counts, total):
         return 0.0
     tbl = _LOG2 if total < len(_LOG2) else _log2_table(total)
     acc = 0.0
+    seen = 0
     for c in counts:
         if c:
             acc += c * tbl[c]
+            seen += 1
     # Shannon entropy is non-negative; a certain distribution (one symbol with
     # every count) cancels to zero in exact arithmetic but lands a few ulp below
     # it here, since c*log2(c)/c does not round back to log2(c). Clamp rather
     # than hand a caller a negative "amount of information".
     h = tbl[total] - acc / total
-    return h if h > 0.0 else 0.0
+    if h <= 0.0:
+        return 0.0
+    # The same rounding at the other end: a perfectly uniform distribution is
+    # exactly log2(k) bits and lands a few ulp ABOVE it, so byte data returned
+    # 8.000000000000014 against a documented 0..8. log2 of the number of symbols
+    # actually present is the true ceiling, and it is the right one for any
+    # alphabet rather than a hardcoded 8.
+    ceiling = tbl[seen] if seen < len(tbl) else _log2_table(seen)[seen]
+    return h if h < ceiling else ceiling
 
 
 def byte_entropy(data):
