@@ -67,7 +67,7 @@ files through mutagen.
 | NCW ([anatomy](formats/ncw-anatomy.html)) | `.ncw` | inspect + convert | NI Compressed Wave header, channel/block info; convert decodes to WAV |
 | SoundFont ([anatomy](formats/sf2-anatomy.html)) | `.sf2`, `.sf3` | inspect + convert | sfbk RIFF: INFO metadata, every named sample with its byte offset (rate/loop). SF2 = 16-bit PCM, SF3 = Ogg-Vorbis; convert extracts samples |
 | Tracker ([anatomy](formats/tracker-anatomy.html)) | `.mod`, `.xm`, `.s3m`, `.it` | inspect + extract | ProTracker/FastTracker II/ScreamTracker 3/Impulse Tracker: header, pattern order, every embedded sample at its byte offset; IT absolute offset tables and S3M parapointers as followable pointers |
-| [Bitwig WT](formats/bitwig-wt.md) | `.wt` | inspect only | vawt header: frame count, samples/frame, 16-bit sample block |
+| [vawt WT](formats/bitwig-wt.md) | `.wt` | inspect only | vawt header: frame count, samples/frame, flags (float32 or int16), optional XML trailer |
 
 ### Samplers, trackers, and hardware banks (inspect walks these natively)
 
