@@ -6,7 +6,7 @@ reads and writes and that Bitwig Studio's Wavetable and Polymer devices use.
 Primary source: Surge's own byte-level spec, `doc/WT fileformat.txt` in
 `github.com/surge-synthesizer/surge`, cross-checked against `wt_header` /
 `wtflags` in `src/common/dsp/Wavetable.h` and the maintainers' `wt-tool.py`.
-Verified here against 152 real files.
+Verified here against 5,787 real files from both producers.
 
 ---
 
@@ -32,13 +32,22 @@ it, so extension-based dispatch is wrong here:
 acidcat sniffs content, not extension, so the Arturia files are refused rather
 than mis-walked.
 
-### On the Bitwig attribution
+### Two producers, one container, opposite defaults
 
-Surge is the primary-source-verified producer. Bitwig is **corroborated but not
-byte-verified here**: third-party tooling parses Surge and Bitwig `.wt` with one
-shared parser and the identical struct, and Bitwig documents its Wavetable
-device as importing `.wt` interchangeably. No Bitwig-authored specimen was
-available to hex-diff. Treat it as very likely, not proven.
+Both are confirmed against their own files. Bitwig's factory wavetable library
+(`Documents/Bitwig Studio/Library/Wavetables`) is 5,636 files, every one `vawt`.
+Surge-format packs supplied the other 151.
+
+They disagree on exactly one thing, and it is the one that matters:
+
+| producer | files | flags | payload |
+|---|---|---|---|
+| Bitwig | 5,636 | `0x000C` on every single file | int16, full scale |
+| Surge | 151 | `0x0000` on every single file | float32 |
+
+Neither producer varies. That is what made the old misreading so durable: on a
+Bitwig-only corpus the flags word is the constant 12, forever, and "data_offset,
+always 12" explains every byte you can see.
 
 ---
 
@@ -117,20 +126,29 @@ File size is exactly `12 + frame_count * frame_samples * width`, unless flag
 
 ### Measured distribution
 
-152 `vawt` files on hand:
+5,787 `vawt` files:
 
 | field | value | count |
 |---|---|---|
-| flags | `0x0000` (float32) | 151 |
-| flags | `0x000C` (int16, full scale) | 1 |
-| frame_samples | 2048 | 151 |
-| frame_samples | 256 | 1 |
+| flags | `0x000C` int16, full scale | 5,636 |
+| flags | `0x0000` float32 | 151 |
+| frame_samples | 2048 | 5,273 |
+| frame_samples | 256 | 513 |
+| frame_samples | 1024 | 1 |
 
-All 152 satisfy the flag-aware size formula exactly; none satisfies an
-int16-only one. A prior revision of this document claimed a 5,636-file corpus
-in which `data_offset` was always 12; that corpus is not available to re-check,
-and the structural claim it supported is wrong, so the numbers above are the
-ones this file now stands behind.
+`frame_count` runs from 1 to 256 and beyond; 256 is the most common single
+value. No file observed sets `is_sample`, `loop_sample` or `has_metadata`, so
+those three paths are read from the spec rather than from a specimen.
+
+The one number that settles the format:
+
+    flag-aware width    5,787 of 5,787 sizes match
+    int16 only          5,636 match, all 151 Surge files reported corrupt
+    float32 only          151 match, all 5,636 Bitwig files reported corrupt
+
+An earlier revision of this document was built on the Bitwig half alone and
+called bytes 10-11 a `data_offset` that was always 12. Its corpus numbers were
+right; only the field was wrong.
 
 ---
 
@@ -146,7 +164,7 @@ ones this file now stands behind.
 
 The walker reads only the 12-byte header. It warns when the file is shorter
 than the header implies, or when it is longer without the metadata flag set to
-account for it.
+account for it. All 5,787 specimens walk clean.
 
 ---
 

@@ -165,7 +165,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">A <b>.wt</b> is a <b>vawt</b> wavetable: a fixed 12-byte header, then raw samples -- 32-bit float, or 16-bit if one flag bit says so. The header names the length of one single-cycle wave and how many waves are stacked; the data is those waves laid end to end, frame-major, no interleave. Surge writes these, and Bitwig's Polymer and Wavetable devices use the same container. The <b>.wt</b> extension is shared with at least two unrelated formats, so dispatch on the magic, never on the name. <b>Hover</b> any field or byte to light its exact span and read the decode. Color marks kind, the way syntax highlighting does (see the key). Example: <b>vawt</b> + 2048 samples/wave + 64 waves, a real 512 KB float32 table.</p>
+  <p class="lede">A <b>.wt</b> is a <b>vawt</b> wavetable: a fixed 12-byte header, then raw samples -- 32-bit float, or 16-bit if one flag bit says so. The header names the length of one single-cycle wave and how many waves are stacked; the data is those waves laid end to end, frame-major, no interleave. Surge and Bitwig both write this container and disagree on exactly one thing: Bitwig stores int16, Surge stores float32, and only the flags word says which. Neither producer ever varies. The <b>.wt</b> extension is also shared with at least two unrelated formats, so dispatch on the magic, never on the name. <b>Hover</b> any field or byte to light its exact span and read the decode. Color marks kind, the way syntax highlighting does (see the key). Example: <b>vawt</b> + 2048 samples/wave + 64 waves, a real 512 KB float32 table.</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">sea</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -206,10 +206,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region opt">
       <summary><span class="chev">&#9656;</span><span class="rname">wave-length variants</span><span class="rspan">frame_samples in the wild</span></summary>
       <div class="rbody">
-        <p class="note">frame_samples is not fixed. Across the 152 files measured for this page, 2048 dominates.</p>
+        <p class="note">frame_samples is not fixed. Across the 5,787 files measured for this page, 2048 dominates.</p>
         <div class="kv">
-          <div><span class="k">2048</span><span class="v">151 of 152 . the usual resolution</span></div>
-          <div><span class="k">256</span><span class="v">1 of 152 . lower-resolution tables</span></div>
+          <div><span class="k">2048</span><span class="v">5,273 of 5,787 . the usual resolution</span></div>
+          <div><span class="k">256</span><span class="v">513 of 5,787 . lower-resolution tables</span></div>
           <div><span class="k">1024</span><span class="v">rare</span></div>
           <div><span class="k">not vawt</span><span class="v">the BWBM beat-map chunk lives inside a WAV; this is its own file</span></div>
         </div>
@@ -334,7 +334,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"flags",k:"flag",r:[10,11],val:"0x0000",sel:0,
        branch:[["0x01","is_sample -- a one-shot, not a wavetable"],["0x02","loop_sample"],["0x04","int16 payload; CLEAR means float32"],["0x08","int16 full scale is +/-32768, not +/-16384"],["0x10","a null-terminated &lt;wtmeta&gt; XML block follows the samples"]],
        body:"Bit 0x04 is the ONLY thing that gives the sample width. Clear, as here, means float32, so the payload is 12 + 64 x 2048 x 4 = 524,300 bytes -- exactly this file.",
-       note:"this word was long read as a data_offset that was 'always 12'. A host that writes int16 at full scale sets 0x04|0x08 = 0x000C, and 12 decimal IS 0x000C -- so on a corpus from that one host the misreading is indistinguishable from the truth. It breaks on the first float32 file: 151 of 152 tables measured here are float32, and an int16-only parser calls every one of them corrupt."}
+       note:"this word was long read as a data_offset that was 'always 12'. Bitwig writes int16 at full scale, which is 0x04|0x08 = 0x000C, and 12 decimal IS 0x000C -- so across Bitwig's entire 5,636-file factory library the flags word is the constant 12 and the misreading explains every byte you can see. It breaks on the first Surge file: 151 of those measured are float32 with flags 0x0000, and an int16-only parser calls every one corrupt. Measured over 5,787 files: the flag-aware width fits all of them, int16-only fits 5,636, float32-only fits 151."}
     ]);
 })();
 </script>

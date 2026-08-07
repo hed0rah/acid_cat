@@ -226,13 +226,17 @@ def _wt(tmp_path, name, flags, width, trailer=b""):
 
 
 def test_wt_wavetable(tmp_path):
-    label, chunks, warns = _wt(tmp_path, "i.wt", 0x04, 2)      # flags say int16
+    # 0x0C is what Bitwig writes, on all 5,636 files in its factory library:
+    # int16 at full scale. It is also 12 decimal, which is why this word read
+    # convincingly as a data_offset for as long as it did.
+    label, chunks, warns = _wt(tmp_path, "i.wt", 0x0C, 2)
     assert "wavetable" in label.lower()
     assert not warns                                    # size matches header exactly
     assert _field(chunks, "frame_samples") == 2048
     assert _field(chunks, "frame_count") == 3
     assert _field(chunks, "magic") == "vawt"
-    assert _field(chunks, "flags") == "0x0004"
+    assert _field(chunks, "flags") == "0x000C"
+    assert "16-bit" in chunks[0]["summary"]
 
 
 def test_wt_float32_is_not_corrupt(tmp_path):
