@@ -80,11 +80,36 @@ def test_a_mostly_outside_selection_does_not_count(probe):
     assert probe._region_is_audio(lo - 400, 500) is False
 
 
-def test_an_unwalkable_file_does_not_nag():
-    """None, not False. With no chunks nothing said either way, and prompting on
-    every play in a format acidcat cannot walk would make the guard an
-    obstacle -- which is how people learn to dismiss prompts without reading."""
+def test_no_located_pcm_reports_unknown_not_safe():
+    """None means "no walker located raw PCM", which is NOT the same as safe.
+
+    This used to be read as a pass: action_play tested `is_audio is False`, so
+    None fell straight through to playback with no prompt. AUDIO_SAMPLE_IDS is
+    {data, SSND, BODY}, so EVERY compressed format -- mp3, flac, ogg, opus, the
+    tracker family -- returned None and played full-scale noise silently. The
+    caller must warn on None; see test_action_play_warns_when_no_pcm_was_located.
+    """
     assert _Probe([])._region_is_audio(0, 100) is None
+
+
+def test_a_parent_region_that_opens_on_a_header_is_not_audio(probe):
+    """The reported bug: selecting the parent node plays the header first.
+
+    Playback starts AT the region offset, so a span covering the whole file
+    overlaps the audio by well over half and still opens with noise. The old
+    test was "is most of this audio"; the right one is "does it START in the
+    audio", because that is what you hear.
+    """
+    lo, hi = probe._audio_span()
+    whole_file = probe._region_is_audio(0, hi)
+    assert whole_file is False, "a region starting at byte 0 opens with the RIFF header"
+
+
+def test_the_data_chunk_node_still_plays_without_nagging(probe):
+    """The tolerance that has to survive: the tree's data node starts at the
+    chunk header, 8 bytes before the payload, and that is genuinely audio."""
+    data = [c for c in probe.chunks if str(c["id"]).strip() == "data"][0]
+    assert probe._region_is_audio(data["offset"], data["size"]) is True
 
 
 def test_the_prompt_names_the_chunk(probe):

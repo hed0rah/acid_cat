@@ -77,36 +77,41 @@ class AcidcatTUI(App):
     Tree > .tree--guides-selected { color: #08F9DF; }
     """
 
+    # Every binding used to carry show=True, so the footer listed all of them and
+    # the ones a user reaches for most -- edit, in particular -- were pushed off
+    # the end. The footer now carries the common path; `?` lists everything.
     BINDINGS = [
         ("q", "request_quit", "quit"),
         ("g", "goto", "goto offset"),
         ("slash", "search", "search"),
-        ("n", "search_next", "next match"),
-        ("N", "search_prev", "prev match"),
-        ("f", "next_finding", "next finding"),
-        ("x", "follow_xref", "follow pointer"),
-        ("y", "yank", "yank hex"),
-        ("d", "diff", "pending changes"),
+        Binding("n", "search_next", "next match", show=False),
+        Binding("N", "search_prev", "prev match", show=False),
+        Binding("f", "next_finding", "next finding", show=False),
+        ("x", "follow_xref", "follow"),
+        Binding("y", "yank", "yank hex", show=False),
+        Binding("d", "diff", "pending changes", show=False),
         ("m", "map", "byte map"),
-        ("b", "cycle_view", "byte view"),
-        ("p", "play", "play region"),
+        Binding("b", "cycle_view", "byte view", show=False),
+        ("p", "play", "play"),
         ("full_stop", "stop_play", "stop"),
-        ("v", "validate", "validate"),
+        Binding("v", "validate", "validate", show=False),
         ("ctrl+s", "save", "save"),
-        ("ctrl+z", "undo", "undo"),
-        ("ctrl+r", "redo", "redo"),
-        ("o", "open", "open file"),
-        ("l", "locate_regions", "locate regions"),
-        ("u", "ascend", "up to regions"),
+        Binding("ctrl+z", "undo", "undo", show=False),
+        Binding("ctrl+r", "redo", "redo", show=False),
+        Binding("o", "open", "open file", show=False),
+        Binding("l", "locate_regions", "locate regions", show=False),
+        Binding("u", "ascend", "up to regions", show=False),
         ("e", "edit_field", "edit field"),
-        ("tab", "hex_focus", "hex edit"),
-        ("ctrl+t", "toggle_mode", "value/hex"),
-        ("w", "edit", "edit tags"),
-        ("s", "strip", "strip meta"),
+        Binding("tab", "hex_focus", "hex edit", show=False),
+        Binding("ctrl+t", "toggle_mode", "value/hex", show=False),
+        Binding("w", "edit", "edit tags", show=False),
+        Binding("s", "strip", "strip meta", show=False),
         ("a", "expand_all", "expand"),
         ("c", "collapse_all", "collapse"),
         ("question_mark", "help", "help"),
-        ("escape", "cancel_edit", "cancel edit"),
+        Binding("escape", "cancel_edit", "cancel edit", show=False),
+        Binding("plus", "more_rows", "show more rows", show=False),
+        Binding("equals_sign", "more_rows", "show more rows", show=False),
         # scan controls: priority so they beat the tree's own space/enter while a
         # scan runs; check_action keeps them dormant otherwise.
         Binding("space", "pause_scan", "pause scan", priority=True, show=False),
@@ -134,6 +139,8 @@ class AcidcatTUI(App):
         self.fmt = "?"
         self.warns = []
         self.findings = []
+        self._rowbudget = {}      # chunk index -> how many of its rows to list
+        self._morerows = {}       # id(node) -> chunk index, for the "more rows" node
         self._nodemeta = {}       # id(node) -> (off, length, accent)  for the hex pane
         self._nodekey = {}        # id(node) -> stable key, to restore the cursor
                                   # and expansion across the post-edit tree rebuild
@@ -998,6 +1005,7 @@ class AcidcatTUI(App):
                     if n.is_expanded and id(n) in self._nodekey}
         tree.clear()
         self._nodemeta = {}
+        self._morerows = {}       # id(node) -> chunk index, for the "more rows" node
         self._editval = {}
         self._textfield = {}
         self._nodekey = {}
@@ -1059,7 +1067,11 @@ class AcidcatTUI(App):
             # uniform byte offset, so a row node uses its own if present else the
             # chunk's range for the hex pane.
             rows = c.get("rows") or []
-            for k, row in enumerate(rows[:_ROW_CAP]):
+            # The cap keeps a 100k-event MIDI file from building 100k widgets,
+            # but a counted-and-unreachable row is still a part of the file you
+            # cannot walk to. `+` raises this chunk's budget and reloads.
+            budget = self._rowbudget.get(i, _ROW_CAP)
+            for k, row in enumerate(rows[:budget]):
                 rlbl = Text("  ".join(f"{k2}={v}" for k2, v in row.items()),
                             style=SOFT)
                 roff = row.get("offset") if isinstance(row.get("offset"), int) else None
@@ -1070,10 +1082,12 @@ class AcidcatTUI(App):
                 self._nodemeta[id(rnode)] = rnode.data
                 self._nodekey[id(rnode)] = ("row", i, k)
                 keyed[("row", i, k)] = rnode
-            if len(rows) > _ROW_CAP:
-                more = node.add_leaf(Text(f"... {len(rows) - _ROW_CAP} more rows",
-                                          style=DIM))
+            if len(rows) > budget:
+                more = node.add_leaf(
+                    Text(f"... {len(rows) - budget:,} more rows  (+ to show more)",
+                         style=DIM))
                 self._nodemeta[id(more)] = node.data
+                self._morerows[id(more)] = i
         tree.root.expand()
         for ek in expanded:
             n = keyed.get(ek)
@@ -1233,15 +1247,26 @@ class AcidcatTUI(App):
         return None
 
     def _region_is_audio(self, off, length):
-        """True when most of [off, off+length) lies in the sample data.
+        """True only when playing this region would actually produce sound.
 
-        Most, not all: a selection that starts a few bytes early is still the
-        audio, and demanding containment would nag on every ordinary drag.
+        Playback starts AT `off` and reinterprets what it finds as PCM, so the
+        question is what sits at the START of the region -- not whether most of
+        it overlaps the audio somewhere. A parent node that spans a header plus
+        the samples overlaps by well over half and still opens with noise.
+
+        Returns None when no walker located raw PCM in this file at all. That
+        is not the same as "safe": in a compressed format there is no region
+        that plays as PCM, so the caller must warn on None rather than treat an
+        unknown as a yes.
         """
         span = self._audio_span()
         if span is None:
-            return None                     # unknown -- no walker said either way
+            return None
         lo, hi = span
+        # tolerate landing on the chunk header a few bytes before the payload,
+        # which is what selecting the parent node does
+        if not (lo - 8 <= off < hi):
+            return False
         overlap = max(0, min(off + length, hi) - max(off, lo))
         return overlap >= 0.5 * max(1, length)
 
@@ -1261,12 +1286,20 @@ class AcidcatTUI(App):
         # real hazard with headphones, and it is easy to hit -- every field node
         # in the tree is a selectable region, and almost none of them are audio.
         is_audio = self._region_is_audio(off, length)
-        if is_audio is False:
-            where = self._chunk_name_at(off)
-            self.push_screen(
-                YesNoScreen(f"{where} is not the audio payload. Playing it as "
-                            f"PCM will be loud noise, not sound. Continue?"),
-                lambda ok: ok and self._do_play(off, length))
+        if is_audio is not True:
+            if is_audio is False:
+                msg = (f"{self._chunk_name_at(off)} is not the audio payload. "
+                       f"Playing it as PCM will be loud noise, not sound. Continue?")
+            else:
+                # No walker located raw PCM here, which is every compressed
+                # format. Nothing in the file plays as PCM, so this is the case
+                # that most needs the warning -- and it used to be the one case
+                # that skipped it, because None is not False.
+                msg = (f"{self.fmt} stores no raw PCM, so no region of this file "
+                       f"plays as sound. Reinterpreting these bytes will be loud "
+                       f"noise. Continue?")
+            self.push_screen(YesNoScreen(msg),
+                             lambda ok: ok and self._do_play(off, length))
             return
         self._do_play(off, length)
 
@@ -1325,6 +1358,26 @@ class AcidcatTUI(App):
                     pass
             break
         return rate, ch, bits, floating
+
+    def action_more_rows(self):
+        """Raise this chunk's row budget and reload (+).
+
+        The cap exists so a 100k-event file does not build 100k widgets, but a
+        row that is counted and unreachable is a part of the file you cannot
+        walk to. Selecting the "... N more rows" line and pressing + lifts the
+        budget for that chunk only.
+        """
+        tree = self.query_one("#tree")
+        node = getattr(tree, "cursor_node", None)
+        idx = self._morerows.get(id(node)) if node is not None else None
+        if idx is None:
+            self.notify("select a '... more rows' line first", severity="warning")
+            return
+        self._rowbudget[idx] = self._rowbudget.get(idx, _ROW_CAP) + _ROW_CAP
+        total = len(self.chunks[idx].get("rows") or [])
+        self._load()          # rebuilds the tree; the walk is cached-cheap here
+        shown = min(self._rowbudget[idx], total)
+        self.notify(f"showing {shown:,} of {total:,} rows")
 
     def action_help(self):
         self.push_screen(HelpScreen())
