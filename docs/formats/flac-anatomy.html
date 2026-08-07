@@ -180,7 +180,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">lengths</span><span class="v">LITTLE-endian here, unlike the rest of FLAC</span></div>
         <div><span class="k">vendor</span><span class="v">e.g. "reference libFLAC 1.3.2"</span></div>
         <div><span class="k">comments</span><span class="v">UTF-8 "FIELD=value": TITLE, ARTIST, BPM, KEY</span></div>
-      </div></div></details>
+      </div>        <div class="sec">the block, and the endianness flip (24 bytes)</div>
+        <p class="note">Everything in FLAC is big-endian except the inside of this block.</p>
+        <div id="flac-vc"></div>
+        <div class="sec">one comment (16 bytes)</div>
+        <p class="note">A length and a string. There is no key table and no type -- the key is text before an equals sign.</p>
+        <div id="flac-vc-entry"></div>
+</div></details>
     <details class="region opt"><summary><span class="chev">&#9656;</span><span class="rname">PICTURE</span><span class="rspan">type 6 . cover art</span></summary>
       <div class="rbody"><div class="kv">
         <div><span class="k">fields</span><span class="v">picture type, MIME, description, w/h/depth, data</span></div>
@@ -345,6 +351,41 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         note:"duration = total_samples / sample_rate, no frame walk needed. channels and bits store minus one. The 20-bit rate holds any value up to 1,048,575 Hz (0 is invalid); frame headers re-code it in just 4 bits with escapes back to here."},
       {label:"md5_signature",k:"enum",r:[18,33],val:"16-byte MD5",body:"MD5 of the unencoded audio, so a decoder can verify a bit-exact round trip. 0 = unset."}
     ]);
+
+  // VORBIS_COMMENT: a big-endian block whose payload is little-endian
+  build("flac-vc","byte",
+    [0x04,0x00,0x00,0x56,0x0D,0x00,0x00,0x00,0x4C,0x61,0x76,0x66,0x35,0x36,0x2E,0x34,0x30,0x2E,0x31,0x30,0x31,0x03,0x00,0x00],
+    [
+      {label:"block type",k:"sync",r:[0,0],val:"0x04 = VORBIS_COMMENT",
+       body:"The top bit marks the LAST metadata block; the low seven are the type. 0x04 here means type 4 and more blocks follow. 0x84 would mean the same type and audio next.",
+       note:"types: 0 STREAMINFO, 1 PADDING, 2 APPLICATION, 3 SEEKTABLE, 4 VORBIS_COMMENT, 5 CUESHEET, 6 PICTURE."},
+      {label:"block length",k:"enum",r:[1,3],val:"86",
+       body:"A 24-bit BIG-endian length, counting the payload only. So the next block header sits at this header + 4 + 86."},
+      {label:"vendor length",k:"flag",r:[4,7],val:"13",
+       body:"And here the byte order FLIPS. This is a 32-bit LITTLE-endian integer, in a format that is big-endian everywhere else, because the whole comment block was adopted unchanged from Ogg Vorbis. Read it big-endian and you get 218,103,808.",
+       note:"the single most common FLAC parsing mistake, and nothing in the block signals the change."},
+      {label:"vendor string",k:"rsv",r:[8,20],val:'"Lavf56.40.101"',
+       body:"UTF-8, no terminator -- the length above is the only bound. This one names libavformat, so the file came out of ffmpeg.",
+       note:"a useful provenance signal: encoders stamp themselves here and rarely lie."},
+      {label:"comment count",k:"enum",r:[21,23],val:"3 (truncated)",
+       body:"A 32-bit little-endian count of the entries that follow. Shown truncated here; its fourth byte begins the next row of the file."}
+    ]);
+  // one comment: length-prefixed KEY=VALUE, and that is the entire schema
+  build("flac-vc-entry","byte",
+    [0x0C,0x00,0x00,0x00,0x74,0x69,0x74,0x6C,0x65,0x3D,0x47,0x61,0x6C,0x77,0x61,0x79],
+    [
+      {label:"length",k:"sync",r:[0,3],val:"12",
+       body:"32-bit little-endian, like everything else inside this block.",
+       note:"0x0000000C. Read big-endian it is 201,326,592, and the parse ends there."},
+      {label:"key",k:"enum",r:[4,8],val:'"title"',
+       body:"Case-insensitive, and restricted to U+0020 through U+007E excluding the equals sign itself -- printable ASCII, no spaces problem, no Unicode. There is no registry and no type: a comment is whatever text precedes the first equals sign.",
+       note:"conventional keys are TITLE, ARTIST, ALBUM, DATE, TRACKNUMBER -- but nothing enforces them, and a key may repeat."},
+      {label:"separator",k:"sync",r:[9,9],val:"0x3D = '='",
+       body:"The FIRST equals sign splits key from value. A value containing '=' is fine; a key cannot contain one."},
+      {label:"value",k:"rsv",r:[10,15],val:'"Galway"',
+       body:"UTF-8, running to the length. No terminator, no escaping, no type -- a number, a date and a title are all just text.",
+       note:"a comment holds text only, so FLAC's native path for cover art is the PICTURE block. Art can still travel in a comment via METADATA_BLOCK_PICTURE, which base64-encodes that exact picture structure -- a Vorbis convention FLAC adopted, and one real taggers write, sometimes instead of the native block."}
+    ]);
 })();
 </script>
 <script>
@@ -470,6 +511,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
+
+
 })();
 
 </script>

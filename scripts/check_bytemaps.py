@@ -88,6 +88,31 @@ if missing:
     print("  a page with maps that this script cannot see is the failure mode "
           "it exists to prevent -- check the call style before trusting a pass.")
 
+# Reading a call is not the same as the call being able to run. Nine pages once
+# passed every check below while every new map sat in the theme toggle's IIFE,
+# where build() is not in scope -- valid data, dead page. So: the call must live
+# in the script that defines build(), and its mount div must exist.
+placement = []
+for p in PAGES:
+    s = p.read_text(encoding="utf-8", errors="replace")
+    home = next((m for m in re.finditer(r"<script\b[^>]*>.*?</script>", s, re.S)
+                 if re.search(r"function build\b", m.group(0))), None)
+    calls = list(re.finditer(r"""\bbuild\(\s*["']([^"']+)["']""", s))
+    if calls and home is None:
+        placement.append(f"{p.name}: build() called but never defined")
+        continue
+    for m in calls:
+        if not (home.start() <= m.start() < home.end()):
+            placement.append(f"{p.name}: build(\"{m.group(1)}\") is outside "
+                             f"the script that defines build()")
+        if f'id="{m.group(1)}"' not in s:
+            placement.append(f"{p.name}: build(\"{m.group(1)}\") has no "
+                             f"matching mount div")
+if placement:
+    print(f"\n{len(placement)} PLACEMENT PROBLEM(S) -- these maps do not render:")
+    for line in placement:
+        print("   " + line)
+
 js = ["var R=[];"]
 for idx, (page, mount, unit, b, f) in enumerate(maps):
     js.append(f"R.push({{page:{json.dumps(page)},mount:{json.dumps(mount)},"

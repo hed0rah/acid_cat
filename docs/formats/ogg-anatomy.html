@@ -217,7 +217,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">Opus pre_skip</span><span class="v">u16 LE in OpusHead: samples to discard at the start (encoder priming). Opus always decodes at 48 kHz, so duration = (last_granule &#8722; pre_skip) / 48000</span></div>
         <div><span class="k">FLAC-in-Ogg</span><span class="v">0x7F followed by "FLAC" (5 bytes), then the native fLaC STREAMINFO block</span></div>
         <div><span class="k">note</span><span class="v">a reader identifies the codec from these first bytes of the BOS packet, before decoding anything else; a mismatch is a hard error</span></div>
-      </div></div></details>
+      </div>        <div class="sec">the identification header (30 bytes)</div>
+        <p class="note">Packet type 1. Channels and sample rate live here, not in the page header.</p>
+        <div id="ogg-ident"></div>
+        <div class="sec">the comment header (24 bytes)</div>
+        <p class="note">Packet type 3, and the same comment structure FLAC borrowed.</p>
+        <div id="ogg-comment"></div>
+</div></details>
   </div>
 
   <div class="sec">stream organization</div>
@@ -392,6 +398,48 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       note:"clear here; the first segment on this page begins a new, complete packet"}
   ]);
 
+
+  // Vorbis identification header: the audio parameters
+  build("ogg-ident","byte",
+    [0x01,0x76,0x6F,0x72,0x62,0x69,0x73,0x00,0x00,0x00,0x00,0x02,0x44,0xAC,0x00,0x00,
+     0x00,0x00,0x00,0x00,0x80,0xB5,0x01,0x00,0x00,0x00,0x00,0x00,0xB8,0x01],
+    [
+      {label:"packet type",k:"sync",r:[0,0],val:"0x01 = identification",
+       body:"Vorbis headers are numbered odd: 1 identification, 3 comment, 5 setup. All three must appear, in that order, before any audio.",
+       note:"the type byte is part of the packet, not the Ogg page -- Ogg itself carries no notion of what it transports."},
+      {label:"magic",k:"sync",r:[1,6],val:'"vorbis"',
+       body:"Six ASCII bytes after every Vorbis header type byte. Opus instead uses OpusHead and OpusTags, and FLAC-in-Ogg uses 0x7F FLAC."},
+      {label:"version",k:"rsv",r:[7,10],val:"0",
+       body:"Must be zero. A non-zero value means a stream this decoder is not allowed to attempt."},
+      {label:"channels",k:"enum",r:[11,11],val:"2",
+       body:"A single byte, and the only place the channel count appears."},
+      {label:"sample rate",k:"enum",r:[12,15],val:"44,100",
+       body:"32-bit LITTLE-endian, unlike almost every other audio container. 0x0000AC44 = 44100.",
+       note:"Ogg and Vorbis are little-endian throughout, which is what FLAC inherits in its comment block."},
+      {label:"bitrate max",k:"rsv",r:[16,19],val:"0 = unset"},
+      {label:"bitrate nominal",k:"flag",r:[20,23],val:"112,000",
+       body:"0x0001B580. Signed; zero or -1 mean unspecified, and for a VBR stream these are hints rather than measurements."},
+      {label:"bitrate min",k:"rsv",r:[24,27],val:"0 = unset"},
+      {label:"blocksizes",k:"enum",r:[28,28],val:"0xB8",
+       body:"Two 4-bit exponents in one byte: the low nibble is the short block, the high the long. 8 and 11 here mean 256 and 2048 samples.",
+       note:"the encoder switches between them to keep transients sharp, which is why the byte holds two."},
+      {label:"framing",k:"sync",r:[29,29],val:"0x01",
+       body:"A single set bit ending the header. If it is clear the header is malformed and the stream must be rejected."}
+    ]);
+  // the comment header -- the same structure FLAC uses
+  build("ogg-comment","byte",
+    [0x03,0x76,0x6F,0x72,0x62,0x69,0x73,0x0D,0x00,0x00,0x00,0x4C,0x61,0x76,0x66,0x35,
+     0x36,0x2E,0x34,0x30,0x2E,0x31,0x30,0x31],
+    [
+      {label:"packet type",k:"sync",r:[0,0],val:"0x03 = comment",
+       body:"The second of the three mandatory headers. Tags therefore sit near the start of the file, before any audio."},
+      {label:"magic",k:"sync",r:[1,6],val:'"vorbis"'},
+      {label:"vendor length",k:"flag",r:[7,10],val:"13",
+       body:"32-bit little-endian. Identical to the FLAC block, because FLAC adopted this structure unchanged -- the difference is that here little-endian is native, and in FLAC it is an exception to the surrounding format."},
+      {label:"vendor string",k:"rsv",r:[11,23],val:'"Lavf56.40.101"',
+       body:"UTF-8, bounded by the length. A comment count follows, then length-prefixed KEY=VALUE entries exactly as in FLAC.",
+       note:"see the FLAC page for a single comment drawn byte by byte; the entry format is the same one."}
+    ]);
 })();
 </script>
 <script>
@@ -517,6 +565,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
+
+
 })();
 
 </script>

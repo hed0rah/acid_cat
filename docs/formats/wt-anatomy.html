@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>acidcat / bitwig wavetable anatomy</title>
+<title>acidcat / vawt wavetable anatomy</title>
 <link rel="icon" id="acidcat-fav" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTEyIDUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48bWFzayBpZD0iayI+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMwMDAiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0MC4yMSw0Mi43Mikgc2NhbGUoMC4yKSI+PGNpcmNsZSBjeD0iMTA3OC45NyIgY3k9IjEyNDYuNDEiIHI9Ijg0Ny45NTgiIGZpbGw9IiNmZmYiPjwvY2lyY2xlPjxwYXRoIGQ9Ik04MjMuNzgsNDM2LjY1M2MtMjQ1LDg0IC0zNjAsMjE1IC0zOTMuNzgsMjYzLjk1Yy0zNCw3MCAtMzMsLTEzNSAyNSwtMzQwLjZjMzcsLTEzNSAxMTgsLTMwMCAxNTEuNzgsLTM1OS4zNWM2MCwtNTUgNjAsMzAgMjE3LDQzNi4wNVoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNMTMzNC4xNiw0MzYuNjUzYzI0NSw4NCAzNjAsMjE1IDM5My43OCwyNjMuOTVjMzQsNzAgMzMsLTEzNSAtMjUsLTM0MC42Yy0zNywtMTM1IC0xMTgsLTMwMCAtMTUxLjc4LC0zNTkuMzVjLTYwLC01NSAtNjAsMzAgLTIxNyw0MzYuMDVaIiBmaWxsPSIjZmZmIj48L3BhdGg+PGVsbGlwc2UgY3g9Ijc3MiIgY3k9Ijk3NSIgcng9Ijk3IiByeT0iMTM3IiBmaWxsPSIjMDAwIj48L2VsbGlwc2U+PGVsbGlwc2UgY3g9IjEzOTQiIGN5PSI5NzUiIHJ4PSI5NyIgcnk9IjEzNyIgZmlsbD0iIzAwMCI+PC9lbGxpcHNlPjxwYXRoIGQ9Ik01MjAuMTE2LDE1MDUuMjRjMzUwLjMzMSw0MTQuNzQ0IDcyMi4wMzksNDIxLjk2OCAxMTE3LjcyLDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxNzUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPjwvZz48L21hc2s+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMxNzE0MGYiIG1hc2s9InVybCgjaykiLz48cGF0aCBkPSJNOTgsMzI0IEw2MCwzMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzE3MTQwZiIgc3Ryb2tlLXdpZHRoPSIzMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTk4LDM2MiBMNjAsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzI0IEw0NTIsMzE2IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzYyIEw0NTIsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg=="><script>(function(){var l="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTEyIDUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48bWFzayBpZD0iayI+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMwMDAiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0MC4yMSw0Mi43Mikgc2NhbGUoMC4yKSI+PGNpcmNsZSBjeD0iMTA3OC45NyIgY3k9IjEyNDYuNDEiIHI9Ijg0Ny45NTgiIGZpbGw9IiNmZmYiPjwvY2lyY2xlPjxwYXRoIGQ9Ik04MjMuNzgsNDM2LjY1M2MtMjQ1LDg0IC0zNjAsMjE1IC0zOTMuNzgsMjYzLjk1Yy0zNCw3MCAtMzMsLTEzNSAyNSwtMzQwLjZjMzcsLTEzNSAxMTgsLTMwMCAxNTEuNzgsLTM1OS4zNWM2MCwtNTUgNjAsMzAgMjE3LDQzNi4wNVoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNMTMzNC4xNiw0MzYuNjUzYzI0NSw4NCAzNjAsMjE1IDM5My43OCwyNjMuOTVjMzQsNzAgMzMsLTEzNSAtMjUsLTM0MC42Yy0zNywtMTM1IC0xMTgsLTMwMCAtMTUxLjc4LC0zNTkuMzVjLTYwLC01NSAtNjAsMzAgLTIxNyw0MzYuMDVaIiBmaWxsPSIjZmZmIj48L3BhdGg+PGVsbGlwc2UgY3g9Ijc3MiIgY3k9Ijk3NSIgcng9Ijk3IiByeT0iMTM3IiBmaWxsPSIjMDAwIj48L2VsbGlwc2U+PGVsbGlwc2UgY3g9IjEzOTQiIGN5PSI5NzUiIHJ4PSI5NyIgcnk9IjEzNyIgZmlsbD0iIzAwMCI+PC9lbGxpcHNlPjxwYXRoIGQ9Ik01MjAuMTE2LDE1MDUuMjRjMzUwLjMzMSw0MTQuNzQ0IDcyMi4wMzksNDIxLjk2OCAxMTE3LjcyLDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxNzUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPjwvZz48L21hc2s+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMxNzE0MGYiIG1hc2s9InVybCgjaykiLz48cGF0aCBkPSJNOTgsMzI0IEw2MCwzMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzE3MTQwZiIgc3Ryb2tlLXdpZHRoPSIzMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTk4LDM2MiBMNjAsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzI0IEw0NTIsMzE2IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzYyIEw0NTIsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==",d="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTEyIDUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48bWFzayBpZD0iayI+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMwMDAiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0MC4yMSw0Mi43Mikgc2NhbGUoMC4yKSI+PGNpcmNsZSBjeD0iMTA3OC45NyIgY3k9IjEyNDYuNDEiIHI9Ijg0Ny45NTgiIGZpbGw9IiNmZmYiPjwvY2lyY2xlPjxwYXRoIGQ9Ik04MjMuNzgsNDM2LjY1M2MtMjQ1LDg0IC0zNjAsMjE1IC0zOTMuNzgsMjYzLjk1Yy0zNCw3MCAtMzMsLTEzNSAyNSwtMzQwLjZjMzcsLTEzNSAxMTgsLTMwMCAxNTEuNzgsLTM1OS4zNWM2MCwtNTUgNjAsMzAgMjE3LDQzNi4wNVoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNMTMzNC4xNiw0MzYuNjUzYzI0NSw4NCAzNjAsMjE1IDM5My43OCwyNjMuOTVjMzQsNzAgMzMsLTEzNSAtMjUsLTM0MC42Yy0zNywtMTM1IC0xMTgsLTMwMCAtMTUxLjc4LC0zNTkuMzVjLTYwLC01NSAtNjAsMzAgLTIxNyw0MzYuMDVaIiBmaWxsPSIjZmZmIj48L3BhdGg+PGVsbGlwc2UgY3g9Ijc3MiIgY3k9Ijk3NSIgcng9Ijk3IiByeT0iMTM3IiBmaWxsPSIjMDAwIj48L2VsbGlwc2U+PGVsbGlwc2UgY3g9IjEzOTQiIGN5PSI5NzUiIHJ4PSI5NyIgcnk9IjEzNyIgZmlsbD0iIzAwMCI+PC9lbGxpcHNlPjxwYXRoIGQ9Ik01MjAuMTE2LDE1MDUuMjRjMzUwLjMzMSw0MTQuNzQ0IDcyMi4wMzksNDIxLjk2OCAxMTE3LjcyLDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxNzUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPjwvZz48L21hc2s+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiNmMmVmZTgiIG1hc2s9InVybCgjaykiLz48cGF0aCBkPSJNOTgsMzI0IEw2MCwzMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2YyZWZlOCIgc3Ryb2tlLXdpZHRoPSIzMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTk4LDM2MiBMNjAsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmMmVmZTgiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzI0IEw0NTIsMzE2IiBmaWxsPSJub25lIiBzdHJva2U9IiNmMmVmZTgiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzYyIEw0NTIsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmMmVmZTgiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==",e=document.getElementById("acidcat-fav"),m=matchMedia("(prefers-color-scheme: dark)");function s(){e.setAttribute("href",m.matches?d:l);}try{m.addEventListener("change",s)}catch(x){m.addListener(s)}s();})();</script>
 <script>(function(){try{var m=localStorage.getItem("acidcat-theme");if(!m)m=matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",m);}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -153,7 +153,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
   <div class="head">
     <div class="row">
-      <div class="title"><div class="tt"><div class="sysmark">ACIDCAT . FILE FORMAT REFERENCE</div><h1>Bitwig Wavetable Anatomy</h1></div><acidcat-toggle aria-label="Cycle theme: light, dark, acid, house light, house dark"></acidcat-toggle></div>
+      <div class="title"><div class="tt"><div class="sysmark">ACIDCAT . FILE FORMAT REFERENCE</div><h1>vawt Wavetable Anatomy</h1></div><acidcat-toggle aria-label="Cycle theme: light, dark, acid, house light, house dark"></acidcat-toggle></div>
       <div class="stamp"><b>vawt container</b>Polymer / Sampler<br>rev 2026.07</div>
     </div>
     <div class="strip">
@@ -165,7 +165,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="lede">A <b>.wt</b> is a Bitwig wavetable: a fixed 12-byte <b>vawt</b> header, then raw signed 16-bit samples. The header names the length of one single-cycle wave and how many waves are stacked; the data is those waves laid end to end, frame-major, no interleave. Bitwig writes one whenever you drop a WAV onto Polymer or another wavetable device. <b>Hover</b> any field or byte to light its exact span and read the decode. Color marks kind, the way syntax highlighting does (see the key). Example: <b>vawt</b> + 2048 samples/wave + 256 waves, a real 1 MB table.</p>
+  <p class="lede">A <b>.wt</b> is a <b>vawt</b> wavetable: a fixed 12-byte header, then raw samples -- 32-bit float, or 16-bit if one flag bit says so. The header names the length of one single-cycle wave and how many waves are stacked; the data is those waves laid end to end, frame-major, no interleave. Surge writes these, and Bitwig's Polymer and Wavetable devices use the same container. The <b>.wt</b> extension is shared with at least two unrelated formats, so dispatch on the magic, never on the name. <b>Hover</b> any field or byte to light its exact span and read the decode. Color marks kind, the way syntax highlighting does (see the key). Example: <b>vawt</b> + 2048 samples/wave + 64 waves, a real 512 KB float32 table.</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">sea</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -183,19 +183,22 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody">
         <p class="note">The whole header, drawn below as a byte map. Four fields, all little-endian: the magic, the wave length, the wave count, and the offset where samples begin.</p>
         <div id="block-head"></div>
-      </div>
+              <div class="sec">the whole header (12 bytes)</div>
+        <p class="note">From a 64-wave Surge table. The last field decides how wide a sample is, and it is the one that gets misread.</p>
+        <div id="wt-hdr"></div>
+</div>
     </details>
 
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">sample data</span><span class="rspan">0x0C . to EOF</span></summary>
       <div class="rbody">
-        <p class="note">Immediately after the header: frame_count * frame_samples signed 16-bit little-endian samples, laid out frame-major. Wave 0's complete cycle comes first, then wave 1's, and so on. No per-wave header, no interleave. Full-scale (observed range spans the whole -32768..+32767).</p>
+        <p class="note">Immediately after the header: frame_count * frame_samples samples, laid out frame-major. They are 32-bit float unless flag 0x04 is set, in which case they are signed 16-bit. Wave 0's complete cycle comes first, then wave 1's, and so on. No per-wave header, no interleave. For int16, flag 0x08 selects full scale (-32768..+32767); without it a full-scale sample reaches only about +/-16384.</p>
         <div class="kv">
-          <div><span class="k">format</span><span class="v">int16 little-endian, frame-major</span></div>
-          <div><span class="k">per-wave bytes</span><span class="v">frame_samples * 2</span></div>
-          <div><span class="k">wave i at</span><span class="v">12 + i * frame_samples * 2</span></div>
+          <div><span class="k">format</span><span class="v">float32 LE, or int16 LE with flag 0x04; frame-major</span></div>
+          <div><span class="k">per-wave bytes</span><span class="v">frame_samples * 4, or * 2 with flag 0x04</span></div>
+          <div><span class="k">wave i at</span><span class="v">12 + i * frame_samples * width</span></div>
           <div><span class="k">total samples</span><span class="v">frame_count * frame_samples</span></div>
-          <div><span class="k">file size</span><span class="v">exactly 12 + total_samples * 2 (no footer)</span></div>
+          <div><span class="k">file size</span><span class="v">12 + total_samples * width, plus a &lt;wtmeta&gt; XML block if flag 0x10</span></div>
         </div>
       </div>
     </details>
@@ -203,10 +206,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region opt">
       <summary><span class="chev">&#9656;</span><span class="rname">wave-length variants</span><span class="rspan">frame_samples in the wild</span></summary>
       <div class="rbody">
-        <p class="note">frame_samples is not fixed. Across a 5636-file corpus, three values appear; 2048 dominates.</p>
+        <p class="note">frame_samples is not fixed. Across the 152 files measured for this page, 2048 dominates.</p>
         <div class="kv">
-          <div><span class="k">2048</span><span class="v">~91% . the common Bitwig / Serum-lineage resolution</span></div>
-          <div><span class="k">256</span><span class="v">~9% . lower-resolution tables</span></div>
+          <div><span class="k">2048</span><span class="v">151 of 152 . the usual resolution</span></div>
+          <div><span class="k">256</span><span class="v">1 of 152 . lower-resolution tables</span></div>
           <div><span class="k">1024</span><span class="v">rare</span></div>
           <div><span class="k">not vawt</span><span class="v">the BWBM beat-map chunk lives inside a WAV; this is its own file</span></div>
         </div>
@@ -215,8 +218,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <footer>
-    <span>acidcat / bitwig wavetable anatomy</span>
-    <span>vawt . int16 le . frame-major . 256 x 2048</span>
+    <span>acidcat / vawt wavetable anatomy</span>
+    <span>vawt . float32 or int16 le . frame-major . 64 x 2048</span>
   <span><a href="https://hed0rah.github.io">hed0rah</a> &middot; <a href="https://x.com/r3l0z">r3l0z</a></span></footer>
 
 </div>
@@ -315,22 +318,23 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     dcol.style.minHeight=(maxH+6)+"px";
   }
 
-  // vawt header: "vawt" + frame_samples 2048 (LE u32) + frame_count 256 (LE u16) + data_offset 12 (LE u16)
-  build("block-head","byte",
-    [0x76,0x61,0x77,0x74, 0x00,0x08,0x00,0x00, 0x00,0x01, 0x0C,0x00],
+
+  // the complete vawt header, from a real 64-frame Surge wavetable
+  build("wt-hdr","byte",
+    [0x76,0x61,0x77,0x74,0x00,0x08,0x00,0x00,0x40,0x00,0x00,0x00],
     [
       {label:"magic",k:"sync",r:[0,3],val:'"vawt"',
-       body:"The four-byte signature at offset 0. This is its own container, not a RIFF chunk, so vawt sits at the very start of the file.",
-       note:"do not confuse with the BWBM beat-map chunk Bitwig writes inside WAV files."},
-      {label:"frame_samples",k:"enum",r:[4,7],val:"2048",
-       body:"uint32 little-endian: the number of samples in one single-cycle wave. This is the wave length, not the total. Observed values are 256, 1024, and 2048.",
-       note:"little-endian: 00 08 00 00 = 0x00000800 = 2048."},
-      {label:"frame_count",k:"enum",r:[8,9],val:"256",
-       body:"uint16 little-endian: how many single-cycle waves are stacked in the table. 1 for a single waveform, up to 256 and beyond for a table the oscillator sweeps through.",
-       note:"00 01 = 0x0100 = 256. a WAV dropped in becomes as many waves as its length divides into."},
-      {label:"data_offset",k:"sync",r:[10,11],val:"12",
-       body:"uint16 little-endian: byte offset where the sample data begins. Always 12, the header length; the samples follow immediately with no gap.",
-       note:"0C 00 = 12."}
+       body:"Vember Audio WaveTable, the lineage this format comes from. It sits at byte 0 -- this is its own container, not a chunk inside anything.",
+       note:"the .wt EXTENSION is not the format: Arturia Pigments writes XML to .wt, and Dune 3 writes a different binary header with no magic at all. Dispatch on these four bytes, never on the name."},
+      {label:"frame_samples",k:"enum",r:[4,7],val:"2,048",
+       body:"Samples in one single-cycle wave, 32-bit little-endian. 2048 is near-universal; 256 and 1024 also occur.",
+       note:"little-endian throughout, samples included."},
+      {label:"frame_count",k:"enum",r:[8,9],val:"64",
+       body:"How many waves are stacked in the table. The oscillator sweeps across them; 1 means a plain single-cycle waveform."},
+      {label:"flags",k:"flag",r:[10,11],val:"0x0000",sel:0,
+       branch:[["0x01","is_sample -- a one-shot, not a wavetable"],["0x02","loop_sample"],["0x04","int16 payload; CLEAR means float32"],["0x08","int16 full scale is +/-32768, not +/-16384"],["0x10","a null-terminated &lt;wtmeta&gt; XML block follows the samples"]],
+       body:"Bit 0x04 is the ONLY thing that gives the sample width. Clear, as here, means float32, so the payload is 12 + 64 x 2048 x 4 = 524,300 bytes -- exactly this file.",
+       note:"this word was long read as a data_offset that was 'always 12'. A host that writes int16 at full scale sets 0x04|0x08 = 0x000C, and 12 decimal IS 0x000C -- so on a corpus from that one host the misreading is indistinguishable from the truth. It breaks on the first float32 file: 151 of 152 tables measured here are float32, and an int16-only parser calls every one of them corrupt."}
     ]);
 })();
 </script>
@@ -457,6 +461,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
 })();
 
 </script>

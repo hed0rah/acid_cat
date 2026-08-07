@@ -183,7 +183,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody">
         <p class="note">The group header, drawn above: the CAT keyword, the group size, and the REX2 form type. IFF reserves <b>CAT</b> for concatenating <b>FORM</b>/<b>LIST</b> groups, with the word after its size a hint at their type; REX2 repurposes that slot for a real form id (<b>REX2</b>) and hangs the chunks straight off the CAT, using it where IFF would use a FORM.</p>
         <div id="block-head"></div>
-      </div>
+              <div class="sec">the container and the first chunk (24 bytes)</div>
+        <p class="note">Big-endian IFF, from a real ReCycle loop. Note the form type between the two.</p>
+        <div id="rx2-cat"></div>
+</div>
     </details>
 
     <details class="region" open>
@@ -329,6 +332,29 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"The form type. REX2 marks a ReCycle loop; the child chunks (HEAD, CREI, GLOB, SINF, SDAT) follow, with SLCE nested inside a CAT/SLCL sub-group rather than at this level.",
        note:"the slice markers live in a nested CAT/SLCL sub-group."}
     ]);
+
+  // CAT + REX2 form type + the first chunk header, from a real .rx2
+  build("rx2-cat","byte",
+    [0x43,0x41,0x54,0x20,0x00,0x07,0xDE,0x9E,0x52,0x45,0x58,0x32,
+     0x48,0x45,0x41,0x44,0x00,0x00,0x00,0x1D,0x49,0x0C,0xF1,0x8D],
+    [
+      {label:"container id",k:"sync",r:[0,3],val:'"CAT "',
+       body:"IFF's concatenation container, with a trailing SPACE -- the id is four bytes and 'CAT' is three. A parser that compares three characters matches things that are not this.",
+       note:"RIFF's little-endian cousin. Everything here is BIG-endian."},
+      {label:"size",k:"enum",r:[4,7],val:"515,742",
+       body:"Big-endian, counting everything after this field. 8 + 515,742 = 515,750, the exact file size -- this format keeps its promise.",
+       note:"contrast the .fxp byteSize on the other datasheet, where the same idea is written wrong by two vendors out of three."},
+      {label:"form type",k:"enum",r:[8,11],val:'"REX2"',
+       body:"What KIND of CAT this is. It sits inside the container rather than before it, so the first four bytes of the file do not identify the format on their own -- you need bytes 8 to 11 too.",
+       note:"sniffing 'CAT ' alone would also match unrelated IFF concatenations."},
+      {label:"chunk id",k:"sync",r:[12,15],val:'"HEAD"',
+       body:"The first real chunk. Chunks run id, big-endian size, payload -- the same shape all the way down, including nested CAT chunks further in."},
+      {label:"chunk size",k:"enum",r:[16,19],val:"29",
+       body:"29 is ODD, and IFF pads chunks to an even boundary. So the payload occupies bytes 20 to 48, byte 49 is a pad byte that belongs to nobody, and the next chunk starts at 50.",
+       note:"forgetting the pad byte is the classic IFF walk bug: every chunk after the first odd one lands one byte off and the whole file reads as garbage."},
+      {label:"payload",k:"rsv",r:[20,23],val:"first 4 of 29",
+       body:"HEAD carries the loop's tempo, slice count and sample rate. The slice list arrives later, in SINF and the nested CATs, with the audio in SDAT."}
+    ]);
 })();
 </script>
 <script>
@@ -454,6 +480,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
 })();
 
 </script>

@@ -184,7 +184,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody">
         <p class="note">The whole header, drawn above as a byte map. Magic, sizes, the preset kind, and the plugin id, all big-endian.</p>
         <div id="block-head"></div>
-      </div>
+              <div class="sec">the fixed header (28 bytes)</div>
+        <p class="note">From a real Serum preset. Big-endian, unusually for a Windows-first format.</p>
+        <div id="fxp-hdr"></div>
+</div>
     </details>
 
     <details class="region">
@@ -207,7 +210,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">FPCh</span><span class="v">chunk_size (uint32 BE) + opaque plugin blob</span></div>
           <div><span class="k">Serum note</span><span class="v">Serum 1 shipped .fxp; Serum 2 moved to the XferJson container</span></div>
         </div>
-      </div>
+              <div class="sec">where the name ends and the payload starts (12 bytes at offset 52)</div>
+        <p class="note">An opaque blob, and in this case a compressed one.</p>
+        <div id="fxp-chunk"></div>
+</div>
     </details>
   </div>
 
@@ -337,6 +343,46 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"num_params",k:"enum",r:[24,27],val:"1",
        body:"uint32 BE. In a single-program .fxp (an fxProgram) this field is num_params, the count of float parameters the plugin exposes, NOT a program count; num_programs only exists in a .fxb bank (fxSet). This example header reads 1."}
     ]);
+
+  // fxProgram header from a real Serum preset
+  build("fxp-hdr","byte",
+    [0x43,0x63,0x6E,0x4B,0x00,0x00,0x20,0x21,0x46,0x50,0x43,0x68,0x00,0x00,0x00,0x01,
+     0x58,0x66,0x73,0x58,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01],
+    [
+      {label:"chunkMagic",k:"sync",r:[0,3],val:'"CcnK"',
+       body:"Steinberg's marker for a VST2 preset file. Everything in this header is BIG-endian, which catches people out in a format that only ever ran on little-endian machines.",
+       note:"the same magic opens .fxb bank files; the field after next is what tells them apart."},
+      {label:"byteSize",k:"flag",r:[4,7],val:"8,225",
+       body:"The spec says this counts everything AFTER the magic and this field -- file size minus 8, so 8,217 for this file. It reads 8,225: the full file size. The plugin that wrote it is off by eight.",
+       note:"measured across 736 presets: 734 from one vendor write the full file size, 2 from another write the spec value. Both conventions are live, so this field cannot be trusted as a bound -- validate against the real file size instead."},
+      {label:"fxMagic",k:"enum",r:[8,11],val:'"FPCh"',sel:1,
+       branch:[["FxCk","a program stored as an array of float parameters"],["FPCh","a program stored as one opaque chunk"],["FxBk","a bank of FxCk programs"],["FBCh","a bank stored as one opaque chunk"]],
+       body:"Which of four shapes the rest of the file takes. FPCh means the plugin serialises its own state and the host cannot interpret it.",
+       note:"a .fxp holding FBCh does occur -- the extension does not bind the magic."},
+      {label:"version",k:"rsv",r:[12,15],val:"1",
+       body:"Format version. Always 1 in practice."},
+      {label:"fxID",k:"enum",r:[16,19],val:'"XfsX"',
+       body:"The plugin's unique id. This one is Serum. It is the only thing identifying which plugin can read the payload, and nothing verifies it.",
+       note:"load a preset into the wrong plugin and there is no checksum to stop you -- the id is the whole safety mechanism."},
+      {label:"fxVersion",k:"rsv",r:[20,23],val:"1",
+       body:"The PLUGIN's own version number, not the format's. Its meaning is entirely up to the plugin."},
+      {label:"numPrograms",k:"enum",r:[24,27],val:"1",
+       body:"Always 1 for a program file; a bank uses this for real. A 28-byte ASCII program name follows immediately, at offset 28."}
+    ]);
+  // the tail of the name and the head of the payload
+  build("fxp-chunk","byte",
+    [0x4B,0x49,0x45,0x53,0x00,0x00,0x1F,0xE5,0x78,0x01,0xED,0x5C],
+    [
+      {label:"prgName tail",k:"rsv",r:[0,3],val:'"KIES"',
+       body:"The last four bytes of the 28-byte name field at offset 28. It is a fixed-width field, NUL-padded, and a 28-character name fills it with no terminator at all.",
+       note:"a name longer than 28 characters is simply truncated -- this file's name was cut mid-word."},
+      {label:"chunkSize",k:"enum",r:[4,7],val:"8,165",
+       body:"FPCh only. A big-endian count of the opaque payload that follows. 60 + 8,165 = 8,225, the exact file size -- so THIS length is honest even though byteSize above is not.",
+       note:"prefer this field over byteSize when you need a bound."},
+      {label:"payload",k:"sync",r:[8,11],val:"0x78 0x01 = zlib",
+       body:"The plugin's private state. Opaque by design -- but 0x78 0x01 is a zlib stream at the lowest compression setting, so this one is inflatable rather than encrypted.",
+       note:"0x78 followed by 0x01, 0x9C or 0xDA covers almost every zlib header in the wild. Spotting it is the difference between 'opaque blob' and a readable wavetable."}
+    ]);
 })();
 </script>
 <script>
@@ -462,6 +508,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
+
+
 })();
 
 </script>

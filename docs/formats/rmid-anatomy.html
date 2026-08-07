@@ -183,7 +183,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody">
         <p class="note">The wrapper, drawn above: magic, size, and the RMID form type.</p>
         <div id="block-head"></div>
-      </div>
+              <div class="sec">a complete file (first 24 of 46 bytes)</div>
+        <p class="note">Two formats with opposite byte orders, one inside the other. A minimal but spec-exact specimen.</p>
+        <div id="rmid-all"></div>
+</div>
     </details>
 
     <details class="region">
@@ -327,6 +330,27 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        body:"The RIFF form type. RMID means the data chunk holds a Standard MIDI File. RIFF....WAVE would be a WAV instead; the sniffer keys on exactly this.",
        note:"the whole point of the format: a MIDI dressed as a RIFF."}
     ]);
+
+  // RIFF wrapper, then the MIDI file inside it -- and the endianness changes
+  build("rmid-all","byte",
+    [0x52,0x49,0x46,0x46,0x26,0x00,0x00,0x00,0x52,0x4D,0x49,0x44,
+     0x64,0x61,0x74,0x61,0x1A,0x00,0x00,0x00,0x4D,0x54,0x68,0x64],
+    [
+      {label:"RIFF",k:"sync",r:[0,3],val:'"RIFF"',
+       body:"The ordinary RIFF container, the same one WAV uses."},
+      {label:"size",k:"enum",r:[4,7],val:"38",
+       body:"LITTLE-endian, counting everything after this field. 8 + 38 = 46, the file size."},
+      {label:"form type",k:"enum",r:[8,11],val:'"RMID"',
+       body:"What makes this a MIDI file rather than a WAV. Bytes 0 to 3 are identical in both, so a sniffer that stops at 'RIFF' cannot tell them apart.",
+       note:"acidcat reads the form type before choosing a walker, which is why an .rmid does not arrive at the WAV parser."},
+      {label:"chunk id",k:"sync",r:[12,15],val:'"data"',
+       body:"One chunk, named exactly as in a WAV, holding something that is not audio at all: a complete standard MIDI file, byte for byte."},
+      {label:"chunk size",k:"enum",r:[16,19],val:"26",
+       body:"Little-endian, like every other RIFF length. The last little-endian number in the file."},
+      {label:"MThd",k:"sync",r:[20,23],val:'"MThd"',
+       body:"And here the byte order FLIPS. Everything from this point is a standard MIDI file, and SMF is BIG-endian: the header length that follows reads 00 00 00 06, the format is 0, one track, 96 ticks per quarter note.",
+       note:"one file, two byte orders, with nothing marking the boundary except knowing that MThd begins a different format. Extract from byte 20 to the end and you have a playable .mid."}
+    ]);
 })();
 </script>
 <script>
@@ -452,6 +476,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
 })();
 
 </script>

@@ -186,7 +186,10 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k">entries</span><span class="v">multisample.xml + member WAV/FLAC files</span></div>
           <div><span class="k">compression</span><span class="v">STORED (uncompressed) in practice</span></div>
         </div>
-      </div>
+              <div class="sec">a ZIP local file header (30 bytes)</div>
+        <p class="note">The standard structure every entry begins with. Field 4 is the one this format gets wrong.</p>
+        <div id="ms-zip"></div>
+</div>
     </details>
 
     <details class="region">
@@ -329,6 +332,34 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     det.n.textContent="";
     dcol.style.minHeight=(maxH+6)+"px";
   }
+
+  // the ZIP local file header -- spec-defined, and where the CRC quirk lives
+  build("ms-zip","byte",
+    [0x50,0x4B,0x03,0x04,0x14,0x00,0x00,0x00,0x00,0x00,0x78,0x9B,0xE6,0x5C,
+     0xDA,0x61,0x8E,0x71,0x3B,0x02,0x00,0x00,0x3B,0x02,0x00,0x00,0x0F,0x00,0x00,0x00],
+    [
+      {label:"signature",k:"sync",r:[0,3],val:"PK 03 04",
+       body:"A ZIP local file header. Every entry begins with one, so the file opens as an ordinary archive and any unzip tool will list it.",
+       note:"LITTLE-endian throughout, unlike the IFF formats."},
+      {label:"version needed",k:"rsv",r:[4,5],val:"20 = 2.0",
+       body:"The minimum ZIP version required. 2.0 means nothing exotic: no ZIP64, no encryption."},
+      {label:"flags",k:"flag",r:[6,7],val:"0x0000",
+       body:"Bit 3 is the interesting one: when set, the sizes and CRC below are zero here and appear in a data descriptor AFTER the payload instead. Clear here, so the values are present."},
+      {label:"method",k:"enum",r:[8,9],val:"0 = stored",sel:0,
+       branch:[["0","stored -- no compression"],["8","deflate"]],
+       body:"Stored, so the WAVs sit in the archive uncompressed and can be read with a plain seek and read."},
+      {label:"mod time / date",k:"rsv",r:[10,13],val:"DOS timestamp",
+       body:"Two 16-bit DOS fields with two-second resolution and no time zone. Useless as provenance, but it is what an archive tool shows you."},
+      {label:"CRC-32",k:"flag",r:[14,17],val:"0x718E61DA",
+       body:"THE FIELD THAT BITES. A checksum of the uncompressed data -- and the host that writes these archives fills it with a value that does not match, so Python's ZipFile.read raises BadZipFile on a perfectly good file.",
+       note:"consistent, not corruption. Read the entry by seeking to the header, skipping 30 bytes plus the name and extra lengths, and taking compress_size bytes raw. The central directory and namelist() are unaffected."},
+      {label:"compressed size",k:"enum",r:[18,21],val:"571",
+       body:"Equal to the uncompressed size below, because the method is stored."},
+      {label:"uncompressed size",k:"enum",r:[22,25],val:"571"},
+      {label:"name / extra length",k:"enum",r:[26,29],val:"15 and 0",
+       body:"The name is 15 bytes -- 'multisample.xml', the manifest that makes this a multisample rather than a folder of WAVs. It follows immediately, then the extra field, then the data.",
+       note:"payload begins at 30 + name_len + extra_len. That arithmetic is exactly what the CRC workaround needs."}
+    ]);
 })();
 </script>
 <script>
@@ -454,6 +485,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
+
+
+
 })();
 
 </script>

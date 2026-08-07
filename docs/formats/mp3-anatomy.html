@@ -463,6 +463,91 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         ["00","none"],["01","50/15 ms"],["10","reserved"],["11","CCITT J.17"]],
        body:"Legacy de-emphasis curve; almost always none."}
     ]);
+
+  // ID3v2.3.0 tag header, from a real file. Synchsafe size: 7 bits per byte,
+  // top bit always clear, so no byte can look like an MPEG sync.
+  build("id3v2-hdr","byte",
+    [0x49,0x44,0x33,0x03,0x00,0x00,0x01,0x51,0x0C,0x78],
+    [
+      {label:"magic",k:"sync",r:[0,2],val:'"ID3"',
+       body:"Three ASCII bytes at the very start of the file. A tag can only live at offset 0 (a footer variant aside), which is what lets a decoder skip it without parsing.",
+       note:"acidcat sniffs these three bytes, then checks whether the tag wraps a non-MPEG container."},
+      {label:"version",k:"enum",r:[3,3],val:"3 (2.3.0)",sel:1,
+       branch:[["2","2.2.0, three-character frame ids, effectively extinct"],["3","2.3.0, the common one; frame sizes are plain u32"],["4","2.4.0; frame sizes are SYNCHSAFE too"]],
+       body:"The minor version. It decides how frame sizes are read, and getting it wrong is the classic ID3 parsing bug.",
+       note:"2.3 and 2.4 differ in the frame header, not here."},
+      {label:"revision",k:"rsv",r:[4,4],val:"0",
+       body:"Revision number. Always 0 in practice; a decoder must ignore it rather than reject on it."},
+      {label:"flags",k:"flag",r:[5,5],val:"0x00",
+       body:"Bit 7 unsynchronisation, bit 6 extended header, bit 5 experimental, bit 4 footer. The footer bit is 2.4 ONLY -- in 2.3 that bit is reserved and must be zero. The low four bits must be zero in both.",
+       note:"unsynchronisation rewrites the payload so no FF 00 pattern can be mistaken for a frame sync; a parser must undo it before reading frames."},
+      {label:"size (synchsafe)",k:"enum",r:[6,9],val:"3,425,912",
+       body:"Four bytes, SEVEN bits each, top bit always clear: (b0<<21)|(b1<<14)|(b2<<7)|b3. That keeps the size itself from containing a byte that looks like a sync. It counts the bytes AFTER this header, so the audio starts at 10 + size.",
+       note:"0x01510C78 read naively would be 22,088,824 -- the synchsafe value is 3,425,912."}
+    ]);
+  // an ID3v2.3 text frame. 2.4 would read this size as synchsafe.
+  build("id3v2-frame","byte",
+    [0x54,0x43,0x4F,0x4D,0x00,0x00,0x00,0x13,0x00,0x00,0x01,0xFF,0xFE,0x4B,0x00,0x72,0x00,0x79,0x00,0x70,0x00,0x74],
+    [
+      {label:"frame id",k:"sync",r:[0,3],val:'"TCOM"',
+       body:"Four characters, A-Z and 0-9. TCOM is the composer; every id beginning T is a text frame and shares this payload shape.",
+       note:"a run of zero bytes here is padding, not a frame, and ends the tag."},
+      {label:"size",k:"enum",r:[4,7],val:"19",
+       body:"A PLAIN big-endian u32 in 2.3, counting the bytes after this 10-byte frame header. In 2.4 the same field is synchsafe -- reading a 2.4 frame as 2.3 gives a wildly wrong size and desynchronises the whole tag.",
+       note:"this single difference is the most common ID3 bug."},
+      {label:"frame flags",k:"flag",r:[8,9],val:"0x0000",
+       body:"Status and format flags: tag/file alter preservation, read-only, then compression, encryption and grouping. Set flags add bytes to the front of the payload, so a parser that ignores them reads the wrong offset."},
+      {label:"encoding",k:"enum",r:[10,10],val:"0x01 = UTF-16",sel:1,
+       branch:[["0x00","ISO-8859-1, NUL terminated (2.3 and 2.4)"],["0x01","UTF-16 WITH a byte-order mark (2.3 and 2.4)"],["0x02","UTF-16BE, no BOM -- 2.4 ONLY"],["0x03","UTF-8 -- 2.4 ONLY"]],
+       body:"The first byte of every text payload. It is not optional and it is not part of the string.",
+       note:"a reader that skips this byte gets a leading control character, which is how mojibake in tag editors usually starts."},
+      {label:"BOM",k:"sync",r:[11,12],val:"FF FE = little-endian",
+       body:"Because the encoding is 0x01, the text itself opens with a byte-order mark. FF FE is little-endian, FE FF big.",
+       note:"the BOM is inside the payload, so the frame size counts it."},
+      {label:"text",k:"rsv",r:[13,21],val:'"Krypt..."',
+       body:"UTF-16LE characters, two bytes each -- every second byte here is 0x00 because the text is ASCII-range. Truncated in this view."}
+    ]);
+  // APIC: cover art, and the reason a "small" MP3 can carry megabytes of tag
+  build("id3v2-apic","byte",
+    [0x41,0x50,0x49,0x43,0x00,0x34,0x3E,0x51,0x00,0x00,0x00,0x69,0x6D,0x61,0x67,0x65,0x2F,0x70,0x6E,0x67,0x00,0x03,0x00,0x89],
+    [
+      {label:"frame id",k:"sync",r:[0,3],val:'"APIC"',
+       body:"Attached picture. One frame can hold an entire image, which is why a three-minute MP3 can carry a multi-megabyte tag."},
+      {label:"size",k:"enum",r:[4,7],val:"3,423,825",
+       body:"3.4 MB of PNG in a single frame -- larger than a great many complete MP3s.",
+       note:"acidcat caps its ID3 read at 16 MB so a forged size cannot force an unbounded allocation."},
+      {label:"frame flags",k:"flag",r:[8,9],val:"0x0000"},
+      {label:"encoding",k:"enum",r:[10,10],val:"0x00",
+       body:"Applies to the description field further down, not to the image."},
+      {label:"MIME type",k:"enum",r:[11,20],val:'"image/png"',
+       body:"A NUL-terminated string, always latin-1 REGARDLESS of the encoding byte above -- the encoding governs the description, not this. Its length is declared nowhere, so the terminator is the only way to reach the next field.",
+       note:"the empty string means image/ (a URL) in the spec; in the wild it means a broken writer."},
+      {label:"picture type",k:"flag",r:[21,21],val:"0x03 = front cover",
+       body:"0x00 other, 0x03 front cover, 0x04 back cover, 0x08 artist. Front cover is what a player shows."},
+      {label:"description",k:"rsv",r:[22,22],val:"empty",
+       body:"A NUL-terminated string in the declared encoding. Empty here, so a single 0x00 -- but under encoding 0x01 or 0x02 the terminator is TWO zero bytes, and a reader scanning for one NUL stops in the middle of a UTF-16 character.",
+       note:"acidcat scans for a 2-byte terminator with parity correction when the encoding is UTF-16."},
+      {label:"image data",k:"sync",r:[23,23],val:"0x89 = PNG",
+       body:"The image begins immediately, with no length of its own -- it runs to the end of the frame. 0x89 opens the PNG signature; a JPEG would begin FF D8."}
+    ]);
+  // ID3v1: 128 fixed bytes at the very end of the file. This is the tail.
+  build("id3v1-tail","byte",
+    [0x32,0x30,0x31,0x34,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x00,0x01,0x0C],
+    [
+      {label:"year",k:"enum",r:[0,3],val:'"2014"',
+       body:"Four ASCII digits at trailer offset 93. Four digits is the whole field, so ID3v1 cannot express a month, a day, or a year outside 0000-9999.",
+       note:"space or NUL padded when unset; both occur."},
+      {label:"comment",k:"rsv",r:[4,31],val:"28 spaces",
+       body:"Thirty bytes in ID3v1.0. In v1.1 the last two are stolen for a track number, leaving 28 -- which is why this field is drawn as 28 here."},
+      {label:"zero byte",k:"sync",r:[32,32],val:"0x00",
+       body:"THE version tell. If trailer byte 125 is zero and byte 126 is not, this is ID3v1.1 and byte 126 is a track number. If byte 125 is non-zero, the comment simply runs the full 30 bytes and there is no track.",
+       note:"there is no version field anywhere in ID3v1; this single byte is the entire distinction."},
+      {label:"track",k:"enum",r:[33,33],val:"1",
+       body:"Track number, 1-255. Only meaningful because the byte before it is zero."},
+      {label:"genre",k:"flag",r:[34,34],val:"0x0C = Other",
+       body:"An index into a fixed list of 80 genres from the original spec, later extended by Winamp. 0xFF means unset.",
+       note:"the list is closed, so any genre outside it cannot be expressed at all -- one of the reasons ID3v2 exists."}
+    ]);
 })();
 </script>
 <script>
@@ -589,93 +674,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   }
   customElements.define('acidcat-toggle', AcidcatToggle);
 
-  // ID3v2.3.0 tag header, from a real file. Synchsafe size: 7 bits per byte,
-  // top bit always clear, so no byte can look like an MPEG sync.
-  build("id3v2-hdr","byte",
-    [0x49,0x44,0x33,0x03,0x00,0x00,0x01,0x51,0x0C,0x78],
-    [
-      {label:"magic",k:"sync",r:[0,2],val:'"ID3"',
-       body:"Three ASCII bytes at the very start of the file. A tag can only live at offset 0 (a footer variant aside), which is what lets a decoder skip it without parsing.",
-       note:"acidcat sniffs these three bytes, then checks whether the tag wraps a non-MPEG container."},
-      {label:"version",k:"enum",r:[3,3],val:"3 (2.3.0)",sel:1,
-       branch:[["2","2.2.0, three-character frame ids, effectively extinct"],["3","2.3.0, the common one; frame sizes are plain u32"],["4","2.4.0; frame sizes are SYNCHSAFE too"]],
-       body:"The minor version. It decides how frame sizes are read, and getting it wrong is the classic ID3 parsing bug.",
-       note:"2.3 and 2.4 differ in the frame header, not here."},
-      {label:"revision",k:"rsv",r:[4,4],val:"0",
-       body:"Revision number. Always 0 in practice; a decoder must ignore it rather than reject on it."},
-      {label:"flags",k:"flag",r:[5,5],val:"0x00",
-       body:"Bit 7 unsynchronisation, bit 6 extended header, bit 5 experimental, bit 4 footer. The footer bit is 2.4 ONLY -- in 2.3 that bit is reserved and must be zero. The low four bits must be zero in both.",
-       note:"unsynchronisation rewrites the payload so no FF 00 pattern can be mistaken for a frame sync; a parser must undo it before reading frames."},
-      {label:"size (synchsafe)",k:"enum",r:[6,9],val:"3,425,912",
-       body:"Four bytes, SEVEN bits each, top bit always clear: (b0<<21)|(b1<<14)|(b2<<7)|b3. That keeps the size itself from containing a byte that looks like a sync. It counts the bytes AFTER this header, so the audio starts at 10 + size.",
-       note:"0x01510C78 read naively would be 22,088,824 -- the synchsafe value is 3,425,912."}
-    ]);
 
-  // an ID3v2.3 text frame. 2.4 would read this size as synchsafe.
-  build("id3v2-frame","byte",
-    [0x54,0x43,0x4F,0x4D,0x00,0x00,0x00,0x13,0x00,0x00,0x01,0xFF,0xFE,0x4B,0x00,0x72,0x00,0x79,0x00,0x70,0x00,0x74],
-    [
-      {label:"frame id",k:"sync",r:[0,3],val:'"TCOM"',
-       body:"Four characters, A-Z and 0-9. TCOM is the composer; every id beginning T is a text frame and shares this payload shape.",
-       note:"a run of zero bytes here is padding, not a frame, and ends the tag."},
-      {label:"size",k:"enum",r:[4,7],val:"19",
-       body:"A PLAIN big-endian u32 in 2.3, counting the bytes after this 10-byte frame header. In 2.4 the same field is synchsafe -- reading a 2.4 frame as 2.3 gives a wildly wrong size and desynchronises the whole tag.",
-       note:"this single difference is the most common ID3 bug."},
-      {label:"frame flags",k:"flag",r:[8,9],val:"0x0000",
-       body:"Status and format flags: tag/file alter preservation, read-only, then compression, encryption and grouping. Set flags add bytes to the front of the payload, so a parser that ignores them reads the wrong offset."},
-      {label:"encoding",k:"enum",r:[10,10],val:"0x01 = UTF-16",sel:1,
-       branch:[["0x00","ISO-8859-1, NUL terminated (2.3 and 2.4)"],["0x01","UTF-16 WITH a byte-order mark (2.3 and 2.4)"],["0x02","UTF-16BE, no BOM -- 2.4 ONLY"],["0x03","UTF-8 -- 2.4 ONLY"]],
-       body:"The first byte of every text payload. It is not optional and it is not part of the string.",
-       note:"a reader that skips this byte gets a leading control character, which is how mojibake in tag editors usually starts."},
-      {label:"BOM",k:"sync",r:[11,12],val:"FF FE = little-endian",
-       body:"Because the encoding is 0x01, the text itself opens with a byte-order mark. FF FE is little-endian, FE FF big.",
-       note:"the BOM is inside the payload, so the frame size counts it."},
-      {label:"text",k:"rsv",r:[13,21],val:'"Krypt..."',
-       body:"UTF-16LE characters, two bytes each -- every second byte here is 0x00 because the text is ASCII-range. Truncated in this view."}
-    ]);
 
-  // APIC: cover art, and the reason a "small" MP3 can carry megabytes of tag
-  build("id3v2-apic","byte",
-    [0x41,0x50,0x49,0x43,0x00,0x34,0x3E,0x51,0x00,0x00,0x00,0x69,0x6D,0x61,0x67,0x65,0x2F,0x70,0x6E,0x67,0x00,0x03,0x00,0x89],
-    [
-      {label:"frame id",k:"sync",r:[0,3],val:'"APIC"',
-       body:"Attached picture. One frame can hold an entire image, which is why a three-minute MP3 can carry a multi-megabyte tag."},
-      {label:"size",k:"enum",r:[4,7],val:"3,423,825",
-       body:"3.4 MB of PNG in a single frame -- larger than a great many complete MP3s.",
-       note:"acidcat caps its ID3 read at 16 MB so a forged size cannot force an unbounded allocation."},
-      {label:"frame flags",k:"flag",r:[8,9],val:"0x0000"},
-      {label:"encoding",k:"enum",r:[10,10],val:"0x00",
-       body:"Applies to the description field further down, not to the image."},
-      {label:"MIME type",k:"enum",r:[11,20],val:'"image/png"',
-       body:"A NUL-terminated string, always latin-1 REGARDLESS of the encoding byte above -- the encoding governs the description, not this. Its length is declared nowhere, so the terminator is the only way to reach the next field.",
-       note:"the empty string means image/ (a URL) in the spec; in the wild it means a broken writer."},
-      {label:"picture type",k:"flag",r:[21,21],val:"0x03 = front cover",
-       body:"0x00 other, 0x03 front cover, 0x04 back cover, 0x08 artist. Front cover is what a player shows."},
-      {label:"description",k:"rsv",r:[22,22],val:"empty",
-       body:"A NUL-terminated string in the declared encoding. Empty here, so a single 0x00 -- but under encoding 0x01 or 0x02 the terminator is TWO zero bytes, and a reader scanning for one NUL stops in the middle of a UTF-16 character.",
-       note:"acidcat scans for a 2-byte terminator with parity correction when the encoding is UTF-16."},
-      {label:"image data",k:"sync",r:[23,23],val:"0x89 = PNG",
-       body:"The image begins immediately, with no length of its own -- it runs to the end of the frame. 0x89 opens the PNG signature; a JPEG would begin FF D8."}
-    ]);
 
-  // ID3v1: 128 fixed bytes at the very end of the file. This is the tail.
-  build("id3v1-tail","byte",
-    [0x32,0x30,0x31,0x34,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x00,0x01,0x0C],
-    [
-      {label:"year",k:"enum",r:[0,3],val:'"2014"',
-       body:"Four ASCII digits at trailer offset 93. Four digits is the whole field, so ID3v1 cannot express a month, a day, or a year outside 0000-9999.",
-       note:"space or NUL padded when unset; both occur."},
-      {label:"comment",k:"rsv",r:[4,31],val:"28 spaces",
-       body:"Thirty bytes in ID3v1.0. In v1.1 the last two are stolen for a track number, leaving 28 -- which is why this field is drawn as 28 here."},
-      {label:"zero byte",k:"sync",r:[32,32],val:"0x00",
-       body:"THE version tell. If trailer byte 125 is zero and byte 126 is not, this is ID3v1.1 and byte 126 is a track number. If byte 125 is non-zero, the comment simply runs the full 30 bytes and there is no track.",
-       note:"there is no version field anywhere in ID3v1; this single byte is the entire distinction."},
-      {label:"track",k:"enum",r:[33,33],val:"1",
-       body:"Track number, 1-255. Only meaningful because the byte before it is zero."},
-      {label:"genre",k:"flag",r:[34,34],val:"0x0C = Other",
-       body:"An index into a fixed list of 80 genres from the original spec, later extended by Winamp. 0xFF means unset.",
-       note:"the list is closed, so any genre outside it cannot be expressed at all -- one of the reasons ID3v2 exists."}
-    ]);
+
+
+
+
 
 })();
 
