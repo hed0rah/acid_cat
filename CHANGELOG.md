@@ -6,6 +6,8 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [1.0.0b2] - 2026-08-08
+
 A hardening pass ahead of the 1.0 release candidate. Almost every entry below
 has one shape: **work was skipped and the result was reported as complete.** A
 cap, a swallowed exception or a filter would drop part of the job, and the
@@ -37,6 +39,16 @@ these were introduced by the 1.0 restructure itself.
   acidcat, check any `&&` / `||` chain and any `$?` branch.**
 
 ### Fixed
+- **Bitwig wavetables: the `.wt` header word at offset 10 is a flags field, not
+  a data offset.** Read as an offset, 151 of 152 real wavetables were reported
+  corrupt. The flags say whether the payload is int16 or float32, whether the
+  file is a one-shot sample, and whether `<wtmeta>` XML follows. All 152 walk
+  clean. The synthetic test specimen had encoded the same misunderstanding,
+  which is why nothing caught it.
+- **`audit` trusted a declared PCM size past the end of the file**, reading
+  beyond the buffer instead of clamping to the bytes actually present.
+- **The TUI loudness guard never fired on compressed files**, and its prompt
+  could not be answered from the keyboard.
 - **`repair` could destroy audio, and exited 0.** On a WAV whose container size
   had been truncated, the repairer rewrote the file to the size the header
   declared -- orphaning 882,000 bytes of perfectly readable samples and
@@ -155,6 +167,28 @@ these were introduced by the 1.0 restructure itself.
   never asked about.
 
 ### Added
+- **The Ableton sidecar family is walked.** `.asd` analysis files, the Live Set
+  family, Max for Live devices and `.agr` grooves. The object tree's type
+  dictionary is decoded rather than guessed at, so typed values come out as
+  values; warp markers are decoded and the tempo derived from them, since `.asd`
+  does not store a tempo field. A sidecar that no longer describes its audio is
+  reported as such. The overview bin size is read from the file (128) rather
+  than inferred (64), and the "schema generations" the format appeared to have
+  turned out to be optional sections.
+- **Visualisation over a whole file, not a prefix.** `viz` gained a streamed
+  file-wide entropy pass and a 64x64 Hilbert map covering the entire file at a
+  flat read cost. Both say when they sampled; neither captions a cap as a fact.
+- **Two more anomaly rules, and fixtures that fire every one of them.** Two of
+  the thirteen shipped rules were referenced by no test at all -- a detector
+  nobody has made fire is a claim, not a check. Sixteen rules now, none untested.
+- **`probe.annotate()` and `od --marks`.** Per-byte tags (`class:*`, `mark:size`,
+  `mark:table`) for the hex path with no walker behind it -- `--offset`, a carved
+  region, an unknown header. Tags are strings, never colours, so the terminal,
+  the TUI and the HTML explorer each choose their own styling. The overlay is
+  bounded to 256 KB and its summary line says which bytes it actually scanned.
+- **A TUI you can drive.** A pane can take the whole screen (`z`), the hex row
+  width follows the pane instead of folding below ~154 columns, `tab` moves
+  focus, and the layout gives the hex view half the screen.
 - **One rendering rule across every verb.** There were six different
   output-format sets: seven verbs offered `table/json/csv` but not `tsv`, two
   offered `tsv` but not `csv`, three declared a private `--json` boolean that
