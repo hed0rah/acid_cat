@@ -16,6 +16,7 @@ from being broken. That is the same defect class as a silent cap, in the
 smallest possible form.
 """
 
+import pathlib
 import asyncio
 import os
 import shutil
@@ -43,18 +44,20 @@ def _run(scenario):
     asyncio.run(scenario())
 
 
-def test_tab_reaches_hex_edit(wav):
-    """Textual's focus_next used to eat it. Only a real key press catches this:
-    calling action_hex_focus() directly always worked."""
+def test_hex_edit_is_reachable_by_its_key(wav):
+    """It was on `tab`, which Textual's focus_next ate before the binding -- and
+    calling action_hex_focus() directly always worked, so every existing test
+    passed. It is ctrl+e now: tab means move focus, and entering an edit mode
+    should take a modifier."""
     async def scenario():
         app = AcidcatTUI(wav)
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause()
             await pilot.press("down")
             await pilot.pause()
-            await pilot.press("tab")
+            await pilot.press("ctrl+e")
             await pilot.pause()
-            assert app._hexedit is not None, "tab did not enter hex edit"
+            assert app._hexedit is not None, "ctrl+e did not enter hex edit"
     _run(scenario)
 
 
@@ -64,7 +67,7 @@ def test_arrows_move_the_hex_edit_cursor(wav):
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause()
             await pilot.press("down")
-            await pilot.press("tab")
+            await pilot.press("ctrl+e")
             await pilot.pause()
             assert app._hexedit is not None
             for k in ("right", "right", "down"):
@@ -82,9 +85,9 @@ def test_the_hex_pane_can_be_focused_and_scrolled(wav):
             await pilot.pause()
             # stay on the root node: the whole file, so the pane holds
             # _HEX_CAP bytes and genuinely overflows one screen
-            await pilot.press("shift+tab")
+            await pilot.press("tab")
             await pilot.pause()
-            assert app._focused_pane() == "hexwrap", "shift+tab skipped the hex pane"
+            assert app._focused_pane() == "hexwrap", "tab did not move focus to the hex pane"
             hw = app.query_one("#hexwrap")
             assert hw.max_scroll_y > 0, "the pane should hold more than one screen"
             for _ in range(6):
@@ -107,7 +110,7 @@ def test_zoom_zooms_the_focused_pane_not_a_fixed_order(wav):
             await pilot.press("z")             # toggles off
             await pilot.pause()
             assert app._zoom is None
-            await pilot.press("shift+tab")     # now the hex pane
+            await pilot.press("tab")           # now the hex pane
             await pilot.press("z")
             await pilot.pause()
             assert app._zoom == "zoom-hex"
@@ -121,7 +124,7 @@ def test_zoom_focuses_what_it_zoomed(wav):
         app = AcidcatTUI(wav)
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            await pilot.press("shift+tab")
+            await pilot.press("tab")
             await pilot.press("z")
             await pilot.pause()
             assert app._focused_pane() == "hexwrap"
@@ -190,4 +193,38 @@ def test_expand_and_collapse_actually_move_the_tree(wav):
             await pilot.press("c")
             await pilot.pause()
             assert expanded(app) < opened
+    _run(scenario)
+
+
+def test_strip_asks_before_it_touches_anything(wav):
+    """`s` used to discard every tag on the keypress. Every other unmodified
+    key here reads; a mistyped `s` reaching for something else should not be
+    a destructive edit."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            before = pathlib.Path(app.work).read_bytes()
+            await pilot.press("s")
+            await pilot.pause()
+            assert len(app.screen_stack) > 1, "s did not ask"
+            assert not app.dirty, "s edited before the answer"
+            await pilot.press("n")
+            await pilot.pause()
+            assert not app.dirty, "declining still edited"
+            assert pathlib.Path(app.work).read_bytes() == before
+    _run(scenario)
+
+
+def test_answering_yes_still_strips(wav):
+    """The confirmation must not have broken the feature it guards."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            await pilot.press("s")
+            await pilot.pause()
+            await pilot.press("y")
+            await pilot.pause()
+            assert app.dirty, "confirming did not strip"
     _run(scenario)

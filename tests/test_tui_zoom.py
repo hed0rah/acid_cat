@@ -43,15 +43,29 @@ def _run(scenario):
     asyncio.run(scenario())
 
 
-def test_the_hex_pane_does_not_fit_a_row_unzoomed(wav):
-    """The bug this exists to fix. If this ever fails because the layout got
-    wider, the zoom is still useful but this rationale needs rewriting."""
+def test_a_narrow_pane_narrows_the_row_instead_of_folding(wav):
+    """The grid does not scroll horizontally, so a row wider than the pane
+    wraps and column position stops meaning anything. The width follows the
+    pane now, the way `od --width` always could."""
+    from acidcat.tui_app.render import row_width_for
     async def scenario():
         app = AcidcatTUI(wav)
-        async with app.run_test(size=(120, 40)) as pilot:
+        async with app.run_test(size=(100, 40)) as pilot:
             await pilot.pause()
-            assert app.query_one("#hexwrap").size.width < ROW_COLUMNS
+            pane = app.query_one("#hexwrap").size.width
+            w = app._hex_width()
+            need = 10 + 3 * w + (1 if w > 8 else 0) + 1 + w
+            assert w < 16, "a 100-column terminal cannot fit 16 bytes per row"
+            assert need <= pane, f"{w}/row needs {need}, pane is {pane}"
     _run(scenario)
+
+
+def test_row_width_thresholds():
+    from acidcat.tui_app.render import row_width_for
+    assert row_width_for(76) == 16
+    assert row_width_for(75) == 8
+    assert row_width_for(43) == 8
+    assert row_width_for(42) == 4
 
 
 def test_zoom_gives_the_hex_pane_the_whole_screen(wav):
@@ -62,7 +76,7 @@ def test_zoom_gives_the_hex_pane_the_whole_screen(wav):
         app = AcidcatTUI(wav)
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            await pilot.press("shift+tab")
+            await pilot.press("tab")
             await pilot.press("z")
             await pilot.pause()
             assert app.query_one("#hexwrap").size.width >= ROW_COLUMNS
@@ -85,16 +99,15 @@ def test_zoom_reaches_every_pane_and_toggles_back(wav):
             assert app._zoom is None
             assert app.query_one("#hexwrap").size.width == start
 
-            await pilot.press("shift+tab")                        # -> hex pane
+            await pilot.press("tab")                        # -> hex pane
             await pilot.press("z"); await pilot.pause()
             assert app._zoom == "zoom-hex"
             assert app.query_one("#hexwrap").size.width >= ROW_COLUMNS
             await pilot.press("z"); await pilot.pause()
 
-            await pilot.press("shift+tab"); await pilot.press("shift+tab")
-            await pilot.press("z"); await pilot.pause()           # -> anomalies
-            assert app._zoom == "zoom-anom"
-            assert app.query_one("#anomwrap").size.width >= ROW_COLUMNS
+            # forensics no longer zooms: it sits in the left column now, sized
+            # to its content, and over 900 real files 894 have nothing to show.
+            assert "anomwrap" not in app._PANES
     _run(scenario)
 
 

@@ -47,7 +47,26 @@ def _fuzzy(query, text):
     return i == len(q)
 
 
-def hex_text(path, off, length, accent, spans=None):
+# A row is gutter + hex cells + the mid gap + the ascii column. Powers of two
+# only: at 16 or 8 per row a column still maps to the low nibble of the offset,
+# which is most of why a hex grid is readable at all.
+_ROW_WIDTHS = (16, 8, 4)
+
+
+def row_width_for(columns):
+    """Bytes per row that fit in ``columns``, largest first. 16 needs 76.
+
+    The grid folds rather than scrolling horizontally, so a row wider than the
+    pane does not merely look cramped -- it wraps, and column position stops
+    meaning anything.
+    """
+    for n in _ROW_WIDTHS:
+        if columns >= 10 + 3 * n + (1 if n > 8 else 0) + 1 + n:
+            return n
+    return _ROW_WIDTHS[-1]
+
+
+def hex_text(path, off, length, accent, spans=None, width=16):
     """A colored hex dump (offset gutter + hex columns + ascii) of up to
     _HEX_CAP bytes starting at off. Bytes render in `accent`; when `spans` (a
     list of (abs_offset, len) field ranges) is given, each field's bytes take a
@@ -59,7 +78,8 @@ def hex_text(path, off, length, accent, spans=None):
         return t
     shown = min(length, _HEX_CAP)
     raw = _read(path, off, shown)
-    _hex_rows(t, off, raw, accent, _spans_cmap(off, spans, shown) if spans else None)
+    _hex_rows(t, off, raw, accent,
+              _spans_cmap(off, spans, shown) if spans else None, width)
     if length > shown:
         t.append(f"  .. {length - shown:,} more bytes\n", style=DIM)
     return t
@@ -77,7 +97,7 @@ def _spans_cmap(base_off, spans, limit):
     return cmap
 
 
-def _hex_rows(t, off, raw, byte_style, cmap=None):
+def _hex_rows(t, off, raw, byte_style, cmap=None, width=16):
     """Append hex-dump rows (gutter + hex + ascii) for `raw` to Text `t`.
 
     `cmap` maps a position (relative to `off`) to a style, and it applies to
@@ -86,16 +106,16 @@ def _hex_rows(t, off, raw, byte_style, cmap=None):
     reason the hex editor had to hand-inline its own copy of this loop to get a
     cursor onto both halves of a row.
     """
-    for row in range(0, len(raw), 16):
-        chunk = raw[row:row + 16]
+    for row in range(0, len(raw), width):
+        chunk = raw[row:row + width]
         t.append(f"{off + row:08x}  ", style=GUTTER)
-        for i in range(16):
+        for i in range(width):
             if i < len(chunk):
                 style = cmap.get(row + i, byte_style) if cmap else byte_style
                 t.append(f"{chunk[i]:02x} ", style=style)
             else:
                 t.append("   ")
-            if i == 7:
+            if width > 8 and i == (width // 2) - 1:
                 t.append(" ")
         t.append(" ")
         for i, b in enumerate(chunk):

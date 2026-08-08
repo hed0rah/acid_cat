@@ -50,6 +50,7 @@ from acidcat.tui_theme import (
 
 from acidcat.tui_app.render import (
     edit_profile, hex_text, text_field_for, _read, _fuzzy, _hex_rows,
+    row_width_for,
     _SPIN, _BAR_W, _HEX_CAP, _ROW_CAP, _HEXEDIT_CAP, _UNDO_CAP, _VIZ_READ,
     _UNDO_BYTES_CAP, _DIFF_CAP, _LARGE_FILE, _SCAN_SEG,
 )
@@ -63,13 +64,23 @@ from acidcat.tui_app.screens import (
 class AcidcatTUI(App):
     CSS = """
     Screen { background: #16181C; }
-    #tree { width: 48%; border: round #08F9DF; padding: 0 1; }
-    #right { width: 52%; }
+    #left { width: 50%; }
+    #right { width: 50%; }
+    /* file identity and the forensic summary share one box above the tree.
+       Measured over 900 real files, 894 have no findings and the worst has
+       three -- so this is one or two lines almost always, and the 30% of the
+       right column it used to occupy now belongs to the hex view. */
+    #title { height: auto; padding: 0 1; }
+    /* forensics keeps its own box, but sized to its content instead of a fixed
+       30% of the screen: measured over 900 real files, 894 have no findings at
+       all and the worst has three. It stays a VerticalScroll so a genuinely
+       damaged file's list is still reachable. */
+    #anomwrap { height: auto; max-height: 40%; border: round #FF4D00; }
+    #anom { height: auto; padding: 0 1; }
+    #tree { border: round #08F9DF; padding: 0 1; }
     #detail { height: auto; border: round #3A3E45; padding: 0 1; color: #C9CDD3; }
     #hexwrap { border: round #08F9DF; }
     #hex { padding: 0 1; }
-    #anomwrap { height: 30%; border: round #FF4D00; }
-    #anom { height: auto; padding: 0 1; }
     #editbar { dock: bottom; height: 3; border: round #FF4D00; background: #16181C; }
     #editbar.hidden { display: none; }
 
@@ -79,13 +90,10 @@ class AcidcatTUI(App):
        read-only `allow_maximize` is true, which excludes these containers, and
        it postdates the `textual>=0.60` floor in pyproject. Classes work on
        every version and need no feature test. */
-    Screen.zoom-hex #tree, Screen.zoom-hex #detail, Screen.zoom-hex #anomwrap { display: none; }
+    Screen.zoom-hex #left, Screen.zoom-hex #detail { display: none; }
     Screen.zoom-hex #right { width: 100%; }
     Screen.zoom-tree #right { display: none; }
-    Screen.zoom-tree #tree { width: 100%; }
-    Screen.zoom-anom #tree, Screen.zoom-anom #detail, Screen.zoom-anom #hexwrap { display: none; }
-    Screen.zoom-anom #right { width: 100%; }
-    Screen.zoom-anom #anomwrap { height: 100%; }
+    Screen.zoom-tree #left { width: 100%; }
     Tree { background: #16181C; }
     Tree > .tree--guides { color: #3A3E45; }
     Tree > .tree--guides-selected { color: #08F9DF; }
@@ -116,18 +124,19 @@ class AcidcatTUI(App):
         Binding("l", "locate_regions", "locate regions", show=False),
         Binding("u", "ascend", "up to regions", show=False),
         ("e", "edit_field", "edit field"),
-        # priority, for the same reason as shift+tab below: Textual binds tab to
-        # focus_next at the screen level and consumes it first, so hex-edit mode
-        # was unreachable by the key its own help screen documents.
-        Binding("tab", "hex_focus", "hex edit", show=False, priority=True),
+        # ctrl+e, not tab: tab moves focus, and entering an edit mode should
+        # take a modifier. Priority because Textual binds ctrl+e at the screen
+        # level in some versions.
+        Binding("ctrl+e", "hex_focus", "hex edit", show=False, priority=True),
         Binding("ctrl+t", "toggle_mode", "value/hex", show=False),
         Binding("w", "edit", "edit tags", show=False),
         Binding("s", "strip", "strip meta", show=False),
         ("z", "zoom", "zoom pane"),
-        # priority: Textual binds shift+tab to focus_previous, which walks every
-        # focusable widget in reverse DOM order -- tree then anomalies, skipping
-        # the hex pane, which is the one you actually need to reach.
-        Binding("shift+tab", "focus_pane", "focus next pane",
+        # priority: Textual binds tab/shift+tab to focus_next/focus_previous at
+        # the screen level and consumes them first, walking every focusable
+        # widget in DOM order rather than pane to pane.
+        Binding("tab", "focus_pane", "focus pane", show=False, priority=True),
+        Binding("shift+tab", "focus_pane_back", "focus pane back",
                 show=False, priority=True),
         ("a", "expand_all", "expand"),
         ("c", "collapse_all", "collapse"),
@@ -206,15 +215,16 @@ class AcidcatTUI(App):
         self._scan_timer = None   # set_interval handle animating the spinner
 
     def compose(self) -> ComposeResult:
-        yield Static(id="title")
         with Horizontal():
-            yield Tree("file", id="tree")
+            with Vertical(id="left"):
+                yield Static(id="title")
+                with VerticalScroll(id="anomwrap"):
+                    yield Static(id="anom")
+                yield Tree("file", id="tree")
             with Vertical(id="right"):
                 yield Static(id="detail")
                 with VerticalScroll(id="hexwrap"):
                     yield HexPane(id="hex")
-                with VerticalScroll(id="anomwrap"):
-                    yield Static(id="anom")
         yield Input(id="editbar", classes="hidden")
         yield Footer()
 
@@ -1181,12 +1191,13 @@ class AcidcatTUI(App):
         self._cur_spans = spans
         if self._view == "hex":
             self.query_one("#hex", Static).update(
-                hex_text(self.work, off, length, accent, spans))
+                hex_text(self.work, off, length, accent, spans,
+                         self._hex_width()))
         # in a viz mode the pane shows a whole-file view; a node highlight leaves it
 
     # pane id -> the class that gives it the screen
-    _ZOOM_FOR = {"tree": "zoom-tree", "hexwrap": "zoom-hex", "anomwrap": "zoom-anom"}
-    _PANES = ("tree", "hexwrap", "anomwrap")
+    _ZOOM_FOR = {"tree": "zoom-tree", "hexwrap": "zoom-hex"}
+    _PANES = ("tree", "hexwrap")
 
     def _focused_pane(self):
         """Which pane owns focus, walking up from whatever widget has it.
@@ -1201,16 +1212,22 @@ class AcidcatTUI(App):
             node = node.parent
         return "hexwrap" if self._view == "hex" else "tree"
 
+    def action_focus_pane_back(self):
+        self._move_pane(-1)
+
     def action_focus_pane(self):
-        """Move focus to the next pane (shift+tab).
+        """Move focus to the next pane (tab).
 
         Without this the hex pane is unreachable: focus starts on the tree and
         never leaves, so arrow keys always drive the tree and the hex view
         cannot be scrolled at all -- and it is a VerticalScroll holding up to
         _HEX_CAP bytes, which is far more than one screen.
         """
+        self._move_pane(1)
+
+    def _move_pane(self, step):
         cur = self._focused_pane()
-        nxt = self._PANES[(self._PANES.index(cur) + 1) % len(self._PANES)]
+        nxt = self._PANES[(self._PANES.index(cur) + step) % len(self._PANES)]
         self.query_one(f"#{nxt}").focus()
         self.notify(f"focus: {nxt}")
 
@@ -1247,10 +1264,23 @@ class AcidcatTUI(App):
         pane = self.query_one("#hex", Static)
         if self._view == "hex":
             off, length, accent = self._cur_region
-            pane.update(hex_text(self.work, off, length, accent, self._cur_spans))
+            pane.update(hex_text(self.work, off, length, accent,
+                                 self._cur_spans, self._hex_width()))
         else:
             pane.update(self._viz_render(self._view))
         self.notify(f"byte view: {self._view}")
+
+    def _hex_width(self):
+        """Bytes per row for the current pane.
+
+        16 needs 76 columns and half a terminal only reaches that at 156, so a
+        constant meant the grid folded on any ordinary window -- and a folded
+        hex grid loses the property that makes it a grid.
+        """
+        try:
+            return row_width_for(self.query_one("#hexwrap").size.width - 2)
+        except Exception:
+            return 16
 
     def _viz_width(self):
         try:
@@ -2043,7 +2073,8 @@ class AcidcatTUI(App):
                      f"(length may change)", style=SOFT)
             self.query_one("#detail", Static).update(d)
             self.query_one("#hex", Static).update(
-                hex_text(self.work, tgt["off"], tgt["length"], PEND))
+                hex_text(self.work, tgt["off"], tgt["length"], PEND,
+                         width=self._hex_width()))
             return
         text = self.query_one("#editbar", Input).value
         patch = self._patch_from_input(text)
@@ -2234,7 +2265,8 @@ class AcidcatTUI(App):
         t.append(f"byte {cur + 1}/{len(buf)} @ 0x{off + cur:08x}"
                  f"{' low-nibble' if nib else ''}   arrows move  0-9a-f overwrite"
                  f"  enter=apply  esc=cancel\n", style=DIM)
-        _hex_rows(t, off, bytes(buf), ACCENT, {cur: self._HEXEDIT_CURSOR})
+        _hex_rows(t, off, bytes(buf), ACCENT, {cur: self._HEXEDIT_CURSOR},
+                  self._hex_width())
         self.query_one("#hex", Static).update(t)
 
     # ── other actions ─────────────────────────────────────────────────
@@ -2275,9 +2307,24 @@ class AcidcatTUI(App):
         self.push_screen(EditScreen(self.work, prof[0], prof[1]), after)
 
     def action_strip(self):
+        """Remove every identifying tag (s) -- after asking.
+
+        A single unmodified key that mutates the file the moment it is pressed
+        is the wrong shape. Every other one-key binding here reads; the ones
+        that write are either modified (ctrl+s, ctrl+e) or open a form you then
+        have to fill in (e, w). This was the exception, and a mistyped `s`
+        while reaching for anything else silently discarded every tag.
+        """
         if not self.work:
             self.notify("open a file first (o)", severity="warning")
             return
+        self.push_screen(
+            YesNoScreen("Strip ALL identifying metadata from this file? "
+                        "The edit is undoable (ctrl+z) and is not written "
+                        "until you save.", yes_label="strip"),
+            lambda ok: ok and self._do_strip())
+
+    def _do_strip(self):
         try:
             _fmt, new_data, removed = _write_strip(self.work)
         except (EditError, OSError, ValueError) as e:
