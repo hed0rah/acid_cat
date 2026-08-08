@@ -54,6 +54,11 @@ def register(subparsers):
     p.add_argument("--region", type=int, metavar="N",
                    help="Dump the Nth region reported by `locate` (0-based); "
                         "runs locate itself, so no piping is required.")
+    p.add_argument("--marks", action="store_true",
+                   help="Tint the raw dump by byte class, and highlight values "
+                        "that look like a file size or an offset table. "
+                        "Inferred, not decoded -- and only on the raw dump; "
+                        "a walked file already colours by decoded field.")
     p.set_defaults(func=run)
 
 
@@ -139,15 +144,129 @@ def _requested_range(args, path, size):
 _AUTO_DUMP_CAP = 16 * 1024 * 1024
 
 
-def _raw_dump(data, start, length, width, on, note):
+# Foreground says what kind of byte this is; background says the value means
+# something. Two channels, because the structured path already spends
+# foreground on field identity and an overlay must not fight it.
+_MARK_BG = {"mark:size": "#3A3E45", "mark:table": "#4A3327"}
+
+
+def _styled_cells(row, base, tags, on):
+    """Hex cells for one row, with escapes RUN-LENGTH ENCODED.
+
+    A per-byte escape is about 19 bytes. Emitting one per byte turns a 16 MB
+    dump into roughly 380 MB of stdout, on a path that has already cost this
+    project 1.4 GB of output in five and a half minutes (see the note in
+    _run). A style only changes when the tags change, and in a header the runs
+    are long -- a field of nulls is one escape, not sixty-four.
+    """
+    from acidcat.tui_theme import BYTE_CLASS_TEXT
+    from acidcat.util.color import bg, fg
+
+    out = []
+    run = []
+    run_key = object()
+
+    def flush():
+        if not run:
+            return
+        text = " ".join(f"{x:02x}" for x in run)
+        if on and run_key is not None:
+            cls, mark = run_key
+            if cls:
+                text = fg(BYTE_CLASS_TEXT[cls], text)
+            if mark:
+                text = bg(_MARK_BG[mark], text)
+        out.append(text)
+        run.clear()
+
+    for i, b in enumerate(row):
+        t = tags.get(base + i, ())
+        cls = next((x.split(":", 1)[1] for x in t if x.startswith("class:")), None)
+        mark = next((x for x in t if x.startswith("mark:")), None)
+        key = (cls, mark)
+        if key != run_key and run:
+            flush()
+        run_key = key
+        run.append(b)
+    flush()
+    return " ".join(out)
+
+
+# annotate() returns a tag list per byte, which is the right shape for a hex
+# window and the wrong one for a whole file: measured, it costs ~217 MB per MB
+# of input, so the 16 MB _AUTO_DUMP_CAP would ask for ~3.5 GB. Marks are a
+# header-reading aid -- nobody eyeballs 16 MB of hex for a size field -- so the
+# overlay is bounded and the summary line says where it stopped.
+_MARK_CAP = 256 * 1024
+
+
+def _marks_for(args, data, start, length):
+    """(tags, covered) for the window about to be dumped, or None if --marks
+    is off.
+
+    The window is what gets scanned, but the marks are defined against the
+    whole file: a size field means nothing measured against a slice, and an
+    offset that lands in-file is only checkable if you know how big the file
+    is. base_off keeps the 4-byte grid the file's, not the window's.
+    """
+    if not getattr(args, "marks", False):
+        return None
+    from acidcat.core.probe import annotate
+
+    end = min(start + length, len(data), start + _MARK_CAP)
+    covered = end - start
+    return annotate(bytes(data[start:end]), base_off=start,
+                    file_size=len(data)), covered
+
+
+def _raw_dump(data, start, length, width, on, note, marks=None):
     """A plain hex dump of a byte range -- what od(1) does. Used when the file
     has no walker, or when an explicit range was asked for."""
     end = min(start + length, len(data))
+    tags, covered = marks if marks else (None, 0)
     print(_c("1", note, on))
+    if tags:
+        line = _mark_summary(tags, on, covered, end - start)
+        if line:
+            print(line)
     for base in range(start, end, width):
         row = data[base:min(base + width, end)]
-        print(f"  0x{base:08x}  {_hexcells(row):<{width * 3}} {_ascii(row)}")
+        if tags and base - start < covered:
+            cells = _styled_cells(row, base - start, tags, on)
+            # cells carries escapes, so it cannot be width-padded by format
+            # spec -- the padding has to be computed from the visible length,
+            # which is the same 3n-1 the unstyled path produces.
+            pad = " " * max(0, width * 3 - (3 * len(row) - 1))
+            print(f"  0x{base:08x}  {cells}{pad} {_ascii(row)}")
+        else:
+            print(f"  0x{base:08x}  {_hexcells(row):<{width * 3}} {_ascii(row)}")
     return 0
+
+
+def _mark_summary(tags, on, covered, dumped):
+    """One line naming what was inferred, rather than forty silent hints.
+
+    A statistical inference must never outrank a checked magic number
+    (core/forensics/locate.py), and a view that estimates has to say so
+    (tests/test_tui_viz_honesty.py). Saying it once discharges both.
+    """
+    kinds = {}
+    for ts in tags.values():
+        for t in ts:
+            if t.startswith("mark:"):
+                kinds[t] = kinds.get(t, 0) + 1
+    short = covered < dumped
+    if not kinds and not short:
+        return None
+    words = {"mark:size": "a value matching the file size",
+             "mark:table": "a run of ascending in-file offsets"}
+    parts = [f"{words[k]} ({n // 4} field(s))" for k, n in sorted(kinds.items())]
+    body = "; ".join(parts) if parts else "nothing found"
+    # A cap reported as a complete scan is the bug this project keeps finding
+    # in itself: say which bytes were actually looked at.
+    if short:
+        body += f" -- in the first {covered:,} of {dumped:,} bytes dumped"
+    return _c("2", "  marks: " + body + " -- inferred, not decoded", on)
 
 
 def _run(args):
@@ -166,7 +285,8 @@ def _run(args):
         try:
             return _raw_dump(data, start, length, args.width, on,
                              f"{path}  0x{start:08x} .. 0x{start + length:08x}"
-                             f"  ({length:,} bytes)")
+                             f"  ({length:,} bytes)",
+                             _marks_for(args, data, start, length))
         finally:
             close()
 
@@ -188,7 +308,8 @@ def _run(args):
             if shown < len(data):
                 note += (f"\n  showing the first {shown:,} bytes; "
                          f"use --offset/--length for the rest")
-            return _raw_dump(data, 0, shown, args.width, on, note)
+            return _raw_dump(data, 0, shown, args.width, on, note,
+                             _marks_for(args, data, 0, shown))
         finally:
             close()
     # mmap, not f.read(): od only slices small header/field/preview runs, and
