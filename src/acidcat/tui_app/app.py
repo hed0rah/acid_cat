@@ -72,6 +72,20 @@ class AcidcatTUI(App):
     #anom { height: auto; padding: 0 1; }
     #editbar { dock: bottom; height: 3; border: round #FF4D00; background: #16181C; }
     #editbar.hidden { display: none; }
+
+    /* Zoom. A hex row is 76 columns wide and the right pane is 52% of the
+       terminal, so below about 154 columns the grid folds -- at 120 the pane
+       is 61 wide. Textual can maximize natively, but only for widgets whose
+       read-only `allow_maximize` is true, which excludes these containers, and
+       it postdates the `textual>=0.60` floor in pyproject. Classes work on
+       every version and need no feature test. */
+    Screen.zoom-hex #tree, Screen.zoom-hex #detail, Screen.zoom-hex #anomwrap { display: none; }
+    Screen.zoom-hex #right { width: 100%; }
+    Screen.zoom-tree #right { display: none; }
+    Screen.zoom-tree #tree { width: 100%; }
+    Screen.zoom-anom #tree, Screen.zoom-anom #detail, Screen.zoom-anom #hexwrap { display: none; }
+    Screen.zoom-anom #right { width: 100%; }
+    Screen.zoom-anom #anomwrap { height: 100%; }
     Tree { background: #16181C; }
     Tree > .tree--guides { color: #3A3E45; }
     Tree > .tree--guides-selected { color: #08F9DF; }
@@ -106,6 +120,7 @@ class AcidcatTUI(App):
         Binding("ctrl+t", "toggle_mode", "value/hex", show=False),
         Binding("w", "edit", "edit tags", show=False),
         Binding("s", "strip", "strip meta", show=False),
+        ("z", "zoom", "zoom pane"),
         ("a", "expand_all", "expand"),
         ("c", "collapse_all", "collapse"),
         ("question_mark", "help", "help"),
@@ -159,6 +174,7 @@ class AcidcatTUI(App):
         self._finding_idx = -1    # cursor into self.findings for jump-to-finding
         self._xref = {}           # id(field node) -> absolute target offset (pointer)
         self._view = "hex"        # byte-view mode: hex | entropy | hilbert | histogram
+        self._zoom = None         # which pane owns the screen, cycled by z
         self._cur_region = (None, None, ACCENT)  # last shown (off, length, accent)
         self._cur_spans = None    # field spans for per-field hex tint (chunk view)
         self._play = None         # handle to a running audio-audition process
@@ -1158,6 +1174,26 @@ class AcidcatTUI(App):
                 hex_text(self.work, off, length, accent, spans))
         # in a viz mode the pane shows a whole-file view; a node highlight leaves it
 
+    # zoom targets, in the order `z` walks them
+    _ZOOM = (None, "zoom-hex", "zoom-tree", "zoom-anom")
+
+    def action_zoom(self):
+        """Cycle which pane owns the screen (z).
+
+        The hex pane is first because it is the one that needs it: a row is 76
+        columns and the pane is 52% of the terminal, so it folds below about
+        154. The tree is second -- chunk and field labels truncate at 48%.
+        """
+        cur = self._zoom
+        nxt = self._ZOOM[(self._ZOOM.index(cur) + 1) % len(self._ZOOM)]
+        for cls in self._ZOOM:
+            if cls:
+                self.screen.remove_class(cls)
+        if nxt:
+            self.screen.add_class(nxt)
+        self._zoom = nxt
+        self.notify(f"zoom: {nxt[5:] if nxt else 'off'}")
+
     def action_cycle_view(self):
         """Cycle the hex pane: hex -> entropy -> hilbert -> histogram (whole file)."""
         order = ["hex", "entropy", "hilbert", "histogram"]
@@ -2136,7 +2172,16 @@ class AcidcatTUI(App):
         event.stop()
         self._render_hexedit()
 
+    _HEXEDIT_CURSOR = "bold #16181C on #FF4D00"
+
     def _render_hexedit(self):
+        """The edit view is the same grid with one byte styled as the cursor.
+
+        It used to be a hand-inlined fourth copy of the row loop, for one
+        reason: `_hex_rows` styled the ascii column independently of `cmap`, so
+        there was no way to put the cursor style on both halves of a row. That
+        gap is closed, so this is a cmap of exactly one entry.
+        """
         he = self._hexedit
         off, buf, cur, nib = he["off"], he["buf"], he["cur"], he["nib"]
         t = Text()
@@ -2144,24 +2189,7 @@ class AcidcatTUI(App):
         t.append(f"byte {cur + 1}/{len(buf)} @ 0x{off + cur:08x}"
                  f"{' low-nibble' if nib else ''}   arrows move  0-9a-f overwrite"
                  f"  enter=apply  esc=cancel\n", style=DIM)
-        cur_st = "bold #16181C on #FF4D00"
-        for row in range(0, len(buf), 16):
-            chunk = buf[row:row + 16]
-            t.append(f"{off + row:08x}  ", style=GUTTER)
-            for i in range(16):
-                if i < len(chunk):
-                    t.append(f"{chunk[i]:02x} ",
-                             style=cur_st if row + i == cur else ACCENT)
-                else:
-                    t.append("   ")
-                if i == 7:
-                    t.append(" ")
-            t.append(" ")
-            for i, b in enumerate(chunk):
-                ch = chr(b) if 32 <= b < 127 else "."
-                t.append(ch, style=(cur_st if row + i == cur
-                                    else (FG if 32 <= b < 127 else DIM)))
-            t.append("\n")
+        _hex_rows(t, off, bytes(buf), ACCENT, {cur: self._HEXEDIT_CURSOR})
         self.query_one("#hex", Static).update(t)
 
     # ── other actions ─────────────────────────────────────────────────

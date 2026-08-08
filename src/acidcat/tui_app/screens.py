@@ -192,6 +192,7 @@ class HelpScreen(ModalScreen):
         rows = [
             ("arrows / enter", "move + expand the tree"),
             ("a / c", "expand all / collapse all"),
+            ("z", "zoom a pane to the whole screen: hex / tree / anomalies / off"),
             ("g", "goto offset (0x.. or decimal)"),
             ("/", "search: text=fuzzy name/value, 0x..=hex, \"..\"=ascii"),
             ("n / N", "next / previous search match"),

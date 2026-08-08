@@ -78,8 +78,14 @@ def _spans_cmap(base_off, spans, limit):
 
 
 def _hex_rows(t, off, raw, byte_style, cmap=None):
-    """Append hex-dump rows (gutter + hex + ascii) for `raw` to Text `t`. With a
-    `cmap` (position -> color), each byte takes its field color."""
+    """Append hex-dump rows (gutter + hex + ascii) for `raw` to Text `t`.
+
+    `cmap` maps a position (relative to `off`) to a style, and it applies to
+    BOTH columns. The ascii column used to be styled independently, which meant
+    a caller could not put one style on a byte -- and that gap is the only
+    reason the hex editor had to hand-inline its own copy of this loop to get a
+    cursor onto both halves of a row.
+    """
     for row in range(0, len(raw), 16):
         chunk = raw[row:row + 16]
         t.append(f"{off + row:08x}  ", style=GUTTER)
@@ -92,9 +98,11 @@ def _hex_rows(t, off, raw, byte_style, cmap=None):
             if i == 7:
                 t.append(" ")
         t.append(" ")
-        for b in chunk:
-            ch = chr(b) if 32 <= b < 127 else "."
-            t.append(ch, style=FG if 32 <= b < 127 else DIM)
+        for i, b in enumerate(chunk):
+            printable = 32 <= b < 127
+            # the cmap wins; otherwise printable/not is the only signal here
+            style = (cmap or {}).get(row + i) or (FG if printable else DIM)
+            t.append(chr(b) if printable else ".", style=style)
         t.append("\n")
 
 
