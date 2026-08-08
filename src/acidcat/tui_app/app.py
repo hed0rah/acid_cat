@@ -1225,9 +1225,36 @@ class AcidcatTUI(App):
         """
         self._move_pane(1)
 
+    def _pane_visible(self, pane):
+        """Is this pane actually on screen right now?
+
+        A zoom hides the other pane with `display: none` on its container, and
+        the widget itself still reports display=True -- so asking the widget is
+        not enough.
+        """
+        node = self.query_one(f"#{pane}")
+        while node is not None:
+            if getattr(node, "display", True) is False:
+                return False
+            node = node.parent
+        return True
+
     def _move_pane(self, step):
+        """Cycle focus through the panes you can see.
+
+        Skipping the hidden ones is the whole job. Zoomed into the hex view,
+        tab used to hand focus to the tree, which is hidden -- so the arrow
+        keys drove a cursor nobody could see and the hex pane jumped to a field
+        you had not chosen. Navigating blind reads as "I cannot change fields".
+        """
+        order = [p for p in self._PANES if self._pane_visible(p)]
+        if len(order) < 2:
+            self.notify("nothing else on screen -- z to leave zoom",
+                        severity="warning")
+            return
         cur = self._focused_pane()
-        nxt = self._PANES[(self._PANES.index(cur) + step) % len(self._PANES)]
+        i = order.index(cur) if cur in order else 0
+        nxt = order[(i + step) % len(order)]
         self.query_one(f"#{nxt}").focus()
         self.notify(f"focus: {nxt}")
 

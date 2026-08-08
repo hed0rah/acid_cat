@@ -228,3 +228,44 @@ def test_answering_yes_still_strips(wav):
             await pilot.pause()
             assert app.dirty, "confirming did not strip"
     _run(scenario)
+
+
+def test_tab_does_not_focus_a_pane_hidden_by_zoom(wav):
+    """Zoomed into the hex view, tab used to focus the tree -- which the zoom
+    hides. The cursor moved, the hex jumped to a field the user had not picked,
+    and nothing on screen explained it. Navigating blind reads as "I cannot
+    change fields at all"."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(160, 44)) as pilot:
+            await pilot.pause()
+            await pilot.press("down")
+            await pilot.press("tab")
+            await pilot.press("z")
+            await pilot.pause()
+            assert app._zoom == "zoom-hex"
+            tree = app.query_one("#tree")
+            before = tree.cursor_line
+            await pilot.press("tab")
+            await pilot.pause()
+            assert app._focused_pane() == "hexwrap", "tab escaped into a hidden pane"
+            await pilot.press("down")
+            await pilot.pause()
+            assert tree.cursor_line == before, "the hidden tree moved unseen"
+    _run(scenario)
+
+
+def test_tab_still_cycles_once_the_zoom_is_off(wav):
+    """The skip must not break the ordinary case."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(160, 44)) as pilot:
+            await pilot.pause()
+            assert app._focused_pane() == "tree"
+            await pilot.press("tab")
+            await pilot.pause()
+            assert app._focused_pane() == "hexwrap"
+            await pilot.press("tab")
+            await pilot.pause()
+            assert app._focused_pane() == "tree"
+    _run(scenario)
