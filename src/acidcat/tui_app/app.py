@@ -1270,15 +1270,30 @@ class AcidcatTUI(App):
             pane.update(self._viz_render(self._view))
         self.notify(f"byte view: {self._view}")
 
+    # of #hexwrap's outer width, the row never gets: its own border (2),
+    # #hex's padding (2), and the vertical scrollbar (2).
+    _HEX_CHROME = 6
+
     def _hex_width(self):
         """Bytes per row for the current pane.
 
         16 needs 76 columns and half a terminal only reaches that at 156, so a
         constant meant the grid folded on any ordinary window -- and a folded
         hex grid loses the property that makes it a grid.
+
+        The scrollbar is subtracted whether or not one is showing, and that is
+        the point. Whether it shows depends on how tall the content is, which
+        depends on the width chosen here -- so measuring the live scrollbar
+        feeds the answer back into itself and lands one layout behind. That is
+        what made the wrapping intermittent: a chunk long enough to scroll lost
+        two columns after the width had already been picked, and stepping to a
+        short field and back appeared to "fix" it because the stale measurement
+        had flipped. Reserving the gutter always costs at most one width step
+        at a borderline size, and never wraps.
         """
         try:
-            return row_width_for(self.query_one("#hexwrap").size.width - 2)
+            return row_width_for(self.query_one("#hexwrap").size.width
+                                 - self._HEX_CHROME)
         except Exception:
             return 16
 

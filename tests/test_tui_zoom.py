@@ -125,3 +125,30 @@ def test_zoom_is_reachable_from_the_footer_and_the_help(wav):
     from acidcat.tui_app.screens import HelpScreen
     import inspect
     assert '("z"' in inspect.getsource(HelpScreen)
+
+
+def test_the_hex_row_never_wraps_at_any_width(wav):
+    """The row must fit the space it actually gets, at every terminal size and
+    on every node -- including one long enough to raise a scrollbar.
+
+    This is the regression that made wrapping look random. Scrollbar presence
+    depends on content height, which depends on the row width, so measuring the
+    live scrollbar lands one layout behind: a long chunk lost two columns after
+    the width was chosen, and stepping to a short field and back flipped the
+    stale measurement and appeared to fix it.
+    """
+    async def scenario():
+        for cols in (80, 100, 120, 140, 156, 158, 160, 164, 172, 200, 240):
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(cols, 44)) as pilot:
+                await pilot.pause()
+                pane = app.query_one("#hex")
+                for _ in range(5):
+                    await pilot.pause()
+                    w = app._hex_width()
+                    need = 10 + 3 * w + (1 if w > 8 else 0) + 1 + w
+                    got = pane.content_size.width
+                    assert need <= got, (
+                        f"{cols} cols: {w}/row needs {need}, pane gives {got}")
+                    await pilot.press("down")
+    _run(scenario)
