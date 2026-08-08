@@ -152,3 +152,65 @@ def test_the_hex_row_never_wraps_at_any_width(wav):
                         f"{cols} cols: {w}/row needs {need}, pane gives {got}")
                     await pilot.press("down")
     _run(scenario)
+
+
+def test_the_detail_pane_never_changes_height(wav):
+    """The layout must not jump as you move through the tree.
+
+    #detail was `height: auto`, so a summary long enough to wrap grew the pane
+    and stole a row from the hex view below it -- the visible symptom being
+    that the hex pane resized when you selected a different chunk. It is a
+    two-line status now, fixed, and a long line clips.
+    """
+    async def scenario():
+        for cols in (100, 120, 140, 200):
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(cols, 44)) as pilot:
+                await pilot.pause()
+                d = app.query_one("#detail")
+                seen = set()
+                for _ in range(8):
+                    await pilot.press("down")
+                    await pilot.pause()
+                    seen.add(d.content_size.height)
+                assert len(seen) == 1, (
+                    f"{cols} cols: #detail took heights {sorted(seen)} across "
+                    f"nodes -- the layout jumps")
+    _run(scenario)
+
+
+def test_a_summary_does_not_repeat_the_size_the_row_shows(wav):
+    """The row prints the size, then the walker summary printed it again."""
+    from acidcat.tui_app.render import trim_size_echo
+    assert trim_size_echo("audio payload, 176,400 bytes, 1.000 s", 176400) \
+        == "audio payload, 1.000 s"
+    assert trim_size_echo("padding, 8,192 bytes", 8192) == "padding"
+    # a DIFFERENT number is a real statement -- a declared size, a payload
+    # inside a larger chunk -- and must survive
+    assert trim_size_echo("declared 999 bytes", 12) == "declared 999 bytes"
+    assert trim_size_echo("INFO, 1 entries", 26) == "INFO, 1 entries"
+
+
+def test_no_tree_row_states_its_size_twice(wav):
+    """The call site, not the helper. The row prints the size itself and then
+    the walker's summary printed it again -- 'data 0x46 176,400b audio payload,
+    176,400 bytes'. Two statements of one fact, and on the widest chunks it is
+    what pushed the row past the pane."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(200, 44)) as pilot:
+            await pilot.pause()
+            tree = app.query_one("#tree")
+            checked = 0
+            for node in [tree.root] + list(tree.root.children):
+                lbl = node.label
+                text = lbl.plain if hasattr(lbl, "plain") else str(lbl)
+                meta = app._nodemeta.get(id(node))
+                if not meta:
+                    continue
+                size = meta[1]
+                checked += 1
+                assert f"{size:,}b" not in text or f"{size:,} bytes" not in text, (
+                    f"row states its size twice: {text!r}")
+            assert checked, "no chunk rows were checked"
+    _run(scenario)

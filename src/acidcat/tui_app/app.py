@@ -50,7 +50,7 @@ from acidcat.tui_theme import (
 
 from acidcat.tui_app.render import (
     edit_profile, hex_text, text_field_for, _read, _fuzzy, _hex_rows,
-    row_width_for,
+    row_width_for, trim_size_echo,
     _SPIN, _BAR_W, _HEX_CAP, _ROW_CAP, _HEXEDIT_CAP, _UNDO_CAP, _VIZ_READ,
     _UNDO_BYTES_CAP, _DIFF_CAP, _LARGE_FILE, _SCAN_SEG,
 )
@@ -78,7 +78,11 @@ class AcidcatTUI(App):
     #anomwrap { height: auto; max-height: 40%; border: round #FF4D00; }
     #anom { height: auto; padding: 0 1; }
     #tree { border: round #08F9DF; padding: 0 1; }
-    #detail { height: auto; border: round #3A3E45; padding: 0 1; color: #C9CDD3; }
+    /* Fixed, not auto: the detail is a two-line status (name, then an
+       editability note). On auto it grew when a summary was long enough to
+       wrap, stealing rows from the hex pane and making the layout jump as you
+       moved through the tree. Two content rows always, and a long line clips. */
+    #detail { height: 4; border: round #3A3E45; padding: 0 1; color: #C9CDD3; }
     #hexwrap { border: round #08F9DF; }
     #hex { padding: 0 1; }
     #editbar { dock: bottom; height: 3; border: round #FF4D00; background: #16181C; }
@@ -1066,7 +1070,8 @@ class AcidcatTUI(App):
                        style=f"bold {TEAL}" if is_audio else f"bold {accent}")
             lbl.append(f"0x{c.get('offset', 0):08x}  ", style=DIM)
             lbl.append(f"{c.get('size', 0):,}b  ", style=SOFT)
-            lbl.append(str(c.get("summary", "")), style=FG)
+            lbl.append(trim_size_echo(c.get("summary", ""), c.get("size", 0)),
+                       style=FG)
             if is_audio:
                 lbl.append("  [playable]", style=TEAL)
             node = tree.root.add(lbl)
@@ -1180,12 +1185,22 @@ class AcidcatTUI(App):
         detail = self.query_one("#detail", Static)
         d = Text()
         d.append(name, style=f"bold {accent}")
-        if off is not None:
-            d.append(f"   @ 0x{off:08x}   {length:,} bytes", style=SOFT)
-        else:
+        if off is None:
             d.append("   (derived, no byte range)", style=DIM)
+        elif f"0x{off:08x}" not in name:
+            d.append(f"   @ 0x{off:08x}   {length:,} bytes", style=SOFT)
+        # else: the tree label already carries this offset. Repeating it put
+        # the same two facts on the line twice and pushed it to 110 columns
+        # against a 66-column pane, which is most of the wrapping in the
+        # multi-pane view -- the pane was not too small, the line was too long.
         if note:
             d.append(f"\n{note}", style=SOFT)
+        # A status line, so it clips rather than reflows. Wrapped, one long
+        # summary silently stole a row from the pane below and the layout
+        # jumped as you moved through the tree -- the detail is a glance, and
+        # the full text is a keypress away in the pane that has room for it.
+        d.no_wrap = True
+        d.overflow = "ellipsis"
         detail.update(d)
         self._cur_region = (off, length, accent)
         self._cur_spans = spans
@@ -1896,17 +1911,17 @@ class AcidcatTUI(App):
             if bt is not None:
                 if bt["mode"] == "bitfield":
                     return (f"value-editable ({bt['width']}-bit packed) -- "
-                            "press e, or tab for hex")
-                return "enum-editable -- press e, or tab for hex"
+                            "press e, or ctrl+e for hex")
+                return "enum-editable -- press e, or ctrl+e for hex"
             try:
                 if encode_value(enc, str(raw if raw is not None else value)) == rb:
-                    return f"value-editable ({enc}) -- press e, or tab for hex"
+                    return f"value-editable ({enc}) -- press e, or ctrl+e for hex"
             except (ValueError, struct.error):
                 pass
         if infer_enc(value, rb, self._prefer_be) is not None:
-            return "value-editable -- press e, or tab for hex"
+            return "value-editable -- press e, or ctrl+e for hex"
         if length <= _HEXEDIT_CAP:
-            return "hex-editable -- press e or tab"
+            return "hex-editable -- press ctrl+e"
         return ""
 
     # ── inline byte / value editor with live hex preview ──────────────

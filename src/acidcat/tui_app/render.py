@@ -7,6 +7,7 @@ is built from -- plus the view/scan/undo cap constants. No Textual app state.
 """
 
 import os
+import re
 
 from rich.text import Text
 
@@ -198,3 +199,28 @@ def text_field_for(profile, field_name):
     return None
 
 
+
+
+_SIZE_ECHO = re.compile(r",?\s*\b[\d,]+ bytes\b")
+
+
+def trim_size_echo(summary, size):
+    """Drop a byte count from a chunk summary when the row already shows it.
+
+    The tree row prints the size itself, then the walker's summary prints it
+    again -- "data 0x46 176,400b audio payload, 176,400 bytes, 1.000 s". Two
+    statements of one fact, and on the widest chunks it is what pushed the row
+    past the pane. Only an exact match is removed: a summary quoting a
+    *different* number is saying something (a declared size, a payload inside a
+    larger chunk) and must survive untouched.
+    """
+    text = str(summary or "")
+    if not size:
+        return text
+    def drop(m):
+        try:
+            return "" if int(m.group(0).replace(",", "").replace("bytes", "").strip()) == size else m.group(0)
+        except ValueError:
+            return m.group(0)
+    out = _SIZE_ECHO.sub(drop, text)
+    return re.sub(r"\s{2,}", " ", out).strip().strip(",").strip()
