@@ -24,7 +24,7 @@ import sys
 from acidcat.commands._output import (add_output_format_arg,
                                       chosen_format)
 from acidcat.util.stdin import display_name
-from acidcat.util.color import add_color_arg, color_enabled
+from acidcat.util.color import add_color_arg, color_enabled, fg
 
 from acidcat.core import probe as pr
 from acidcat.core.forensics import viz
@@ -117,8 +117,6 @@ def register(subparsers):
     p.set_defaults(func=run)
 
 
-def _rgb(hexc):
-    return int(hexc[1:3], 16), int(hexc[3:5], 16), int(hexc[5:7], 16)
 
 
 
@@ -399,12 +397,7 @@ def _dispatch(args, verb, path, data):
             cells = []
             for b in row:
                 glyph, cls = viz.byte_class(b)
-                hexc = BYTE_CLASS[cls]
-                if color:
-                    r, g, bl = _rgb(hexc)
-                    cells.append(f"\x1b[38;2;{r};{g};{bl}m█\x1b[0m")
-                else:
-                    cells.append(glyph)
+                cells.append(fg(BYTE_CLASS[cls], "█") if color else glyph)
             print("  " + "".join(cells))
         print("  legend:  . null   o ascii   - control   + high   # 0xFF")
         return 0

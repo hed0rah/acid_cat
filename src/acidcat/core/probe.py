@@ -135,6 +135,93 @@ def scan_value(data, value, fmt, limit=512):
     return hits[:limit]
 
 
+# A run of ascending in-file u32s is a table; one in-file u32 is a coincidence.
+# For a 44 KB file every value under 44,170 "could be an offset", which is most
+# small integers -- so a lone candidate is noise and only the run is a finding.
+_TABLE_MIN_ENTRIES = 4
+_MARK_LIMIT = 256
+
+
+def annotate(window, *, base_off=0, file_size=None, marks=True):
+    """``{position: [tag, ...]}`` for the bytes of ``window``.
+
+    Positions are relative to the window, matching what a hex renderer's colour
+    map already wants. Tags are strings and never colours -- ``viz.byte_class``
+    sets that precedent so core stays presentation-free and the terminal, the
+    TUI and the HTML explorer each choose their own styling.
+
+    Tags emitted:
+
+    ``class:null|ff|ascii|ctrl|high``
+        What kind of byte this is -- the split ``viz.byte_class`` already uses,
+        so a dump and the Hilbert map agree. This is the thing the ascii column
+        cannot say: 00, FF and 80 are three identical dots there. Note that
+        printable means 0x20..0x7E, so DEL is ``high``, not ``ctrl``.
+
+    ``mark:size``
+        A value equal to the file size, or to the file size minus 8. The second
+        is the RIFF/IFF convention (a size counting everything after the id and
+        the size field), and finding it is usually the moment an unknown
+        container stops being unknown.
+
+    ``mark:table``
+        The start of a run of at least four ascending u32s that all land inside
+        the file. This is deliberately narrower than "this value could be an
+        offset", which for any real file is true of most small integers and
+        would light up the whole dump.
+
+    ``marks=False`` gives classes only, for a caller that just wants the
+    byte-kind tint.
+    """
+    from acidcat.core.forensics import viz
+
+    tags = {}
+
+    def add(pos, tag):
+        if 0 <= pos < len(window):
+            tags.setdefault(pos, []).append(tag)
+
+    for i, b in enumerate(window):
+        add(i, "class:" + viz.byte_class(b)[1])
+
+    if not marks or not file_size:
+        return tags
+
+    # size fields: reuse the value scan, which already tries both byte orders
+    for want in (file_size, file_size - 8):
+        if want <= 0:
+            continue
+        for off, _order in scan_value(window, want, "u32", limit=_MARK_LIMIT):
+            for k in range(4):
+                add(off + k, "mark:size")
+
+    # offset tables: a run, not a value
+    n = len(window)
+    aligned = (4 - (base_off % 4)) % 4          # first window-relative 4-aligned pos
+    run_start = None
+    prev = None
+    count = 0
+    for pos in range(aligned, n - 3, 4):
+        v = struct.unpack_from("<I", window, pos)[0]
+        ascending = prev is not None and prev < v
+        if 0 < v < file_size and (prev is None or ascending):
+            if run_start is None:
+                run_start, count = pos, 1
+            else:
+                count += 1
+            prev = v
+            continue
+        if run_start is not None and count >= _TABLE_MIN_ENTRIES:
+            for k in range(count * 4):
+                add(run_start + k, "mark:table")
+        run_start, prev, count = (pos, v, 1) if 0 < v < file_size else (None, None, 0)
+    if run_start is not None and count >= _TABLE_MIN_ENTRIES:
+        for k in range(count * 4):
+            add(run_start + k, "mark:table")
+
+    return tags
+
+
 def strings(data, minlen=4, limit=1000):
     """Printable ASCII runs, as (offset, text)."""
     out = []

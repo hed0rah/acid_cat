@@ -33,9 +33,20 @@ THEMES = {
         # multi-item ramp (teal -> silver -> orange), restrained, no neon rainbow
         "PALETTE": ["#08F9DF", "#5CD9CE", "#93C9C2", "#C9CDD3",
                     "#D6B49E", "#E88F63", "#F56A31", "#FF4D00"],
-        # byte-class colors (Hilbert / entropy byte-map, per-byte tint)
+        # byte-class colors for SOLID BLOCKS -- the Hilbert map and probe map,
+        # where a cell is a filled glyph and "nulls recede into the ground" is
+        # exactly right.
         "BYTE_CLASS": {"ascii": "#08F9DF", "high": "#FF4D00", "ctrl": "#8A9099",
                        "null": "#3A3E45", "ff": "#FF8A5C", "empty": "#16181C"},
+        # the same classes for TEXT, where the digits still have to be read.
+        # null at #3A3E45 measures 1.65:1 against the #16181C background: fine
+        # behind a block, unreadable as "00" -- and 00 is the most common byte
+        # in every header this points at. DIM is 2.60:1 and is already what the
+        # ascii column uses for non-printables. `empty` has no meaning in a hex
+        # dump (there is no such thing as an absent byte) so it is not here.
+        "BYTE_CLASS_TEXT": {"ascii": "#08F9DF", "high": "#FF4D00",
+                            "ctrl": "#8A9099", "null": "#565B63",
+                            "ff": "#FF8A5C"},
     },
 }
 
@@ -51,6 +62,7 @@ ORANGE = _T["ORANGE"]
 AMBER = _T["AMBER"]
 PALETTE = _T["PALETTE"]
 BYTE_CLASS = _T["BYTE_CLASS"]
+BYTE_CLASS_TEXT = _T["BYTE_CLASS_TEXT"]
 
 # semantic aliases (name the role, not the color, at the call site)
 ACCENT = TEAL        # navigation / structure / focus

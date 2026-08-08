@@ -47,3 +47,24 @@ def color_enabled(args):
     if os.environ.get("NO_COLOR"):
         return False
     return sys.stdout.isatty()
+
+
+def fg(hexcolor, text):
+    """Wrap ``text`` in a 24-bit foreground colour from a ``#rrggbb`` string.
+
+    The theme speaks hex because that is what Rich and the HTML explorer want;
+    a terminal wants an SGR escape. This is the bridge, and it lives here
+    because this module already owns the ANSI axis. Callers gate it on
+    ``color_enabled(args)`` -- it does not check, so a caller cannot forget
+    that it is a formatting decision rather than a colour one.
+    """
+    r, g, b = int(hexcolor[1:3], 16), int(hexcolor[3:5], 16), int(hexcolor[5:7], 16)
+    return f"\x1b[38;2;{r};{g};{b}m{text}\x1b[0m"
+
+
+def bg(hexcolor, text):
+    """As ``fg``, on the background. Kept as a separate channel on purpose:
+    foreground already carries field identity in both hex renderers, so an
+    overlay that wants its own channel has to use this one."""
+    r, g, b = int(hexcolor[1:3], 16), int(hexcolor[3:5], 16), int(hexcolor[5:7], 16)
+    return f"\x1b[48;2;{r};{g};{b}m{text}\x1b[0m"
