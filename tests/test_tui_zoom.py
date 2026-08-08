@@ -55,40 +55,46 @@ def test_the_hex_pane_does_not_fit_a_row_unzoomed(wav):
 
 
 def test_zoom_gives_the_hex_pane_the_whole_screen(wav):
+    """Reach the pane first: zoom acts on what has focus, and focus starts on
+    the tree. That is the correction to the first version of this feature,
+    which walked a fixed order and ignored where you were."""
     async def scenario():
         app = AcidcatTUI(wav)
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
+            await pilot.press("shift+tab")
             await pilot.press("z")
             await pilot.pause()
             assert app.query_one("#hexwrap").size.width >= ROW_COLUMNS
     _run(scenario)
 
 
-def test_zoom_cycles_every_pane_and_returns(wav):
-    """z walks hex -> tree -> anomalies -> off. Each step must actually give
-    that pane the width, not merely set a class."""
+def test_zoom_reaches_every_pane_and_toggles_back(wav):
+    """Each pane can own the screen, and z on an already-zoomed pane restores
+    the layout rather than moving to the next one."""
     async def scenario():
         app = AcidcatTUI(wav)
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
             start = app.query_one("#hexwrap").size.width
 
-            await pilot.press("z"); await pilot.pause()
-            assert app._zoom == "zoom-hex"
-            assert app.query_one("#hexwrap").size.width >= ROW_COLUMNS
-
-            await pilot.press("z"); await pilot.pause()
+            await pilot.press("z"); await pilot.pause()          # tree is focused
             assert app._zoom == "zoom-tree"
             assert app.query_one("#tree").size.width >= ROW_COLUMNS
-
-            await pilot.press("z"); await pilot.pause()
-            assert app._zoom == "zoom-anom"
-            assert app.query_one("#anomwrap").size.width >= ROW_COLUMNS
-
             await pilot.press("z"); await pilot.pause()
             assert app._zoom is None
             assert app.query_one("#hexwrap").size.width == start
+
+            await pilot.press("shift+tab")                        # -> hex pane
+            await pilot.press("z"); await pilot.pause()
+            assert app._zoom == "zoom-hex"
+            assert app.query_one("#hexwrap").size.width >= ROW_COLUMNS
+            await pilot.press("z"); await pilot.pause()
+
+            await pilot.press("shift+tab"); await pilot.press("shift+tab")
+            await pilot.press("z"); await pilot.pause()           # -> anomalies
+            assert app._zoom == "zoom-anom"
+            assert app.query_one("#anomwrap").size.width >= ROW_COLUMNS
     _run(scenario)
 
 

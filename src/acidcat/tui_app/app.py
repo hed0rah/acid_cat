@@ -116,11 +116,19 @@ class AcidcatTUI(App):
         Binding("l", "locate_regions", "locate regions", show=False),
         Binding("u", "ascend", "up to regions", show=False),
         ("e", "edit_field", "edit field"),
-        Binding("tab", "hex_focus", "hex edit", show=False),
+        # priority, for the same reason as shift+tab below: Textual binds tab to
+        # focus_next at the screen level and consumes it first, so hex-edit mode
+        # was unreachable by the key its own help screen documents.
+        Binding("tab", "hex_focus", "hex edit", show=False, priority=True),
         Binding("ctrl+t", "toggle_mode", "value/hex", show=False),
         Binding("w", "edit", "edit tags", show=False),
         Binding("s", "strip", "strip meta", show=False),
         ("z", "zoom", "zoom pane"),
+        # priority: Textual binds shift+tab to focus_previous, which walks every
+        # focusable widget in reverse DOM order -- tree then anomalies, skipping
+        # the hex pane, which is the one you actually need to reach.
+        Binding("shift+tab", "focus_pane", "focus next pane",
+                show=False, priority=True),
         ("a", "expand_all", "expand"),
         ("c", "collapse_all", "collapse"),
         ("question_mark", "help", "help"),
@@ -220,7 +228,7 @@ class AcidcatTUI(App):
             self.action_open()
 
     def on_unmount(self):
-        self.action_stop_play()
+        self.action_stop_play(quiet=True)
         self._discard_work()
         self._clean_region_tmps()
 
@@ -336,7 +344,7 @@ class AcidcatTUI(App):
                                   severity="warning")
 
     def _play_pcm(self, pcm, info, label):
-        self.action_stop_play()
+        self.action_stop_play(quiet=True)
         self._play = play.play_bytes(pcm, rate=info["rate"], ch=info["channels"],
                                      bits=16, floating=False)
         secs = len(pcm) / max(1, info["rate"] * info["channels"] * 2)
@@ -658,6 +666,8 @@ class AcidcatTUI(App):
     def action_ascend(self):
         """From a descended region, go back up to the blob's region browser."""
         if self._regions is None or self._blob_src is None:
+            self.notify("not inside a region -- u returns from a region opened "
+                        "with l or from a blob")
             return
         self._region_view = None
         self.push_screen(
@@ -1174,25 +1184,57 @@ class AcidcatTUI(App):
                 hex_text(self.work, off, length, accent, spans))
         # in a viz mode the pane shows a whole-file view; a node highlight leaves it
 
-    # zoom targets, in the order `z` walks them
-    _ZOOM = (None, "zoom-hex", "zoom-tree", "zoom-anom")
+    # pane id -> the class that gives it the screen
+    _ZOOM_FOR = {"tree": "zoom-tree", "hexwrap": "zoom-hex", "anomwrap": "zoom-anom"}
+    _PANES = ("tree", "hexwrap", "anomwrap")
+
+    def _focused_pane(self):
+        """Which pane owns focus, walking up from whatever widget has it.
+
+        The hex pane's focusable child is #hex, not the #hexwrap scroller, so a
+        direct id check misses it.
+        """
+        node = self.focused
+        while node is not None:
+            if getattr(node, "id", None) in self._ZOOM_FOR:
+                return node.id
+            node = node.parent
+        return "hexwrap" if self._view == "hex" else "tree"
+
+    def action_focus_pane(self):
+        """Move focus to the next pane (shift+tab).
+
+        Without this the hex pane is unreachable: focus starts on the tree and
+        never leaves, so arrow keys always drive the tree and the hex view
+        cannot be scrolled at all -- and it is a VerticalScroll holding up to
+        _HEX_CAP bytes, which is far more than one screen.
+        """
+        cur = self._focused_pane()
+        nxt = self._PANES[(self._PANES.index(cur) + 1) % len(self._PANES)]
+        self.query_one(f"#{nxt}").focus()
+        self.notify(f"focus: {nxt}")
 
     def action_zoom(self):
-        """Cycle which pane owns the screen (z).
+        """Give the focused pane the whole screen, or hand it back (z).
 
-        The hex pane is first because it is the one that needs it: a row is 76
-        columns and the pane is 52% of the terminal, so it folds below about
-        154. The tree is second -- chunk and field labels truncate at 48%.
+        Zooms what you are looking at rather than walking a fixed order -- and
+        focuses it, so the arrow keys drive the thing that just filled the
+        screen. A hex row is 76 columns against a pane that is 52% of the
+        terminal, so below about 154 columns the dump folds without this.
         """
-        cur = self._zoom
-        nxt = self._ZOOM[(self._ZOOM.index(cur) + 1) % len(self._ZOOM)]
-        for cls in self._ZOOM:
-            if cls:
-                self.screen.remove_class(cls)
-        if nxt:
-            self.screen.add_class(nxt)
-        self._zoom = nxt
-        self.notify(f"zoom: {nxt[5:] if nxt else 'off'}")
+        target = self._focused_pane()
+        want = self._ZOOM_FOR[target]
+        for cls in set(self._ZOOM_FOR.values()):
+            self.screen.remove_class(cls)
+        if self._zoom == want:
+            self._zoom = None
+            self.query_one("#tree").focus()
+            self.notify("zoom: off")
+            return
+        self.screen.add_class(want)
+        self._zoom = want
+        self.query_one(f"#{target}").focus()
+        self.notify(f"zoom: {target}")
 
     def action_cycle_view(self):
         """Cycle the hex pane: hex -> entropy -> hilbert -> histogram (whole file)."""
@@ -1389,16 +1431,18 @@ class AcidcatTUI(App):
     def _do_play(self, off, length):
         data = _read(self.work, off, min(length, 4 * 1024 * 1024))
         rate, ch, bits, floating = self._audio_params()
-        self.action_stop_play()
+        self.action_stop_play(quiet=True)
         self._play = play.play_bytes(data, rate=rate, ch=ch, bits=bits, floating=floating)
         secs = len(data) / max(1, rate * ch * (bits // 8))
         self.notify(f"playing {len(data):,} bytes as {rate} Hz {ch}ch {bits}-bit "
                     f"(~{secs:.1f}s) -- . to stop")
 
-    def action_stop_play(self):
+    def action_stop_play(self, quiet=False):
         if getattr(self, "_play", None):
             play.stop(self._play)
             self._play = None
+        elif not quiet:
+            self.notify("nothing is playing (p plays the selected region)")
 
     # bounds for a fmt/COMM chunk we are willing to believe. a corrupt header
     # yields arbitrary integers, and they end up in a WAV header whose byte_rate
@@ -1925,6 +1969,7 @@ class AcidcatTUI(App):
         live preview stays consistent."""
         tgt = self._edit_target
         if not tgt:
+            self.notify("no field is being edited (e edits the selected field)")
             return
         if tgt["fmt"] is None:
             # enum/packed fields (bitsmap/bitsdyn/bitfield) are value-editable
