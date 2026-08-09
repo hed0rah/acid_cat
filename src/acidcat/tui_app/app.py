@@ -66,16 +66,14 @@ class AcidcatTUI(App):
     Screen { background: #16181C; }
     #left { width: 50%; }
     #right { width: 50%; }
-    /* file identity and the forensic summary share one box above the tree.
-       Measured over 900 real files, 894 have no findings and the worst has
-       three -- so this is one or two lines almost always, and the 30% of the
-       right column it used to occupy now belongs to the hex view. */
+    /* The left column's top box, deliberately the same fixed height as
+       #detail on the right so the tree and the hex pane start on the same
+       row. Two content lines: what the file is, and what forensics found.
+       It scrolls, so a genuinely damaged file's longer list is still
+       reachable without the box resizing and shifting everything below it. */
+    #idbox { height: 4; border: round #3A3E45; }
+    #idbox.findings { border: round #FF4D00; }
     #title { height: auto; padding: 0 1; }
-    /* forensics keeps its own box, but sized to its content instead of a fixed
-       30% of the screen: measured over 900 real files, 894 have no findings at
-       all and the worst has three. It stays a VerticalScroll so a genuinely
-       damaged file's list is still reachable. */
-    #anomwrap { height: auto; max-height: 40%; border: round #FF4D00; }
     #anom { height: auto; padding: 0 1; }
     #tree { border: round #08F9DF; padding: 0 1; }
     /* Fixed, not auto: the detail is a two-line status (name, then an
@@ -221,8 +219,8 @@ class AcidcatTUI(App):
     def compose(self) -> ComposeResult:
         with Horizontal():
             with Vertical(id="left"):
-                yield Static(id="title")
-                with VerticalScroll(id="anomwrap"):
+                with VerticalScroll(id="idbox"):
+                    yield Static(id="title")
                     yield Static(id="anom")
                 yield Tree("file", id="tree")
             with Vertical(id="right"):
@@ -1150,6 +1148,9 @@ class AcidcatTUI(App):
 
     def _render_anomalies(self):
         panel = self.query_one("#anom", Static)
+        # the box it shares with the filename goes orange only when there is
+        # something to see -- a permanently alarmed border says nothing
+        self.query_one("#idbox").set_class(bool(self.findings), "findings")
         t = Text()
         t.append("forensics  ", style=f"bold {ACCENT}")
         if not self.findings:
@@ -2391,9 +2392,36 @@ class AcidcatTUI(App):
         what = ", ".join(removed) if removed else "nothing to remove"
         self.notify(f"stripped: {what} (unsaved -- ctrl+s to save)")
 
+    @staticmethod
+    def _expanded_count(tree):
+        n, stack = 0, [tree.root]
+        while stack:
+            node = stack.pop()
+            if node.is_expanded:
+                n += 1
+                stack.extend(node.children)
+        return n
+
     def action_expand_all(self):
-        self.query_one("#tree", Tree).root.expand_all()
+        tree = self.query_one("#tree", Tree)
+        before = self._expanded_count(tree)
+        tree.root.expand_all()
+        self._report_fold(tree, before, "expanded", "already fully expanded")
 
     def action_collapse_all(self):
-        for node in self.query_one("#tree", Tree).root.children:
+        tree = self.query_one("#tree", Tree)
+        before = self._expanded_count(tree)
+        for node in tree.root.children:
             node.collapse_all()
+        self._report_fold(tree, before, "collapsed", "already collapsed")
+
+    def _report_fold(self, tree, before, verb, nothing):
+        """Say what happened, including when nothing did.
+
+        The tree opens collapsed, so `c` on a fresh file changed nothing and
+        said nothing -- and a key the footer advertises that produces no
+        response at all is indistinguishable from a broken build. That is the
+        same shape as the bugs found by hand in this pane three times over.
+        """
+        delta = abs(self._expanded_count(tree) - before)
+        self.notify(f"{verb} {delta} node(s)" if delta else nothing)

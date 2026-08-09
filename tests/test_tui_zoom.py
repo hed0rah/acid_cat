@@ -214,3 +214,60 @@ def test_no_tree_row_states_its_size_twice(wav):
                     f"row states its size twice: {text!r}")
             assert checked, "no chunk rows were checked"
     _run(scenario)
+
+
+def test_the_two_columns_are_symmetric(wav):
+    """The left column's top box and the right column's top box must start on
+    the same row and be the same height, or the tree and the hex pane below
+    them start at different rows and the whole layout reads as crooked.
+
+    This was broken by construction: the left had an unbordered title stacked
+    on a variable-height forensics box, the right had one fixed bordered box.
+    Their tops could never line up.
+    """
+    async def scenario():
+        for cols, rows in ((100, 30), (140, 44), (200, 50), (120, 60)):
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(cols, rows)) as pilot:
+                await pilot.pause()
+                idbox = app.query_one("#idbox").region
+                detail = app.query_one("#detail").region
+                tree = app.query_one("#tree").region
+                hexw = app.query_one("#hexwrap").region
+                assert idbox.y == detail.y, f"{cols}x{rows}: top boxes start on different rows"
+                assert idbox.height == detail.height, f"{cols}x{rows}: top boxes differ in height"
+                assert tree.y == hexw.y, f"{cols}x{rows}: tree and hex start on different rows"
+                assert tree.height == hexw.height, f"{cols}x{rows}: tree and hex differ in height"
+                assert tree.width == hexw.width, f"{cols}x{rows}: columns differ in width"
+    _run(scenario)
+
+
+def test_the_top_box_does_not_resize_as_you_move(wav):
+    """It shares a box with the filename now, so if it grew with content it
+    would shift the tree down every time you selected a different chunk."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            box = app.query_one("#idbox")
+            seen = set()
+            for _ in range(8):
+                await pilot.press("down")
+                await pilot.pause()
+                seen.add(box.region.height)
+            assert len(seen) == 1, f"#idbox took heights {sorted(seen)}"
+    _run(scenario)
+
+
+def test_the_top_box_flags_findings_and_is_calm_when_clean(wav):
+    """A permanently alarmed border says nothing. It is orange only when there
+    is something to look at."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            box = app.query_one("#idbox")
+            assert ("findings" in box.classes) == bool(app.findings), (
+                f"border says findings={'findings' in box.classes}, "
+                f"there are {len(app.findings)}")
+    _run(scenario)
