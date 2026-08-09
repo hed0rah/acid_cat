@@ -172,22 +172,27 @@ class TestDumpCommand:
 
 
 class TestScanCommand:
-    def test_scan_directory_with_wav(self, tmp_path, minimal_wav):
+    def test_scan_directory_with_wav(self, tmp_path, minimal_wav, monkeypatch):
+        """`scan` writes its CSV relative to the working directory, so the test
+        has to own that directory. It did not, and every run dropped a
+        `<tmpdir>_metadata.csv` into the repo root -- containing absolute local
+        paths. The old version also asserted nothing at all: it collected a list
+        of candidate CSVs and never looked at it.
+        """
         import shutil
         shutil.copy(minimal_wav, tmp_path / "test.wav")
+        workdir = tmp_path / "cwd"
+        workdir.mkdir()
+        monkeypatch.chdir(workdir)
+
         code, out, err = run_cli("scan", str(tmp_path), "-q")
         assert code == 0 or code is None
-        csv_path = str(tmp_path / "_metadata.csv")
-        # a CSV should be written next to the dir or in cwd
-        # find written CSV
-        written = list(tmp_path.glob("*.csv")) + [
-            f for f in [
-                os.path.join(os.getcwd(), "test_metadata.csv"),
-                os.path.join(os.getcwd(), "tmp_metadata.csv"),
-            ] if os.path.isfile(f)
-        ]
-        # at least one CSV was created somewhere
-        # (we just check the command didn't crash)
+
+        written = list(workdir.glob("*.csv"))
+        assert written, f"scan wrote no CSV into {workdir}"
+        body = written[0].read_text(encoding="utf-8")
+        assert "filename" in body.splitlines()[0], "CSV has no header row"
+        assert "test.wav" in body, "the scanned file is missing from the CSV"
 
     def test_scan_empty_directory(self, tmp_path):
         code, out, err = run_cli("scan", str(tmp_path), "-q")
