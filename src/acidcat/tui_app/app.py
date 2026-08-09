@@ -68,19 +68,20 @@ class AcidcatTUI(App):
     #right { width: 50%; }
     /* The left column's top box, deliberately the same fixed height as
        #detail on the right so the tree and the hex pane start on the same
-       row. Two content lines: what the file is, and what forensics found.
-       It scrolls, so a genuinely damaged file's longer list is still
-       reachable without the box resizing and shifting everything below it. */
-    #idbox { height: 4; border: round #3A3E45; }
+       row. Four content lines: what the file is, what forensics found, and
+       room for whatever else belongs in a quick readout. It scrolls, so a
+       genuinely damaged file's longer list stays reachable without the box
+       resizing and shifting everything below it. */
+    #idbox { height: 6; border: round #3A3E45; }
     #idbox.findings { border: round #FF4D00; }
     #title { height: auto; padding: 0 1; }
     #anom { height: auto; padding: 0 1; }
     #tree { border: round #08F9DF; padding: 0 1; }
-    /* Fixed, not auto: the detail is a two-line status (name, then an
-       editability note). On auto it grew when a summary was long enough to
-       wrap, stealing rows from the hex pane and making the layout jump as you
-       moved through the tree. Two content rows always, and a long line clips. */
-    #detail { height: 4; border: round #3A3E45; padding: 0 1; color: #C9CDD3; }
+    /* Fixed, not auto, and the same height as #idbox opposite it. On auto it
+       grew when a summary was long enough to wrap, stealing rows from the hex
+       pane and making the layout jump as you moved through the tree. Four
+       content rows always, and a long line clips. */
+    #detail { height: 6; border: round #3A3E45; padding: 0 1; color: #C9CDD3; }
     #hexwrap { border: round #08F9DF; }
     #hex { padding: 0 1; }
     #editbar { dock: bottom; height: 3; border: round #FF4D00; background: #16181C; }
@@ -1289,11 +1290,15 @@ class AcidcatTUI(App):
         if self._zoom == want:
             self._zoom = None
             self.query_one("#tree").focus()
+            self.call_after_refresh(self._paint_bytes)
             self.notify("zoom: off")
             return
         self.screen.add_class(want)
         self._zoom = want
         self.query_one(f"#{target}").focus()
+        # after the refresh: the class is set but the layout has not run
+        # yet, so measuring the pane now returns its old size
+        self.call_after_refresh(self._paint_bytes)
         self.notify(f"zoom: {target}")
 
     def action_cycle_view(self):
@@ -1304,6 +1309,18 @@ class AcidcatTUI(App):
         if self._edit_target:
             self.action_cancel_edit()
         self._view = order[(order.index(self._view) + 1) % len(order)]
+        self._paint_bytes()
+        self.notify(f"byte view: {self._view}")
+
+    def _paint_bytes(self):
+        """Draw the byte pane at the size it has right now.
+
+        Every view in this pane is rendered to a fixed character grid sized
+        from the pane, so any layout change leaves the drawing stale until
+        something repaints it. Zooming did exactly that: the pane doubled and
+        the visualization kept its old dimensions until you cycled the view
+        away and back. A terminal resize had the same problem.
+        """
         pane = self.query_one("#hex", Static)
         if self._view == "hex":
             off, length, accent = self._cur_region
@@ -1311,7 +1328,11 @@ class AcidcatTUI(App):
                                  self._cur_spans, self._hex_width()))
         else:
             pane.update(self._viz_render(self._view))
-        self.notify(f"byte view: {self._view}")
+
+    def on_resize(self, event=None):
+        """Repaint on a terminal resize, for the same reason zoom does."""
+        if self.work:
+            self.call_after_refresh(self._paint_bytes)
 
     # of #hexwrap's outer width, the row never gets: its own border (2),
     # #hex's padding (2), and the vertical scrollbar (2).
@@ -1346,6 +1367,39 @@ class AcidcatTUI(App):
         except Exception:
             return 72
 
+    # rows the pane spends on a heading, the caption under it, blank lines and
+    # the legend -- everything that is not the drawing itself
+    _VIZ_CHROME_ROWS = 7
+
+    def _viz_rows(self):
+        """Rows available to a visualization, after its own headings."""
+        try:
+            h = self.query_one("#hexwrap").size.height - 2   # border
+        except Exception:
+            return 12
+        return max(4, h - self._VIZ_CHROME_ROWS)
+
+    def _viz_chart_height(self):
+        """Rows for a column chart. Capped: past a point more rows stop adding
+        readable resolution and the eye loses the whole shape at a glance."""
+        return max(4, min(24, self._viz_rows()))
+
+    def _hilbert_order(self):
+        """Largest Hilbert order whose map fits the pane.
+
+        The map is 2**order square, drawn with half-blocks, so it costs `side`
+        columns and `side / 2` rows. Order is what sets how many bytes fold
+        into one cell, so fitting a bigger one to a zoomed pane is not
+        cosmetic -- it is more of the file actually resolved.
+        """
+        cols, rows = self._viz_width(), self._viz_rows()
+        best = 4
+        for order in (5, 6, 7, 8):
+            side = 1 << order
+            if side <= cols and side // 2 <= rows:
+                best = order
+        return best
+
     def _viz_render(self, mode):
         if not self.fsize:
             t = Text()
@@ -1370,14 +1424,24 @@ class AcidcatTUI(App):
         t.append("entropy  ", style=f"bold {ACCENT}")
         t.append(f"min {min(ent):.1f}  mean {sum(ent) / len(ent):.1f}  "
                  f"max {max(ent):.1f} bits/byte  ", style=SOFT)
-        t.append("(sampled)\n\n" if sampled else "(whole file)\n\n",
+        t.append("(sampled)\n" if sampled else "(whole file)\n",
                  style=PEND if sampled else SOFT)
+        t.append("0-8 bits/byte; flat 8 = compressed\n\n", style=DIM)
+        # A column chart rather than a one-row sparkline. Eight bits squeezed
+        # into a single cell gives eight distinguishable levels; over the rows
+        # the pane actually has it is eight per row, and the difference
+        # between 7.6 and 7.9 bits -- compressed versus encrypted -- becomes
+        # something you can see instead of something you have to measure.
+        rows = self._viz_chart_height()
         blocks = " ▁▂▃▄▅▆▇█"
-        for e in ent:
-            frac = max(0.0, min(1.0, e / 8))
-            t.append(blocks[int(frac * (len(blocks) - 1))],
-                     style=PALETTE[min(len(PALETTE) - 1, int(frac * len(PALETTE)))])
-        t.append("\n")
+        levels = [max(0.0, min(1.0, e / 8)) * rows for e in ent]
+        for r in range(rows - 1, -1, -1):
+            for col, filled in enumerate(levels):
+                frac = max(0.0, min(1.0, filled - r))
+                style = PALETTE[min(len(PALETTE) - 1,
+                                    int((ent[col] / 8) * len(PALETTE)))]
+                t.append(blocks[int(frac * (len(blocks) - 1))], style=style)
+            t.append("\n")
         self._viz_mark_container_end(t, len(ent), size)
         return t
 
@@ -1394,8 +1458,11 @@ class AcidcatTUI(App):
             return
         col = max(0, min(columns - 1, int(end * columns / size)))
         t.append(" " * col, style=DIM)
-        t.append("^", style=f"bold {PEND}")
-        t.append(f"  container ends at 0x{end:08x}; "
+        t.append("^\n", style=f"bold {PEND}")
+        # on its own line, left-aligned. Hung off the caret, the label started
+        # at the caret's column, so a container ending late in the file pushed
+        # its own explanation off the right edge of the pane.
+        t.append(f"container ends at 0x{end:08x}; "
                  f"{size - end:,} bytes follow\n", style=PEND)
 
     def _declared_end(self):
@@ -1408,11 +1475,11 @@ class AcidcatTUI(App):
         return best
 
     def _viz_hilbert(self):
-        grid, side, sampled = viz.hilbert_from_file(self.work, order=6)
+        grid, side, sampled = viz.hilbert_from_file(
+            self.work, order=self._hilbert_order())
         t = Text()
         t.append("hilbert  ", style=f"bold {ACCENT}")
-        t.append(f"{side}x{side} byte-class map; adjacent cells are adjacent bytes  ",
-                 style=SOFT)
+        t.append(f"{side}x{side}; adjacent cells are adjacent bytes  ", style=SOFT)
         t.append("(sampled)\n\n" if sampled else "(whole file)\n\n",
                  style=PEND if sampled else SOFT)
         for y in range(0, side, 2):
@@ -1435,7 +1502,8 @@ class AcidcatTUI(App):
         t.append(f"(0x00 .. 0xff frequency over {len(data):,} bytes"
                  + (", capped)" if capped else ")") + "\n\n",
                  style=PEND if capped else SOFT)
-        for row in viz.byte_histogram(data, width=self._viz_width(), height=8):
+        for row in viz.byte_histogram(data, width=self._viz_width(),
+                                      height=self._viz_chart_height()):
             t.append(row + "\n", style=ACCENT)
         return t
 

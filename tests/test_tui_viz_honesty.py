@@ -20,19 +20,33 @@ from acidcat.tui_app.app import AcidcatTUI
 
 
 class _VizProbe:
+    """The renderers, without a running app.
+
+    Only the geometry is stubbed -- how wide and how tall the pane is. The
+    honesty of the captions is what these tests are about, and that must come
+    from the real code, so every method under test is the real one.
+    """
+
     _viz_entropy = AcidcatTUI._viz_entropy
     _viz_hilbert = AcidcatTUI._viz_hilbert
     _viz_mark_container_end = AcidcatTUI._viz_mark_container_end
     _declared_end = AcidcatTUI._declared_end
+    _viz_chart_height = AcidcatTUI._viz_chart_height
+    _hilbert_order = AcidcatTUI._hilbert_order
+    _VIZ_CHROME_ROWS = AcidcatTUI._VIZ_CHROME_ROWS
 
-    def __init__(self, path, chunks=(), width=72):
+    def __init__(self, path, chunks=(), width=72, rows=39):
         self.work = path
         self.fsize = os.path.getsize(path)
         self.chunks = list(chunks)
         self._w = width
+        self._rows = rows
 
     def _viz_width(self):
         return self._w
+
+    def _viz_rows(self):
+        return self._rows
 
 
 def _wav_plus(path, trailing=b""):
@@ -65,10 +79,27 @@ def test_hilbert_covers_the_file_and_says_how(tmp_path):
     assert "(sampled)" in _VizProbe(str(big))._viz_hilbert().plain
 
 
-def test_hilbert_is_64x64(tmp_path):
-    """Order 6 over order 5: four times the cells, at a bounded read."""
-    out = _VizProbe(_wav_plus(tmp_path / "h.wav"))._viz_hilbert().plain
-    assert "64x64" in out
+def test_hilbert_fits_the_pane_and_says_which_size_it_drew(tmp_path):
+    """The map is sized to the space, so it must state the size it chose.
+
+    Order sets how many bytes fold into one cell, so this is not decoration:
+    a caption naming a resolution the drawing does not have is the same defect
+    as captioning a capped read "(whole file)".
+    """
+    path = _wav_plus(tmp_path / "h.wav")
+
+    # a pane with room for a 64-wide, 32-row map
+    out = _VizProbe(path, width=72, rows=39)._viz_hilbert().plain
+    assert "64x64" in out, out.splitlines()[0]
+
+    # a short pane cannot fit 32 rows, so it must drop an order and say so
+    out = _VizProbe(path, width=72, rows=20)._viz_hilbert().plain
+    assert "32x32" in out, out.splitlines()[0]
+    assert "64x64" not in out
+
+    # a narrow pane is bounded by columns instead
+    out = _VizProbe(path, width=40, rows=39)._viz_hilbert().plain
+    assert "32x32" in out, out.splitlines()[0]
 
 
 def test_the_container_end_is_marked_when_bytes_follow_it(tmp_path):

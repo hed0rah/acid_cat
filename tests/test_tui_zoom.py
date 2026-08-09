@@ -271,3 +271,95 @@ def test_the_top_box_flags_findings_and_is_calm_when_clean(wav):
                 f"border says findings={'findings' in box.classes}, "
                 f"there are {len(app.findings)}")
     _run(scenario)
+
+
+def _is_art(ch):
+    """Block elements (entropy, hilbert) and braille (histogram) -- the glyphs
+    the drawings are made of, as opposed to the prose around them."""
+    return ch == " " or 0x2580 <= ord(ch) <= 0x259F or 0x2800 <= ord(ch) <= 0x28FF
+
+
+def _art(app):
+    """The drawing itself, not the headings."""
+    lines = app.query_one("#hex").render().plain.splitlines()
+    return [l for l in lines if l.strip() and all(_is_art(c) for c in l)]
+
+
+def test_a_visualization_redraws_when_the_pane_changes_size(wav):
+    """Every view here is rendered to a character grid sized from the pane, so
+    a layout change leaves the drawing stale. Zooming did exactly that: the
+    pane doubled and the picture kept its old dimensions until you cycled the
+    view away and back.
+
+    The repaint has to be deferred: at the moment the zoom class is set the
+    layout has not run, so measuring the pane returns its old size.
+    """
+    async def scenario():
+        for presses, name in ((1, "entropy"), (3, "histogram")):
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 44)) as pilot:
+                await pilot.pause()
+                for _ in range(presses):
+                    await pilot.press("b")
+                await pilot.pause()
+                before = max(len(l) for l in _art(app))
+                await pilot.press("tab")
+                await pilot.press("z")
+                await pilot.pause()
+                await pilot.pause()
+                after = max(len(l) for l in _art(app))
+                assert after > before, (
+                    f"{name}: still {after} wide after zooming the pane from "
+                    f"68 to 138 -- it did not redraw")
+    _run(scenario)
+
+
+def test_the_hilbert_map_grows_into_a_zoomed_pane(wav):
+    """Order sets how many bytes fold into one cell, so fitting a bigger map
+    to a bigger pane is not cosmetic -- it is more of the file resolved."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            await pilot.press("b")
+            await pilot.press("b")
+            await pilot.pause()
+            small = len(_art(app))
+            await pilot.press("tab")
+            await pilot.press("z")
+            await pilot.pause()
+            await pilot.pause()
+            assert len(_art(app)) > small, "the hilbert map ignored the space"
+    _run(scenario)
+
+
+def test_a_drawing_never_exceeds_the_pane(wav):
+    """Prose may wrap; the art may not. A wrapped drawing is not a drawing."""
+    async def scenario():
+        for cols, rows in ((100, 30), (140, 44), (200, 60)):
+            for presses in (1, 2, 3):
+                app = AcidcatTUI(wav)
+                async with app.run_test(size=(cols, rows)) as pilot:
+                    await pilot.pause()
+                    for _ in range(presses):
+                        await pilot.press("b")
+                    await pilot.pause()
+                    avail = app.query_one("#hex").content_size.width
+                    for line in _art(app):
+                        assert len(line) <= avail, (
+                            f"{cols}x{rows} view {presses}: art row is "
+                            f"{len(line)} wide, pane gives {avail}")
+    _run(scenario)
+
+
+def test_the_entropy_view_uses_more_than_one_row(wav):
+    """It was a single-row sparkline, so eight bits of range got eight
+    distinguishable levels while forty rows of pane sat empty."""
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            await pilot.press("b")
+            await pilot.pause()
+            assert len(_art(app)) > 1, "entropy is still one row tall"
+    _run(scenario)
