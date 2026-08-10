@@ -141,7 +141,7 @@ def _flac_frame_starts(data, start, end):
     return out
 
 
-def flac_frames(data, audio_start, file_size=None):
+def flac_frames(data, audio_start, file_size=None, cap=_READ_CAP):
     """Verify every FLAC frame's CRC-16.
 
     A failed CRC-16 is proof of damage: the encoder wrote a checksum over these
@@ -159,11 +159,15 @@ def flac_frames(data, audio_start, file_size=None):
     first candidate whose CRC-16 validates. Only when no candidate validates is
     the frame reported as damaged.
     """
-    end = min(len(data), audio_start + _READ_CAP)
+    # cap=None verifies the whole file. --deep is opt-in and its help says it
+    # costs a full read, so capping it there contradicted the documented
+    # behaviour AND left the tail of every large file unchecked. The parameter
+    # stays for any caller that needs a bounded scan.
+    end = len(data) if cap is None else min(len(data), audio_start + cap)
     partial = end < len(data)
     cands = _flac_frame_starts(data, audio_start, end)
     res = {"checked": 0, "failed": 0, "offsets": [], "truncated": False,
-           "partial": partial, "frames_found": 0}
+           "partial": partial, "frames_found": 0, "unverified": 0}
     if not cands:
         return res
 
@@ -191,13 +195,25 @@ def flac_frames(data, audio_start, file_size=None):
             res["frames_found"] += 1
             idx = hit
             continue
-        # no successor verified -- try EOF, since the last frame has none
-        if end - pos >= 4:
+        # no successor verified -- try EOF, since the last frame has none.
+        # Only when `end` IS the end of the file: if the scan stopped at the
+        # read cap, those two bytes are the middle of a frame, not its CRC.
+        if not partial and end - pos >= 4:
             stored = (data[end - 2] << 8) | data[end - 1]
             if crc16(data[pos:end - 2]) == stored:
                 res["checked"] += 1
                 res["frames_found"] += 1
                 break
+        if partial and idx == len(cands) - 1:
+            # This frame runs past the read cap, so its CRC-16 was never read
+            # and cannot be checked. Counting it as FAILED made every FLAC
+            # larger than the cap report as damaged: a pristine 78 MB file came
+            # back "1 of 3183 frame(s) fail their CRC-16" at an offset 606 bytes
+            # short of 64 MiB. The cap was manufacturing the evidence.
+            #
+            # Unverified is its own answer. It is not a pass and not a failure.
+            res["unverified"] += 1
+            break
         res["checked"] += 1
         res["frames_found"] += 1
         res["failed"] += 1
@@ -278,7 +294,7 @@ def _mp3_side_info(data, pos, mode):
     return mdb, worst
 
 
-def mp3_frames(data, audio_start):
+def mp3_frames(data, audio_start, cap=_READ_CAP):
     """Walk MP3 frames by validating each one, not by striding the bitrate.
 
     Counting frames as `size / frame_len` reports a confident, specific, wrong
@@ -293,7 +309,7 @@ def mp3_frames(data, audio_start):
       bad_bigvalues  `big_values` counts spectral PAIRS, so 2*big_values must fit
                      a granule's 576 lines. Over 288 is impossible, not unusual.
     """
-    end = min(len(data), audio_start + _READ_CAP)
+    end = len(data) if cap is None else min(len(data), audio_start + cap)
     res = {"frames": 0, "resyncs": 0, "bad_backref": 0, "bad_bigvalues": 0,
            "offsets": [], "partial": end < len(data), "preamble": 0}
     pos = audio_start

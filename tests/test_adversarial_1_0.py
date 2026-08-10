@@ -211,3 +211,76 @@ def test_concealment_reports_how_many_exist_not_how_many_it_listed():
     assert f"{len(found)} concealed" in note, note
     assert str(C._MAX_FINDINGS) in note, "the cap that bit is not mentioned"
     assert len(C.listed(found)) == C._MAX_FINDINGS
+
+
+# ── the read cap: found by measuring the advertised throughput ─────
+
+def _flac(tmp_path, name, mb, rate=44100):
+    """A real FLAC via ffmpeg, or a skip. Synthetic bytes cannot exercise this:
+    the bug is in how real frame boundaries interact with the scan bound."""
+    from conftest import requires_tool
+    requires_tool("ffmpeg")
+    p = tmp_path / name
+    secs = max(1, int(mb * 1024 * 1024 / (rate * 4 * 0.55)))
+    r = subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+         "-i", f"anoisesrc=d={secs}:c=pink:r={rate}:a=0.5",
+         "-ac", "2", "-ar", str(rate), "-c:a", "flac", str(p)],
+        capture_output=True)
+    if r.returncode != 0 or not p.exists():
+        pytest.skip("ffmpeg could not build a FLAC here")
+    return p
+
+
+def test_a_clean_flac_larger_than_the_read_cap_is_not_reported_damaged(tmp_path):
+    """The cap was manufacturing the evidence.
+
+    flac_frames stopped at 64 MB, then tried to validate the frame straddling
+    that boundary against two bytes that were the middle of a frame rather than
+    its CRC. A pristine 78 MB file reported "1 of 3183 frame(s) fail their
+    CRC-16" at an offset 606 bytes short of 64 MiB. Nothing was wrong with the
+    file. Surfaced by timing the ~10 MB/s figure in --deep's help text, which
+    turned out to be accurate; the file built to measure it was the specimen.
+    """
+    p = _flac(tmp_path, "big.flac", 70, rate=96000)
+    if p.stat().st_size <= 64 * 1024 * 1024:
+        pytest.skip("could not build a FLAC past the 64 MB cap")
+    r = _run("validate", "--deep", str(p))
+    assert r.returncode == 0, (
+        f"a pristine FLAC past the cap was reported damaged\n{r.stdout}{r.stderr}")
+
+
+def test_damage_past_the_read_cap_is_found(tmp_path):
+    """--deep is documented as costing a full read, and capping it at 64 MB
+    contradicted that while leaving the tail of every large file unverified.
+    Damage at 70 MB used to come back "all 1 file(s) consistent", exit 0."""
+    p = _flac(tmp_path, "big.flac", 70, rate=96000)
+    if p.stat().st_size <= 64 * 1024 * 1024:
+        pytest.skip("could not build a FLAC past the 64 MB cap")
+    b = bytearray(p.read_bytes())
+    at = 68 * 1024 * 1024
+    for i in range(at, min(at + 64, len(b))):
+        b[i] ^= 0xFF
+    p.write_bytes(bytes(b))
+    r = _run("validate", "--deep", str(p))
+    assert r.returncode == 1, (
+        f"damage past the cap went unreported\n{r.stdout}{r.stderr}")
+
+
+def test_a_bounded_scan_still_says_when_it_stopped(tmp_path):
+    """validate is uncapped now, but the bound remains for other callers, and
+    an unverified frame must never be counted as a failed one."""
+    from acidcat.core.forensics import checksums
+    p = _flac(tmp_path, "m.flac", 8)
+    data = p.read_bytes()
+    pos = 4
+    while pos + 4 <= len(data):
+        hdr = data[pos]
+        pos += 4 + int.from_bytes(data[pos + 1:pos + 4], "big")
+        if hdr & 0x80:
+            break
+    r = checksums.flac_frames(data, pos, len(data), cap=1024 * 1024)
+    assert r["partial"] is True, "the cap did not bite, so this proves nothing"
+    assert r["failed"] == 0, (
+        f"a bounded scan invented {r['failed']} CRC failure(s) on a clean file")
+    assert r["unverified"] >= 1

@@ -107,7 +107,7 @@ def _deep_check(path, data):
                 break
         else:
             return _no()
-        r = checksums.flac_frames(data, pos, len(data))
+        r = checksums.flac_frames(data, pos, len(data), cap=None)
         caveat = _cap(r, "frames")
         if r["failed"]:
             where = ", ".join(f"0x{o:08x}" for o in r["offsets"][:3])
@@ -128,7 +128,7 @@ def _deep_check(path, data):
                       | (b[8] & 0x7F) << 7 | (b[9] & 0x7F))
     elif not (len(data) > 1 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0):
         return _no()
-    r = checksums.mp3_frames(data, start)
+    r = checksums.mp3_frames(data, start, cap=None)
     caveat = _cap(r, "frames")
     bad = r["resyncs"] + r["bad_bigvalues"] + r["bad_backref"]
     if bad and r["frames"]:
@@ -227,13 +227,17 @@ def _check(path, quiet, rows=None, deep=False):
         return True, True, False, False
     if not report.violations:
         # structurally sound, but a checksum over its own payload disagrees --
-        # which is a stronger statement than any structural check can make
+        # which is a stronger statement than any structural check can make.
+        # The caveat belongs here too: "damage found" over a partial scan still
+        # leaves the rest of the file unexamined, and this branch was the one
+        # path of four that did not say so.
+        detail = deep_note + (f"; {caveat}" if caveat else "")
         if rows is not None:
             rows.append({"path": path, "format": report.label, "status": "fail",
-                         "issues": 1, "repairable": False, "detail": deep_note})
+                         "issues": 1, "repairable": False, "detail": detail})
         else:
             print(f"FAIL  {base}  [{report.label}]  1 issue(s)")
-            print(f"        {deep_note}")
+            print(f"        {detail}")
         return True, False, False, False
     if rows is not None:
         rows.append({"path": path, "format": report.label, "status": "fail",
