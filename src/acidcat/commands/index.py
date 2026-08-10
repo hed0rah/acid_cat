@@ -280,10 +280,17 @@ def run(args):
         rconn.close()
 
     if not quiet:
+        # "unrecognised" is reported separately from "skipped". They are
+        # different facts -- skipped means seen before and unchanged, which is
+        # a file that IS in the index, while unrecognised means never opened at
+        # all. Folding them together let a walk that passed over half a folder
+        # print "0 skipped" and read as complete.
+        extra = (f", {counts['unrecognised']} unrecognised extension"
+                 if counts.get("unrecognised") else "")
         print(
             f"[INFO] [{label}] {counts['added']} added, {counts['updated']} updated, "
             f"{counts['skipped']} skipped, {counts['pruned']} pruned, "
-            f"{counts['failed']} failed",
+            f"{counts['failed']} failed{extra}",
             file=sys.stderr,
         )
     return 0

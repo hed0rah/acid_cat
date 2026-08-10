@@ -19,6 +19,7 @@ inside the fix. The count has to be unbounded SQL, not len() of anything.
 
 import json
 import os
+import pathlib
 import struct
 import subprocess
 import sys
@@ -151,3 +152,50 @@ print(json.dumps({'ac': a['count'], 'at': a['total_matched'],
     assert got["btr"] is False
     assert got["bc"] == got["at"], (
         "the reported total does not match what an unlimited call returns")
+
+
+# ── index must not keep its own idea of what a directory holds ──────
+
+def test_index_walks_every_format_acidcat_knows(tmp_path_factory):
+    """index kept a private 24-entry extension list while the shared set knew
+    87, so it opened the .wav in a folder and passed over the .w64, .rf64,
+    .bwf, .aifc and every tracker module beside it -- formats with full
+    walkers. `detect` on the same folder read them fine, so the two verbs
+    disagreed about what the directory contained.
+
+    Asserted against the shared set rather than a number, so it keeps holding
+    as formats are added.
+    """
+    from acidcat.core.catalogue.indexing import INDEXABLE_EXTENSIONS
+    from acidcat.util.targets import KNOWN_EXTS
+    missing = set(KNOWN_EXTS) - set(INDEXABLE_EXTENSIONS)
+    assert not missing, (
+        f"index would silently pass over {len(missing)} known formats: "
+        f"{sorted(missing)[:12]}")
+
+
+def test_index_reports_what_it_passed_over(tmp_path_factory):
+    """"0 skipped" on a walk that never opened half the folder is the report
+    this whole exercise exists to stop being wrong about.
+
+    Reported separately from "skipped", which means seen-before-and-unchanged:
+    that is a file which IS in the index, and folding the two together makes a
+    filtered file read as already up to date.
+    """
+    base = tmp_path_factory.mktemp("ix")
+    home, corpus = base / "home", base / "c"
+    corpus.mkdir()
+    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
+        "gs-16b-2c-44100hz.wav"
+    if not src.exists():
+        pytest.skip("no wav specimen")
+    (corpus / "a.wav").write_bytes(src.read_bytes())
+    for junk in ("readme.txt", "cover.jpg", "notes.md"):
+        (corpus / junk).write_text("x")
+
+    env = dict(os.environ, ACIDCAT_HOME=str(home))
+    r = subprocess.run([sys.executable, "-m", "acidcat", "index", str(corpus),
+                        "--label", "t"], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "3 unrecognised" in r.stderr, (
+        f"the three non-audio files left no trace:\n{r.stderr}")

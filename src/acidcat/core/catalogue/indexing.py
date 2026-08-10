@@ -12,6 +12,7 @@ import time
 from acidcat.core.catalogue import index as idx
 from acidcat.core.catalogue import paths as acidpaths
 from acidcat.core.catalogue import registry as reg
+from acidcat.util import targets as _targets
 from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
@@ -29,11 +30,17 @@ PRESET_EXTENSIONS = {
     ".vital",                                       # Vital
 }
 
-INDEXABLE_EXTENSIONS = {
-    ".wav", ".aif", ".aiff",
-    ".mp3", ".flac", ".ogg", ".oga", ".opus", ".m4a", ".mp4", ".aac",
-    ".mid", ".midi",
-    ".serumpreset",
+# What a directory walk will open. This was a private 24-entry list while
+# util/targets.py knew 87, so `index` opened the .wav in a folder and passed
+# over the .w64, .rf64, .bwf, .aifc, .sf2 and every tracker module beside it --
+# formats acidcat has full walkers for. `detect` on the same folder read them
+# fine, so the two verbs disagreed about what the directory contained.
+#
+# Derived from the shared set rather than restated, so it cannot drift again.
+# The extras are formats the indexer understands but which are not audio files
+# in their own right.
+INDEXABLE_EXTENSIONS = set(_targets.KNOWN_EXTS) | {
+    ".oga", ".aac", ".serumpreset",
 } | PRESET_EXTENSIONS
 
 # OS sidecar / metadata junk that shows up in copied libraries.
@@ -64,7 +71,7 @@ def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
         idx.ensure_query_indexes(conn)
     except sqlite3.DatabaseError:
         pass
-    added = updated = skipped = failed = 0
+    added = updated = skipped = failed = unrecognised = 0
     seen_paths = 0
     since_commit = 0
 
@@ -74,6 +81,10 @@ def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
                 continue
             ext = os.path.splitext(name)[1].lower()
             if ext not in INDEXABLE_EXTENSIONS:
+                # counted, not merely dropped: "0 skipped" on a walk that
+                # passed over half the folder is the report this module exists
+                # to stop being wrong about
+                unrecognised += 1
                 continue
 
             filepath = os.path.join(root, name)
@@ -170,6 +181,10 @@ def walk_and_upsert(conn, scan_root, do_features=False, do_deep=False,
         "skipped": skipped,
         "failed": failed,
         "pruned": pruned,
+        # distinct from "skipped", which means "seen before and unchanged".
+        # Merging them would hide a filtered file behind a word that reads as
+        # "already up to date".
+        "unrecognised": unrecognised,
     }
 
 
