@@ -7,10 +7,17 @@ import os
 import sys
 from collections import Counter, defaultdict
 
+from acidcat.util import targets
 from acidcat.core.formats.riff import iter_chunks
 from acidcat.commands._output import add_output_format_arg, out_stream
 from acidcat.core.infra.render import output
 from acidcat.util.csv_helpers import safe_basename_for_csv
+
+
+# The RIFF family, and only that: iter_chunks below is RIFF-specific and
+# returns nothing for AIFF or FLAC, so a wider set would just add files
+# that parse to zero chunks.
+_RIFF_EXTS = frozenset({".wav", ".wave", ".rf64", ".bwf"})
 
 
 def register(subparsers):
@@ -50,43 +57,46 @@ def run(args):
     unparseable = 0
     capped = False
 
-    for root, _, files in os.walk(directory):
-        for fn in files:
-            if not fn.lower().endswith(".wav"):
+    # survey tabulates RIFF chunk ids, and iter_chunks is RIFF-specific -- it
+    # returns nothing for AIFF or FLAC. So the narrow set is correct here,
+    # unlike detect and features where it was an accident. It is declared
+    # rather than implied, it covers the whole RIFF family instead of ".wav"
+    # alone, and what it passes over is counted and reported.
+    found, skipped = targets.expand([directory], accept=_RIFF_EXTS)
+    if skipped:
+        note = targets.skip_note(skipped, kind="extension outside the RIFF family")
+        print(f"  {note}", file=sys.stderr)
+    for path in found:
+        ids = []
+        try:
+            for cid, _, _ in iter_chunks(path):
+                ids.append(cid)
+        except Exception:
+            unparseable += 1
+            continue
+
+        if not ids:
+            unparseable += 1
+            continue
+
+        if wanted:
+            u = {c.upper() for c in ids}
+            if not (u & wanted):
                 continue
-            path = os.path.join(root, fn)
-            ids = []
-            try:
-                for cid, _, _ in iter_chunks(path):
-                    ids.append(cid)
-            except Exception:
-                unparseable += 1
-                continue
 
-            if not ids:
-                unparseable += 1
-                continue
+        seen_local = set()
+        for c in ids:
+            if c not in seen_local:
+                seen_local.add(c)
+                counts[c] += 1
+                if len(examples[c]) < max_examples:
+                    examples[c].append(path)
 
-            if wanted:
-                u = {c.upper() for c in ids}
-                if not (u & wanted):
-                    continue
-
-            seen_local = set()
-            for c in ids:
-                if c not in seen_local:
-                    seen_local.add(c)
-                    counts[c] += 1
-                    if len(examples[c]) < max_examples:
-                        examples[c].append(path)
-
-            files_scanned += 1
-            if not quiet and files_scanned % 200 == 0:
-                print(f"  [survey] {files_scanned} files...", file=sys.stderr)
-            if files_scanned >= num:
-                capped = True
-                break
+        files_scanned += 1
+        if not quiet and files_scanned % 200 == 0:
+            print(f"  [survey] {files_scanned} files...", file=sys.stderr)
         if files_scanned >= num:
+            capped = True
             break
 
     # Format results

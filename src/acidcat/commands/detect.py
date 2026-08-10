@@ -5,6 +5,7 @@ acidcat detect -- estimate BPM/key using librosa analysis.
 import csv
 import os
 import sys
+from acidcat.util import targets
 from acidcat.util import deps
 from acidcat.util.stdin import display_name
 
@@ -75,26 +76,29 @@ def _run(args):
     if os.path.isdir(target):
         num = getattr(args, 'num', 500)
         rows = []
-        count = 0
-        for root, _, files in os.walk(target):
-            for fn in files:
-                if not fn.lower().endswith(".wav"):
-                    continue
-                filepath = os.path.join(root, fn)
-                rows.append(_detect_single(filepath, quiet))
-                count += 1
-                if count >= num:
-                    break
-            if count >= num:
-                break
+        # This walk matched ".wav" only, so a directory of FLACs produced an
+        # empty result and said nothing amiss -- while `detect a.flac` on the
+        # same file worked. The shared expander accepts everything acidcat can
+        # parse and hands back what it passed over, so the skip is stated.
+        files, skipped = targets.expand([target])
+        capped = len(files) > num
+        for filepath in files[:num]:
+            rows.append(_detect_single(filepath, quiet))
+        count = len(rows)
+        if not quiet:
+            note = targets.skip_note(skipped)
+            if note:
+                print(f"  {note}", file=sys.stderr)
 
         with out_stream(getattr(args, 'output', None)) as stream:
             output(rows, fmt=fmt_name if fmt_name != "table" else "csv",
                    stream=stream)
         if not quiet:
-            cap_note = (f" (stopped at the -n {num} cap; more files remain)"
-                        if count >= num else "")
-            print(f"\n[INFO] Detected BPM/key for {len(rows)} files{cap_note}.",
+            # name the true total, not just that a cap was hit -- "1 of 2" is
+            # actionable where "the cap was reached" leaves you guessing
+            cap_note = (f" of {len(files):,} (stopped at the -n {num} cap)"
+                        if capped else "")
+            print(f"\n[INFO] Detected BPM/key for {len(rows)} file(s){cap_note}.",
                   file=sys.stderr)
         return 0
 

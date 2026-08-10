@@ -6,6 +6,7 @@ import csv
 import os
 import sys
 
+from acidcat.util import targets
 from acidcat.core.infra.render import output
 from acidcat.commands._output import add_output_format_arg
 from acidcat.util.csv_helpers import safe_basename_for_csv
@@ -54,24 +55,24 @@ def run(args):
 
     num = getattr(args, 'num', 500)
     rows = []
-    count = 0
-
-    for root, _, files in os.walk(target):
-        for fn in files:
-            if not fn.lower().endswith(".wav"):
-                continue
-            filepath = os.path.join(root, fn)
-            if not quiet:
-                print(f"  [features] {fn}...", file=sys.stderr)
-            feats = extract_audio_features(filepath)
-            if feats:
-                feats["filename"] = filepath
-                rows.append(feats)
-            count += 1
-            if count >= num:
-                break
-        if count >= num:
-            break
+    # matched ".wav" only, so a directory of FLAC or AIFF produced "No features
+    # extracted" -- indistinguishable from an empty directory, and wrong
+    files, skipped = targets.expand([target])
+    capped = len(files) > num
+    for filepath in files[:num]:
+        if not quiet:
+            print(f"  [features] {os.path.basename(filepath)}...", file=sys.stderr)
+        feats = extract_audio_features(filepath)
+        if feats:
+            feats["filename"] = filepath
+            rows.append(feats)
+    if not quiet:
+        note = targets.skip_note(skipped)
+        if note:
+            print(f"  {note}", file=sys.stderr)
+        if capped:
+            print(f"  read {num:,} of {len(files):,} file(s) "
+                  f"(raise with --num)", file=sys.stderr)
 
     if not rows:
         print("acidcat features: No features extracted.", file=sys.stderr)
@@ -110,9 +111,9 @@ def run(args):
         writer.writeheader()
         writer.writerows(rows)
     if not quiet:
-        cap_note = (f" (stopped at the -n {num} cap; more files remain)"
-                    if count >= num else "")
-        print(f"\n[INFO] Wrote features for {len(rows)} files to {out_path}"
-              f"{cap_note}", file=sys.stderr)
+        cap_note = (f" of {len(files):,} (stopped at the -n {num} cap)"
+                    if capped else "")
+        print(f"\n[INFO] Wrote features for {len(rows)} file(s){cap_note} "
+              f"to {out_path}", file=sys.stderr)
 
     return 0
