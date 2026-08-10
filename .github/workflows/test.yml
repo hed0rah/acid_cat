@@ -43,6 +43,27 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Install ffmpeg
+        # Not a runtime dependency -- acidcat bundles no decoders. It builds the
+        # specimens for the deep-checksum and concealment tests: a real FLAC to
+        # verify frame CRCs against, a real 24-bit WAV for the not-applicable
+        # path. Those tests guard `validate --deep`, a headline of 1.0.
+        #
+        # Without it they SKIP, and a skipped test is a green run that checked
+        # nothing -- the same failure as the `ml`/`tui` extras below, which
+        # silently skipped whole suites while every run reported success. The
+        # conftest guard makes absence graceful for a contributor's laptop; it
+        # is not a licence for CI to stop checking.
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ffmpeg
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install ffmpeg
+          else
+            choco install ffmpeg -y --no-progress
+          fi
+          ffmpeg -version | head -1
       - name: Install
         # `ml` was requested here and is not a defined extra -- pip warns and
         # carries on, so it looked installed and never was. `tui` and `crypto`
