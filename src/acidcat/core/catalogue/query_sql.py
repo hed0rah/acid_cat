@@ -61,6 +61,24 @@ def build_filter(*, bpm_min=None, bpm_max=None, duration_min=None,
     return where, params, joins
 
 
+def assemble_count(where, joins):
+    """How many rows the same filter matches, unbounded.
+
+    A caller that applies LIMIT has to be able to say "50 of 382" rather than
+    just "50", and it cannot get 382 from a result set it truncated. No ORDER BY
+    (sorting a count is wasted work) and no LIMIT (the count IS the thing the
+    limit hides).
+
+    Summing this across libraries is exact rather than approximate: the registry
+    refuses to register a library whose root overlaps another, so a given file
+    belongs to exactly one library and cannot be counted twice.
+    """
+    sql = "SELECT COUNT(*) FROM samples s " + " ".join(joins)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    return sql
+
+
 def assemble(where, joins, *, order="s.path", limit_placeholder=False):
     """Assemble a full SELECT from build_filter fragments."""
     sql = "SELECT s.* FROM samples s " + " ".join(joins)

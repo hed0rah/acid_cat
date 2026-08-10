@@ -264,8 +264,11 @@ def search_samples(args):
         tags=args.get("tags"), text=args.get("text"))
     limit = _limit(args, "limit", 50)
     sql = query_sql.assemble(where, joins, order="s.path", limit_placeholder=True)
+    count_sql = query_sql.assemble_count(where, joins)
 
     merged = []
+    matched = 0
+    counted_all = True
     with _fanout_conns(args.get("root")) as pairs:
         for lib, conn in pairs:
             try:
@@ -280,6 +283,13 @@ def search_samples(args):
                         idx.fts5_syntax_message(args.get("text"))
                     )
                 raise
+            try:
+                # Unbounded COUNT, because the SELECT above already carries
+                # LIMIT: counting `merged` would be counting the truncation,
+                # which is the defect being fixed rather than the fix.
+                matched += conn.execute(count_sql, params).fetchone()[0]
+            except Exception:
+                counted_all = False
             for r in rows:
                 d = dict(r)
                 d.pop("id", None)     # internal rowid alias, not part of the API
@@ -289,7 +299,17 @@ def search_samples(args):
     merged = _dedup_by_path(merged)
     merged.sort(key=lambda r: r.get("path") or "")
     merged = merged[:limit]
-    return {"count": len(merged), "samples": merged}
+    if not counted_all:
+        matched = None
+    # "count" was len() of the ALREADY-TRUNCATED list, so a model asking "where
+    # is X?" got 10 of 120 and was told count: 10, while list_formats on the
+    # same server truthfully reported 126 -- the server contradicting itself.
+    # A caller here has no stderr to read a note from, so the truncation has to
+    # travel in the payload. Adding keys is backward compatible; changing what
+    # "count" means would not be, so it still counts what was returned.
+    return {"count": len(merged), "total_matched": matched,
+            "truncated": (matched is not None and matched > len(merged)),
+            "samples": merged}
 
 
 def get_sample(args):
@@ -347,6 +367,8 @@ def locate_sample(args):
     like = "%" + idx.escape_like(name) + "%"
 
     merged = []
+    matched = 0
+    counted_all = True
     with _fanout_conns() as pairs:
         for lib, conn in pairs:
             rows = conn.execute(
@@ -355,6 +377,16 @@ def locate_sample(args):
                 "ORDER BY path LIMIT ?",
                 (like, limit),
             ).fetchall()
+            try:
+                # Unbounded, because the SELECT above is limited. This tool's
+                # description promises "every registered library", and a model
+                # asking "where is X?" has no way to see that it got a page.
+                matched += conn.execute(
+                    "SELECT COUNT(*) FROM samples WHERE path LIKE ? ESCAPE '\\'",
+                    (like,),
+                ).fetchone()[0]
+            except Exception:
+                counted_all = False
             for r in rows:
                 d = dict(r)
                 d["library_label"] = lib["label"]
@@ -363,7 +395,17 @@ def locate_sample(args):
     merged = _dedup_by_path(merged)
     merged.sort(key=lambda r: r.get("path") or "")
     merged = merged[:limit]
-    return {"count": len(merged), "samples": merged}
+    if not counted_all:
+        matched = None
+    # "count" was len() of the ALREADY-TRUNCATED list, so a model asking "where
+    # is X?" got 10 of 120 and was told count: 10, while list_formats on the
+    # same server truthfully reported 126 -- the server contradicting itself.
+    # A caller here has no stderr to read a note from, so the truncation has to
+    # travel in the payload. Adding keys is backward compatible; changing what
+    # "count" means would not be, so it still counts what was returned.
+    return {"count": len(merged), "total_matched": matched,
+            "truncated": (matched is not None and matched > len(merged)),
+            "samples": merged}
 
 
 def list_libraries(_args):

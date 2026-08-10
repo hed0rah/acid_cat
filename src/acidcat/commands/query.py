@@ -131,7 +131,7 @@ def _run(args):
         return _run_compatible(args, libs)
 
     try:
-        rows = _fan_out(libs, args)
+        rows, total_matched = _fan_out(libs, args)
     except idx.FTSQueryError as e:
         # 2: a malformed --text is the same class of mistake as a malformed
         # --bpm, which already exits 2. It was 1 (ran fine, no answer), so a
@@ -139,7 +139,13 @@ def _run(args):
         print(f"acidcat query: {e}", file=sys.stderr)
         return 2
     rows.sort(key=lambda r: r.get("path") or "")
+    shown = len(rows)
     rows = rows[: args.limit]
+    # A truncated answer must say so. `query --format wav` printed 50 paths and
+    # nothing else, in every format, so a caller could not tell a complete
+    # result from the first page of one -- and the JSON was a bare 50-element
+    # array with no marker at all.
+    truncated = (total_matched is not None and total_matched > len(rows))         or (total_matched is None and shown > len(rows))
 
     if not rows:
         # An empty result still has to be VALID output in a machine format:
@@ -154,9 +160,25 @@ def _run(args):
             print("(no matches)", file=sys.stderr)
         return 0
 
+    def _note():
+        """One line on stderr when the limit hid something.
+
+        stderr, so `--paths-only` stays pipeable and the JSON stays parseable:
+        the note is for the human, the records are for the program.
+        """
+        if not truncated:
+            return
+        if total_matched is None:
+            print(f"acidcat query: showing {len(rows)}; the total could not be "
+                  f"counted (raise --limit to see more)", file=sys.stderr)
+        else:
+            print(f"acidcat query: showing {len(rows)} of {total_matched} "
+                  f"match(es) -- raise --limit to see more", file=sys.stderr)
+
     if args.paths_only:
         for r in rows:
             print(r["path"])
+        _note()
         return 0
 
     stream = sys.stdout
@@ -167,6 +189,7 @@ def _run(args):
     finally:
         if stream is not sys.stdout:
             stream.close()
+    _note()
     return 0
 
 
@@ -240,13 +263,22 @@ def _run_compatible(args, libs):
 
 
 def _fan_out(libs, args):
-    """Open each library's DB, run the query, accumulate rows, dedup."""
-    sql, params = _build_sql(args)
+    """Open each library's DB, run the query, accumulate rows, dedup.
+
+    Returns (rows, total_matched). The total costs one extra COUNT per library
+    and is what lets the caller say "50 of 382" instead of "50". Without it a
+    truncated answer is indistinguishable from a complete one, in every output
+    format -- the JSON was a bare 50-element array with nothing marking it as a
+    prefix.
+    """
+    sql, count_sql, params = _build_sql(args)
     per_db_sql = sql + " LIMIT ?"
     per_db_limit = args.limit
 
     accumulated = []
     seen_paths = set()
+    total_matched = 0
+    counted_all = True
     for lib in libs:
         try:
             conn = idx.open_db(lib["db_path"])
@@ -269,6 +301,16 @@ def _fan_out(libs, args):
                     ) from e
                 _vlog(args, f"[query] {lib['label']} query failed: {e}")
                 continue
+            try:
+                # one extra COUNT per library, on the connection already open.
+                # A failed count must not lose the rows we did get, so this is
+                # its own try: a missing total is a weaker answer than a wrong
+                # one, and losing real results to get it would be worse than
+                # both.
+                total_matched += conn.execute(count_sql, params).fetchone()[0]
+            except Exception as e:
+                counted_all = False
+                _vlog(args, f"[query] {lib['label']} count failed: {e}")
         finally:
             try:
                 conn.close()
@@ -282,7 +324,7 @@ def _fan_out(libs, args):
                 continue
             seen_paths.add(p)
             accumulated.append(_shape_row(d))
-    return accumulated
+    return accumulated, (total_matched if counted_all else None)
 
 
 def _build_sql(args):
@@ -302,7 +344,8 @@ def _build_sql(args):
         creator=getattr(args, "creator", None),
         product=getattr(args, "product", None),
         tags=args.tag, text=args.text)
-    return query_sql.assemble(where, joins, order="s.path"), params
+    return (query_sql.assemble(where, joins, order="s.path"),
+            query_sql.assemble_count(where, joins), params)
 
 
 def _shape_row(row):
