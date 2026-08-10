@@ -99,11 +99,11 @@ def test_a_predicate_works_as_accept(tree):
 def test_the_extension_set_covers_what_the_old_lists_did(tree):
     """The union has to be a superset of every list it replaces, or the merge
     quietly loses formats -- which is the bug, reintroduced."""
+    # validate's _EXTS is gone: it moved onto the shared expander, which is
+    # the outcome this test exists to drive. The remaining lists stay checked.
     from acidcat.commands.scan import AUDIO_EXTENSIONS
-    from acidcat.commands.validate import _EXTS
     from acidcat.commands.info import _PRESET_EXTS
-    for name, old in (("scan", AUDIO_EXTENSIONS), ("validate", _EXTS),
-                      ("info", _PRESET_EXTS)):
+    for name, old in (("scan", AUDIO_EXTENSIONS), ("info", _PRESET_EXTS)):
         missing = {e.lower() for e in old} - T.KNOWN_EXTS
         assert not missing, f"{name} accepted {sorted(missing)}, the shared set does not"
 
@@ -142,7 +142,6 @@ def test_no_command_walks_directories_on_its_own():
         "convert.py",   # not yet converted -- .ncw only, deliberately
         "scan.py",      # not yet converted -- has its own 11-extension set
         "shape.py",     # not yet converted -- already sees every format
-        "validate.py",  # not yet converted -- structural containers only
     }
     found = set()
     for p in sorted(pathlib.Path("src/acidcat/commands").glob("*.py")):

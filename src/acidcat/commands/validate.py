@@ -22,13 +22,14 @@ from acidcat.core.infra.render import output as _render
 from acidcat.core.infra.mapped import map_file
 from acidcat.core.write import constraints
 from acidcat.core.forensics.checksums import _READ_CAP
+from acidcat.util import targets as _targets
 
-# .mp3 is here because --deep verifies MP3 frames. Without it a directory walk
-# never opened a single MP3 and still printed "all N file(s) consistent" with
-# exit 0 -- a gate passing a tree it had not looked at. The same file named
-# directly WAS checked, so the two forms disagreed about what validate does.
-_EXTS = (".wav", ".rf64", ".bwf", ".aif", ".aiff", ".aifc", ".sf2", ".sf3",
-         ".m4a", ".mp4", ".mov", ".m4b", ".flac", ".mp3")
+# No private extension list. validate kept its own 14-entry tuple, so a
+# directory walk opened .wav and skipped .w64, .ogg, .opus, .caf and every
+# tracker and preset type, then printed "all N file(s) consistent" with exit 0
+# -- a CI gate reporting a clean tree it had never looked at. Adding .mp3 to
+# that tuple fixed one symptom and left the cause: a second list, drifting from
+# the real one. util/targets.py exists because eight commands each grew one.
 
 
 def register(subparsers):
@@ -51,14 +52,14 @@ def register(subparsers):
 
 
 def _iter_paths(inputs):
-    for inp in inputs:
-        if os.path.isdir(inp):
-            for root, _dirs, files in os.walk(inp):
-                for name in sorted(files):
-                    if name.lower().endswith(_EXTS):
-                        yield os.path.join(root, name)
-        else:
-            yield inp
+    """Files to check, plus the count the walk passed over.
+
+    The skip count is returned, not swallowed: a silent filter is
+    indistinguishable from an empty directory, which is how this verb came to
+    report a clean tree it had not read.
+    """
+    files, skipped = _targets.expand(inputs)
+    return files, skipped
 
 
 def _deep_check(path, data):
@@ -277,7 +278,8 @@ def _run(args):
     # 1 = some file has a violation (ran fine), 2 = a named input could not be
     # accessed (a real error). a file inside a walked directory that is missing
     # or unreadable is a skip, not a hard error.
-    checked = failed = errors = unreadable = 0
+    checked = failed = errors = unreadable = total_skipped = 0
+    unmodeled = 0
     any_repairable = False
     fmt = getattr(args, "output_format", "table")
     rows = None if fmt == "table" else []
@@ -288,7 +290,9 @@ def _run(args):
             errors += 1
             continue
         named = not os.path.isdir(inp)
-        for path in _iter_paths([inp]):
+        paths, skipped = _iter_paths([inp])
+        total_skipped += skipped
+        for path in paths:
             did, ok, error, repairable = _check(
                 path, args.quiet, rows, deep=getattr(args, 'deep', False))
             any_repairable = any_repairable or repairable
@@ -305,6 +309,12 @@ def _run(args):
                 checked += 1
                 if not ok:
                     failed += 1
+            elif not error:
+                # walked, opened, and structurally unmodeled. Counted, because
+                # otherwise it leaves no trace at all: "all 2 file(s)
+                # consistent" over a directory of three audio files reads as a
+                # verdict on all three.
+                unmodeled += 1
     if rows is not None:
         # csv/tsv are one flat row per file; the nested per-violation detail
         # only survives in json, so drop the key rather than stringify a list
@@ -315,6 +325,13 @@ def _run(args):
     if errors:
         return 2
     skipped = f", {unreadable} unreadable (not checked)" if unreadable else ""
+    # A filtered-out file is a file NOT checked, and the whole point of this
+    # verb is that it says what it looked at.
+    if total_skipped:
+        skipped += (f", {total_skipped} skipped (unrecognised extension; name a "
+                    f"file directly to force it)")
+    if unmodeled:
+        skipped += f", {unmodeled} not structurally modeled (not checked)"
     if checked == 0:
         # 2, not 0. `validate` is the natural gate in a script, and returning
         # success for files it never modelled gave a clean bill of health to

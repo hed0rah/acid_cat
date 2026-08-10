@@ -12,6 +12,8 @@ someone else's backup) are the same failure pointed at the filesystem.
 
 import json
 import os
+import pathlib
+import re
 import struct
 import subprocess
 import sys
@@ -284,3 +286,58 @@ def test_a_bounded_scan_still_says_when_it_stopped(tmp_path):
     assert r["failed"] == 0, (
         f"a bounded scan invented {r['failed']} CRC failure(s) on a clean file")
     assert r["unverified"] >= 1
+
+
+# ── the conservation law: nothing present may vanish from the count ──
+
+def test_validate_accounts_for_every_file_in_a_directory(tmp_path):
+    """A file handed to validate lands in exactly one bucket, and every bucket
+    is reported.
+
+    validate kept its own 14-entry extension tuple, so a walk opened .wav and
+    silently passed over .w64, .ogg, .opus, .caf and every tracker and preset
+    type, then printed "all N file(s) consistent" with exit 0 -- a CI gate
+    giving a clean bill of health to a tree it had not read. Adding .mp3 to that
+    tuple fixed one symptom; the cause was keeping a second list at all.
+
+    This asserts the accounting, not the list, so it keeps holding as formats
+    are added.
+    """
+    import re
+    corpus = pathlib.Path(__file__).parent.parent / "data" / "test_formats"
+    planted = 0
+    for name in ("gs-16b-2c-44100hz.wav", "gs-16b-2c-44100hz.flac",
+                 "gs-16b-2c-44100hz.ogg", "gs-16b-2c-44100hz.aiff"):
+        src = corpus / name
+        if src.exists():
+            (tmp_path / name).write_bytes(src.read_bytes())
+            planted += 1
+    if planted < 3:
+        pytest.skip("not enough corpus formats to plant")
+    (tmp_path / "notes.txt").write_text("not audio")
+    planted += 1
+
+    r = _run("validate", str(tmp_path))
+    out = r.stdout + r.stderr
+
+    checked = int(re.search(r"all (\d+) file\(s\) consistent", out).group(1)) \
+        if "consistent" in out else 0
+    def _n(pat):
+        m = re.search(pat, out)
+        return int(m.group(1)) if m else 0
+    accounted = (checked + _n(r"(\d+) skipped \(unrecognised")
+                 + _n(r"(\d+) not structurally modeled")
+                 + _n(r"(\d+) unreadable"))
+    assert accounted == planted, (
+        f"planted {planted} files, accounted for {accounted}:\n{out}")
+
+
+def test_validate_does_not_keep_a_private_extension_list():
+    """The cause, not the symptom. util/targets.py exists because eight
+    commands each grew their own list and they drifted apart."""
+    import inspect
+    from acidcat.commands import validate
+    src = inspect.getsource(validate)
+    assert "_targets.expand" in src, "validate stopped using the shared expander"
+    assert not re.search(r'_EXTS\s*=\s*\(', src), (
+        "validate grew a private extension tuple again")
