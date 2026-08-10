@@ -53,8 +53,10 @@ def spec(tmp_path):
 
 
 def _probe(path, *args):
-    return subprocess.run([sys.executable, "-m", "acidcat", "probe", str(path)]
-                          + list(args), capture_output=True, text=True)
+    # operand last: `probe SUBVERB [OPTIONS] FILE...`
+    return subprocess.run([sys.executable, "-m", "acidcat", "probe"]
+                          + list(args) + [str(path)],
+                          capture_output=True, text=True)
 
 
 _WALK = ["table", "0x0b", "--count-at", "0x07", "--type", "u32", "--le",
@@ -83,7 +85,7 @@ def test_it_pipes_straight_into_carve(spec, tmp_path):
     out = tmp_path / "frames"
 
     probe = subprocess.Popen(
-        [sys.executable, "-m", "acidcat", "probe", str(p), "--json", *_WALK],
+        [sys.executable, "-m", "acidcat", "probe", "--json", *_WALK, str(p)],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     carve = subprocess.Popen(
         [sys.executable, "-m", "acidcat", "carve", str(p), "--batch", "-",

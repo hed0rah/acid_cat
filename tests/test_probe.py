@@ -76,7 +76,12 @@ def test_resolve_chunk_and_field(tmp_path):
 # ── command ────────────────────────────────────────────────────────
 
 def _args(file, verb, **kw):
-    base = dict(file=file, verb=verb, type="u32", count=1, be=False, le=False,
+    """Operands live in `files` now, and come last on the command line:
+    `probe SUBVERB [OPTIONS] FILE...`. The old `probe FILE SUBVERB` could not
+    survive a glob -- the shell turns `probe *.wav strings` into
+    `probe a.wav b.wav c.wav strings` before acidcat sees it."""
+    files = kw.pop("files", None) or [file]
+    base = dict(files=files, verb=verb, type="u32", count=1, be=False, le=False,
                 min=4, length=256, width=72, order=4, no_color=True)
     base.update(kw)
     return SimpleNamespace(**base)
@@ -103,7 +108,7 @@ def test_cmd_diff(tmp_path, capsys):
     d = bytearray(open(a, "rb").read())
     d[0x18] ^= 0xFF                          # flip a byte in the fmt chunk
     b.write_bytes(bytes(d))
-    rc = cmd.run(_args(a, "diff", other=str(b)))
+    rc = cmd.run(_args(a, "diff", files=[str(a), str(b)]))
     out = capsys.readouterr().out
     assert rc == 0 and "changed range" in out
 

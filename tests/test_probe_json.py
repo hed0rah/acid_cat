@@ -31,8 +31,10 @@ def wav(tmp_path):
 
 
 def _probe(wav, *args):
-    return subprocess.run([sys.executable, "-m", "acidcat", "probe", wav]
-                          + list(args), capture_output=True, text=True)
+    """`probe SUBVERB [OPTIONS] FILE...` -- the operand goes last, so a glob
+    expands into it the way strings(1) and file(1) have always accepted."""
+    return subprocess.run([sys.executable, "-m", "acidcat", "probe"]
+                          + list(args) + [wav], capture_output=True, text=True)
 
 
 @pytest.mark.parametrize("argv,verb", [

@@ -121,7 +121,7 @@ def lean_wav(tmp_path):
     ["info", "{wav}"],
     ["inspect", "{wav}"],
     ["chunks", "{wav}"],
-    ["probe", "{wav}", "strings"],
+    ["probe", "strings", "{wav}"],
     ["validate", "{wav}"],
     ["formats"],
 ])

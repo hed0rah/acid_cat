@@ -4,12 +4,16 @@ Read a file as raw bytes the way a reverse engineer does, with the addresses
 resolved through acidcat's format walker so you can name structure instead of
 counting bytes.
 
-    acidcat probe FILE read AT [--type u32] [--count N] [--be|--le]
-    acidcat probe FILE scan VALUE [--type u32]
-    acidcat probe FILE find HEX
-    acidcat probe FILE strings [--min N]
-    acidcat probe FILE hexdump AT [--len N]
-    acidcat probe FILE diff OTHER
+    acidcat probe read AT [--type u32] [--count N] [--be|--le] FILE...
+    acidcat probe scan VALUE [--type u32] FILE...
+    acidcat probe find HEX FILE...
+    acidcat probe strings [--min N] FILE...
+    acidcat probe hexdump AT [--len N] FILE...
+    acidcat probe diff OLD NEW
+
+Operands come last and take any number of files, so a glob works and the
+output is labelled per file when there is more than one -- the shape strings(1)
+and file(1) have always had.
 
 AT is a raw offset (0x2c / 44) OR a structural name: a chunk id (data), or a
 chunk field (fmt.sample_rate). VALUE for scan is an integer (or a float for
@@ -36,7 +40,18 @@ def register(subparsers):
     p = subparsers.add_parser(
         "probe",
         help="Byte-level dissection: typed read, value scan, find, strings, hexdump, diff.")
-    p.add_argument("file", help="File to dissect, or '-' for stdin.")
+    # The file operand belongs to each SUB-VERB, not to `probe` itself.
+    #
+    # It used to sit here, giving `acidcat probe FILE VERB ...` -- which reads
+    # nicely and puts the thing you vary most (the operation) last, so shell
+    # history editing is one word. It also cannot survive a glob: the shell
+    # turns `probe *.wav strings` into `probe a.wav b.wav c.wav strings` before
+    # acidcat sees it, and there is no reading of that which works. No
+    # long-lived tool puts an operand between the command and its subcommand,
+    # and this is why.
+    #
+    # `probe SUBVERB [OPTIONS] FILE...` is the openssl/git shape and the one
+    # every shell idiom already expects.
     # probe is the RE surface and had no machine output at all: every subverb
     # printed its summary and its results together on stdout, so scripting
     # `probe find` meant `tail -n +2 | tr -d ' '`. Declared on the PARENT, so it
@@ -75,6 +90,8 @@ def register(subparsers):
                     help="Where the last region ends (default: EOF).")
     tb.add_argument("--be", action="store_true", help="Force big-endian.")
     tb.add_argument("--le", action="store_true", help="Force little-endian.")
+    tb.add_argument("files", nargs="+", metavar="FILE",
+                     help="File(s) to dissect, or '-' for stdin.")
 
     r = sub.add_parser("read", help="Read AT as typed values (pwndbg x).")
     r.add_argument("at", help="Offset (0x.. / decimal) or name (chunk / chunk.field).")
@@ -83,29 +100,44 @@ def register(subparsers):
     r.add_argument("--count", "-n", type=int, default=1, help="How many values.")
     r.add_argument("--be", action="store_true", help="Force big-endian.")
     r.add_argument("--le", action="store_true", help="Force little-endian.")
+    r.add_argument("files", nargs="+", metavar="FILE",
+                     help="File(s) to dissect, or '-' for stdin.")
 
     s = sub.add_parser("scan", help="Find every offset holding VALUE (Cheat Engine).")
     s.add_argument("value", help="The value to find (int, or float for f32/f64).")
     s.add_argument("--type", "-t", default="u32", choices=sorted(pr.FMT_STRUCT),
                    help="How to encode VALUE (default u32).")
+    s.add_argument("files", nargs="+", metavar="FILE",
+                     help="File(s) to dissect, or '-' for stdin.")
 
     f = sub.add_parser("find", help="Find every offset of a byte pattern.")
     f.add_argument("pattern", help="Hex bytes (64617461) or s:text for literal ASCII.")
+    f.add_argument("files", nargs="+", metavar="FILE",
+                     help="File(s) to dissect, or '-' for stdin.")
 
     st = sub.add_parser("strings", help="Printable ASCII runs with offsets.")
     st.add_argument("--min", "-m", type=int, default=4, help="Minimum run length.")
+    st.add_argument("files", nargs="+", metavar="FILE",
+                     help="File(s) to dissect, or '-' for stdin.")
 
     h = sub.add_parser("hexdump", help="Annotated hexdump at AT.")
     h.add_argument("at", help="Offset or structural name.")
     h.add_argument("--len", "-l", dest="length", type=int, default=256,
                    help="Bytes to dump (default 256, or the chunk size for a name).")
+    h.add_argument("files", nargs="+", metavar="FILE",
+                     help="File(s) to dissect, or '-' for stdin.")
 
     d = sub.add_parser("diff", help="Changed byte ranges vs another file.")
-    d.add_argument("other", help="The file to compare against.")
+    # two operands, like diff(1): `probe diff OLD NEW`. Not variadic --
+    # "diff these five files" has no single meaning.
+    d.add_argument("files", nargs=2, metavar="FILE",
+                   help="The two files to compare.")
 
     en = sub.add_parser("entropy",
                         help="Shannon entropy curve + byte histogram (spot encrypted/compressed spans).")
     en.add_argument("--width", "-w", type=int, default=72, help="Plot width in cells.")
+    en.add_argument("files", nargs="+", metavar="FILE",
+                     help="File(s) to dissect, or '-' for stdin.")
 
     mp = sub.add_parser("map",
                         help="Hilbert byte-class map (binvis): the file's shape at a glance.")
@@ -113,6 +145,8 @@ def register(subparsers):
     mp.add_argument("--order", type=int, default=5,
                     help="Grid is 2^order per side (default 5 = 32x32).")
     add_color_arg(mp, deprecated_no_color=True)
+    mp.add_argument("files", nargs="+", metavar="FILE",
+                     help="File(s) to dissect, or '-' for stdin.")
 
     p.set_defaults(func=run)
 
@@ -139,13 +173,44 @@ def _emit(args, payload):
 
 
 def run(args):
+    """Dispatch each operand through the sub-verb, like strings(1) or file(1).
+
+    `diff` is the exception: its two operands are one comparison, not two runs.
+    """
     from acidcat.util.stdin import resolved_input
-    with resolved_input(args.file) as _p:
-        if _p is None:
-            print("acidcat probe: no data on stdin", file=sys.stderr)
-            return 1
-        args.file = _p
-        return _run(args)
+
+    files = list(getattr(args, "files", []) or [])
+    if not getattr(args, "verb", None):
+        print("acidcat probe: pick a verb "
+              "(table/read/scan/find/strings/hexdump/diff/entropy/map)",
+              file=sys.stderr)
+        return 2
+
+    if args.verb == "diff":
+        args.file, args.other = files[0], files[1]
+        with resolved_input(args.file) as _p:
+            if _p is None:
+                print("acidcat probe: no data on stdin", file=sys.stderr)
+                return 1
+            args.file = _p
+            return _run(args)
+
+    worst = 0
+    many = len(files) > 1
+    for i, target in enumerate(files):
+        with resolved_input(target) as _p:
+            if _p is None:
+                print("acidcat probe: no data on stdin", file=sys.stderr)
+                return 1
+            args.file = _p
+            # grep/file style: name the file only when there is more than one,
+            # so single-file output stays pipeable exactly as it was
+            if many:
+                if i:
+                    print()
+                print(f"==> {display_name(target)} <==")
+            worst = max(worst, _run(args) or 0)
+    return worst
 
 
 def _run(args):

@@ -27,8 +27,8 @@ A low-level audio and preset metadata tool. readelf/exiftool for audio.
 | `acidcat query --compatible-with FILE` | samples that mix with FILE (key + tempo, `--same-key` `--bpm-tolerance` `--kind`) |
 | `acidcat similar FILE` | sounds like FILE over the index (`index --features` first); `-n` `--kind` `--no-kind-filter` `--paths-only` |
 | `acidcat convert FILE` | export/transcode: bwclip -> MIDI, NCW/8SVX -> WAV, SF2/SF3 -> samples; `--to-pcm` decodes ADPCM/mistagged WAV to plain PCM (`--codec ima` forces it) |
-| `acidcat probe FILE read AT\|scan V\|find HEX\|strings\|hexdump AT\|diff F2` | byte dissection (RE surface): typed read, value scan, pattern find, strings, hexdump, diff; AT can be an offset or `chunk`/`chunk.field` |
-| `acidcat probe FILE table AT --count-at EXPR --base after-table` | walk a discovered offset table into carve-ready regions; `--json` pipes straight into `carve --batch -` |
+| `acidcat probe read AT\|scan V\|find HEX\|strings\|hexdump AT FILE...`, `probe diff OLD NEW` | byte dissection (RE surface): typed read, value scan, pattern find, strings, hexdump, diff; AT can be an offset or `chunk`/`chunk.field` |
+| `acidcat probe table AT --count-at EXPR --base after-table FILE` | walk a discovered offset table into carve-ready regions; `--json` pipes straight into `carve --batch -` |
 | `acidcat locate BLOB` | find audio regions in a blob/disk image (containers + raw PCM + headerless MP3); `--mode`, `--analyze`, `--transforms`, `-v`. Pipe `--json` to `carve --batch` |
 | `acidcat extract BANK` | pull every embedded sample out of a bank/module as WAVs (MOD/XM/IT/S3M, `.pat`, 8SVX, NCW, SF2/SF3, `.multisample`, `.krz`, `.e4b`/`.e5b`, `.snd`) |
 | `acidcat carve FILE --chunk ID\|--trailing\|--offset N\|--batch SRC` | extract a byte region (chunk / appended blob / range) to a file; `--batch` cuts every `locate` region into a dir; `--wrap` puts a WAV header on raw PCM |
@@ -161,15 +161,15 @@ The loop that takes a file from "opaque" to a spec, then acts on it:
 ```
 acidcat classify mystery.ch1              # triage: is there anything here
 acidcat od mystery.ch1 --length 256       # look at the header
-acidcat probe mystery.ch1 entropy         # compressed/encrypted, or plain?
-acidcat probe mystery.ch1 read 0x07 --type u32 --le      # is that a count?
-acidcat probe mystery.ch1 read 0x0b --type u32 --le -n 8 # is that a table?
+acidcat probe entropy mystery.ch1         # compressed/encrypted, or plain?
+acidcat probe read 0x07 --type u32 --le mystery.ch1      # is that a count?
+acidcat probe read 0x0b --type u32 --le -n 8 mystery.ch1 # is that a table?
 
 # cross-specimen: which header bytes are constant across a whole family
 for f in *.ch1; do acidcat carve "$f" --offset 0 --length 16 --encoding hex; done
 
 # then act on what you found, without leaving the tool
-acidcat probe mystery.ch1 --json table 0x0b \
+acidcat probe --json table 0x0b mystery.ch1 \
     --count-at 0x07 --type u32 --le --base after-table \
   | acidcat carve mystery.ch1 --batch - -o frames/
 ```
