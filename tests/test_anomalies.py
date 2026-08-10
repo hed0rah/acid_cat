@@ -1,7 +1,10 @@
 """Tests for `inspect --anomalies` (core.anomalies)."""
 import io
+import pathlib
 import struct
 import zipfile
+
+import pytest
 
 from acidcat.core.forensics import anomalies
 from acidcat.core.walk import walk_file
@@ -420,3 +423,126 @@ def test_ape_tag_on_wav_flagged(tmp_path):
     path = _write(tmp_path, "ape.wav", wav + ape)
     findings = _scan(path)
     assert any(f["rule"] == "wrong_format_tag" for f in findings)
+
+
+# ── dispatch must not depend on the display label ───────────────────
+
+def _crafted_wav(dst, pcm, extra=b""):
+    hdr = (b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 2, 44100, 176400, 4, 16)
+           + b"data" + struct.pack("<I", len(pcm)) + pcm + extra)
+    dst.write_bytes(b"RIFF" + struct.pack("<I", len(hdr)) + hdr)
+
+
+def _wav_dual_endian(_src, dst):
+    """Content structured in BOTH byte orders -- what dual_endian flags.
+
+    Real audio does not trip this, which is the point of the check and also the
+    trap: parametrising this test over corpus files instead of a crafted one
+    silently removed its teeth, and three mutations that had been caught started
+    surviving.
+    """
+    _crafted_wav(dst, b"\x00\x01" * 4000)
+
+
+def _wav_stego_pad(_src, dst):
+    """An odd-sized chunk whose pad byte is not zero: the chunked-family check.
+
+    A conformant reader never surfaces that byte, which is what makes it worth
+    reporting and why nothing else notices it.
+    """
+    odd = b"LIST" + struct.pack("<I", 5) + b"INFOx" + b"\xa7"   # pad byte set
+    _crafted_wav(dst, b"\x00\x01" * 4000, extra=odd)
+
+
+def _append(src, dst):
+    dst.write_bytes(src.read_bytes() + b"APPENDED" * 64)
+
+
+def _ogg_multistream(src, dst):
+    """Two logical bitstreams in one file: what ogg_multistream looks for.
+
+    A clean ogg with bytes appended produces no finding at all, and a test whose
+    specimen produces nothing compares [] to [] and passes for free. Simple
+    concatenation is not enough either -- both copies carry the SAME serial, so
+    the file holds one bitstream twice rather than two bitstreams. The serial at
+    byte 14 of every page header has to change.
+    """
+    raw = src.read_bytes()
+    second = bytearray(raw)
+    i = 0
+    while (i := second.find(b"OggS", i)) != -1:
+        second[i + 14:i + 18] = b"\x7f\x7f\x7f\x7f"
+        i += 4
+    dst.write_bytes(raw + bytes(second))
+
+
+def _mp4_mdat_cavity(src, dst):
+    """Grow mdat past what stsz accounts for: the mp4-family check.
+
+    Appending to the end of an m4a produces trailing_data, which is not gated on
+    the mp4 id, so a specimen made that way exercises none of this branch -- it
+    was the one mutation still surviving when every other family was covered.
+    The cavity has to sit INSIDE mdat, where no sample points at it.
+    """
+    raw = bytearray(src.read_bytes())
+    pos = 0
+    while pos + 8 <= len(raw):
+        size = struct.unpack_from(">I", raw, pos)[0]
+        kind, hlen = bytes(raw[pos + 4:pos + 8]), 8
+        if size == 1:
+            size, hlen = struct.unpack_from(">Q", raw, pos + 8)[0], 16
+        elif size == 0:
+            size = len(raw) - pos
+        if size < hlen or pos + size > len(raw):
+            break
+        if kind == b"mdat" and hlen == 8:
+            raw[pos:pos + 4] = struct.pack(">I", size + 2048)
+            raw[pos + size:pos + size] = bytes(2048)
+            dst.write_bytes(bytes(raw))
+            return
+        pos += size
+    pytest.skip("no top-level mdat in the m4a specimen to grow")
+
+
+_FAMILIES = [
+    ("dual-endian wav", "gs-16b-2c-44100hz.wav", _wav_dual_endian),
+    ("stego-pad wav", "gs-16b-2c-44100hz.wav", _wav_stego_pad),
+    ("aiff", "gs-16b-2c-44100hz.aiff", _append),
+    ("ogg multistream", "gs-16b-2c-44100hz.ogg", _ogg_multistream),
+    ("mp4 mdat cavity", "gs-16b-2c-44100hz.m4a", _mp4_mdat_cavity),
+]
+
+
+@pytest.mark.parametrize("name,specimen,prepare", _FAMILIES,
+                         ids=[f[0].replace(" ", "-") for f in _FAMILIES])
+def test_detection_does_not_depend_on_the_display_label(tmp_path, name, specimen,
+                                                        prepare):
+    """Renaming a walker's prose label must not switch a check off.
+
+    The anomaly checks used to branch on the label -- fmt_label.startswith("Ogg"),
+    "AIFF" in fmt_label -- which made the wording of a display string
+    load-bearing. Renaming "RIFF/WAVE" would have silently disabled two checks,
+    with nothing in the label's definition hinting anything depended on it and no
+    test to notice. Dispatch is on the sniff id now.
+
+    One case per id set, each with a specimen that trips a check gated on THAT
+    set. Both halves matter and both were learned by getting them wrong: a single
+    WAV leaves the Ogg branch unexercised, and corpus files in place of crafted
+    ones leave the checks that look for crafted patterns unexercised. When
+    changing this, verify it by restoring a prose branch and confirming it fails.
+    """
+    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / specimen
+    if not src.exists():
+        pytest.skip(f"{specimen} not in the corpus")
+    p = tmp_path / specimen
+    prepare(src, p)
+
+    label, chunks, warns = walk_file(str(p))
+    real = anomalies.scan(str(p), label, chunks, warns)
+    assert real, f"{name} produced no findings, so this proves nothing"
+
+    for bogus in ("", "Some Other Format", "wav", None):
+        got = anomalies.scan(str(p), bogus, chunks, warns)
+        assert [f["rule"] for f in got] == [f["rule"] for f in real], (
+            f"{name}: findings changed when the label became {bogus!r} -- "
+            f"dispatch is still keyed on the display string")

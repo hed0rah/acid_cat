@@ -91,7 +91,13 @@ AUDIO_CONTAINER_EXT = {fid: ext for fid, (_m, ext) in AUDIO_CONTAINERS.items()}
 
 
 def sniff_bytes(head):
-    """Classify the first bytes of a file (pass at least 16).
+    """Classify the first bytes of a file (pass at least 20).
+
+    20, not 16: the XM signature is the 17-byte "Extended Module: ", so a
+    caller honouring a 16-byte contract would silently never detect XM.
+    ``sniff`` itself reads 20 for exactly this reason. Widening a documented
+    minimum after 1.0 would be a breaking change to a frozen contract, so it is
+    stated correctly here.
 
     Magic-only: an ID3v2 tag classifies as "mp3" here; use ``sniff`` to
     distinguish a tag that wraps a different container.

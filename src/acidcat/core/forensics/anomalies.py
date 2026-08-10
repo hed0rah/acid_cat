@@ -57,8 +57,9 @@ _EMBEDDED_MEDIA = [
 # Top-level keys a JSON-backed preset is known to carry. A key outside this set
 # is either somewhere to hide bytes or a sign the format moved and this decoder
 # did not -- both worth saying out loud, neither worth an alert.
+# keyed by sniff id, not by display label, for the reason given at _OGG_IDS
 _JSON_PRESET_KEYS = {
-    "Vital": {"author", "comments", "macro1", "macro2", "macro3", "macro4",
+    "vital": {"author", "comments", "macro1", "macro2", "macro3", "macro4",
               "preset_name", "preset_style", "settings", "synth_version"},
 }
 
@@ -282,8 +283,33 @@ def _scan_magics(filepath, start, size):
             carry = window[-overlap:] if overlap else b""
 
 
+# Format families, keyed by sniff id rather than by the walker's display label.
+#
+# These checks used to branch on the prose label -- fmt_label.startswith("Ogg"),
+# "AIFF" in fmt_label -- which made the wording of a display string
+# load-bearing: renaming a label would silently switch detection off, with no
+# test to notice and nothing in the label's own definition hinting that anything
+# depended on it. Ids are the stable name; labels are for humans.
+_OGG_IDS = frozenset({"ogg", "oga", "opus", "spx"})
+_MP4_IDS = frozenset({"mp4", "m4a", "m4b", "mov"})
+_RIFF_IDS = frozenset({"wav", "rf64", "bwf", "w64", "rmid", "wave"})
+_IFF_IDS = frozenset({"aiff", "aifc", "aif", "8svx"})
+_CHUNKED_IDS = _RIFF_IDS | _IFF_IDS
+
+
 def scan(filepath, fmt_label, chunks, warns):
-    """Return a list of forensic findings for an already-walked file."""
+    """Return a list of forensic findings for an already-walked file.
+
+    `fmt_label` is the walker's display label and is kept in the signature for
+    compatibility, but dispatch below uses the sniff id instead -- see the note
+    on the id sets above.
+    """
+    from acidcat.core.infra import sniff as _sniff
+    try:
+        fmt_id = _sniff.sniff(filepath)
+    except Exception:
+        fmt_id = None
+
     findings = []
     size = os.path.getsize(filepath)
     with open(filepath, "rb") as f:
@@ -421,7 +447,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # BOS page; more than one distinct BOS serial means several logical streams
     # multiplexed into one file, a place to carry content most players never
     # surface (a Vorbis-only player hears only its stream, etc.).
-    if fmt_label and fmt_label.startswith("Ogg"):
+    if fmt_id in _OGG_IDS:
         try:
             from acidcat.core.formats import ogg as _ogg
             with open(filepath, "rb") as f:
@@ -447,7 +473,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # every stsz sample size across tracks and compare to the mdat payload; an
     # unreferenced run is a cavity (a payload appended at mdat's tail with only
     # the box size grown, so no chunk offset points at it and the audio is intact).
-    if fmt_label and fmt_label.startswith("MP4"):
+    if fmt_id in _MP4_IDS:
         try:
             from acidcat.core.formats import mp4 as _mp4
             fsz = os.path.getsize(filepath)
@@ -517,7 +543,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # 10. ID3v2 non-zero padding: the region after the last frame up to the tag's
     # declared size is spec'd to be zero; content there is a cavity (not trailing
     # data, since it is inside the tag's own length).
-    if fmt_label and fmt_label.startswith("MP3") and head[:3] == b"ID3":
+    if fmt_id == "mp3" and head[:3] == b"ID3":
         try:
             with open(filepath, "rb") as f:
                 th = f.read(10)
@@ -571,7 +597,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # and big-endian readings are structured audio (a WAV/AIFF twin that plays a
     # different sound each way). real audio is structured one endianness, noise
     # the other; both structured is the crafted-artifact tell.
-    if fmt_label and (fmt_label.startswith("RIFF/WAVE") or "AIFF" in fmt_label):
+    if fmt_id in ({"wav", "rf64", "bwf", "wave"} | _IFF_IDS):
         try:
             from acidcat.core.forensics import lsb as _lsb
             de = _lsb.dual_endian(filepath, fmt_label, chunks)
@@ -593,8 +619,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # pad after any odd-sized chunk; the walker skips it without checking. A
     # non-zero pad after chunks is a low-bandwidth covert channel invisible to
     # every conformant reader (it lands in nobody's payload).
-    if fmt_label and (fmt_label.startswith("RIFF") or "AIFF" in fmt_label
-                      or "RF64" in fmt_label or fmt_label.startswith("RMID")):
+    if fmt_id in _CHUNKED_IDS:
         stego = []
         with open(filepath, "rb") as f:
             for c in chunks:
@@ -637,7 +662,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # prepended ID3v2 wrapping a non-MP3 is handled by inspect's dispatch, which
     # reports it before the walk; the walker refuses such files, so the scanner
     # never sees them.)
-    if size >= 32 and not (fmt_label and fmt_label.startswith("MP3")):
+    if size >= 32 and fmt_id != "mp3":
         with open(filepath, "rb") as f:
             f.seek(size - 32)
             if f.read(8) == b"APETAGEX":
@@ -659,9 +684,12 @@ def scan(filepath, fmt_label, chunks, warns):
         # embedded Ogg -- six of six real Ogg/Opus files tripped this before the
         # guard. The genuine case, several logical bitstreams in one file, is
         # what ogg_multistream above is for.
+        # the id alone decides. "fmt_label and" was left over from when this
+        # branched on the label, and it made the guard depend on the label being
+        # non-empty: a walker that returned "" got a spurious embedded-Ogg
+        # finding on every ordinary Ogg file.
         wanted = [c for c in _EMBEDDED_MEDIA
-                  if not (c[0] == b"OggS" and fmt_label
-                          and fmt_label.startswith("Ogg"))]
+                  if not (c[0] == b"OggS" and fmt_id in _OGG_IDS)]
         hits = _find_embedded(filepath, wanted, own) if wanted else {}
         for magic, _form_at, _form, name in wanted:
             at = hits.get(magic)
@@ -688,11 +716,7 @@ def scan(filepath, fmt_label, chunks, warns):
     # 16/17. JSON-backed presets. The object IS the format -- no length field,
     # no chunk table, no padding -- so the only two places to put something are
     # a key nobody reads and the bytes after the closing brace.
-    known = None
-    for family, keys in _JSON_PRESET_KEYS.items():
-        if fmt_label and fmt_label.startswith(family):
-            known = keys
-            break
+    known = _JSON_PRESET_KEYS.get(fmt_id)
     if known is not None:
         try:
             with open(filepath, "rb") as f:
