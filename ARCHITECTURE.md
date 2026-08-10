@@ -6,7 +6,7 @@ see exactly what a file is, flag anomalies, and edit or repair its structure.
 Closer to readelf / 010 Editor / radare2's format layer than to exiftool, with
 some optional audio analysis (BPM/key via librosa).
 
-v1.0.0b1 · ~39k source LOC · ~23k test LOC · one hard dependency (`mutagen`);
+v1.0.0 · ~39k source LOC · ~23k test LOC · one hard dependency (`mutagen`);
 everything heavier is an optional, lazily imported extra, so `import acidcat`
 pulls only the stdlib core.
 
@@ -28,10 +28,10 @@ unchanged.
    `aiff`, `mp3`, `mp4`, `flac`, `ni`, `tracker`, `sf2`, ...),
    `core/primitives/` (shared byte readers), `core/codecs/` (ADPCM, BRR, VADPCM
    and friends), `core/containers/` (disc images and archives),
-   `core/infra/` (`sniff.py` -- 57 recognized formats, `fieldcodec.py` -- the
+   `core/infra/` (`sniff.py` -- 64 recognized formats, `fieldcodec.py` -- the
    enc-language, `mapped.py`, `render.py`).
-2. **Walkers** -- `core/walk/*.py`: 34 modules serving 46 registered format
-   labels, each emitting the field model. **The correctness oracle and the
+2. **Walkers** -- `core/walk/*.py`: 34 walkers behind one dispatcher, serving 53
+   registered format labels, each emitting the field model. **The correctness oracle and the
    default.** Dispatch: `core/walk/__init__.py::walk_file`.
 3. **Declarative engine** -- `core/grammar/`: format descriptors as data plus one
    interpreter emitting the same field model. Opt-in, test-only, validated
@@ -76,25 +76,25 @@ unchanged.
 
 ```
 src/acidcat/
-  core/            139 modules
-    formats/       per-format byte decoders (17)
-    walk/          34 walker modules -> 46 format labels
+  core/            143 modules
+    formats/       per-format byte decoders (18)
+    walk/          34 walker modules -> 53 format labels (35)
     primitives/    shared byte readers (5)
     codecs/        sample-data decoders: ADPCM, BRR, VADPCM, ... (12)
     containers/    disc images and archives (5)
     infra/         sniff, fieldcodec, mmap, rendering (8)
-    forensics/     anomalies, entropy/viz, audioscan, provenance (13)
+    forensics/     anomalies, entropy/viz, audioscan, provenance (15)
     analysis/      PCM decode, BPM/key, features, bandwidth (8)
     write/         strict IFF engine, constraints, repairers (12)
     extract/       embedded-sample recovery (4)
     catalogue/     SQLite index, registry, query builder, search (8)
-    grammar/       declarative descriptor engine (opt-in) (6)
+    grammar/       declarative descriptor engine (opt-in) (9)
     data/          shipped JSON tables (provenance signatures)
   commands/        29 CLI verbs (31 modules)
   mcp_server/      schema, handlers, transport (19 tools)
   tui_app/         Textual inspector/editor
   util/            small shared helpers
-  cli.py  explorer.py  tui_theme.py  __init__.py     (193 modules in total)
+  cli.py  explorer.py  tui_theme.py  __init__.py     (199 modules in total)
 tests/             ~0.59 test:source LOC
 docs/              architecture.md (detailed), format anatomy pages
 internal_docs/     design + review notes (gitignored, local-only)

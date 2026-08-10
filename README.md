@@ -79,7 +79,7 @@ From a checkout, swap `acidcat` for `-e .`:
 | MIDI   | `.mid`    | BPM, key sig, time sig, tracks, note count/range |
 | RMID   | `.rmid`   | RIFF-wrapped MIDI: RIFF wrapper + the inner SMF (inspect) |
 | MIDI 2.0 | `.midi2` | MIDI Clip File: SMF2CLIP magic + UMP stream -- resolution, tempo, time sig, tick-stamped events (inspect) |
-| N64 bank | `.ctl` | libultra ALBankFile: bank/instrument/wavetable tree + VADPCM codebooks (inspect); `core/vadpcm.py` decodes N64 vector ADPCM |
+| N64 bank | `.ctl` | libultra ALBankFile: bank/instrument/wavetable tree + VADPCM codebooks (inspect); `core/codecs/vadpcm.py` decodes N64 vector ADPCM |
 | Serum  | `.SerumPreset` | Preset name, author, tags, description |
 | VST FXP | `.fxp` | Preset kind, plugin id, version, preset name (inspect) |
 | ReCycle | `.rx2` | CAT/REX2 chunks, creator, slice count (inspect) |

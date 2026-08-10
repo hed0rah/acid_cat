@@ -12,11 +12,11 @@ Last updated: 2026-07-23
 acidcat has two independent code paths, and they see formats differently:
 
 - **inspect path** (`acidcat inspect`): from-scratch, zero-dependency walkers in
-  `core/walk/*`, dispatched by the canonical sniffer in `core/sniff.py`
+  `core/walk/*`, dispatched by the canonical sniffer in `core/infra/sniff.py`
   (`sniff_bytes` reads 16 bytes). This path never touches mutagen.
 - **index/extract path** (`acidcat info`/`scan`/`index`): metadata via mutagen
   plus the native preset parsers, dispatched by `_sniff_format` in
-  `core/indexing.py` (also 16 bytes, but a smaller format set: midi, aiff, wav,
+  `core/catalogue/indexing.py` (also 16 bytes, but a smaller format set: midi, aiff, wav,
   serum, flac, ogg, mp3, mp4, and content-sniffed presets).
 
 RF64 asymmetry: `acidcat inspect` walks RF64 natively (ds64 resolves the
@@ -154,8 +154,8 @@ for every format it supports and prints the structure with byte offsets:
   inspect path); mutagen still serves the index/extract paths.
 - **Serum, VST FXP, ReCycle RX2, Bitwig, Vital, Native Instruments, NCW** --
   native preset/instrument walkers.
-- **Format dispatch** -- `core/sniff.py` (inspect) and `_sniff_format` in
-  `core/indexing.py` (index) both read 16 bytes and trust magic over extension.
+- **Format dispatch** -- `core/infra/sniff.py` (inspect) and `_sniff_format` in
+  `core/catalogue/indexing.py` (index) both read 16 bytes and trust magic over extension.
 
 ### Tier 2: Samplers, trackers, and hardware banks (native walkers)
 

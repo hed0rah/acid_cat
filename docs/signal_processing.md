@@ -87,7 +87,7 @@ Canonical ordering, best to worst:
 5. **oneshot**: file too short for meaningful analysis.
 6. **failed**: extraction errored. Fall back to null.
 
-The `source` fields are currently computed in `core/detect.py` but not
+The `source` fields are currently computed in `core/analysis/detect.py` but not
 yet plumbed into the `samples` table columns. Adding `bpm_source`,
 `key_source`, and a numerical `confidence` column is on the near-term
 work list.

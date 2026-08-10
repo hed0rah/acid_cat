@@ -228,7 +228,7 @@ STFT straight into the next step.
 
 ### Clean chroma for key detection
 
-Currently `core/detect.py` runs chroma_cqt on the full signal. For
+Currently `core/analysis/detect.py` runs chroma_cqt on the full signal. For
 drum-heavy material, the drum onsets add broadband energy that
 flattens the chroma vector, hurting key estimation.
 

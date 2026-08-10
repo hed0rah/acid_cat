@@ -1,6 +1,6 @@
 # Feature Pipeline
 
-How `core/features.py` composes all the DSP primitives into a single
+How `core/analysis/features.py` composes all the DSP primitives into a single
 feature vector per audio file. The capstone doc that ties together
 the spectral, cepstral, rhythmic, and tonal components.
 

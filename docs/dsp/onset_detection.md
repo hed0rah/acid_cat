@@ -269,7 +269,7 @@ Defaults are general-purpose. For specific needs:
 
 Currently in two places:
 
-### `core/detect.py` (BPM pipeline)
+### `core/analysis/detect.py` (BPM pipeline)
 
 ```python
 onset_env = librosa.onset.onset_strength(y=y, sr=sr)
@@ -280,7 +280,7 @@ tempos_2 = librosa.beat.tempo(y=y, sr=sr, aggregate=None)
 Uses onset envelope as input to tempo estimation. The envelope
 drives the autocorrelation that finds periodicity.
 
-### `core/features.py` (feature extraction)
+### `core/analysis/features.py` (feature extraction)
 
 ```python
 onset_env = librosa.onset.onset_strength(y=y, sr=sr)

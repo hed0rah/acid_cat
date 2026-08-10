@@ -218,7 +218,7 @@ acidcat convert bad.wav  --to-pcm --codec ms  # force MS ADPCM on a mistagged fi
 acidcat convert bad.wav  --to-pcm --codec ima # force IMA (continuous, block-less)
 ```
 
-The decoder is `core/adpcm.py`; output is signed 16-bit little-endian PCM,
+The decoder is `core/codecs/adpcm.py`; output is signed 16-bit little-endian PCM,
 interleaved for stereo. The MS path is pinned bit-exact against ffmpeg, so a
 regression that drifts by even one LSB per sample shows up as a non-zero diff.
 acidcat decodes ADPCM but does not encode it: shrinking PCM back into an ADPCM

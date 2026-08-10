@@ -1,7 +1,7 @@
 # Camelot Wheel
 
 Harmonic compatibility math: why two keys sound good together, how the
-Camelot notation encodes that, and how `core/camelot.py` implements the
+Camelot notation encodes that, and how `core/analysis/camelot.py` implements the
 lookup.
 
 Last updated: 2026-04-23
@@ -142,7 +142,7 @@ the core four.
 
 ---
 
-## Implementation in `core/camelot.py`
+## Implementation in `core/analysis/camelot.py`
 
 ### The pitch-class map
 
