@@ -125,3 +125,64 @@ def test_no_marker_on_a_file_with_nothing_after_the_container(tmp_path):
 def test_no_marker_when_nothing_was_walked(tmp_path):
     path = _wav_plus(tmp_path / "unknown.bin")
     assert "container ends at" not in _VizProbe(path, chunks=[])._viz_entropy().plain
+
+
+# ── the forensics panel, the other place a non-answer can read as a pass ──
+
+def _panel_text(app):
+    """What the forensics panel would render, with the app's real state."""
+    from rich.text import Text
+    captured = {}
+
+    class _P:
+        def update(self, t):
+            captured["t"] = t
+
+    class _Box:
+        def set_class(self, *a):
+            pass
+
+    app.query_one = lambda sel, *a: _Box() if sel == "#idbox" else _P()
+    AcidcatTUI._render_anomalies(app)
+    t = captured.get("t")
+    return t.plain if isinstance(t, Text) else str(t)
+
+
+def _bare(findings, scan_note):
+    """An object carrying only what _render_anomalies reads."""
+    class _A:
+        pass
+    a = _A()
+    a.findings = findings
+    a.scan_note = scan_note
+    a.query_one = None
+    return a
+
+
+def test_a_scan_that_did_not_run_does_not_render_as_clean():
+    """`findings = []` meant both "scanned, nothing there" and "never scanned".
+
+    The panel printed "clean: no findings" for both, so a file too large to
+    scan whole, and a file whose scanner raised, both read as a clean bill of
+    health. That is the defect this whole file exists to prevent, one panel
+    over from the views it already guards.
+    """
+    a = _bare([], "not scanned: the file is too large to scan whole, so "
+                  "nothing here is a verdict")
+    out = _panel_text(a)
+    assert "clean" not in out, out
+    assert "not scanned" in out
+
+
+def test_a_scan_that_crashed_says_so():
+    a = _bare([], "scan failed (ValueError); this file was NOT screened")
+    out = _panel_text(a)
+    assert "clean" not in out, out
+    assert "NOT screened" in out
+
+
+def test_a_scan_that_ran_and_found_nothing_still_says_clean():
+    """The other half: the hedge must not fire on a genuine clean result, or
+    it becomes noise and stops being read."""
+    out = _panel_text(_bare([], None))
+    assert "clean: no findings" in out

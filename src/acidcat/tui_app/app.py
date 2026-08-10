@@ -1013,13 +1013,22 @@ class AcidcatTUI(App):
             self.fmt, self.chunks, self.warns = (
                 "walk failed", [], [f"{e.__class__.__name__}: {e}"])
         self._prefer_be = self.fmt in _BE_FMTS
+        # Three states, not two. An empty finding list meant BOTH "scanned it,
+        # nothing there" and "never scanned it", and the panel rendered both as
+        # "clean: no findings" -- a check that did not run reading as a pass,
+        # one panel over from the test file written to prevent exactly that.
+        self.scan_note = None
         if self._readonly:
-            self.findings = []     # skip the whole-file anomaly scan on a large blob
+            self.findings = []
+            self.scan_note = ("not scanned: the file is too large to scan "
+                              "whole, so nothing here is a verdict")
         else:
             try:
                 self.findings = ac_anom.scan(self.work, self.fmt, self.chunks, self.warns)
-            except Exception:
+            except Exception as e:
                 self.findings = []
+                self.scan_note = (f"scan failed ({e.__class__.__name__}); this "
+                                  f"file was NOT screened")
 
         head = Text()
         head.append(f" {self._display_name()} ", style=f"bold {ACCENT}")
@@ -1155,7 +1164,10 @@ class AcidcatTUI(App):
         t = Text()
         t.append("forensics  ", style=f"bold {ACCENT}")
         if not self.findings:
-            t.append("clean: no findings", style=SOFT)
+            note = getattr(self, "scan_note", None)
+            # amber is the tool being honest about its limits, kept distinct
+            # from orange, which means a finding or an unsaved edit
+            t.append(note or "clean: no findings", style=AMBER if note else SOFT)
             panel.update(t)
             return
         # severity legend so the colors are readable, then every finding
