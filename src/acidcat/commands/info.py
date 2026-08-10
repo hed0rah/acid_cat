@@ -34,7 +34,8 @@ def _vlog(args, msg):
 
 def register(subparsers):
     p = subparsers.add_parser("info", help="Show metadata for a single audio file.")
-    p.add_argument("target", help="Path to an audio file (WAV, AIFF, MIDI, Serum preset).")
+    p.add_argument("target", nargs="+", metavar="FILE",
+                   help="Audio file(s) or directory(ies) (WAV, AIFF, MIDI, presets).")
     add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("--deep", action="store_true",
                    help="Include librosa deep analysis (BPM/key detection + spectral features).")
@@ -456,6 +457,12 @@ def _add_deep_analysis(filepath, rec, args):
 
 
 def run(args):
+    """Per-file report, so it takes as many as you hand it."""
+    from acidcat.util import targets
+    return targets.each(args, "target", _run_one, verb="info")
+
+
+def _run_one(args):
     filepath = args.target
     tmp_path = None
 

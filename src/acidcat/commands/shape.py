@@ -133,6 +133,22 @@ def _full_fingerprint(path, want_anomalies):
 
 
 def run(args):
+    from acidcat.util.stdin import resolved_input
+    from contextlib import ExitStack
+    # `-` is stdin. Resolved to a real path up front so the walk below is
+    # untouched; a path that is not "-" passes through unchanged.
+    with ExitStack() as stack:
+        args.targets = [
+            stack.enter_context(resolved_input(t)) if t == "-" else t
+            for t in args.targets
+        ]
+        if any(t is None for t in args.targets):
+            print("acidcat shape: no data on stdin", file=sys.stderr)
+            return 1
+        return _run(args)
+
+
+def _run(args):
     # a target that does not exist yielded nothing, printed nothing and exited
     # 0 -- indistinguishable from "scanned it, matched nothing"
     missing = [t for t in args.targets if not os.path.exists(t)]

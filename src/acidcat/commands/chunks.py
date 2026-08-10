@@ -13,7 +13,8 @@ from acidcat.core.infra.render import output
 
 def register(subparsers):
     p = subparsers.add_parser("chunks", help="Walk RIFF chunks in a WAV file.")
-    p.add_argument("target", help="Path to a WAV file, or '-' for stdin.")
+    p.add_argument("target", nargs="+", metavar="FILE",
+                   help="File(s) or directory(ies), or '-' for stdin.")
     add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("-q", "--quiet", action="store_true")
@@ -28,6 +29,12 @@ def _vlog(args, msg):
 
 
 def run(args):
+    """Per-file report, so it takes as many as you hand it."""
+    from acidcat.util import targets
+    return targets.each(args, "target", _run_one, verb="chunks")
+
+
+def _run_one(args):
     from acidcat.util.stdin import resolved_input
     with resolved_input(args.target) as _p:
         if _p is None:

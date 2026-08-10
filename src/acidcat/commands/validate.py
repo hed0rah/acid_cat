@@ -115,6 +115,21 @@ def _check(path, quiet, rows=None):
 
 
 def run(args):
+    from acidcat.util.stdin import resolved_input
+    from contextlib import ExitStack
+    # `-` is stdin, resolved up front; real paths pass through unchanged.
+    with ExitStack() as stack:
+        args.inputs = [
+            stack.enter_context(resolved_input(t)) if t == "-" else t
+            for t in args.inputs
+        ]
+        if any(t is None for t in args.inputs):
+            print("acidcat validate: no data on stdin", file=sys.stderr)
+            return 1
+        return _run(args)
+
+
+def _run(args):
     # grep/diff exit-code family: 0 = every checked file is consistent,
     # 1 = some file has a violation (ran fine), 2 = a named input could not be
     # accessed (a real error). a file inside a walked directory that is missing

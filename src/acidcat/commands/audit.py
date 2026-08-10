@@ -56,7 +56,8 @@ def _carve_hint(path, finding):
 def register(subparsers):
     p = subparsers.add_parser(
         "audit", help="Forensic verdict: structure + anomalies + provenance (read-only).")
-    p.add_argument("input", help="File to audit.")
+    p.add_argument("input", nargs="+", metavar="FILE",
+                   help="File(s) or directory(ies) to audit.")
     # through the shared registry, not a bare bool: --json here was the only
     # spelling, so `--output-format json` -- which works on 26 other verbs --
     # was an error on the forensic one. table+json only: an audit verdict is
@@ -168,6 +169,13 @@ def _code(scanned, vios, findings, integ):
 
 
 def run(args):
+    """One or many, files or directories -- audit is a per-file report,
+    and it took a single file while `inspect` next to it took a list."""
+    from acidcat.util import targets
+    return targets.each(args, "input", _run_one, verb="audit")
+
+
+def _run_one(args):
     path = args.input
     try:
         label, report, findings, prov, integ, scanned = _gather(

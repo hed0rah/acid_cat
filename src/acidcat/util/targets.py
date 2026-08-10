@@ -117,6 +117,62 @@ def expand(inputs, *, accept=None, recurse=True, follow_links=False):
     return files, skipped
 
 
+def each(args, attr, single, *, verb, accept=None, header=True, stream=None):
+    """Run a single-file command once per operand.
+
+    ``audit`` and ``inspect`` are the same kind of verb -- read a file, print
+    about it -- and took opposite arities: one file versus many, neither
+    accepting a directory. There was no principle behind the split, and a verb
+    whose output is per-file and self-labelling should take as many as you hand
+    it. That is what makes ``audit *.wav`` work, since the shell expands the
+    glob before acidcat is reached.
+
+    ``single(args)`` is the existing one-file body, called with ``args.<attr>``
+    set to each path in turn. The worst exit code wins, so a failure anywhere
+    still fails the command.
+
+    The per-file header appears only when there IS more than one file -- the
+    grep and file(1) rule -- so single-file output stays byte-identical and
+    pipes exactly as before.
+    """
+    import sys
+
+    out = stream or sys.stderr
+    raw = getattr(args, attr)
+    inputs = raw if isinstance(raw, (list, tuple)) else [raw]
+    files, skipped = expand(inputs, accept=accept)
+
+    if not files:
+        note = skip_note(skipped)
+        print(f"acidcat {verb}: no files to read"
+              + (f" -- {note}" if note else ""), file=sys.stderr)
+        return 2
+
+    from acidcat.util.stdin import resolved_input
+
+    worst = 0
+    many = len(files) > 1
+    for i, path in enumerate(files):
+        # `-` is resolved here, once, so every verb routed through this helper
+        # gets stdin without implementing it. A real path passes through
+        # untouched, so a verb that also resolves internally is unaffected.
+        with resolved_input(path) as real:
+            if real is None:
+                print(f"acidcat {verb}: no data on stdin", file=sys.stderr)
+                return 1
+            setattr(args, attr, real)
+            if many and header:
+                if i:
+                    print(file=out)
+                print(f"==> {path} <==", file=out)
+            worst = max(worst, single(args) or 0)
+
+    note = skip_note(skipped)
+    if note:
+        print(f"  {note}", file=sys.stderr)
+    return worst
+
+
 def skip_note(skipped, *, kind="unrecognised extension"):
     """One line naming what the walk passed over, or None when it passed over
     nothing. Say it -- silence here reads as "there was nothing there"."""

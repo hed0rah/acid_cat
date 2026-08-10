@@ -100,8 +100,11 @@ def test_options_may_follow_operands(two_wavs):
     assert _cli("inspect", a, "--output-format", "json").returncode == 0
 
 
-@pytest.mark.parametrize("verb", ["inspect", "info", "od", "classify", "detect"])
+@pytest.mark.parametrize("verb", ["inspect", "info", "od", "classify", "detect",
+                                  "audit", "chunks", "shape", "validate"])
 def test_dash_reads_stdin(verb):
+    """Invariant 3. shape, audit and validate had no stdin handling at all --
+    audit got it for free once it routed through targets.each."""
     src = "data/test_formats/generated/src.wav"
     if not os.path.isfile(src):
         pytest.skip("generated wav corpus absent")
@@ -118,3 +121,45 @@ def test_usage_and_missing_file_both_exit_2(two_wavs):
     assert _cli("inspect").returncode == 2
     assert _cli("inspect", a + ".nope").returncode == 2
     assert _cli("frobnicate").returncode == 2
+
+
+# ── arity: a per-file report takes as many files as you hand it ──────
+
+REPORT_VERBS = ["audit", "inspect", "info", "chunks", "shape", "classify",
+                "validate"]
+
+
+@pytest.mark.parametrize("verb", REPORT_VERBS)
+def test_report_verbs_accept_several_files(two_wavs, verb):
+    """`audit *.wav` is what the shell hands over, and it was a usage error.
+    `inspect` and `audit` are the same kind of verb -- read a file, print about
+    it -- and took opposite arities with no principle behind the split."""
+    a, b = two_wavs
+    r = _cli(verb, a, b)
+    assert r.returncode == 0, f"{verb} rejected two files: {r.stderr[:200]}"
+
+
+@pytest.mark.parametrize("verb", REPORT_VERBS)
+def test_report_verbs_accept_a_directory(two_wavs, verb, tmp_path):
+    a, _ = two_wavs
+    d = os.path.dirname(a)
+    r = _cli(verb, d)
+    assert r.returncode == 0, f"{verb} rejected a directory: {r.stderr[:200]}"
+
+
+@pytest.mark.parametrize("verb", ["audit", "info", "chunks"])
+def test_single_file_output_is_unlabelled(two_wavs, verb):
+    """One file must still pipe exactly as it did -- the per-file header is a
+    multi-file affordance, the grep/file rule."""
+    a, _ = two_wavs
+    r = _cli(verb, a)
+    assert "==> " not in r.stdout and "==> " not in r.stderr
+
+
+def test_a_failure_in_one_file_fails_the_command(two_wavs, tmp_path):
+    """Worst exit code wins, or `audit *.wav && deploy` proceeds on a bad file."""
+    a, _ = two_wavs
+    bad = tmp_path / "broken.wav"
+    bad.write_bytes(b"RIFF\x00\x00\x00\x00WAVEjunk")
+    r = _cli("audit", a, str(bad))
+    assert r.returncode != 0

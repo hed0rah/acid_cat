@@ -511,6 +511,14 @@ def run(args):
     if not targets:
         print("acidcat inspect: no target file given", file=sys.stderr)
         return 2
+    # inspect took many files but refused a directory, which is the same split
+    # `audit` had in the other direction. One expander, so every verb agrees on
+    # what a directory holds and says what it skipped.
+    from acidcat.util import targets as _targets
+    targets, _skipped = _targets.expand(targets)
+    if not targets:
+        print("acidcat inspect: no readable files in that path", file=sys.stderr)
+        return 2
 
     deep = getattr(args, "frames", False) or getattr(args, "verbose", False)
     full = getattr(args, "full", False)
