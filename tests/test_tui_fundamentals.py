@@ -197,3 +197,77 @@ def test_the_footer_only_advertises_keys_that_work(keysweep):
               if k in keysweep
               and not keysweep[k]["changed"] and not keysweep[k]["spoke"]]
     assert not broken, f"footer advertises inert keys: {broken}"
+
+
+# ── mounting must not scale with a hostile chunk count ─────────────
+
+def _null_tailed_wav(path, tail_bytes):
+    """A valid WAV with a run of nulls appended.
+
+    The deep walker reads each 8-byte run of zeros as a zero-size chunk, so
+    this is the cheapest way to make a file with an enormous chunk count. It is
+    not contrived: a truncated or zero-padded file from a failed transfer looks
+    exactly like this, and opening damaged files is the tool's purpose.
+    """
+    import struct
+    pcm = b"\x00\x01" * 200
+    body = (b"WAVE" + b"fmt "
+            + struct.pack("<IHHIIHH", 16, 1, 2, 44100, 176400, 4, 16)
+            + b"data" + struct.pack("<I", len(pcm)) + pcm)
+    path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body
+                     + bytes(tail_bytes))
+    return path
+
+
+def test_a_huge_chunk_count_does_not_freeze_the_mount(tmp_path):
+    """_ROW_CAP bounded rows WITHIN a chunk; nothing bounded the chunks.
+
+    One Tree widget per chunk, built synchronously in on_mount: 65,538 chunks
+    took 11.5 s, 262,146 took 46 s with nothing painted -- so `q` was not
+    available -- and 8.5 million never finished. `inspect` renders the same
+    file in 3.4 s, which is what makes this the TUI's bug and not the walker's.
+    """
+    import time
+    from acidcat.tui_app.app import AcidcatTUI
+    p = _null_tailed_wav(tmp_path / "tail.wav", 2 * 1024 * 1024)
+
+    async def go():
+        app = AcidcatTUI(str(p))
+        t0 = time.perf_counter()
+        async with app.run_test(size=(120, 40)) as pilot:
+            elapsed = time.perf_counter() - t0
+            nodes = len(app.query_one("#tree").root.children)
+            await pilot.press("q")
+        return elapsed, nodes
+
+    elapsed, nodes = asyncio.run(go())
+    assert elapsed < 10.0, f"mount took {elapsed:.1f}s on a 2 MB file"
+    assert nodes <= 2001, f"{nodes} top-level nodes; the chunk cap is not applied"
+
+
+def test_the_hidden_chunks_are_counted_and_reachable(tmp_path):
+    """A silently shortened tree makes a truncated file look complete, which is
+    worse than the freeze. The cap has to name what it hid, and `+` must reach
+    past it -- the same contract the row cap already honours."""
+    from acidcat.tui_app.app import AcidcatTUI
+    p = _null_tailed_wav(tmp_path / "tail.wav", 512 * 1024)
+
+    async def go():
+        app = AcidcatTUI(str(p))
+        async with app.run_test(size=(120, 40)) as pilot:
+            tree = app.query_one("#tree")
+            labels = [str(c.label) for c in tree.root.children]
+            named = any("more chunks" in x for x in labels)
+            before = len(tree.root.children)
+            hits = [c for c in tree.root.children if "more chunks" in str(c.label)]
+            if hits:
+                tree.move_cursor(hits[0])
+                app.action_more_rows()
+                await pilot.pause()
+            after = len(app.query_one("#tree").root.children)
+            await pilot.press("q")
+        return named, before, after
+
+    named, before, after = asyncio.run(go())
+    assert named, "the hidden chunks are not named, so the tree looks complete"
+    assert after > before, f"+ did not extend the chunk budget ({before} -> {after})"

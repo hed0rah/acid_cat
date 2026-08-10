@@ -51,7 +51,7 @@ from acidcat.tui_theme import (
 from acidcat.tui_app.render import (
     edit_profile, hex_text, text_field_for, _read, _fuzzy, _hex_rows,
     row_width_for, trim_size_echo,
-    _SPIN, _BAR_W, _HEX_CAP, _ROW_CAP, _HEXEDIT_CAP, _UNDO_CAP, _VIZ_READ,
+    _SPIN, _BAR_W, _HEX_CAP, _ROW_CAP, _CHUNK_CAP, _HEXEDIT_CAP, _UNDO_CAP, _VIZ_READ,
     _UNDO_BYTES_CAP, _DIFF_CAP, _LARGE_FILE, _SCAN_SEG,
 )
 from acidcat.tui_app.screens import (
@@ -176,6 +176,7 @@ class AcidcatTUI(App):
         self.findings = []
         self._rowbudget = {}      # chunk index -> how many of its rows to list
         self._morerows = {}       # id(node) -> chunk index, for the "more rows" node
+        self._morechunks = set()  # id(node) for the "more chunks" node
         self._nodemeta = {}       # id(node) -> (off, length, accent)  for the hex pane
         self._nodekey = {}        # id(node) -> stable key, to restore the cursor
                                   # and expansion across the post-edit tree rebuild
@@ -1054,6 +1055,7 @@ class AcidcatTUI(App):
         tree.clear()
         self._nodemeta = {}
         self._morerows = {}       # id(node) -> chunk index, for the "more rows" node
+        self._morechunks = set()  # id(node) for the "more chunks" node
         self._editval = {}
         self._textfield = {}
         self._nodekey = {}
@@ -1064,7 +1066,8 @@ class AcidcatTUI(App):
         tree.root.data = (0, self.fsize, ACCENT)
         self._nodemeta[id(tree.root)] = (0, self.fsize, ACCENT)
         from acidcat.core.infra.sniff import AUDIO_SAMPLE_IDS
-        for i, c in enumerate(self.chunks):
+        cbudget = getattr(self, "_chunkbudget", _CHUNK_CAP)
+        for i, c in enumerate(self.chunks[:cbudget]):
             accent = PALETTE[i % len(PALETTE)]
             cid = str(c.get("id", "?")).strip()
             # Mark the chunk that actually holds sample data. Every field node in
@@ -1137,6 +1140,14 @@ class AcidcatTUI(App):
                          style=DIM))
                 self._nodemeta[id(more)] = node.data
                 self._morerows[id(more)] = i
+        if len(self.chunks) > cbudget:
+            # counted, named, and reachable -- the same treatment rows get. A
+            # silently shortened tree would make a truncated file look complete.
+            more = tree.root.add_leaf(
+                Text(f"... {len(self.chunks) - cbudget:,} more chunks  "
+                     f"(+ to show more)", style=DIM))
+            self._nodemeta[id(more)] = tree.root.data
+            self._morechunks.add(id(more))
         tree.root.expand()
         for ek in expanded:
             n = keyed.get(ek)
@@ -1657,9 +1668,16 @@ class AcidcatTUI(App):
         """
         tree = self.query_one("#tree")
         node = getattr(tree, "cursor_node", None)
+        if node is not None and id(node) in getattr(self, "_morechunks", ()):
+            self._chunkbudget = getattr(self, "_chunkbudget", _CHUNK_CAP) + _CHUNK_CAP
+            total = len(self.chunks)
+            self._load()
+            self.notify(f"showing {min(self._chunkbudget, total):,} of {total:,} chunks")
+            return
         idx = self._morerows.get(id(node)) if node is not None else None
         if idx is None:
-            self.notify("select a '... more rows' line first", severity="warning")
+            self.notify("select a '... more rows' or '... more chunks' line first",
+                        severity="warning")
             return
         self._rowbudget[idx] = self._rowbudget.get(idx, _ROW_CAP) + _ROW_CAP
         total = len(self.chunks[idx].get("rows") or [])

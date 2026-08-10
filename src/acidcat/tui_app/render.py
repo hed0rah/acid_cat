@@ -19,6 +19,13 @@ _BAR_W = 18            # width of the scan progress bar
 
 _HEX_CAP = 1024        # most bytes to render in the hex pane for one node
 _ROW_CAP = 400         # most per-element rows (events/frames) to list per chunk
+# Most chunks to build tree widgets for. _ROW_CAP bounds rows WITHIN a chunk and
+# nothing bounded the chunk count itself, so a malformed file froze the TUI on
+# open: a WAV with a tail of nulls walks as one zero-size chunk per 8 bytes, and
+# 262,146 of them took 46 seconds to mount with nothing painted -- so not even
+# `q` was available. 8.5 million of them never finished. `inspect` renders the
+# same file in 3.4 seconds because it prints text instead of building widgets.
+_CHUNK_CAP = 2000
 _HEXEDIT_CAP = 512     # refuse editing a byte region bigger than this (pick a field)
 _VIZ_READ = 8 * 1024 * 1024   # bytes the histogram reads; the other views stream
 _UNDO_CAP = 50         # most undo deltas to keep
