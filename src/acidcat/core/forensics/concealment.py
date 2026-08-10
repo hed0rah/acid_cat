@@ -43,7 +43,7 @@ SECTOR_FRAMES = 588          # 2352 bytes of CD audio: 588 stereo 16-bit frames
 _LEN_TOL = 0.35              # a run this close to one sector counts as sector-shaped
 _CONTEXT = SECTOR_FRAMES * 2  # neighbourhood that must look like real audio
 _CONTRAST_DB = 12.0          # how much more structured the surroundings must be
-_MAX_FINDINGS = 20
+_MAX_FINDINGS = 20           # how many are listed INDIVIDUALLY, not how many exist
 
 
 def _numpy():
@@ -229,8 +229,18 @@ def scan(samples, *, sample_rate=44100):
             claimed.append((start, start + length))
             seen_list.append((start, name, length))
 
+    # Every finding is returned. The cap belongs to whoever RENDERS this, which
+    # is the only place that knows whether it is filling a terminal or a JSON
+    # document, and it has to announce itself when it bites.
+    #
+    # This used to truncate here, and summarise() then printed len() of the
+    # already-truncated list -- so a rip with 65 concealed sectors and one with
+    # 20 both reported "20 concealed sector(s)", and the machine-readable output
+    # carried only that sentence. A cap reported as a count is precisely the
+    # defect this release exists to remove, and it was sitting in the newest
+    # forensic check in the tree.
     out = []
-    for start, name, length in sorted(seen_list)[:_MAX_FINDINGS]:
+    for start, name, length in sorted(seen_list):
         out.append({
             "strategy": name,
             "frame": int(start),
@@ -256,9 +266,23 @@ def summarise(findings):
     for f in findings:
         kinds[f["strategy"]] = kinds.get(f["strategy"], 0) + 1
     parts = ", ".join(f"{n} x {k}" for k, n in sorted(kinds.items()))
+    # the count is of everything found, never of what a caller chose to list
+    listed = ""
+    if len(findings) > _MAX_FINDINGS:
+        listed = f"; the first {_MAX_FINDINGS} are listed individually"
     return (f"{len(findings)} concealed sector(s) on the 588-frame CD grid "
-            f"({parts}) -- consistent with a rip from a disc that could not be "
-            f"read cleanly, not with damage to this file")
+            f"({parts}){listed} -- consistent with a rip from a disc that could "
+            f"not be read cleanly, not with damage to this file")
+
+
+def listed(findings):
+    """The subset a text renderer should print one-by-one.
+
+    Separate from the count on purpose: summarise() reports how many exist and
+    this decides how many are shown, so the two can never drift into each other
+    the way they did when scan() truncated its own return value.
+    """
+    return findings[:_MAX_FINDINGS]
 
 
 def scan_float_channels(channels, *, bit_depth, sample_rate=44100):

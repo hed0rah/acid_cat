@@ -21,9 +21,14 @@ from acidcat.commands._output import add_output_format_arg
 from acidcat.core.infra.render import output as _render
 from acidcat.core.infra.mapped import map_file
 from acidcat.core.write import constraints
+from acidcat.core.forensics.checksums import _READ_CAP
 
+# .mp3 is here because --deep verifies MP3 frames. Without it a directory walk
+# never opened a single MP3 and still printed "all N file(s) consistent" with
+# exit 0 -- a gate passing a tree it had not looked at. The same file named
+# directly WAS checked, so the two forms disagreed about what validate does.
 _EXTS = (".wav", ".rf64", ".bwf", ".aif", ".aiff", ".aifc", ".sf2", ".sf3",
-         ".m4a", ".mp4", ".mov", ".m4b", ".flac")
+         ".m4a", ".mp4", ".mov", ".m4b", ".flac", ".mp3")
 
 
 def register(subparsers):
@@ -63,12 +68,33 @@ def _deep_check(path, data):
     This asks a different and stronger question: does the payload still match
     the checksum written over it? A failure here is proof, not inference.
 
-    Returns a one-line finding, or None when the format carries nothing
-    checkable or everything checks out. Only FLAC and MP3 for now; both are
-    verifiable without decoding, which matters because acidcat bundles no
-    decoders.
+    Returns ``{"ran": bool, "failure": str|None, "caveat": str|None}``.
+
+    Three states, because two are not enough. This used to return a string on
+    failure and None otherwise, which made "this format carries nothing
+    checkable" indistinguishable from "checked it, it is clean" -- so a valid
+    MP3 that passed a deep check was reported as never examined, and
+    `validate --deep song.mp3` exited 2 on a healthy file. `validate f && ship f`
+    could therefore never pass an MP3.
+
+    ``caveat`` carries the read cap. checksums stops at _READ_CAP and says so in
+    its result; nothing read that flag, so a 200 MB FLAC was verified over its
+    first 64 MB and reported as clean. A partial verification presented as a
+    whole one is the failure this command exists to catch.
+
+    Only FLAC and MP3 for now; both are verifiable without decoding, which
+    matters because acidcat bundles no decoders.
     """
     from acidcat.core.forensics import checksums
+
+    def _no():
+        return {"ran": False, "failure": None, "caveat": None}
+
+    def _cap(r, unit):
+        if not r.get("partial"):
+            return None
+        return (f"scanning stopped at the {_READ_CAP // (1024 * 1024)} MB read "
+                f"cap, so {unit} past that point were NOT verified")
 
     head = bytes(data[:4])
     if head == b"fLaC":
@@ -80,14 +106,20 @@ def _deep_check(path, data):
             if hdr & 0x80:
                 break
         else:
-            return None
+            return _no()
         r = checksums.flac_frames(data, pos, len(data))
+        caveat = _cap(r, "frames")
         if r["failed"]:
             where = ", ".join(f"0x{o:08x}" for o in r["offsets"][:3])
-            return (f"{r['failed']} of {r['checked']} FLAC frame(s) fail their "
-                    f"CRC-16 (at {where}) -- the audio no longer matches the "
-                    f"checksum the encoder wrote over it")
-        return None
+            return {"ran": True, "caveat": caveat,
+                    "failure": (f"{r['failed']} of {r['checked']} FLAC frame(s) "
+                                f"fail their CRC-16 (at {where}) -- the audio no "
+                                f"longer matches the checksum the encoder wrote "
+                                f"over it")}
+        # nothing to verify is not the same as verified-and-clean
+        if not r["checked"]:
+            return _no()
+        return {"ran": True, "failure": None, "caveat": caveat}
 
     start = 0
     if head[:3] == b"ID3":
@@ -95,16 +127,21 @@ def _deep_check(path, data):
         start = 10 + ((b[6] & 0x7F) << 21 | (b[7] & 0x7F) << 14
                       | (b[8] & 0x7F) << 7 | (b[9] & 0x7F))
     elif not (len(data) > 1 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0):
-        return None
+        return _no()
     r = checksums.mp3_frames(data, start)
+    caveat = _cap(r, "frames")
     bad = r["resyncs"] + r["bad_bigvalues"] + r["bad_backref"]
     if bad and r["frames"]:
         where = ", ".join(f"0x{o:08x}" for o in r["offsets"][:3])
-        return (f"{bad} damaged MP3 frame(s) of {r['frames']} (at {where}): "
-                f"{r['resyncs']} lost sync, {r['bad_bigvalues']} impossible "
-                f"big_values, {r['bad_backref']} dangling bit-reservoir "
-                f"back-reference(s)")
-    return None
+        return {"ran": True, "caveat": caveat,
+                "failure": (f"{bad} damaged MP3 frame(s) of {r['frames']} (at "
+                            f"{where}): {r['resyncs']} lost sync, "
+                            f"{r['bad_bigvalues']} impossible big_values, "
+                            f"{r['bad_backref']} dangling bit-reservoir "
+                            f"back-reference(s)")}
+    if not r["frames"]:
+        return _no()
+    return {"ran": True, "failure": None, "caveat": caveat}
 
 
 def _check(path, quiet, rows=None, deep=False):
@@ -131,27 +168,44 @@ def _check(path, quiet, rows=None, deep=False):
             rows.append({"path": path, "format": None, "status": "unreadable",
                          "issues": 0, "repairable": False, "detail": str(e)})
         return False, True, True, False
-    deep_note = None
+    deep_res = {"ran": False, "failure": None, "caveat": None}
     try:
         with memoryview(data) as view:
             report = constraints.analyze(view)
         if deep:
-            deep_note = _deep_check(path, data)
+            deep_res = _deep_check(path, data)
     finally:
         close()
+    deep_note = deep_res["failure"]
+    caveat = deep_res["caveat"]
     if report is None:
         # A format acidcat does not structurally model can still carry a
         # checksum over its own bytes -- MP3 is exactly that case -- so --deep
         # has a verdict here even though the structural pass does not.
         if deep_note:
+            detail = deep_note + (f"; {caveat}" if caveat else "")
             if rows is not None:
                 rows.append({"path": path, "format": None, "status": "fail",
                              "issues": 1, "repairable": False,
-                             "detail": deep_note})
+                             "detail": detail})
             else:
                 print(f"FAIL  {os.path.basename(path)}  [deep]  1 issue(s)")
-                print(f"        {deep_note}")
+                print(f"        {detail}")
             return True, False, False, False
+        if deep_res["ran"]:
+            # Checked by --deep and clean. Reporting this as "not modelled" made
+            # a passing deep check exit 2, so `validate f && ship f` could never
+            # pass an MP3 -- the check ran, proved the payload matches its own
+            # checksums, and the result was thrown away.
+            if rows is not None:
+                rows.append({"path": path, "format": None, "status": "ok",
+                             "issues": 0, "repairable": False,
+                             "detail": caveat or "deep check passed"})
+            elif not quiet:
+                print(f"OK    {os.path.basename(path)}  [deep]")
+                if caveat:
+                    print(f"        {caveat}")
+            return True, True, False, False
         if rows is not None:
             # a skip is a real answer and belongs in the record set, so a
             # consumer can tell "checked, clean" from "never modelled"
@@ -163,9 +217,13 @@ def _check(path, quiet, rows=None, deep=False):
     if not report.violations and not deep_note:
         if rows is not None:
             rows.append({"path": path, "format": report.label, "status": "ok",
-                         "issues": 0, "repairable": False, "detail": ""})
+                         "issues": 0, "repairable": False,
+                         "detail": caveat or ""})
         elif not quiet:
             print(f"OK    {base}  [{report.label}]")
+            if caveat:
+                # a pass over part of a file is not a pass over the file
+                print(f"        {caveat}")
         return True, True, False, False
     if not report.violations:
         # structurally sound, but a checksum over its own payload disagrees --

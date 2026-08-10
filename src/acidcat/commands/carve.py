@@ -101,6 +101,22 @@ def register(subparsers):
     p.set_defaults(func=run)
 
 
+def _as_int(v, what):
+    """An int from a JSON number or a numeric string, or a ValueError naming it.
+
+    Accepts "0x10" because every other address acidcat takes does, and a person
+    writing these records by hand has no reason to think this one is different.
+    """
+    if isinstance(v, bool) or not isinstance(v, (int, str)):
+        raise ValueError(f"{what} is {type(v).__name__}, not a number")
+    if isinstance(v, int):
+        return v
+    try:
+        return int(v.strip(), 0)
+    except ValueError:
+        raise ValueError(f"{what} is {v!r}, which is not a number") from None
+
+
 def _parse_records(text):
     """Parse `locate` output -- a JSON array, or TSV lines (offset, length, kind,
     format, ...) -- into [{offset, length, kind, format}]."""
@@ -118,15 +134,28 @@ def _parse_records(text):
         # a record that has length and no end, which is a perfectly reasonable
         # thing for someone scripting their own regions to write.
         out = []
-        for r in recs:
+        for i, r in enumerate(recs):
+            if not isinstance(r, dict):
+                raise ValueError(f"record {i} is {type(r).__name__}, not an object")
+            # These records are meant to be hand-writable -- the missing-length
+            # branch below exists for exactly that. So the fields have to be
+            # validated rather than indexed: a record with no 'offset', or a
+            # "0x10" someone typed because every other acidcat surface accepts
+            # hex, used to raise KeyError/TypeError straight out of the parser
+            # as an uncaught traceback.
+            if "offset" not in r:
+                raise ValueError(f"record {i} has no 'offset'")
+            offset = _as_int(r["offset"], f"record {i} 'offset'")
             length = r.get("length")
             if length is None:
                 if "end" not in r:
                     raise ValueError(
-                        f"region at offset {r.get('offset')} has neither "
+                        f"region at offset {offset} has neither "
                         f"'length' nor 'end'")
-                length = r["end"] - r["offset"]
-            out.append({"offset": r["offset"], "length": length,
+                length = _as_int(r["end"], f"record {i} 'end'") - offset
+            else:
+                length = _as_int(length, f"record {i} 'length'")
+            out.append({"offset": offset, "length": length,
                         "kind": r.get("kind", "region"), "format": r.get("format"),
                         "geometry": r.get("geometry")})
         return out

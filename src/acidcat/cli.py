@@ -23,6 +23,7 @@ import argparse
 import errno
 import os
 import sys
+import traceback
 
 from acidcat import __version__
 from acidcat.commands._output import add_output_format_arg
@@ -190,6 +191,22 @@ def main(argv=None):
     except KeyboardInterrupt:
         print("\nacidcat: interrupted", file=sys.stderr)
         return 130                      # the shell's convention for SIGINT
+    except SystemExit:
+        raise                           # argparse's own exits are deliberate
+    except BaseException:
+        # An unhandled exception used to propagate, print a traceback, and let
+        # the interpreter exit 1 -- the same code the exit-code contract gives
+        # to "ran fine, and the answer is no". So `validate f && ship f` read a
+        # crash as a clean negative, and `audit f || quarantine f` quarantined
+        # on a bug. grep and diff, the tools that convention cites, both use 2
+        # for "could not run", and that is what a crash is.
+        #
+        # The traceback still prints: this changes what the shell is told, not
+        # what the developer sees.
+        traceback.print_exc()
+        print("acidcat: internal error (this is a bug); exiting 2",
+              file=sys.stderr)
+        return 2
 
 
 def _is_closed_pipe(exc):

@@ -124,7 +124,18 @@ def _repair_one(path, args, rows=None):
     if rows is not None:
         rows[-1].update(action="repaired", written=written, backup=backup)
         return 0
-    note = f"  (backup: {os.path.basename(backup)})" if backup else ""
+    if backup:
+        note = f"  (backup: {os.path.basename(backup)})"
+    elif not args.output and not args.overwrite:
+        # commit returns None both when it made no backup AND when it found a
+        # <name>_original already on disk and kept it. Printing nothing for the
+        # second case told the user their input was rewritten in place with a
+        # backup, when the file holding that name may predate acidcat and have
+        # nothing to do with this original. write.py has said so since it was
+        # written; repair, which rewrites structure, did not.
+        note = "  (existing backup kept)"
+    else:
+        note = ""
     print(f"  wrote {os.path.basename(written)}{note}")
     return 0
 

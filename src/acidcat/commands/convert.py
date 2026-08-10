@@ -47,6 +47,11 @@ def register(subparsers):
                    help="MIDI ticks per beat for .bwclip output (default 480).")
     p.add_argument("--skip-existing", action="store_true",
                    help="Batch mode: skip an .ncw whose .wav already exists.")
+    p.add_argument("--force", action="store_true",
+                   help="Allow writing over an existing file at a path convert "
+                        "derived itself (by swapping the extension). Without "
+                        "this, such a write is refused rather than silently "
+                        "destroying an unrelated file of the same name.")
     p.add_argument("--to-pcm", action="store_true",
                    help="Decode a compressed/ADPCM WAV to a plain 16-bit PCM WAV "
                         "that plays anywhere (IMA/DVI ADPCM 0x0011, Microsoft "
@@ -62,7 +67,7 @@ def register(subparsers):
 def _batch_ncw(directory, args):
     """Convert every .ncw under `directory` to a sibling .wav. Read-only on the
     inputs; one bad file is counted and skipped, never fatal."""
-    done = skipped = failed = 0
+    done = skipped = failed = refused = 0
     for root, _dirs, files in os.walk(directory):
         for name in files:
             if not name.lower().endswith(".ncw"):
@@ -71,6 +76,13 @@ def _batch_ncw(directory, args):
             out = os.path.splitext(src)[0] + ".wav"
             if args.skip_existing and os.path.exists(out):
                 skipped += 1
+                continue
+            clash = outpath.refuse_clobber("convert", out, force=args.force)
+            if clash:
+                # counted and reported, not fatal: one pre-existing sibling
+                # should not abandon the rest of the directory
+                refused += 1
+                print(f"  [skip] {clash}", file=sys.stderr)
                 continue
             try:
                 with open(src, "rb") as f:
@@ -88,8 +100,11 @@ def _batch_ncw(directory, args):
                       file=sys.stderr)
     print(f"converted {done:,} .ncw -> .wav"
           + (f", skipped {skipped:,} existing" if skipped else "")
+          + (f", refused {refused:,} that would overwrite an existing file"
+             if refused else "")
           + (f", {failed:,} failed" if failed else ""))
-    return 0 if done or not failed else 1
+    # a refusal is a file NOT converted, so it must not report success
+    return 0 if done or not (failed or refused) else 1
 
 
 def _run_ncw(path, data, args):
@@ -101,6 +116,8 @@ def _run_ncw(path, data, args):
         return 1
     out = args.output or (os.path.splitext(path)[0] + ".wav")
     err = outpath.refuse_self_overwrite("convert", path, out)
+    if not err and not args.output:
+        err = outpath.refuse_clobber("convert", out, force=args.force)
     if err:
         print(err, file=sys.stderr)
         return 2
@@ -149,6 +166,8 @@ def _run_svx(path, data, args):
     wav = svxmod.to_wav(info, samples)
     out = args.output or (os.path.splitext(path)[0] + ".wav")
     err = outpath.refuse_self_overwrite("convert", path, out)
+    if not err and not args.output:
+        err = outpath.refuse_clobber("convert", out, force=args.force)
     if err:
         print(err, file=sys.stderr)
         return 2

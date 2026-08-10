@@ -44,3 +44,24 @@ def refuse_self_overwrite(verb, source, out):
         return (f"acidcat {verb}: {out}: output is the input; refusing to "
                 f"overwrite the file being read")
     return None
+
+
+def refuse_clobber(verb, out, *, force=False, flag="--force"):
+    """An error string when `out` exists and was never named by the user.
+
+    For a DERIVED output path only -- one the command computed, typically by
+    swapping an extension. `convert` turned `precious.ncw` into `precious.wav`
+    and opened it "wb", so an unrelated `precious.wav` sitting beside it was
+    destroyed with no warning, no backup, and exit 0. NCW and WAV siblings are
+    ordinary in a Kontakt library, so this was reachable by running the
+    documented command in a normal directory.
+
+    An explicit `-o` is deliberately NOT routed through here. The user naming a
+    target is a different act from a tool inventing one, and the surprise this
+    prevents is entirely in the second case.
+    """
+    if force or not out or not os.path.exists(out):
+        return None
+    return (f"acidcat {verb}: {out}: already exists; refusing to overwrite a "
+            f"file this command named for you (pass {flag} to allow, or "
+            f"--skip-existing to pass over it)")

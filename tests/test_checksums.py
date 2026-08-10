@@ -277,9 +277,19 @@ def test_deep_proves_flac_damage(flac_pair):
 def test_deep_reaches_formats_with_no_structural_model(mp3_set):
     """MP3 is not a structurally-modeled container, so plain validate has
     nothing to say about it -- but its frames are checkable, and a verdict
-    exists even where the structural pass has none."""
+    exists even where the structural pass has none.
+
+    This test used to assert the opposite of its own docstring: it required a
+    CLEAN mp3 to print "no structurally-modeled files to check" and exit 2,
+    which is the bug, written down and locked in. It described a verdict
+    existing while demanding the tool report that none did. Passing the good
+    file is the whole point of the feature.
+    """
     good, nosync, payload = mp3_set
-    assert "no structurally-modeled" in _validate(good, "--deep").stderr
+    r = _validate(good, "--deep")
+    assert r.returncode == 0, f"a clean mp3 failed --deep\n{r.stdout}{r.stderr}"
+    assert "no structurally-modeled" not in r.stderr
+    assert "OK" in r.stdout
     for bad in (nosync, payload):
         assert "FAIL" in _validate(bad, "--deep").stdout
 
