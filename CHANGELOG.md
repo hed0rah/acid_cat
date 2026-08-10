@@ -6,6 +6,111 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-10
+
+The 1.0 release. Everything below landed after the 1.0.0b2 beta, and the theme
+is the same one that runs through the whole 1.0 cycle: **a tool that reports a
+partial answer as a whole one is worse than a tool that declines.** Most of what
+follows is either a check learning to say what it did not look at, or a CLI
+shape being fixed while it is still free to fix.
+
+### Breaking
+
+- **`probe` takes its operands last: `probe SUBVERB [OPTIONS] FILE...`.** The
+  old `probe FILE SUBVERB` could not survive a wildcard -- the shell turns
+  `probe *.wav strings` into `probe a.wav b.wav c.wav strings` before acidcat
+  sees it, and there was no reading of that which worked. No long-lived tool
+  puts an operand between a command and its subcommand. Two things fall out:
+  `probe strings --help` now works without naming a file, and multi-file output
+  is labelled per file, the grep and file(1) rule, so single-file output still
+  pipes unchanged. `probe diff` takes exactly two operands, like diff(1).
+
+- **Per-file report verbs accept many files and directories.** `audit`, `info`
+  and `chunks` took exactly one file and no directory, while `inspect` beside
+  them took a list and no directory: four arities across verbs that all do the
+  same thing. `audit *.wav` was a usage error. The rule now is testable rather
+  than aesthetic -- a verb takes `FILE...` when its output is per-file and
+  self-labelling, and one file only when it has arguments meaningless across
+  files, which is why `od`, `carve` and probe's offset sub-verbs stay singular.
+
+### Added
+
+- **`validate --deep` verifies the checksums a format carries about itself.**
+  FLAC frame CRC-8 and CRC-16, and MP3 frame validity. Neither needs a decoder.
+  A failure is proof rather than inference. acidcat previously parsed FLAC's
+  STREAMINFO MD5, displayed it, and never checked it -- `repair` called a file
+  "already consistent" that ffmpeg refuses to decode. Off by default because it
+  costs a full read. Worth recording: ffmpeg does not verify FLAC frame CRCs by
+  default either, so this class of damage passes quietly through the most
+  obvious tool for the job.
+
+- **`audit --signal` reports CD ripper concealment.** Where a rip wrote silence,
+  a held sample, an interpolation or a repeated block over a sector it could not
+  read. This speaks to a file's ORIGIN rather than its damage: CD players
+  conceal errors in the playback path by design and say nothing, while the drives
+  used for ripping generally do not, so concealment reaching a file is evidence
+  it came off a disc that would not read cleanly. Measured against real material
+  at 0.0 to 0.4 percent false positives for the three structural strategies.
+  Raw uncorrected data is deliberately NOT claimed: measured over one CD sector,
+  real audio and random bytes overlap by 40 percent on the obvious statistic, so
+  detecting it would mean a false positive on roughly six files in ten.
+
+### Fixed
+
+- **Anomaly checks dispatched on the display label, so renaming a string could
+  turn a check off.** Seven checks branched on the walker's human-readable
+  label -- `fmt_label.startswith("Ogg")`, `"AIFF" in fmt_label` -- which made
+  the wording of a presentation string load-bearing across a module boundary.
+  Retitling `RIFF/WAVE` would have silently disabled two forensic checks, with
+  nothing at the definition site to warn anyone and no test to catch it.
+  Dispatch is on the sniff id now. One latent bug fell out of the conversion: a
+  guard that suppresses the spurious "embedded Ogg" finding on ordinary Ogg
+  files also required the label to be non-empty, so a walker returning `""`
+  would have had the guard fail open.
+
+- **Directory walks skipped supported formats, silently.** Eight commands each
+  had their own `os.walk` and their own extension list, so one directory holding
+  a FLAC, an MP3, an AIFF and a WAV was seen as 4, 3, 1 or 0 files depending
+  which verb you asked, and none of them said so. `detect` finds BPM and key,
+  matched `.wav` only, and reported nothing at all for a library of FLACs while
+  `detect a.flac` on the same file worked. There is one shared expander now: a
+  named file is never filtered, and a directory walk reports what it passed over.
+
+- **`od` on a directory produced a raw traceback** -- the only uncaught one
+  across 21 verbs and four kinds of bad input.
+
+- **`-` reads stdin on every verb that takes a file.** `shape`, `audit` and
+  `validate` had no stdin handling at all.
+
+- **The TUI's hex row lost two columns to a scrollbar it did not reserve.** The
+  width was measured from the pane minus its border, ignoring padding and the
+  scrollbar -- and because scrollbar presence depends on content height, which
+  depends on the width being chosen, the measurement fed back into itself and
+  landed one layout behind. That is why the wrapping looked intermittent and why
+  moving to a shorter field and back appeared to fix it.
+
+- **`tab` in the TUI handed focus to a pane the zoom had hidden**, so the arrow
+  keys drove a cursor nobody could see and the hex view jumped to a field the
+  user had not chosen. From outside that reads as "I cannot change fields",
+  which is the opposite of what was happening.
+
+- **The TUI's multi-pane view stated the same facts up to three times** on one
+  line -- offset, size, then both again -- putting a 110-character line into a
+  66-column pane. The two columns are symmetric now, and the byte views redraw
+  when the pane changes size instead of keeping their old dimensions until you
+  cycled away and back.
+
+- **A test wrote into the repository root** on every run, and asserted nothing.
+
+### Internal
+
+- CI went red on all five platforms from a guard that could never fire:
+  `subprocess.run` raises `FileNotFoundError` when a binary is absent rather
+  than returning non-zero, so `if result.returncode: skip()` never reached the
+  skip. There is one `have_tool()` helper now, verified by running the whole
+  suite with ffmpeg removed from PATH.
+
+
 ## [1.0.0b2] - 2026-08-08
 
 A hardening pass ahead of the 1.0 release candidate. Almost every entry below
