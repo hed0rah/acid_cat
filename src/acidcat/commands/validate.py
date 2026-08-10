@@ -31,6 +31,11 @@ def register(subparsers):
         "validate",
         help="Check container structure for stale size/offset/pad fields (read-only).")
     p.add_argument("inputs", nargs="+", help="File(s) or directory(ies) to check.")
+    p.add_argument("--deep", action="store_true",
+                   help="Also verify the checksums a format carries about "
+                        "itself: FLAC frame CRCs, MP3 frame validity. These "
+                        "PROVE damage rather than infer it, but cost a full "
+                        "read (~10 MB/s), so they are off by default.")
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Only print files that have violations.")
     # validate is the CI-gate verb: you could branch on its exit code but not
@@ -51,7 +56,58 @@ def _iter_paths(inputs):
             yield inp
 
 
-def _check(path, quiet, rows=None):
+def _deep_check(path, data):
+    """Verify the integrity data the format carries about itself.
+
+    Structural analysis asks whether the container's own arithmetic adds up.
+    This asks a different and stronger question: does the payload still match
+    the checksum written over it? A failure here is proof, not inference.
+
+    Returns a one-line finding, or None when the format carries nothing
+    checkable or everything checks out. Only FLAC and MP3 for now; both are
+    verifiable without decoding, which matters because acidcat bundles no
+    decoders.
+    """
+    from acidcat.core.forensics import checksums
+
+    head = bytes(data[:4])
+    if head == b"fLaC":
+        pos = 4
+        while pos + 4 <= len(data):
+            hdr = data[pos]
+            ln = int.from_bytes(bytes(data[pos + 1:pos + 4]), "big")
+            pos += 4 + ln
+            if hdr & 0x80:
+                break
+        else:
+            return None
+        r = checksums.flac_frames(data, pos, len(data))
+        if r["failed"]:
+            where = ", ".join(f"0x{o:08x}" for o in r["offsets"][:3])
+            return (f"{r['failed']} of {r['checked']} FLAC frame(s) fail their "
+                    f"CRC-16 (at {where}) -- the audio no longer matches the "
+                    f"checksum the encoder wrote over it")
+        return None
+
+    start = 0
+    if head[:3] == b"ID3":
+        b = bytes(data[:10])
+        start = 10 + ((b[6] & 0x7F) << 21 | (b[7] & 0x7F) << 14
+                      | (b[8] & 0x7F) << 7 | (b[9] & 0x7F))
+    elif not (len(data) > 1 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0):
+        return None
+    r = checksums.mp3_frames(data, start)
+    bad = r["resyncs"] + r["bad_bigvalues"] + r["bad_backref"]
+    if bad and r["frames"]:
+        where = ", ".join(f"0x{o:08x}" for o in r["offsets"][:3])
+        return (f"{bad} damaged MP3 frame(s) of {r['frames']} (at {where}): "
+                f"{r['resyncs']} lost sync, {r['bad_bigvalues']} impossible "
+                f"big_values, {r['bad_backref']} dangling bit-reservoir "
+                f"back-reference(s)")
+    return None
+
+
+def _check(path, quiet, rows=None, deep=False):
     """Return (checked, ok, error, repairable): checked is False for a skipped or
     unreadable file; error is True only when the file could not be read (I/O
     error), as opposed to being a format acidcat does not structurally model (a
@@ -75,12 +131,27 @@ def _check(path, quiet, rows=None):
             rows.append({"path": path, "format": None, "status": "unreadable",
                          "issues": 0, "repairable": False, "detail": str(e)})
         return False, True, True, False
+    deep_note = None
     try:
         with memoryview(data) as view:
             report = constraints.analyze(view)
+        if deep:
+            deep_note = _deep_check(path, data)
     finally:
         close()
     if report is None:
+        # A format acidcat does not structurally model can still carry a
+        # checksum over its own bytes -- MP3 is exactly that case -- so --deep
+        # has a verdict here even though the structural pass does not.
+        if deep_note:
+            if rows is not None:
+                rows.append({"path": path, "format": None, "status": "fail",
+                             "issues": 1, "repairable": False,
+                             "detail": deep_note})
+            else:
+                print(f"FAIL  {os.path.basename(path)}  [deep]  1 issue(s)")
+                print(f"        {deep_note}")
+            return True, False, False, False
         if rows is not None:
             # a skip is a real answer and belongs in the record set, so a
             # consumer can tell "checked, clean" from "never modelled"
@@ -89,13 +160,23 @@ def _check(path, quiet, rows=None):
                          "detail": "not a structurally-modeled container"})
         return False, True, False, False        # not a structurally-modeled container
     base = os.path.basename(path)
-    if not report.violations:
+    if not report.violations and not deep_note:
         if rows is not None:
             rows.append({"path": path, "format": report.label, "status": "ok",
                          "issues": 0, "repairable": False, "detail": ""})
         elif not quiet:
             print(f"OK    {base}  [{report.label}]")
         return True, True, False, False
+    if not report.violations:
+        # structurally sound, but a checksum over its own payload disagrees --
+        # which is a stronger statement than any structural check can make
+        if rows is not None:
+            rows.append({"path": path, "format": report.label, "status": "fail",
+                         "issues": 1, "repairable": False, "detail": deep_note})
+        else:
+            print(f"FAIL  {base}  [{report.label}]  1 issue(s)")
+            print(f"        {deep_note}")
+        return True, False, False, False
     if rows is not None:
         rows.append({"path": path, "format": report.label, "status": "fail",
                      "issues": len(report.violations),
@@ -146,7 +227,8 @@ def _run(args):
             continue
         named = not os.path.isdir(inp)
         for path in _iter_paths([inp]):
-            did, ok, error, repairable = _check(path, args.quiet, rows)
+            did, ok, error, repairable = _check(
+                path, args.quiet, rows, deep=getattr(args, 'deep', False))
             any_repairable = any_repairable or repairable
             if error:
                 # Inside a directory walk an unreadable file used to be counted

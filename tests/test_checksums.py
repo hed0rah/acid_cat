@@ -7,6 +7,7 @@ strength of arithmetic it got wrong. Every test below that asserts "clean" is
 therefore as important as the ones asserting "damaged".
 """
 
+import json
 import os
 import struct
 import subprocess
@@ -251,3 +252,52 @@ def test_side_info_arithmetic_is_asserted_not_assumed(mp3_set):
     assert h is not None
     assert C._mp3_side_info(b, start, h[1]) is not None, \
         "side info did not consume exactly its declared width"
+
+
+# ── the --deep flag on validate ──────────────────────────────────────
+
+def _validate(*args):
+    return subprocess.run([sys.executable, "-m", "acidcat", "validate", *args],
+                          capture_output=True, text=True)
+
+
+def test_deep_is_off_by_default(flac_pair):
+    """A full read at ~10 MB/s is not something to impose on a directory sweep
+    that only asked whether the container's arithmetic adds up."""
+    _, bad = flac_pair
+    assert "FAIL" not in _validate(bad).stdout
+    assert "FAIL" in _validate(bad, "--deep").stdout
+
+
+def test_deep_proves_flac_damage(flac_pair):
+    good, bad = flac_pair
+    assert "OK" in _validate(good, "--deep").stdout
+    out = _validate(bad, "--deep").stdout
+    assert "FAIL" in out and "CRC-16" in out
+
+
+def test_deep_reaches_formats_with_no_structural_model(mp3_set):
+    """MP3 is not a structurally-modeled container, so plain validate has
+    nothing to say about it -- but its frames are checkable, and a verdict
+    exists even where the structural pass has none."""
+    good, nosync, payload = mp3_set
+    assert "no structurally-modeled" in _validate(good, "--deep").stderr
+    for bad in (nosync, payload):
+        assert "FAIL" in _validate(bad, "--deep").stdout
+
+
+def test_deep_failure_is_reported_in_json(flac_pair):
+    _, bad = flac_pair
+    r = _validate(bad, "--deep", "--output-format", "json")
+    doc = json.loads(r.stdout)
+    rec = doc[0] if isinstance(doc, list) else doc
+    assert rec["status"] == "fail"
+    assert "CRC" in rec["detail"]
+
+
+def test_deep_exit_code_follows_the_grep_family(flac_pair):
+    """0 = consistent, 1 = a file has a violation. Same contract as the
+    structural pass, so `validate --deep X && ...` behaves."""
+    good, bad = flac_pair
+    assert _validate(good, "--deep").returncode == 0
+    assert _validate(bad, "--deep").returncode == 1
