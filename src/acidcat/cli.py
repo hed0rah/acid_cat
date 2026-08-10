@@ -179,7 +179,15 @@ def main(argv=None):
         return _dispatch(argv)
     except OSError as e:
         if not _is_closed_pipe(e):
-            raise
+            # NOT a bare re-raise. `raise` here leaves main() entirely -- the
+            # BaseException handler below is a sibling of this one, not an outer
+            # net, so it never sees it. Every OSError from a parser therefore
+            # kept printing a traceback and exiting 1, the code reserved for
+            # "ran fine, and the answer is no", which is the exact hole the
+            # handler below was added to close.
+            traceback.print_exc()
+            print(f"acidcat: {e.__class__.__name__}: {e}", file=sys.stderr)
+            return 2
         # stop writing, and keep the interpreter's shutdown flush from raising
         # again on the dead descriptor
         try:

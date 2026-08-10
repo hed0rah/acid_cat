@@ -11,10 +11,12 @@ so the tree is walked by index ranges, not nesting.
         print(f["path"], f["offset"], f["size"])
 """
 
+import os
 import struct
 
 MAGIC = 0xC2339F3D                   # GameCube disc magic word, at offset 0x1C
 _MAGIC_OFF = 0x1C
+_MAX_DEPTH = 64          # a real disc nests a handful deep
 
 
 def is_gcm(path):
@@ -35,11 +37,19 @@ def _entry(fst, i):
 def walk(path):
     """Yield {path, offset, size} for every file on a GameCube disc, or nothing
     if `path` is not one. offset/size are absolute byte positions in the image."""
+    fsize = os.path.getsize(path)
     with open(path, "rb") as f:
         head = f.read(0x440)
         if len(head) < 0x440 or struct.unpack_from(">I", head, _MAGIC_OFF)[0] != MAGIC:
             return
         fst_off, fst_size = struct.unpack_from(">II", head, 0x424)
+        # fst_size is an unchecked u32 straight from the image. f.read(n)
+        # commits n bytes before it discovers the file is shorter, so a 1 KB
+        # image declaring 0xFFFFFFFF allocated 4.3 GB. Clamp to what can
+        # actually be there; a truncated FST fails the length checks below.
+        if fst_off >= fsize:
+            return
+        fst_size = min(fst_size, fsize - fst_off)
         f.seek(fst_off)
         fst = f.read(fst_size)
     if len(fst) < 12:
@@ -56,25 +66,50 @@ def walk(path):
 
     out = []
 
-    def descend(idx, prefix, end):
+    # A directory entry's "size" is an index past its last child, and nothing in
+    # the image guarantees it points FORWARD. Two ways that hung or crashed:
+    #
+    #   idx = size where size <= idx  -- the cursor never advances and the while
+    #   loop spins forever. A 1,114-byte file span indefinitely at 0% progress,
+    #   with no output and no way to interrupt it in a pipeline.
+    #
+    #   a directory whose child-end points backwards re-enters the same range,
+    #   so descend() recurses until RecursionError.
+    #
+    # Both are fixed by the same rule: the cursor must strictly increase, and a
+    # child range must lie forward of the entry that declares it. Depth is
+    # bounded too, since a legitimate disc is nowhere near this deep.
+    def descend(idx, prefix, end, depth):
         while idx < end and idx < num:
             typ = fst[idx * 12]
             off, size = struct.unpack_from(">II", fst, idx * 12 + 4)
             nm = name(idx)
             if typ == 1:                              # directory: size = index past last child
-                descend(idx + 1, prefix + nm + "/", size)
-                idx = size
+                child_end = min(size, num)
+                if child_end > idx + 1 and depth < _MAX_DEPTH:
+                    descend(idx + 1, prefix + nm + "/", child_end, depth + 1)
+                idx = child_end if child_end > idx else idx + 1
             else:
                 out.append({"path": prefix + nm, "offset": off, "size": size})
                 idx += 1
 
-    descend(1, "", num)
+    descend(1, "", num, 0)
     yield from out
 
 
 def read_file(path, entry, limit=None):
-    """Read a file's bytes from its walk() entry (absolute offset/size)."""
+    """Read a file's bytes from its walk() entry (absolute offset/size).
+
+    The size is clamped to what remains in the image. It comes from the FST
+    unchecked, and a 1,118-byte file declaring a 0xFFFFFFFF entry allocated
+    4.3 GB here before finding out the file was 1 KB long.
+    """
+    fsize = os.path.getsize(path)
+    off = entry["offset"]
+    if off >= fsize:
+        return b""
     n = entry["size"] if limit is None else min(entry["size"], limit)
+    n = min(n, fsize - off)
     with open(path, "rb") as f:
-        f.seek(entry["offset"])
+        f.seek(off)
         return f.read(n)

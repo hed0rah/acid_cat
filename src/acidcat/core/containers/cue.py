@@ -23,8 +23,19 @@ SECTOR = 2352                        # raw CD sector; a CD-DA sector is all samp
 CDDA_RATE = 44100
 
 
+class CueError(Exception):
+    """A .cue sheet that cannot be parsed. A cue is hand-editable text, so
+    malformed ones are ordinary input, not an internal error."""
+
+
 def _msf_to_lba(msf):
-    m, s, f = (int(x) for x in msf.split(":"))
+    parts = msf.split(":")
+    if len(parts) != 3:
+        raise CueError(f"malformed MSF timestamp {msf!r} (want MM:SS:FF)")
+    try:
+        m, s, f = (int(x) for x in parts)
+    except ValueError:
+        raise CueError(f"non-numeric MSF timestamp {msf!r}") from None
     return (m * 60 + s) * 75 + f     # 75 sectors per second
 
 
@@ -40,17 +51,39 @@ def parse(cue_path):
         for line in fh:
             line = line.strip()
             if line.startswith("FILE "):
-                name = line.split('"')[1] if '"' in line else line.split()[1]
+                # an unterminated quote used to yield "", making cur_file the
+                # containing DIRECTORY; the later open() then raised an OSError
+                # that escaped as a traceback and exit 1
+                if '"' in line:
+                    q = line.split('"')
+                    name = q[1] if len(q) > 2 else ""
+                else:
+                    rest = line.split()
+                    name = rest[1] if len(rest) > 1 else ""
+                if not name:
+                    raise CueError(f"FILE line names no file: {line!r}")
                 cur_file = os.path.join(base, name)
             elif line.startswith("TRACK "):
                 if cur:
                     tracks.append(cur)
                 parts = line.split()
-                cur = {"num": int(parts[1]), "type": parts[2], "file": cur_file,
+                if len(parts) < 3:
+                    raise CueError(f"TRACK line needs a number and a type: {line!r}")
+                try:
+                    tnum = int(parts[1])
+                except ValueError:
+                    raise CueError(f"non-numeric track number {parts[1]!r}") from None
+                cur = {"num": tnum, "type": parts[2], "file": cur_file,
                        "start_lba": 0}
             elif line.startswith("INDEX ") and cur is not None:
                 parts = line.split()
-                idx, lba = int(parts[1]), _msf_to_lba(parts[2])
+                if len(parts) < 3:
+                    raise CueError(f"INDEX line needs a number and a timestamp: {line!r}")
+                try:
+                    idx = int(parts[1])
+                except ValueError:
+                    raise CueError(f"non-numeric index number {parts[1]!r}") from None
+                lba = _msf_to_lba(parts[2])
                 # INDEX 01 is the track proper; INDEX 00 is pregap. Prefer 01.
                 if idx == 1 or "start_set" not in cur:
                     cur["start_lba"] = lba

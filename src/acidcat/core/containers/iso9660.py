@@ -16,6 +16,7 @@ sector geometry and the root directory.
     data = iso9660.read_file("game.bin", entry)
 """
 
+import os
 import struct
 
 _USER = 2048                         # ISO logical block size
@@ -39,7 +40,23 @@ def _read_block(f, lba, layout):
 
 
 def _read_extent(f, lba, size, layout):
+    """Read `size` bytes starting at `lba`, bounded by the image.
+
+    `size` comes from a directory record unchecked. A record declaring a 4 GiB
+    extent cost 2,097,152 seek+read calls against a 110 KB image, and 24 such
+    records in one file ran past 90 seconds -- a hang built from a handful of
+    bytes. Clamping to the sectors the image actually holds makes the cost
+    proportional to the file rather than to a number inside it.
+    """
+    sector_size, _user_off = layout
+    try:
+        fsize = os.fstat(f.fileno()).st_size
+    except OSError:
+        fsize = None
     n = (size + _USER - 1) // _USER
+    if fsize is not None:
+        avail = max(0, (fsize // sector_size) - lba)
+        n = min(n, avail)
     return b"".join(_read_block(f, lba + k, layout) for k in range(n))[:size]
 
 

@@ -757,7 +757,14 @@ EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 # rather than leaking a parser's private exception type to the CLI as a
 # traceback. Deliberately narrow: a KeyError or IndexError is a bug in us and
 # must stay loud.
-_MALFORMED = (sf2mod.Sf2Error, ncwmod.NcwError, svxmod.SvxError, struct.error)
+# cuemod.CueError: a .cue is hand-editable text, so a bad timestamp or a
+# truncated TRACK line is ordinary malformed input rather than a bug in us.
+# Imported lazily-but-eagerly here (the module is cheap and has no heavy deps)
+# so the tuple stays a tuple.
+from acidcat.core.containers import cue as _cuemod
+
+_MALFORMED = (sf2mod.Sf2Error, ncwmod.NcwError, svxmod.SvxError, struct.error,
+              _cuemod.CueError)
 
 
 def iter_samples(filepath, fmt=None):

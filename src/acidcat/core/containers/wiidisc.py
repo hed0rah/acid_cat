@@ -18,7 +18,10 @@ install dependency-light:  pip install acidcat[crypto]
             data = disc.read(f)
 """
 
+import os
 import struct
+
+_MAX_DEPTH = 64          # a real disc nests a handful deep
 
 MAGIC = 0x5D1C9EA3                   # Wii disc magic word, at offset 0x18
 _MAGIC_OFF = 0x18
@@ -80,7 +83,16 @@ class WiiDisc:
         f = self._f
         f.seek(0x40000)
         npart, ptoff = struct.unpack(">II", f.read(8))
-        f.seek(ptoff << 2)
+        # npart is an unchecked u32 from the disc. read(npart * 8) commits the
+        # full length before discovering the file is shorter, so a 262 KB image
+        # declaring 0xFFFFFFFF asked for 34.4 GB -- 130,000x the input. Clamp to
+        # what the image can actually hold; a short table fails the loop below.
+        fsize = os.fstat(f.fileno()).st_size
+        base = ptoff << 2
+        if base >= fsize:
+            raise WiiError("partition table starts past the end of the image")
+        npart = min(npart, max(0, (fsize - base) // 8))
+        f.seek(base)
         table = f.read(npart * 8)
         part = None
         for i in range(npart):
@@ -144,19 +156,29 @@ class WiiDisc:
 
         files = []
 
-        def descend(idx, prefix, end):
+        # Same rule as gcm.descend, and for the same reason: this function is a
+        # byte-for-byte copy of it, so it carried the identical hang (idx = size
+        # where size <= idx never advances) and the identical unbounded
+        # recursion. Only the gcm copy was reachable with a synthetic specimen
+        # -- getting here needs bytes that AES-decrypt to a walkable FST -- so
+        # this one was fixed by inspection alongside its twin rather than by
+        # repro. If these two ever need to diverge, they should stop being
+        # copies first.
+        def descend(idx, prefix, end, depth):
             while idx < end and idx < num:
                 typ = fst[idx * 12]
                 off, size = struct.unpack_from(">II", fst, idx * 12 + 4)
                 nm = name(idx)
                 if typ == 1:                             # directory: size = index past children
-                    descend(idx + 1, prefix + nm + "/", size)
-                    idx = size
+                    child_end = min(size, num)
+                    if child_end > idx + 1 and depth < _MAX_DEPTH:
+                        descend(idx + 1, prefix + nm + "/", child_end, depth + 1)
+                    idx = child_end if child_end > idx else idx + 1
                 else:
                     files.append({"path": prefix + nm, "offset": off << 2, "size": size})
                     idx += 1
 
-        descend(1, "", num)
+        descend(1, "", num, 0)
         self._files = files
 
     def files(self):

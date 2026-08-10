@@ -42,8 +42,14 @@ def normalize(data):
     (word-reversed); leaves an already-z64 image untouched."""
     m = data[:4]
     if m == _V64:
-        b = bytearray(data)
-        b[0::2], b[1::2] = data[1::2], data[0::2]
+        # An odd-length image makes data[1::2] one shorter than data[0::2], and
+        # assigning mismatched extended slices raises ValueError. A real ROM is
+        # always even, but a truncated or hand-cut one is exactly the input this
+        # tool exists to open, so drop the odd trailing byte rather than crash:
+        # a half word has no swapped counterpart to pair it with.
+        even = len(data) - (len(data) & 1)
+        b = bytearray(data[:even])
+        b[0::2], b[1::2] = data[1:even:2], data[0:even:2]
         return bytes(b)
     if m == _N64:
         a = array.array("I")
