@@ -221,3 +221,29 @@ def test_a_skipped_check_is_reported_but_not_counted(tmp_path):
     verd = re.search(r"VERDICT: (\d+) integrity mismatch", out)
     if sect and verd:
         assert sect.group(1) == verd.group(1), out
+
+
+def test_alignment_slack_covers_the_anchor_sample(tmp_path):
+    """An interpolation is anchored ON the last good sample, so that sample is
+    collinear with the line drawn from it and joins the run -- the detected run
+    starts one frame before the sector boundary. Demanding exact alignment
+    misses every interpolated gap, which is how this surfaced: against
+    sector-aligned specimens the interp case was the only one not found."""
+    x = music(n_sectors=14)
+    a = at_sector()
+    lo, hi = x[a - 1].astype(np.float64), x[a + SF].astype(np.float64)
+    t = np.linspace(0, 1, SF, endpoint=False)[:, None]
+    x[a:a + SF] = (lo + (hi - lo) * t).astype(np.int16)
+    f = C.scan(x)
+    assert f, "an anchored interpolation went undetected"
+    assert f[0]["strategy"] == "interpolate"
+    assert abs(f[0]["frame"] - a) <= 2
+
+
+def test_the_slack_is_small_enough_to_stay_strict():
+    """Two frames out of 588 is 0.3 percent. A gap well off the grid must still
+    be rejected, or the slack has quietly become 'any offset'."""
+    x = music(n_sectors=14)
+    a = at_sector() + 40           # far off the grid, well beyond the slack
+    x[a:a + SF] = 0
+    assert C.scan(x) == []

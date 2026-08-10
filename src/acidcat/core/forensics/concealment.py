@@ -71,9 +71,19 @@ def _db(x):
     return 20 * math.log10(max(x, 1e-9))
 
 
+# A run may begin one or two samples before the sector boundary, and that is
+# inherent rather than sloppy: an interpolation is anchored ON the last good
+# sample, so that sample is collinear with the line drawn from it and joins the
+# run. Held samples do the same. Two frames out of 588 is 0.3 percent of a
+# sector, far too tight to matter for false positives, and demanding exact
+# alignment misses every interpolated gap.
+_ALIGN_SLACK = 2
+
+
 def _sector_shaped(start, length):
-    return (abs(length / SECTOR_FRAMES - 1.0) <= _LEN_TOL
-            and start % SECTOR_FRAMES == 0)
+    off = start % SECTOR_FRAMES
+    aligned = off <= _ALIGN_SLACK or off >= SECTOR_FRAMES - _ALIGN_SLACK
+    return abs(length / SECTOR_FRAMES - 1.0) <= _LEN_TOL and aligned
 
 
 def _discontinuous(x, start, length):
@@ -129,7 +139,12 @@ def _interp(x):
     # is zero. Tolerance is PER CHANNEL: a ramp quantised to int16 jitters by
     # one LSB, and summing two channels against a tolerance of 1 is twice as
     # strict as intended and misses every interpolated gap.
-    flat = np.all(np.abs(np.diff(x, n=2, axis=0)) <= 1, axis=1)
+    # Tolerance 2, per channel. A line quantised to int16 does not have an
+    # exactly-zero second difference, and how far it strays depends on the
+    # rounding: nearest-rounding stays within 1, truncation toward zero reaches
+    # 2. A ripper written in C truncates, so a tolerance of 1 catches only
+    # interpolators that happen to round.
+    flat = np.all(np.abs(np.diff(x, n=2, axis=0)) <= 2, axis=1)
     # flat[i] is true when x[i], x[i+1] and x[i+2] are collinear, so it
     # describes the run STARTING at x[i] and the padding goes on the right.
     # Left-padding shifted every run one sample late, which put the start off
@@ -196,17 +211,26 @@ def scan(samples, *, sample_rate=44100):
     if x.shape[0] < SECTOR_FRAMES * 4:
         return []              # too short for a neighbourhood to exist
 
-    seen = {}
+    seen_list = []
+
+    # Detectors run most-specific first, and a later one may describe the SAME
+    # hole a frame or two off -- silence is also constant, and the constant run
+    # starts one sample later because the first zero is where the previous
+    # sample stopped matching. Keying the dedup on an exact start position
+    # reported one muted sector twice, as mute at 3528 and hold at 3529.
+    # Overlap is the right test: two findings inside one sector of each other
+    # are one event.
+    claimed = []
     for name, fn in _DETECTORS:
         for start, length in fn(x):
-            # nesting: keep the most specific strategy for a given position
-            if start in seen:
+            if any(start < c_end and c_start < start + length
+                   for c_start, c_end in claimed):
                 continue
-            seen[start] = (name, length)
+            claimed.append((start, start + length))
+            seen_list.append((start, name, length))
 
     out = []
-    for start in sorted(seen)[:_MAX_FINDINGS]:
-        name, length = seen[start]
+    for start, name, length in sorted(seen_list)[:_MAX_FINDINGS]:
         out.append({
             "strategy": name,
             "frame": int(start),
