@@ -235,3 +235,25 @@ def summarise(findings):
     return (f"{len(findings)} concealed sector(s) on the 588-frame CD grid "
             f"({parts}) -- consistent with a rip from a disc that could not be "
             f"read cleanly, not with damage to this file")
+
+
+def scan_float_channels(channels, *, bit_depth, sample_rate=44100):
+    """Adapter for callers holding normalised float channels.
+
+    Every test in this module is an EXACT one -- an exact-zero run, an exactly
+    constant run, a second difference of exactly zero, a byte-identical block --
+    because that is what makes the false positive rate low enough to be worth
+    reporting. Floats normalised to +/-1 cannot answer those questions.
+
+    16-bit sources round-trip back to their integers exactly, so those are
+    reconstructed and scanned. Anything else returns None, which the caller must
+    report as "not screened" rather than as "nothing found". Concealment is a
+    CD phenomenon and CD audio is 16-bit; a 24-bit file did not come off a Red
+    Book disc, so declining is correct rather than merely cautious.
+    """
+    if bit_depth != 16 or not channels:
+        return None
+    np = _numpy()
+    x = np.stack([np.rint(np.asarray(c) * 32768.0) for c in channels], axis=1)
+    return scan(np.clip(x, -32768, 32767).astype(np.int16),
+                sample_rate=sample_rate)

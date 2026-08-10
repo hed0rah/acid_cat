@@ -159,3 +159,65 @@ def test_raw_passthrough_is_not_claimed():
     rng = np.random.default_rng(3)
     x[a:a + SF] = rng.integers(-32768, 32767, (SF, 2), dtype=np.int16)
     assert all(f["strategy"] != "raw" for f in C.scan(x))
+
+
+# ── wired into audit --signal ───────────────────────────────────────
+
+def _wav(path, samples):
+    import struct
+    b = samples.astype("<i2").tobytes()
+    with open(path, "wb") as f:
+        f.write(b"RIFF" + struct.pack("<I", 36 + len(b)) + b"WAVEfmt "
+                + struct.pack("<IHHIIHH", 16, 1, 2, 44100, 44100 * 4, 4, 16)
+                + b"data" + struct.pack("<I", len(b)) + b)
+
+
+def _audit(path, *extra):
+    import subprocess
+    import sys
+    return subprocess.run([sys.executable, "-m", "acidcat", "audit", str(path),
+                           "--signal", *extra], capture_output=True, text=True)
+
+
+def test_audit_signal_reports_a_concealed_sector(tmp_path):
+    p = tmp_path / "concealed.wav"
+    _wav(p, apply(music(n_sectors=14), "mute"))
+    r = _audit(p)
+    assert "concealed-sectors" in r.stdout
+    assert "588" in r.stdout, "the sector grid is the origin evidence, name it"
+    assert r.returncode == 1
+
+
+def test_audit_signal_is_silent_on_clean_audio(tmp_path):
+    p = tmp_path / "clean.wav"
+    _wav(p, music(n_sectors=14))
+    r = _audit(p)
+    # "concealed-sectors" specifically: the ordinary HIDDEN line already says
+    # "no concealed or appended data", so a bare substring check passes for the
+    # wrong reason on a clean file and fails for the wrong reason here
+    assert "concealed-sectors" not in r.stdout
+    assert r.returncode == 0
+
+
+def test_a_skipped_check_is_reported_but_not_counted(tmp_path):
+    """24-bit audio did not come off a Red Book disc, so concealment analysis
+    does not apply. Saying nothing would read as "clean"; counting it as a
+    mismatch would make every 24-bit file a failure. It is named separately."""
+    import subprocess
+    import sys
+    src, deep = tmp_path / "s.wav", tmp_path / "deep.wav"
+    _wav(src, music(n_sectors=14))
+    conv = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src),
+                           "-c:a", "pcm_s24le", str(deep)], capture_output=True)
+    if conv.returncode != 0:
+        pytest.skip("ffmpeg not available")
+    out = _audit(deep).stdout
+    assert "NOT CHECKED" in out
+    assert "24-bit" in out
+    # the section count and the verdict count must agree, and neither may
+    # include the skipped check
+    import re
+    sect = re.search(r"INTEGRITY\s+(\d+) mismatch", out)
+    verd = re.search(r"VERDICT: (\d+) integrity mismatch", out)
+    if sect and verd:
+        assert sect.group(1) == verd.group(1), out

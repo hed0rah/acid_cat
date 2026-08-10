@@ -71,6 +71,50 @@ def register(subparsers):
     p.set_defaults(func=run)
 
 
+def _concealment_findings(path, chans, rate):
+    """Ripper concealment: where a CD rip wrote over a sector it could not read.
+
+    This says something the other signal checks do not. It is not a claim that
+    the file is damaged -- it is a claim about the file's ORIGIN. A CD player
+    conceals errors in the playback path by design and says nothing about it,
+    while the CD-ROM drives used for ripping generally do not, so concealment
+    reaching a file is evidence it came off a disc that would not read cleanly.
+    """
+    from acidcat.core.forensics import concealment
+    from acidcat.core.walk import walk_file
+
+    depth = None
+    try:
+        _label, chunks, _w = walk_file(path)
+        for c in chunks:
+            for f in c.get("fields") or ():
+                if f.get("name") == "bits_per_sample":
+                    depth = int(f.get("value") or 0)
+                    break
+    except Exception:
+        return []
+    if depth is None:
+        return []
+
+    try:
+        found = concealment.scan_float_channels(chans, bit_depth=depth,
+                                                sample_rate=rate)
+    except Exception as e:
+        return [{"check": "concealment", "verdict": "check-failed",
+                 "detail": f"could not run ({type(e).__name__}); this file was "
+                           f"NOT screened for ripper concealment"}]
+    if found is None:
+        # a cap that announces itself: silence here would read as "clean"
+        return [{"check": "concealment", "verdict": "not-applicable",
+                 "detail": f"{depth}-bit audio; concealment analysis applies to "
+                           f"16-bit CD-derived material, so this file was not "
+                           f"screened"}]
+    if not found:
+        return []
+    return [{"check": "concealment", "verdict": "concealed-sectors",
+             "detail": concealment.summarise(found)}]
+
+
 def _signal_findings(path):
     """Bandwidth and channel checks from the decoded samples.
 
@@ -88,6 +132,7 @@ def _signal_findings(path):
     # would turn every ordinary file into a finding.
     clean = {"no-wall", "stereo"}
     out = []
+    out.extend(_concealment_findings(path, chans, rate))
     for analyze in (bandwidth.analyze, channels.analyze):
         # the analyzers were called outside the guard, so only pcm.load was
         # protected: a WAV declaring nSamplesPerSec = 0 reached a division in
@@ -154,6 +199,21 @@ def _gather(path, signal=False):
         close()
 
 
+# "I did not check this" is not a finding. A verdict that reports a check being
+# skipped must be shown -- silence would read as "clean" -- but counting it as a
+# mismatch turns every 24-bit file into a failure, which is a cap reported as a
+# fact about the file.
+_NOT_A_FINDING = ("not-applicable",)
+
+
+def _real_findings(integ):
+    return [i for i in integ if i.get("verdict") not in _NOT_A_FINDING]
+
+
+def _skipped_notes(integ):
+    return [i for i in integ if i.get("verdict") in _NOT_A_FINDING]
+
+
 def _code(scanned, vios, findings, integ):
     """0 clean, 1 the file has something to answer for, 2 nothing was checked.
 
@@ -165,7 +225,7 @@ def _code(scanned, vios, findings, integ):
     """
     if not scanned and not vios:
         return 2
-    return 1 if (vios or findings or integ) else 0
+    return 1 if (vios or findings or _real_findings(integ)) else 0
 
 
 def run(args):
@@ -245,13 +305,18 @@ def _run_one(args):
             at = f" @ 0x{f['offset']:08x}" if f.get("offset") else ""
             print(f"                {f['severity']:<6} {f['message']}{at}")
 
-    if not integ:
+    real, skipped = _real_findings(integ), _skipped_notes(integ)
+    if not real:
         print("  INTEGRITY   header matches the audio (or not checkable)")
     else:
-        print(f"  INTEGRITY   {len(integ)} mismatch(es)")
-        for it in integ:
+        print(f"  INTEGRITY   {len(real)} mismatch(es)")
+        for it in real:
             print(f"                {it['verdict']}")
             print(f"                  {it['detail']}")
+    for it in skipped:
+        # named separately from the mismatch count, because a check that did
+        # not run is not evidence about the file
+        print(f"  NOT CHECKED {it['detail']}")
 
     if prov:
         top = prov[0]
@@ -267,8 +332,8 @@ def _run_one(args):
     n_fix = len(report.repairable) if report else 0
     alerts = sum(1 for f in findings if f["severity"] == "alert")
     bits = []
-    if integ:
-        bits.append(f"{len(integ)} integrity mismatch(es)")
+    if _real_findings(integ):
+        bits.append(f"{len(_real_findings(integ))} integrity mismatch(es)")
     if hidden:
         bits.append(f"{len(hidden)} hidden region(s)")
     if n_fix:
