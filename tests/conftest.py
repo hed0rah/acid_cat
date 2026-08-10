@@ -137,3 +137,32 @@ def corpus_or_fixture(name, small):
 
 # a plain WAV for the tests that just need real audio to point at
 CORPUS_WAV = corpus_or_fixture(os.path.join("generated", "src.wav"), "tone.wav")
+
+
+def have_tool(name):
+    """Is an external tool actually runnable?
+
+    subprocess.run RAISES FileNotFoundError when the binary is absent -- it does
+    not return a non-zero code. A guard written as `run(...); if returncode:
+    skip()` therefore never fires, and the test dies with a traceback instead of
+    skipping. That is exactly how CI went red on every platform at once: the
+    local machine has ffmpeg, the runners do not.
+
+    One helper, so the mistake has one place to live.
+    """
+    import shutil
+    import subprocess
+    if shutil.which(name) is None:
+        return False
+    try:
+        subprocess.run([name, "-version"], capture_output=True, timeout=30)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def requires_tool(name):
+    """Skip the calling test unless `name` is runnable."""
+    import pytest as _pytest
+    if not have_tool(name):
+        _pytest.skip(f"{name} not available")

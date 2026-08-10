@@ -49,11 +49,9 @@ def test_crc_changes_when_any_byte_changes():
 # ---------------------------------------------------------------- fixtures
 
 def _have(tool):
-    try:
-        subprocess.run([tool, "-version"], capture_output=True, timeout=20)
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
+    """One definition of "is this tool runnable", in conftest."""
+    from conftest import have_tool
+    return have_tool(tool)
 
 
 @pytest.fixture(scope="module")

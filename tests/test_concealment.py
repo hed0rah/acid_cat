@@ -204,13 +204,14 @@ def test_a_skipped_check_is_reported_but_not_counted(tmp_path):
     does not apply. Saying nothing would read as "clean"; counting it as a
     mismatch would make every 24-bit file a failure. It is named separately."""
     import subprocess
-    import sys
+    from conftest import requires_tool
+    requires_tool("ffmpeg")          # raises Skipped if absent; run() would raise
     src, deep = tmp_path / "s.wav", tmp_path / "deep.wav"
     _wav(src, music(n_sectors=14))
     conv = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src),
                            "-c:a", "pcm_s24le", str(deep)], capture_output=True)
     if conv.returncode != 0:
-        pytest.skip("ffmpeg not available")
+        pytest.skip("ffmpeg could not write 24-bit here")
     out = _audit(deep).stdout
     assert "NOT CHECKED" in out
     assert "24-bit" in out
