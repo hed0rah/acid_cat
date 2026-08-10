@@ -19,6 +19,7 @@ not a precondition.
 Complements `inspect --hex` (a value-first table); this is a bytes-first layout.
 """
 
+import os
 import sys
 from acidcat.util.color import add_color_arg, color_enabled
 
@@ -272,6 +273,13 @@ def _mark_summary(tags, on, covered, dumped):
 def _run(args):
     path = args.target
     on = color_enabled(args)
+    # A directory reaches _size() fine and only fails later, inside sniff, as a
+    # raw PermissionError on Windows or IsADirectoryError elsewhere -- the one
+    # uncaught traceback across 21 verbs x 4 kinds of bad input. `od` takes one
+    # file because its whole vocabulary is offsets into that file.
+    if path != "-" and os.path.isdir(path):
+        print(f"acidcat od: {path}: Is a directory", file=sys.stderr)
+        return 2
     try:
         rng = _requested_range(args, path, _size(path))
     except (ValueError, KeyError, OSError) as e:

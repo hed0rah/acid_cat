@@ -170,3 +170,16 @@ def test_inspect_signpost_quotes_awkward_filenames(tmp_path, capsys):
     main(["inspect", str(p)])
     err = capsys.readouterr().err
     assert 'acidcat od "xA1_mute + wire.ch1"' in err, "the suggestion is unquoted"
+
+
+def test_od_on_a_directory_says_so_instead_of_crashing(tmp_path):
+    """The only uncaught traceback found across 21 verbs and four kinds of bad
+    input. A directory passes _size() and only fails later inside sniff, as a
+    raw PermissionError on Windows or IsADirectoryError elsewhere."""
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, "-m", "acidcat", "od", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert "Traceback" not in r.stderr, r.stderr
+    assert "Is a directory" in r.stderr
+    assert r.returncode == 2
