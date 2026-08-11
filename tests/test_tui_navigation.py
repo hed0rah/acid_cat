@@ -269,3 +269,29 @@ def test_tab_still_cycles_once_the_zoom_is_off(wav):
             await pilot.pause()
             assert app._focused_pane() == "tree"
     _run(scenario)
+
+
+def test_the_map_key_declines_on_an_unwalked_file(tmp_path):
+    """`m` is a shown footer binding and early-returned when nothing parsed.
+
+    So on an unrecognised blob it changed nothing and said nothing, which is
+    indistinguishable from a broken build -- on exactly the files a person
+    opens this tool for. It could not join the table above because every
+    fixture there is a valid WAV with chunks.
+    """
+    from acidcat.tui_app.app import AcidcatTUI
+    p = tmp_path / "mystery.bin"
+    p.write_bytes(bytes(range(256)) * 8)          # no magic any walker claims
+
+    async def scenario():
+        app = AcidcatTUI(str(p))
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            assert not app.chunks, "specimen was walked, so this proves nothing"
+            notes = []
+            app.notify = lambda m, **kw: notes.append(str(m))
+            await pilot.press("m")
+            await pilot.pause()
+            assert any("no byte map" in n for n in notes), notes
+            assert len(app.screen_stack) == 1, "a map screen opened anyway"
+    _run(scenario)

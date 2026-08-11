@@ -52,6 +52,7 @@ from acidcat.tui_app.render import (
     edit_profile, hex_text, text_field_for, _read, _fuzzy, _hex_rows,
     row_width_for, trim_size_echo,
     _SPIN, _BAR_W, _HEX_CAP, _ROW_CAP, _CHUNK_CAP, _HEXEDIT_CAP, _UNDO_CAP, _VIZ_READ,
+    _SEARCH_CAP,
     _UNDO_BYTES_CAP, _DIFF_CAP, _LARGE_FILE, _SCAN_SEG,
 )
 from acidcat.tui_app.screens import (
@@ -1771,21 +1772,31 @@ class AcidcatTUI(App):
         if needle is not None:                       # raw-byte search
             with open(self.work, "rb") as f:
                 data = f.read()
-            hits, pos = [], data.find(needle)
-            while pos != -1 and len(hits) < 4096:
-                hits.append(("byte", pos, len(needle)))
+            # Count every occurrence; keep the first _SEARCH_CAP for cycling.
+            # data.find is memchr-class C, so counting the tail costs far less
+            # than the widget work already done, and it is the difference
+            # between "4096 match(es)" and the truth.
+            hits, total, pos = [], 0, data.find(needle)
+            while pos != -1:
+                total += 1
+                if len(hits) < _SEARCH_CAP:
+                    hits.append(("byte", pos, len(needle)))
                 pos = data.find(needle, pos + 1)
             desc = f"{len(needle)} byte(s)"
         else:                                        # fuzzy name/value search
             hits = [("node", n) for n, _o, _l in self._allnodes
                     if _fuzzy(text, self._node_name(n))]
+            total = len(hits)                        # the tree is already in hand
             desc = f"'{text}'"
         if not hits:
             self.notify(f"no match for {desc}", severity="warning")
             self._search = None
             return
-        self._search = {"desc": desc, "hits": hits, "idx": -1}
-        self.notify(f"{len(hits)} match(es) for {desc}; n/N to cycle")
+        self._search = {"desc": desc, "hits": hits, "idx": -1, "total": total}
+        # house shape: the true total, then what was actually listed
+        more = (f"; first {len(hits):,} of {total:,} reachable"
+                if total > len(hits) else "")
+        self.notify(f"{total:,} match(es) for {desc}{more}; n/N to cycle")
         self._search_step(1)
 
     @staticmethod
@@ -1812,7 +1823,10 @@ class AcidcatTUI(App):
             return
         s["idx"] = (s["idx"] + direction) % len(s["hits"])
         hit = s["hits"][s["idx"]]
-        pos = f"{s['idx'] + 1}/{len(s['hits'])}"
+        # "1/4096" reads as the total. A "+" says the cycle is a prefix of it.
+        total = s.get("total", len(s["hits"]))
+        pos = (f"{s['idx'] + 1}/{len(s['hits'])}"
+               + ("+" if total > len(s["hits"]) else ""))
         if hit[0] == "byte":
             self._jump_to_offset(hit[1], hit[2],
                                  f"match {pos} @ 0x{hit[1]:08x}  ({s['desc']})")
@@ -1858,39 +1872,51 @@ class AcidcatTUI(App):
         self.notify(f"yanked {len(blob)} bytes as hex -> {where}{note}")
 
     def _pending_changes(self):
-        """(regions, src_len, work_len): the changed byte regions between the
+        """(regions, src_len, work_len, total): changed byte regions between the
         working copy and the saved original, each (offset, old_bytes, new_bytes).
-        For a same-length file every differing run is listed; a length change is
-        reported as one region from the first difference (a text re-serialization
-        shifts the tail, so per-run diffing there is not meaningful)."""
+
+        `total` is how many regions EXIST; `regions` holds the first _DIFF_CAP of
+        them. The scan used to stop at _DIFF_CAP + 1 so the screen could print
+        ".. 1 more regions", which made 201 the largest number it could ever
+        report: 1,000 changed regions rendered as "201 region(s)". This is the
+        screen consulted before ctrl+s, so an accidental thousand-region
+        overwrite read as a two-hundred-region one.
+
+        A length change is reported as one region from the first difference (a
+        text re-serialization shifts the tail, so per-run diffing is not
+        meaningful there)."""
         try:
             with open(self.work, "rb") as f:
                 work = f.read()
             with open(self.src, "rb") as f:
                 src = f.read()
         except OSError:
-            return [], 0, 0
+            return [], 0, 0, 0
         if len(src) != len(work):
             start, o, n = self._minimal_delta(src, work)
-            return ([(start, o, n)] if o != n else []), len(src), len(work)
+            regions = [(start, o, n)] if o != n else []
+            return regions, len(src), len(work), len(regions)
         regions = []
+        total = 0
         i = 0
-        while i < len(src) and len(regions) < _DIFF_CAP + 1:
+        while i < len(src):
             if src[i] != work[i]:
                 j = i
                 while j < len(src) and src[j] != work[j]:
                     j += 1
-                regions.append((i, src[i:j], work[i:j]))
+                total += 1
+                if len(regions) < _DIFF_CAP:
+                    regions.append((i, src[i:j], work[i:j]))
                 i = j
             else:
                 i += 1
-        return regions, len(src), len(work)
+        return regions, len(src), len(work), total
 
     def action_diff(self):
         if not self.work:
             return
-        regions, sl, wl = self._pending_changes()
-        self.push_screen(DiffScreen(regions, sl, wl))
+        regions, sl, wl, total = self._pending_changes()
+        self.push_screen(DiffScreen(regions, sl, wl, total))
 
     def _byte_map(self):
         """(segments, unaccounted): the file's top-level byte regions biggest
@@ -1916,6 +1942,11 @@ class AcidcatTUI(App):
 
     def action_map(self):
         if not self.chunks:
+            # `m` is a shown footer binding, so returning in silence made it
+            # indistinguishable from a broken build on exactly the files a
+            # person opens the TUI for -- the unrecognised ones.
+            self.notify(f"no byte map: nothing was parsed out of this file "
+                        f"({self.fmt})", severity="warning")
             return
         segs, un = self._byte_map()
         self.push_screen(MapScreen(segs, self.fsize, un))

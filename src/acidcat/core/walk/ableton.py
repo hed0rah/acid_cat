@@ -218,20 +218,32 @@ def inspect_asd(filepath):
 
         marks = abmod.warp_markers(raw, h["order"])
         if marks:
-            bpm = abmod.derived_tempo(marks)
+            # Every span, not the first. Warp markers exist to encode tempo that
+            # MOVES, so a clip warped 120 / 60 / 200 has three answers and
+            # reporting 120 as "the" tempo is a confident wrong one.
+            spans = abmod.derived_tempos(marks)
+            bpm = spans[0] if spans else None
+            lo, hi = (min(spans), max(spans)) if spans else (None, None)
+            varies = spans and (hi - lo) > 0.05      # ignore rounding jitter
+            tempo_txt = (f"{lo:g}-{hi:g} BPM over {len(spans)} spans"
+                         if varies else (f"{bpm:g} BPM" if bpm else ""))
             wf = [_f(0, 4, "count", len(marks), "warp markers")]
             for m in marks[:8]:
                 wf.append(_f(0, 16, f"marker[{m['id']}]",
                              f"{m['sec']:.6f} s = beat {m['beat']:g}"))
             if bpm:
-                wf.append(_f(0, 0, "derived_tempo", f"{bpm:g} BPM",
-                             "beats per second between two markers x 60; Live "
-                             "stores this mapping, not the number"))
+                note = ("beats per second between two markers x 60; Live "
+                        "stores this mapping, not the number")
+                if varies:
+                    note = (f"tempo MOVES across this clip: {len(spans)} spans "
+                            f"from {lo:g} to {hi:g} BPM. Live stores this "
+                            f"mapping, not a number")
+                wf.append(_f(0, 0, "derived_tempo", tempo_txt, note))
             chunks.append({
                 "id": "warp", "offset": raw.find(abmod.WARP_MARKER_NAME),
                 "size": len(marks) * abmod.WARP_MARKER_SIZE,
                 "summary": (f"{len(marks)} warp marker(s)"
-                            + (f", {bpm:g} BPM" if bpm else "")),
+                            + (f", {tempo_txt}" if tempo_txt else "")),
                 "fields": wf, "warnings": [],
                 "payload_base": raw.find(abmod.WARP_MARKER_NAME),
             })

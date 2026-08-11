@@ -18,6 +18,16 @@ import pytest
 from acidcat.tui_app.app import AcidcatTUI
 
 
+def _run_capture(coro_factory):
+    """asyncio.run for a scenario that returns a value.
+
+    The module's `_run` discards the return, and three tests already repeat the
+    notify-capture idiom by hand; this keeps the new ones from being a fourth
+    copy.
+    """
+    return asyncio.run(coro_factory())
+
+
 def _run(coro_factory):
     asyncio.run(coro_factory())
 
@@ -271,3 +281,129 @@ def test_the_hidden_chunks_are_counted_and_reachable(tmp_path):
     named, before, after = asyncio.run(go())
     assert named, "the hidden chunks are not named, so the tree looks complete"
     assert after > before, f"+ did not extend the chunk budget ({before} -> {after})"
+
+
+# ── a cap must never be reported as the answer ──────────────────────
+
+def _repeated_byte_wav(path, n=100_000, value=0x41):
+    """A WAV whose payload is one byte repeated, so the match count is known."""
+    import struct
+    pcm = bytes([value]) * n
+    body = (b"WAVE" + b"fmt "
+            + struct.pack("<IHHIIHH", 16, 1, 1, 44100, 44100, 1, 8)
+            + b"data" + struct.pack("<I", len(pcm)) + pcm)
+    path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+    return str(path)
+
+
+def test_byte_search_reports_the_true_match_count(tmp_path):
+    """The loop stopped at a bare literal 4096 and the notify printed
+    len(hits), so 100,000 matches reported as "4096 match(es)" and n/N wrapped
+    at 4096 with the rest of the file unreachable and unmentioned.
+
+    This was the only cap in the app that was neither named nor disclosed.
+    """
+    from acidcat.tui_app.app import AcidcatTUI
+    from acidcat.tui_app.render import _SEARCH_CAP
+    p = _repeated_byte_wav(tmp_path / "many.wav")
+
+    async def scenario():
+        app = AcidcatTUI(p)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            notes = []
+            app.notify = lambda m, **kw: notes.append(str(m))
+            app._run_search("0x41")
+            await pilot.pause()
+            state = app._search
+            await pilot.press("q")
+        return notes, state
+
+    notes, state = _run_capture(scenario)
+    assert state["total"] > _SEARCH_CAP, "specimen no longer exceeds the cap"
+    assert len(state["hits"]) == _SEARCH_CAP
+    said = " ".join(notes)
+    assert f"{state['total']:,} match(es)" in said, said
+    assert "reachable" in said, said
+
+
+def test_a_search_under_the_cap_says_nothing_extra(tmp_path):
+    """The hedge must not fire when nothing was hidden."""
+    from acidcat.tui_app.app import AcidcatTUI
+    p = _repeated_byte_wav(tmp_path / "few.wav", n=10)
+
+    async def scenario():
+        app = AcidcatTUI(p)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            notes = []
+            app.notify = lambda m, **kw: notes.append(str(m))
+            app._run_search("0x41")
+            await pilot.pause()
+            await pilot.press("q")
+        return notes, None
+
+    notes, _ = _run_capture(scenario)
+    assert notes and "reachable" not in " ".join(notes), notes
+
+
+def test_pending_changes_counts_every_region(tmp_path):
+    """_pending_changes stopped at _DIFF_CAP + 1 so the screen could print
+    ".. 1 more regions", which made 201 the largest number it could ever
+    report. 1,000 changed regions rendered as "201 region(s)" on the one screen
+    a person consults before overwriting their file.
+    """
+    from acidcat.tui_app.app import AcidcatTUI
+    from acidcat.tui_app.render import _DIFF_CAP
+    src = _repeated_byte_wav(tmp_path / "edit.wav", n=8000, value=0x00)
+
+    async def scenario():
+        app = AcidcatTUI(src)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            # 1,000 isolated single-byte changes in the working copy
+            with open(app.work, "rb") as f:
+                buf = bytearray(f.read())
+            start = len(buf) - 6000
+            for k in range(1000):
+                buf[start + k * 4] ^= 0xFF
+            with open(app.work, "wb") as f:
+                f.write(bytes(buf))
+            out = app._pending_changes()
+            await pilot.press("q")
+        return out, None
+
+    (regions, _sl, _wl, total), _ = _run_capture(scenario)
+    assert total == 1000, f"reported {total} regions, planted 1000"
+    assert len(regions) == _DIFF_CAP, "the list should still be capped"
+
+
+def test_the_diff_screen_prints_the_true_region_count(monkeypatch):
+    """The other half of the pending-changes fix: the app now computes a true
+    total, and the screen has to render it rather than len(the capped list).
+
+    Composed directly instead of driven, because the count is a property of the
+    text and not of the interaction.
+    """
+    from acidcat.tui_app import screens as S
+    from acidcat.tui_app.render import _DIFF_CAP
+
+    class _Ctx:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(S, "Vertical", lambda **kw: _Ctx())
+    monkeypatch.setattr(S, "Static", lambda t: t)
+    regions = [(i * 4, b"\x00\x00", b"\x01\x01") for i in range(_DIFF_CAP)]
+
+    out = list(S.DiffScreen(regions, 8000, 8000, total=1000).compose())[0]
+    txt = out.plain if hasattr(out, "plain") else str(out)
+    assert "1,000 region(s)" in txt, txt.splitlines()[:2]
+    assert f"listing the first {_DIFF_CAP:,}" in txt
+    assert "800 more regions" in txt
+
+    # and no hedge when the cap did not bite
+    out = list(S.DiffScreen(regions, 8000, 8000, total=_DIFF_CAP).compose())[0]
+    txt = out.plain if hasattr(out, "plain") else str(out)
+    assert "listing the first" not in txt
+    assert "more regions" not in txt

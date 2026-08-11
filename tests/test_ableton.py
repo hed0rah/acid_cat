@@ -750,3 +750,61 @@ def test_amxd_trailing_data_is_reported_even_when_something_else_is_wrong(tmp_pa
         p.write_bytes(blob)
         _chunks, warns = walker.inspect_amxd(str(p))
         assert any("chain ends" in w for w in warns), f"{name}: {warns}"
+
+
+# ── a tempo that moves must not report as a tempo that does not ──────────
+
+def _spanned(*pairs):
+    """Markers from (seconds, beats) pairs, ids in a run from zero."""
+    return [{"id": i, "sec": s, "beat": b} for i, (s, b) in enumerate(pairs)]
+
+
+def test_every_warp_span_is_measured_not_just_the_first():
+    """Warp markers exist to encode tempo that MOVES.
+
+    derived_tempo returned on the first usable pair, so a clip warped
+    120 / 60 / 200 reported "120 BPM" in both the field and the chunk summary
+    with nothing hinting the other spans existed. The field's own note said
+    "between two markers", which was accurate about the mechanism and
+    misleading about the answer.
+    """
+    # 2 beats in 1 s = 120 BPM; then 1 beat in 1 s = 60; then 1 beat in 0.3 s
+    marks = _spanned((0.0, 0.0), (1.0, 2.0), (2.0, 3.0), (2.3, 4.0))
+    spans = ab.derived_tempos(marks)
+    assert len(spans) == 3
+    assert spans[0] == pytest.approx(120.0)
+    assert spans[1] == pytest.approx(60.0)
+    assert spans[2] == pytest.approx(200.0)
+
+
+def test_a_steady_clip_still_reports_one_number():
+    """The hedge must not fire on a clip whose tempo does not move, or it
+    becomes noise on the ordinary case and stops being read."""
+    marks = _spanned((0.0, 0.0), (1.0, 2.0), (2.0, 4.0))
+    spans = ab.derived_tempos(marks)
+    assert spans == [120.0, 120.0]
+    assert max(spans) - min(spans) < 0.05
+
+
+def test_derived_tempo_still_returns_a_single_number():
+    """The old entry point keeps working for callers that want one value."""
+    marks = _spanned((0.0, 0.0), (1.0, 2.0), (2.0, 3.0))
+    assert ab.derived_tempo(marks) == pytest.approx(120.0)
+    assert ab.derived_tempo([{"id": 0, "sec": 0.0, "beat": 0.0}]) is None
+
+
+def test_a_varying_clip_renders_a_range(tmp_path):
+    """End to end: the walker must show the movement, not the first span."""
+    body = b"".join(_marker(i, s, b) for i, (s, b) in enumerate(
+        [(0.0, 0.0), (1.0, 2.0), (2.0, 3.0), (2.3, 4.0)]))
+    p = tmp_path / "vari.wav.asd"
+    p.write_bytes(build_asd(grid_for(44100, 2.0), tail=body))
+    chunks, _warns = walker.inspect_asd(str(p))
+    warp = [c for c in chunks if c["id"] == "warp"]
+    if not warp:
+        pytest.skip("the synthetic marker array was not recognised")
+    summary = warp[0]["summary"]
+    assert "BPM" in summary
+    assert "-" in summary and "spans" in summary, summary
+    field = [f for f in warp[0]["fields"] if f["name"] == "derived_tempo"][0]
+    assert "MOVES" in field["note"], field["note"]
