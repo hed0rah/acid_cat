@@ -35,6 +35,18 @@ shape being fixed while it is still free to fix.
 
 ### Added
 
+- **A ledger of every bound in the tree, and a conservation law over directory
+  verbs.** Nine instances of one defect were fixed by hand this cycle: a cap
+  applied, and the shortened result presented as the whole answer. These are the
+  mechanism for the tenth. Every module-level constant whose name claims it
+  bounds something must sit in exactly one bucket -- swept by a test, exempt
+  with a reason from a closed set, or recorded as debt that may only shrink --
+  so a new cap cannot be added without someone deciding which. Separately, every
+  file handed to a directory verb must land in a named bucket and be counted:
+  `validate` is asserted to account for all of them, and the twelve verbs that
+  do not yet are listed rather than forgotten. The ledger found two constants on
+  its first run that had been missed while building its own list by hand.
+
 - **`validate --deep` verifies the checksums a format carries about itself.**
   FLAC frame CRC-8 and CRC-16, and MP3 frame validity. Neither needs a decoder.
   A failure is proof rather than inference. acidcat previously parsed FLAC's
@@ -59,6 +71,18 @@ shape being fixed while it is still free to fix.
   detecting it would mean a false positive on roughly six files in ten.
 
 ### Fixed
+
+- **Four places a cap, or a first answer, was reported as the answer.** The TUI
+  byte search stopped at an undisclosed 4,096 and printed that as the match
+  count, so 100,000 matches read as 4,096 with the rest of the file unreachable
+  and unmentioned. The pending-changes screen -- the one consulted before a save
+  -- stopped its scan at 201 so it could print ".. 1 more regions", making 201
+  the largest number it could ever report: 1,000 changed regions rendered as
+  201. Ableton's `derived_tempo` returned the first warp span, so a clip warped
+  120 / 60 / 200 reported 120 with nothing saying the tempo moved, in a format
+  whose warp markers exist precisely to encode tempo that moves. And `m` in the
+  TUI did nothing and said nothing on an unrecognised file, which is
+  indistinguishable from a broken build on exactly the files the tool is for.
 
 - **Anomaly checks dispatched on the display label, so renaming a string could
   turn a check off.** Seven checks branched on the walker's human-readable
