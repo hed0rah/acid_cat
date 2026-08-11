@@ -11,6 +11,7 @@ is not indexed. Fans out across every registered library.
 import os
 import sys
 
+from acidcat.util.argtypes import nonneg_int
 from acidcat.core.catalogue import paths as acidpaths
 from acidcat.commands._output import add_output_format_arg
 from acidcat.core.catalogue import registry as reg
@@ -26,7 +27,7 @@ def register(subparsers):
         "similar",
         help="Find samples similar to a reference file (over the index).")
     p.add_argument("target", help="Reference audio file.")
-    p.add_argument("-n", "--num", type=int, default=5, dest="num",
+    p.add_argument("-n", "--num", type=nonneg_int, default=5, dest="num",
                    help="Number of results (default 5).")
     p.add_argument("--kind", choices=["loop", "one_shot", "any"],
                    help="Filter candidates by kind (default: the target's own "

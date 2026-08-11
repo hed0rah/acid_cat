@@ -524,11 +524,12 @@ def _extract_and_store_features(conn, filepath, path_key, quiet=False):
     except ImportError:
         if not quiet:
             print("  [features] librosa not installed; skipping", file=sys.stderr)
-        return
+        return False
     feats = extract_audio_features(filepath)
     if feats is None:
-        return
+        return False          # no vector stored; the caller counts this
     idx.upsert_features(conn, path_key, feats)
+    return True
 
 
 # ── parallel feature extraction ─────────────────────────────────────
@@ -582,8 +583,14 @@ def _extract_features_parallel(conn, queue, quiet=False, jobs=None):
     # each spawned worker pays a one-time librosa/numba cold start (seconds); only
     # worth it when there is enough work to amortize it across the pool.
     if workers <= 1 or n < 2 * workers:
+        stored = 0
         for filepath, path_key in queue:
-            _extract_and_store_features(conn, filepath, path_key, quiet=quiet)
+            if _extract_and_store_features(conn, filepath, path_key, quiet=quiet):
+                stored += 1
+        if not quiet and stored < n:
+            print(f"  [features] {stored}/{n} stored; {n - stored} produced no "
+                  f"features (unreadable, too short, or decode failed)",
+                  file=sys.stderr)
         return
 
     import multiprocessing as mp
@@ -592,10 +599,12 @@ def _extract_features_parallel(conn, queue, quiet=False, jobs=None):
     since_commit = 0
     if not quiet:
         print(f"  [features] extracting {n} files on {workers} workers...", file=sys.stderr)
+    stored = 0
     with ctx.Pool(workers, initializer=_feature_worker_init) as pool:
         for path_key, feats in pool.imap_unordered(_feature_worker, queue, chunksize=1):
             if feats is not None:
                 idx.upsert_features(conn, path_key, feats)
+                stored += 1
             done += 1
             since_commit += 1
             if since_commit >= _COMMIT_EVERY_N_FILES:
@@ -604,6 +613,14 @@ def _extract_features_parallel(conn, queue, quiet=False, jobs=None):
             if not quiet and (done % 50 == 0 or done == n):
                 print(f"  [features] {done}/{n}", file=sys.stderr)
     conn.commit()
+    # `done` counts files ATTEMPTED, and it was the only number printed -- so a
+    # run where a fifth of the files produced no vector still ended "600/600"
+    # and read as complete. `similar` then searches a library the user believes
+    # was fully indexed. The gap is named, not inferred from a later count.
+    if not quiet and stored < n:
+        print(f"  [features] {stored}/{n} stored; {n - stored} produced no "
+              f"features (unreadable, too short, or decode failed)",
+              file=sys.stderr)
 
 
 def _refuses_as_root(path):

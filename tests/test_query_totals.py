@@ -391,3 +391,70 @@ def test_a_healthy_fanout_says_nothing(two_libs):
     assert len(r.stdout.strip().splitlines()) == 2
     assert "not searched" not in r.stderr
     assert "could not be searched" not in r.stderr
+
+
+# ── a limit that is not a limit, and work that did not happen ───────
+
+@pytest.mark.parametrize("verb,flag", [("query", "--limit"), ("similar", "-n")])
+def test_a_negative_limit_is_rejected(two_libs, verb, flag):
+    """SQLite reads LIMIT -1 as unlimited and Python reads rows[:-1] as
+    all-but-the-last, so a negative limit fetched everything and dropped one
+    row: 381 of 382 matches, no error, no indication. The single missing row is
+    what makes it worth rejecting -- a wrong answer wearing the shape of a
+    right one.
+
+    The MCP layer already guarded this and documented the hazard in its own
+    docstring. The CLI beside it never got the guard, so the same input was an
+    error through one face of the tool and silent loss through the other.
+    """
+    env, _home = two_libs
+    args = [verb, flag, "-1"]
+    if verb == "similar":
+        args.append(str(pathlib.Path(__file__).parent.parent / "data" /
+                        "test_formats" / "gs-16b-2c-44100hz.wav"))
+    r = subprocess.run([sys.executable, "-m", "acidcat", *args],
+                       capture_output=True, text=True, env=env)
+    assert r.returncode == 2, f"rc={r.returncode}\n{r.stdout}{r.stderr}"
+    assert "zero or positive" in r.stderr, r.stderr
+
+
+def test_zero_is_still_a_valid_limit(two_libs):
+    """Zero means zero, and asking for no rows is a real request. Rejecting it
+    alongside negatives would break the "just tell me the count" case."""
+    env, _home = two_libs
+    r = subprocess.run([sys.executable, "-m", "acidcat", "query", "--format",
+                        "wav", "--paths-only", "--limit", "0"],
+                       capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == ""
+
+
+def test_feature_extraction_reports_what_it_could_not_do(tmp_path_factory):
+    """The progress counter counted files ATTEMPTED and was the only number
+    printed, so a run where a fifth produced no vector still ended "600/600"
+    and read as complete. `similar` then searches a library the user believes
+    was fully indexed.
+    """
+    pytest.importorskip("librosa")
+    base = tmp_path_factory.mktemp("ft")
+    home, corpus = base / "home", base / "c"
+    corpus.mkdir()
+    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
+        "gs-16b-2c-44100hz.wav"
+    if not src.exists():
+        pytest.skip("no wav specimen")
+    (corpus / "good.wav").write_bytes(src.read_bytes())
+    # structurally valid, no decodable audio
+    body = (b"WAVE" + b"fmt "
+            + struct.pack("<IHHIIHH", 16, 1, 2, 44100, 176400, 4, 16)
+            + b"data" + struct.pack("<I", 0))
+    for name in ("empty.wav", "empty2.wav"):
+        (corpus / name).write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+
+    env = dict(os.environ, ACIDCAT_HOME=str(home))
+    r = subprocess.run([sys.executable, "-m", "acidcat", "index", str(corpus),
+                        "--label", "ft", "--features"],
+                       capture_output=True, text=True, env=env, timeout=900)
+    assert r.returncode == 0, r.stderr
+    assert "produced no features" in r.stderr, (
+        f"the files that yielded nothing left no trace:\n{r.stderr}")
