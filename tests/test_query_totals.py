@@ -246,3 +246,69 @@ def test_a_forward_version_db_is_a_message_not_a_bug_report(tmp_path_factory):
         assert "this is a bug" not in r.stderr, f"{argv}:\n{r.stderr}"
         assert "schema_version 9" in r.stderr, f"{argv}:\n{r.stderr}"
         assert r.returncode == 2, f"{argv}: rc={r.returncode}"
+
+
+# ── find_compatible must not lose matches to its own prefilter ──────
+
+def _keys_library(tmp_path, n_decoys=250, n_matches=5):
+    """A library where the non-matching keys are inserted FIRST.
+
+    Insertion order is what a LIMIT with no ORDER BY keeps, so this is the
+    layout that exposes the bug -- and it is not contrived: samples land in a
+    library in whatever order the walk found them.
+    """
+    from acidcat.core.catalogue import index as idx
+    db = tmp_path / "lib.db"
+    conn = idx.open_db(str(db))
+    rows = [(f"/x/g{i:03d}_128bpm_Gm.wav", "Gm") for i in range(n_decoys)]
+    rows += [(f"/x/m{i}_128bpm_Am.wav", "Am") for i in range(n_matches)]
+    for path, key in rows:
+        conn.execute(
+            "INSERT OR REPLACE INTO samples (path,bpm,key,duration,acid_beats,"
+            "format) VALUES (?,128.0,?,4.0,8,'wav')", (path, key))
+    conn.commit()
+    conn.close()
+    return [{"label": "keys", "db_path": str(db), "root_path": "/x"}]
+
+
+def test_compatible_matches_are_not_lost_behind_the_prefilter(tmp_path):
+    """Key compatibility is decided in Python, AFTER the SQL fetch.
+
+    A row cap in that SQL therefore discards candidates before anything has
+    looked at their key, and with no ORDER BY the survivors are whatever
+    insertion order gives. 250 G minor samples at 128 bpm inserted ahead of 5
+    A minor ones returned zero matches for an A minor reference, while the
+    caller had asked for 20 -- so the number returned was not a limit artifact,
+    it was simply wrong.
+    """
+    from acidcat.core.catalogue import search
+    libs = _keys_library(tmp_path)
+    got = search.find_compatible(libs, key="Am", bpm=128.0, kind="loop",
+                                 limit=20, exclude_path="/x/ref.wav")
+    assert len(got) == 5, (
+        f"expected all 5 A-minor matches, got {len(got)}: "
+        f"{[os.path.basename(r['path']) for r in got]}")
+    assert all("Am" in os.path.basename(r["path"]) for r in got)
+
+
+def test_the_prefilter_does_not_depend_on_insertion_order(tmp_path):
+    """The same library, decoys inserted after instead of before, must give the
+    same answer. If it does not, an ORDER BY is doing the work a filter should."""
+    from acidcat.core.catalogue import search
+    from acidcat.core.catalogue import index as idx
+    db = tmp_path / "rev.db"
+    conn = idx.open_db(str(db))
+    for i in range(5):
+        conn.execute("INSERT OR REPLACE INTO samples (path,bpm,key,duration,"
+                     "acid_beats,format) VALUES (?,128.0,'Am',4.0,8,'wav')",
+                     (f"/x/m{i}_Am.wav",))
+    for i in range(250):
+        conn.execute("INSERT OR REPLACE INTO samples (path,bpm,key,duration,"
+                     "acid_beats,format) VALUES (?,128.0,'Gm',4.0,8,'wav')",
+                     (f"/x/g{i:03d}_Gm.wav",))
+    conn.commit()
+    conn.close()
+    libs = [{"label": "rev", "db_path": str(db), "root_path": "/x"}]
+    got = search.find_compatible(libs, key="Am", bpm=128.0, kind="loop",
+                                 limit=20, exclude_path="/x/ref.wav")
+    assert len(got) == 5, f"order-dependent result: {len(got)}"

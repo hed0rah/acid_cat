@@ -97,6 +97,9 @@ def compatible_codes(key, include_relative=True, same_key_only=False):
     return out
 
 
+_CANDIDATE_CAP = 100_000     # safety net only; announced when reached
+
+
 def find_compatible(libs, *, key=None, bpm=None, kind="any", bpm_tol=0.06,
                     half_double=True, same_key_only=False, include_relative=True,
                     min_duration=None, limit=50, exclude_path=None):
@@ -133,7 +136,21 @@ def find_compatible(libs, *, key=None, bpm=None, kind="any", bpm_tol=0.06,
     sql = "SELECT s.* FROM samples s"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += f" LIMIT {max(limit * 4, 200)}"       # over-fetch; Python scores + sorts
+    # No `LIMIT limit * 4`. Key compatibility is decided in PYTHON, after this
+    # query, so a SQL row cap discards candidates before anything has looked at
+    # their key -- and with no ORDER BY, which ones survive is rowid order,
+    # i.e. insertion order. A library holding 250 samples at 128 bpm in G minor
+    # inserted before 5 at 128 bpm in A minor returned ONE match for an A minor
+    # reference instead of six, and the caller had asked for 20.
+    #
+    # The docstring above claimed the opposite ("never truncated behind an
+    # in-band non-match"), which is what the over-fetch was meant to buy. It
+    # bought four times the requested count, not four times the near-miss rate.
+    #
+    # The WHERE clause already narrows to the BPM windows and the kind, so the
+    # candidate set is small in practice. The remaining bound is a safety net
+    # against a pathological library, and it reports when it bites.
+    sql += f" LIMIT {_CANDIDATE_CAP + 1}"
 
     def evaluate(rkey, rbpm):
         key_rel = None
