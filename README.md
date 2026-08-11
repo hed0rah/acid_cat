@@ -202,6 +202,28 @@ never examined:
     acidcat locate disk.img --json | acidcat carve disk.img --batch - -o out/ \
       || echo "nothing recovered"                    # a real answer either way
 
+A bounded run is not a failed one. When a read window, a list cap or a filter
+stops a verb short, it says so **on stderr** and exits by what it actually
+found. `scan DIR -n 5` that hits the cap still exits `0`; the sentence naming
+the cap is on stderr so it cannot corrupt the records on stdout. Silence is the
+claim of completeness: a caveat appears only when a bound was actually reached,
+never as a standing note that one exists.
+
+## Machine-readable output
+
+`--output-format json|csv|tsv` (or `--json` / `--csv`) writes records to stdout
+and everything else to stderr, so a truncated run stays parseable and a summary
+sentence can never turn a document into `Extra data`.
+
+Two compatibility rules, so scripts written against 1.0 keep working:
+
+- **A JSON object may gain new keys in any release.** Consumers must ignore keys
+  they do not recognise. Removing or renaming a key is a breaking change.
+- **A top-level JSON array stays an array.** Verbs that emit a list of records
+  will not be wrapped in an envelope, because `jq '.[]'` and `[0]` are the
+  reason the list shape was chosen. Run-level facts that have no record to live
+  on go to stderr instead.
+
 ## Dependency Groups
 
 | Group | What it adds | Commands enabled |

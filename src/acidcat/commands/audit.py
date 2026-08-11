@@ -203,7 +203,14 @@ def _gather(path, signal=False):
 # skipped must be shown -- silence would read as "clean" -- but counting it as a
 # mismatch turns every 24-bit file into a failure, which is a cap reported as a
 # fact about the file.
-_NOT_A_FINDING = ("not-applicable",)
+# "check-failed" joins "not-applicable" here, and the distinction is the point:
+# both mean acidcat did not produce a verdict, neither means the FILE has
+# something wrong with it. A check that crashed is our infrastructure failing,
+# and charging it to the file made `audit f || quarantine f` quarantine a clean
+# file because our own analyser raised. Both still print as NOT CHECKED, so the
+# gap stays visible; it is only the exit code and the mismatch count that stop
+# blaming the file for it.
+_NOT_A_FINDING = ("not-applicable", "check-failed")
 
 
 def _real_findings(integ):
