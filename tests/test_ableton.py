@@ -656,3 +656,97 @@ def test_an_unmapped_ableton_document_reports_its_root_child(tmp_path):
     chunks, _ = walker.inspect_ableton_xml(str(p), ab.sniff_gzip_ableton(str(p)))
     named = {f["name"]: f["value"] for f in chunks[0]["fields"]}
     assert named.get("root_child") == "SomeFutureThing"
+
+
+# ── claims must not outrun the bytes that support them ──────────────
+
+def _asd(count, frames, order="<", grid=None):
+    """A minimal .asd: marker, byte order, count, reserved, then the grid."""
+    import struct
+    head = bytes([0x06]) + (b"I" if order == "<" else b"M") \
+        + struct.pack(order + "I", count) + struct.pack(order + "I", 0)
+    if grid is None:
+        step = max(1, frames // max(1, count - 1))
+        grid = [min(frames, i * step) for i in range(count - 1)]
+        if grid:
+            grid[-1] = frames
+    return head + b"".join(struct.pack(order + "I", g) for g in grid)
+
+
+def test_a_truncated_grid_reports_a_lower_bound_not_a_duration(tmp_path):
+    """The grid ends early, so its last position describes the bytes PRESENT,
+    not the audio. Printed plain, a 60 s source read as 15 s -- wrong by 4x and
+    stated as a fact, with the truncation warning sitting somewhere else where
+    it cannot catch a number already asserted.
+    """
+    full = _asd(2001, 2_646_000)
+    p = tmp_path / "t.wav.asd"
+    p.write_bytes(full[:10 + 500 * 4])          # keep a quarter of the grid
+    chunks, warns = walker.inspect_asd(str(p))
+    grid = [c for c in chunks if c["id"] == "grid"][0]
+    assert "LOWER BOUND" in grid["summary"], grid["summary"]
+    dur = [f for f in grid["fields"] if f["name"] == "duration"]
+    assert dur and "LOWER BOUND" in dur[0]["note"], dur
+    last = [f for f in grid["fields"] if f["name"] == "last_position"][0]
+    assert "lower bound" in last["note"].lower(), last["note"]
+    assert any("claims" in w for w in warns)
+
+
+def test_a_complete_grid_still_states_the_duration_plainly(tmp_path):
+    """The hedge must not fire on a whole file, or it stops meaning anything."""
+    p = tmp_path / "ok.wav.asd"
+    p.write_bytes(_asd(2001, 2_646_000))
+    chunks, _warns = walker.inspect_asd(str(p))
+    grid = [c for c in chunks if c["id"] == "grid"][0]
+    assert "LOWER BOUND" not in grid["summary"], grid["summary"]
+    last = [f for f in grid["fields"] if f["name"] == "last_position"][0]
+    assert "equals the source audio" in last["note"]
+
+
+def test_no_object_tree_is_not_claimed_beside_chunks_read_from_one(tmp_path):
+    """The field-name scan is one way into the object tree; warp markers,
+    onsets and the overview trailer each have their own detector further down.
+    Deciding the verdict before those ran printed "there is no object tree in
+    it" directly above 400 warp markers read out of that tree."""
+    import re
+    import inspect as _inspect
+    from acidcat.core.walk import ableton as abwalk
+    src = _inspect.getsource(abwalk.inspect_asd)
+    # the EMIT site, not any mention: the comment above it says the phrase too
+    m = re.search(r"warns\.append\([\s\S]{0,40}?this sidecar carries only", src)
+    assert m, "the no-object-tree warning is gone entirely"
+    warn_at = m.start()
+    for detector in ("warp", "onsets", "overview"):
+        at = src.index(f'"id": "{detector}"')
+        assert at < warn_at, (
+            f"the {detector} chunk is appended AFTER the no-object-tree "
+            f"verdict, so the verdict cannot see it")
+
+
+def test_amxd_magic_is_read_from_the_file(tmp_path):
+    """A field table is the one place a reader trusts to show actual bytes. It
+    printed the literal "ampf" whatever the file held, while a warning two
+    lines away said the magic was missing."""
+    import struct
+    p = tmp_path / "bad.amxd"
+    p.write_bytes(b"XXXX" + struct.pack("<I", 1) + b"aaaa")
+    chunks, warns = walker.inspect_amxd(str(p))
+    magic = [f for c in chunks for f in c["fields"] if f["name"] == "magic"]
+    assert magic and magic[0]["value"] == "XXXX", magic
+    assert any("magic" in w for w in warns)
+
+
+def test_amxd_trailing_data_is_reported_even_when_something_else_is_wrong(tmp_path):
+    """Gating the trailing-data check on `not warns` meant any unrelated
+    warning suppressed it, so appended bytes went unreported precisely on the
+    files that already looked anomalous. Backwards for a forensics tool."""
+    import struct
+    tail = b"TRAIL!"
+    good = (b"ampf" + struct.pack("<I", 1) + b"aaaa"
+            + b"ptch" + struct.pack("<I", 4) + b"{}  ")
+    for name, blob in (("good.amxd", good + tail),
+                       ("bad.amxd", b"XXXX" + good[4:] + tail)):
+        p = tmp_path / name
+        p.write_bytes(blob)
+        _chunks, warns = walker.inspect_amxd(str(p))
+        assert any("chain ends" in w for w in warns), f"{name}: {warns}"

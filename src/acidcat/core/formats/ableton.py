@@ -621,9 +621,17 @@ def root_child(xml_head):
 
 
 def header_attributes(xml_head):
-    """Attributes of the root <Ableton> element, as a dict of str."""
+    """Attributes of the root <Ableton> element, or None if there is no such
+    element.
+
+    None and {} are different answers. This returned {} for both "no <Ableton>
+    element" and "the element is there and carries no attributes", so the
+    caller warned "no <Ableton> root element found" about documents whose root
+    element it had just parsed the child of -- the same output both reporting
+    and denying the element's existence.
+    """
     m = re.search(rb"<Ableton\b([^>]*)>", xml_head)
     if not m:
-        return {}
+        return None
     return {k.decode("ascii"): v.decode("utf-8", "replace")
             for k, v in _ATTR.findall(m.group(1))}

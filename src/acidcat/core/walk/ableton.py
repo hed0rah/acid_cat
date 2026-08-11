@@ -116,6 +116,13 @@ def inspect_asd(filepath):
                      "rate; the rate could not be inferred")
     else:
         approx = "" if h["rate_exact"] else " (lower bound -- grid never hit the cap)"
+        # A truncated grid ends early, so total_frames and the duration derived
+        # from it describe the bytes PRESENT, not the audio. Printing them plain
+        # made a 60 s source read as 15 s -- wrong by 4x, stated as a fact, with
+        # the truncation warning sitting elsewhere where it cannot catch up with
+        # a number already asserted.
+        if h["truncated"]:
+            approx = " (LOWER BOUND -- grid is truncated, audio ran longer)"
         grid_summary = (f"{len(h['frames']):,} positions over {h['total_frames']:,} "
                         f"frames = {dur:.3f} s at {rate:,} Hz{approx}")
 
@@ -124,7 +131,9 @@ def inspect_asd(filepath):
            "frames"),
         _f(max(0, len(h["frames"]) - 1) * 4, 4, "last_position",
            f"{h['total_frames']:,}",
-           "equals the source audio's total frame count"),
+           ("last position PRESENT; the grid is truncated, so this is a lower "
+            "bound rather than the source's frame count") if h["truncated"]
+           else "equals the source audio's total frame count"),
     ]
     if h["max_step"]:
         grid_fields.append(_f(0, 0, "max_step", f"{h['max_step']:,} frames",
@@ -135,7 +144,9 @@ def inspect_asd(filepath):
                               "exact" if h["rate_exact"] else
                               "lower bound; a short file may never reach the cap"))
         grid_fields.append(_f(0, 0, "duration", f"{dur:.3f} s",
-                              "last_position / inferred_rate"))
+                              ("last_position / inferred_rate -- a LOWER BOUND, "
+                               "the grid is truncated") if h["truncated"]
+                              else "last_position / inferred_rate"))
 
     grid = {"id": "grid", "offset": 10, "size": h["table_end"] - 10,
             "summary": grid_summary, "fields": grid_fields,
@@ -143,6 +154,9 @@ def inspect_asd(filepath):
     chunks = [header, grid]
 
     body_off = h["table_end"]
+    # default True: a file whose grid runs to EOF has no body to hold an object
+    # tree, so "bare" is the correct answer rather than an unset variable
+    _bare = True
     if body_off < len(raw):
         # the declarations sit at the front; the rest is the overview pyramid,
         # so bound the dictionary walk rather than scanning megabytes of peaks
@@ -181,13 +195,13 @@ def inspect_asd(filepath):
                         f"{len(set(classes))} classes: {_sections(present)}"),
             "fields": obj_fields, "warnings": [], "payload_base": body_off,
         })
-        if not present:
-            # verified over 1,500 specimens: when the scan finds no field names
-            # in EITHER byte order, the file genuinely carries only a header and
-            # grid. Say that, rather than something that reads as a parse failure
-            warns.append("this sidecar carries only the header and frame grid; "
-                         "there is no object tree in it")
-        elif not notable:
+        # Decided at the END, not here. The field-name scan is only one of the
+        # ways into the object tree -- warp markers, onsets and the overview
+        # trailer are each found by their own detector further down. Emitting
+        # the warning at this point printed "there is no object tree in it"
+        # directly above 400 warp markers read out of that tree.
+        _bare = not present
+        if present and not notable:
             warns.append(f"{len(present)} declared fields, none of them a "
                          f"recognised analysis field")
 
@@ -289,6 +303,14 @@ def inspect_asd(filepath):
                 "fields": ovf, "warnings": [], "payload_base": ov["sentinel_at"],
             })
 
+    if _bare and not any(c["id"] in ("warp", "onsets", "clip", "overview")
+                         for c in chunks):
+        # verified over 1,500 specimens: when nothing is found in EITHER byte
+        # order by ANY detector, the file genuinely carries only a header and
+        # grid. Say that, rather than something that reads as a parse failure.
+        warns.append("this sidecar carries only the header and frame grid; "
+                     "there is no object tree in it")
+
     return chunks, warns
 
 
@@ -320,8 +342,13 @@ def inspect_ableton_xml(filepath, fmt_id="als"):
                      f"decompression cap; counts below describe only the prefix read")
 
     attrs = abmod.header_attributes(xml[:4096])
-    if not attrs:
+    if attrs is None:
         warns.append("no <Ableton> root element found in the decompressed XML")
+        attrs = {}
+    elif not attrs:
+        # the element is there, it just carries nothing. Saying so is different
+        # from saying it is missing.
+        warns.append("<Ableton> root element carries no attributes")
 
     ratio = (len(xml) / size) if size else 0
     fields = [_f(0, 0, k, v) for k, v in attrs.items()]
@@ -370,7 +397,11 @@ def inspect_amxd(filepath):
         "id": "ampf", "offset": 0, "size": min(size, _AMXD_HEADER),
         "summary": "Ableton Max Patch Format header",
         "fields": [
-            _f(0x00, 4, "magic", "ampf"),
+            # read, not asserted. This printed the literal "ampf" whatever the
+            # file held, so a field table -- the one place a reader trusts to
+            # show actual bytes -- stated a value the file did not contain,
+            # while a warning two lines away said the magic was missing.
+            _f(0x00, 4, "magic", raw[:4].decode("ascii", "replace")),
             _f(0x04, 4, "version",
                struct.unpack_from("<I", raw, 4)[0] if len(raw) >= 8 else "?"),
             _f(0x08, 4, "marker", marker.decode("ascii", "replace"),
@@ -406,6 +437,10 @@ def inspect_amxd(filepath):
         seen += 1
     if seen >= _AMXD_MAX_CHUNKS:
         warns.append(f"stopped after {_AMXD_MAX_CHUNKS} chunks; the chain may continue")
-    elif off != size and not warns:
+    elif off != size:
+        # An independent check, not an "else". Gating this on `not warns` meant
+        # any unrelated warning -- a bad magic, an odd marker -- suppressed it,
+        # so appended data went unreported precisely on the files that already
+        # looked anomalous. That is backwards for a forensics tool.
         warns.append(f"chunk chain ends at {off:,} but the file is {size:,} bytes")
     return chunks, warns
