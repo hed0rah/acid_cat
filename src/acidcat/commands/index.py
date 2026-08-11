@@ -121,6 +121,24 @@ def _warn_legacy_db(args):
 
 
 def run(args):
+    """Entry point. Turns a designed refusal into a clean message.
+
+    SchemaVersionError exists to be shown to a person: it means the DB was
+    written by a newer acidcat and this build will not touch it. No call site
+    caught it, so `index --stats lib` on such a DB printed a traceback followed
+    by "internal error (this is a bug)" -- telling the user their correct,
+    intentional refusal was a defect, and burying the one sentence that says
+    what to do about it.
+    """
+    from acidcat.core.catalogue.index import SchemaVersionError
+    try:
+        return _run(args)
+    except SchemaVersionError as e:
+        print(f"acidcat index: {e}", file=sys.stderr)
+        return 2
+
+
+def _run(args):
     quiet = getattr(args, "quiet", False)
     registry_path = getattr(args, "registry", None)
 

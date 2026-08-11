@@ -199,3 +199,50 @@ def test_index_reports_what_it_passed_over(tmp_path_factory):
     assert r.returncode == 0, r.stderr
     assert "3 unrecognised" in r.stderr, (
         f"the three non-audio files left no trace:\n{r.stderr}")
+
+
+def test_a_forward_version_db_is_a_message_not_a_bug_report(tmp_path_factory):
+    """SchemaVersionError exists to be shown to a person.
+
+    It means the DB was written by a newer acidcat and this build will not
+    touch it -- a correct, intentional refusal. No call site caught it, so the
+    user got a traceback plus "internal error (this is a bug)", which tells
+    them their working setup is broken and buries the one sentence saying what
+    to actually do.
+    """
+    base = tmp_path_factory.mktemp("sv")
+    home, corpus = base / "home", base / "c"
+    corpus.mkdir()
+    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
+        "gs-16b-2c-44100hz.wav"
+    if not src.exists():
+        pytest.skip("no wav specimen")
+    (corpus / "a.wav").write_bytes(src.read_bytes())
+    env = dict(os.environ, ACIDCAT_HOME=str(home))
+    r = subprocess.run([sys.executable, "-m", "acidcat", "index", str(corpus),
+                        "--label", "sv"], capture_output=True, text=True, env=env)
+    if r.returncode != 0:
+        pytest.skip("could not build a scratch index")
+
+    import glob
+    import sqlite3
+    dbs = glob.glob(str(home / "libraries" / "*.db"))
+    if not dbs:
+        pytest.skip("no per-library DB to age")
+    conn = sqlite3.connect(dbs[0])
+    try:
+        conn.execute("UPDATE meta SET v='9' WHERE k='schema_version'")
+        conn.commit()
+    except sqlite3.Error:
+        pytest.skip("meta table shape differs")
+    finally:
+        conn.close()
+
+    for argv in (["index", "--stats", "sv"],
+                 ["index", str(corpus), "--label", "sv"]):
+        r = subprocess.run([sys.executable, "-m", "acidcat", *argv],
+                           capture_output=True, text=True, env=env)
+        assert "Traceback" not in r.stderr, f"{argv}:\n{r.stderr}"
+        assert "this is a bug" not in r.stderr, f"{argv}:\n{r.stderr}"
+        assert "schema_version 9" in r.stderr, f"{argv}:\n{r.stderr}"
+        assert r.returncode == 2, f"{argv}: rc={r.returncode}"
