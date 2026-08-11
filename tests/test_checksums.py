@@ -138,14 +138,43 @@ def test_ffmpeg_agrees_the_file_is_broken(flac_pair):
     if not _have("ffmpeg"):
         pytest.skip("ffmpeg not available")
     good, bad = flac_pair
-    for path, expect_error in ((good, False), (bad, True)):
-        p = subprocess.run(["ffmpeg", "-v", "error", "-err_detect", "crccheck",
+    for path, mode in ((good, []), (bad, []), (bad, ["-err_detect", "crccheck"])):
+        p = subprocess.run(["ffmpeg", "-v", "error", *mode,
                             "-i", path, "-f", "null", "-"],
                            capture_output=True, text=True)
-        got_error = "crc" in p.stderr.lower() or "error" in p.stderr.lower()
-        assert got_error == expect_error, \
-            f"{os.path.basename(path)}: ffmpeg error={got_error}, " \
-            f"expected {expect_error}. stderr: {p.stderr.strip()[:120]}"
+        assert p.returncode == 0, (
+            f"{os.path.basename(path)} with {mode or 'defaults'}: ffmpeg exited "
+            f"{p.returncode}. If ffmpeg has started failing on CRC damage, the "
+            f"claim in the release notes needs revisiting -- that is a good "
+            f"problem, but it must not go unnoticed.\n{p.stderr}")
+
+
+def test_acidcat_proves_what_ffmpeg_accepts(flac_pair):
+    """The point of the comparison, asserted on acidcat rather than on ffmpeg.
+
+    The previous version of this matched ffmpeg's stderr for "crc" or "error"
+    and required -err_detect crccheck to fire. That is a claim about one
+    ffmpeg BUILD's message wording, not about the format: it passed on the
+    macOS and Windows runners and failed on all three Ubuntu ones, where the
+    damaged file produced no stderr at all even with crccheck. The flag
+    documented for this does not reliably catch a frame-CRC failure.
+
+    It had also never actually run: ffmpeg was not installed on any runner
+    until this release, so the test skipped everywhere and the divergence sat
+    undetected. Installing ffmpeg in CI is what surfaced it.
+
+    What is stable across every build observed: ffmpeg exits 0 on a FLAC whose
+    frame CRCs do not match, with or without the flag. So the damage is
+    provable from the file's own checksums and the most obvious tool for the
+    job accepts it silently -- which is the whole reason validate --deep
+    exists.
+    """
+    if not _have("ffmpeg"):
+        pytest.skip("ffmpeg not available")
+    _good, bad = flac_pair
+    r = _validate(bad, "--deep")
+    assert "FAIL" in r.stdout and "CRC" in r.stdout, r.stdout
+    assert r.returncode == 1
 
 
 def test_a_file_with_no_frames_is_not_a_failure():

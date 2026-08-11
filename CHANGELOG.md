@@ -42,7 +42,10 @@ shape being fixed while it is still free to fix.
   "already consistent" that ffmpeg refuses to decode. Off by default because it
   costs a full read. Worth recording: ffmpeg does not verify FLAC frame CRCs by
   default either, so this class of damage passes quietly through the most
-  obvious tool for the job.
+  obvious tool for the job -- and `-err_detect crccheck`, the flag documented
+  for it, does not reliably catch it. Measured across the CI matrix: ffmpeg
+  exits 0 on a FLAC whose frame CRCs do not match, with the flag and without,
+  on every build tested.
 
 - **`audit --signal` reports CD ripper concealment.** Where a rip wrote silence,
   a held sample, an interpolation or a repeated block over a sector it could not
