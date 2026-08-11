@@ -270,6 +270,13 @@ def run(args):
         finally:
             if stream is not sys.stdout:
                 stream.close()
+        # This path returned before the cap note below, so `scan DIR --json`
+        # that stopped at -n said nothing about stopping: the machine-readable
+        # face was the one that could not tell a complete run from a truncated
+        # one. stderr, so the records on stdout stay parseable.
+        if not quiet and count >= num:
+            print(f"[INFO] stopped at the -n {num} cap; more files remain",
+                  file=sys.stderr)
         return 0
 
     # output

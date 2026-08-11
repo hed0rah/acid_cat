@@ -341,3 +341,61 @@ def test_validate_does_not_keep_a_private_extension_list():
     assert "_targets.expand" in src, "validate stopped using the shared expander"
     assert not re.search(r'_EXTS\s*=\s*\(', src), (
         "validate grew a private extension tuple again")
+
+
+# ── whose fault is it: the file's, or ours? ─────────────────────────
+
+def test_a_check_that_crashed_does_not_condemn_the_file():
+    """"check-failed" means our analyser raised, not that the file is bad.
+
+    It was counted as a finding, and findings drive the exit code, so
+    `audit f || quarantine f` quarantined a clean file because acidcat's own
+    concealment check hit an exception. That is an infrastructure failure
+    charged to the input.
+
+    It still prints as NOT CHECKED -- the gap has to stay visible. Only the
+    blame moves.
+    """
+    from acidcat.commands import audit as A
+    integ = [{"check": "concealment", "verdict": "check-failed",
+              "detail": "could not run (ValueError); this file was NOT screened"}]
+    assert A._real_findings(integ) == [], (
+        "a crashed check still counts as a finding about the file")
+    assert len(A._skipped_notes(integ)) == 1, (
+        "a crashed check vanished entirely; it must still be reported")
+    assert A._code(True, [], [], integ) == 0, (
+        "a clean file whose check crashed still exits 1")
+
+
+def test_a_real_finding_still_condemns_the_file():
+    """The other half. Widening the not-a-finding class is worthless if it also
+    swallows the mismatches audit exists to report."""
+    from acidcat.commands import audit as A
+    integ = [{"check": "bandwidth", "verdict": "lossy-wall",
+              "detail": "content stops dead at 16.0 kHz"}]
+    assert len(A._real_findings(integ)) == 1
+    assert A._code(True, [], [], integ) == 1
+
+
+def test_scan_json_says_when_it_stopped_early(tmp_path):
+    """The cap note lived only on the CSV path; the --json branch returned
+    before it. So the machine-readable face was the one that could not tell a
+    complete run from a truncated one."""
+    corpus = pathlib.Path(__file__).parent.parent / "data" / "test_formats"
+    planted = 0
+    for name in ("gs-16b-2c-44100hz.wav", "gs-16b-2c-44100hz.flac",
+                 "gs-16b-2c-44100hz.mp3"):
+        src = corpus / name
+        if src.exists():
+            (tmp_path / name).write_bytes(src.read_bytes())
+            planted += 1
+    if planted < 3:
+        pytest.skip("corpus formats not present")
+
+    r = _run("scan", str(tmp_path), "-n", "2", "--json")
+    assert "stopped at the -n 2 cap" in r.stderr, r.stderr
+    json.loads(r.stdout)                     # stdout must stay parseable
+
+    r = _run("scan", str(tmp_path), "-n", "99", "--json")
+    assert "stopped at the" not in r.stderr, (
+        f"a complete run claimed it stopped early:\n{r.stderr}")
