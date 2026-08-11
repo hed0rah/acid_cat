@@ -3,7 +3,7 @@ Vorbis/Opus comment header. Page primitives live in core/ogg.py."""
 
 import os
 
-from acidcat.core import ogg as oggmod
+from acidcat.core.formats import ogg as oggmod
 from acidcat.core.walk.base import _f
 
 def inspect_ogg(filepath):

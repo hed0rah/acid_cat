@@ -28,7 +28,7 @@ def run(args):
     path = args.file
     if not os.path.isfile(path):
         print(f"acidcat explore: {path}: No such file", file=sys.stderr)
-        return 1
+        return 2
     r = subprocess.run(
         [sys.executable, "-m", "acidcat", "inspect", "--full", path],
         capture_output=True)

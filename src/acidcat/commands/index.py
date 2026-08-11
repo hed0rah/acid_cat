@@ -22,10 +22,10 @@ import os
 import sys
 import time
 
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
-from acidcat.core.indexing import (
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
+from acidcat.core.catalogue.indexing import (
     walk_and_upsert, _refuses_as_root, _count_audio_in_subtree,
     _discover_candidates, _resolve_unique_label,
 )
@@ -121,6 +121,24 @@ def _warn_legacy_db(args):
 
 
 def run(args):
+    """Entry point. Turns a designed refusal into a clean message.
+
+    SchemaVersionError exists to be shown to a person: it means the DB was
+    written by a newer acidcat and this build will not touch it. No call site
+    caught it, so `index --stats lib` on such a DB printed a traceback followed
+    by "internal error (this is a bug)" -- telling the user their correct,
+    intentional refusal was a defect, and burying the one sentence that says
+    what to do about it.
+    """
+    from acidcat.core.catalogue.index import SchemaVersionError
+    try:
+        return _run(args)
+    except SchemaVersionError as e:
+        print(f"acidcat index: {e}", file=sys.stderr)
+        return 2
+
+
+def _run(args):
     quiet = getattr(args, "quiet", False)
     registry_path = getattr(args, "registry", None)
 
@@ -143,14 +161,14 @@ def run(args):
             f"target directory. Drop the target or remove the flag.",
             file=sys.stderr,
         )
-        return 1
+        return 2
     if len(active_mgmt) > 1:
         print(
             f"acidcat index: cannot combine {active_mgmt[0]} and "
             f"{active_mgmt[1]}; pick one.",
             file=sys.stderr,
         )
-        return 1
+        return 2
 
     # registry-management modes (no target required)
     if args.list_libs:
@@ -186,12 +204,12 @@ def run(args):
     if not args.target:
         print("acidcat index: missing target directory (or use "
               "--list/--orphans/--stats/--forget/--remove)", file=sys.stderr)
-        return 1
+        return 2
 
     target = args.target
     if not os.path.isdir(target):
         print(f"acidcat index: {target}: Not a directory", file=sys.stderr)
-        return 1
+        return 2
 
     _warn_legacy_db(args)
 
@@ -231,7 +249,7 @@ def run(args):
         except OSError as e:
             print(f"acidcat index: --rebuild could not remove {db_path}: {e}",
                   file=sys.stderr)
-            return 1
+            return 2
         _vlog(args, f"[index] removed existing DB at {db_path}")
 
     conn = idx.open_db(db_path)
@@ -280,10 +298,17 @@ def run(args):
         rconn.close()
 
     if not quiet:
+        # "unrecognised" is reported separately from "skipped". They are
+        # different facts -- skipped means seen before and unchanged, which is
+        # a file that IS in the index, while unrecognised means never opened at
+        # all. Folding them together let a walk that passed over half a folder
+        # print "0 skipped" and read as complete.
+        extra = (f", {counts['unrecognised']} unrecognised extension"
+                 if counts.get("unrecognised") else "")
         print(
             f"[INFO] [{label}] {counts['added']} added, {counts['updated']} updated, "
             f"{counts['skipped']} skipped, {counts['pruned']} pruned, "
-            f"{counts['failed']} failed",
+            f"{counts['failed']} failed{extra}",
             file=sys.stderr,
         )
     return 0

@@ -14,7 +14,7 @@ The ZIP-based .multisample is not yet handled."""
 import os
 import struct
 
-from acidcat.core import bitwig as bwmod
+from acidcat.core.formats import bitwig as bwmod
 from acidcat.core.walk.base import _f
 from acidcat.util.midi import midi_note_to_name
 

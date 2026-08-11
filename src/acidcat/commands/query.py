@@ -7,15 +7,18 @@ scope to one or more libraries by label or path. Override the registry
 location with --registry or the ACIDCAT_REGISTRY env var.
 """
 
+import json
 import os
 import sqlite3
 import sys
 
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import query_sql
-from acidcat.core import registry as reg
-from acidcat.core.formats import output
+from acidcat.util.argtypes import nonneg_int
+from acidcat.core.catalogue import index as idx
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import query_sql
+from acidcat.core.catalogue import registry as reg
+from acidcat.core.infra.render import format_json, output
 
 
 DEFAULT_FIELDS = [
@@ -69,10 +72,9 @@ def register(subparsers):
     p.add_argument("--kind", dest="kind", choices=["loop", "one_shot", "any"],
                    help="With --compatible-with, override the inferred sample "
                         "kind filter (loop / one_shot / any).")
-    p.add_argument("--limit", type=int, default=50, help="Max rows (default 50).")
-    p.add_argument("-f", "--output-format", dest="output_format",
-                   default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    p.add_argument("--limit", type=nonneg_int, default=50,
+                   help="Max rows (default 50).")
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("--paths-only", action="store_true",
                    help="Print bare paths, one per line.")
@@ -87,17 +89,46 @@ def _vlog(args, msg):
 
 
 def run(args):
+    try:
+        return _run(args)
+    except QueryUsageError as e:
+        print(f"acidcat query: {e}", file=sys.stderr)
+        return 2
+
+
+def _run(args):
+    # Validate the invocation before consulting any state. A malformed --bpm is
+    # wrong whether or not a library happens to be registered, and checking it
+    # second meant the same command reported "no libraries" (1) on a fresh
+    # machine and "bad value" (2) on a populated one.
+    for field in ("bpm", "duration"):
+        spec = getattr(args, field, None)
+        if spec:
+            _parse_range(str(spec), field)
+
     registry_path = getattr(args, "registry", None)
     rconn = reg.open_registry(registry_path)
     try:
         libs = reg.list_libraries(rconn, only_existing=True)
+        # A registered library whose DB is gone -- unmounted drive, file
+        # deleted by hand -- was dropped in silence, so a query that should
+        # have searched five libraries searched four and said nothing. "(no
+        # matches)" and "the drive is not plugged in" are different answers and
+        # the user has to be able to tell them apart.
+        missing = [r["label"] for r in reg.find_orphans(rconn)]
     finally:
         rconn.close()
+    if missing:
+        print(f"acidcat query: {len(missing)} registered librar"
+              f"{'y' if len(missing) == 1 else 'ies'} not searched, DB missing: "
+              f"{', '.join(sorted(missing))}", file=sys.stderr)
 
     if not libs:
+        # 2: there is nothing to search, so the query could not run at all --
+        # the same answer `validate` gives when nothing was checkable.
         print("acidcat query: no libraries registered. "
               "Run `acidcat index DIR --label NAME` first.", file=sys.stderr)
-        return 1
+        return 2
 
     scopes = None
     if args.root:
@@ -112,21 +143,54 @@ def run(args):
         return _run_compatible(args, libs)
 
     try:
-        rows = _fan_out(libs, args)
+        rows, total_matched = _fan_out(libs, args)
     except idx.FTSQueryError as e:
+        # 2: a malformed --text is the same class of mistake as a malformed
+        # --bpm, which already exits 2. It was 1 (ran fine, no answer), so a
+        # script could not tell "your syntax is wrong" from "nothing matched".
         print(f"acidcat query: {e}", file=sys.stderr)
-        return 1
+        return 2
     rows.sort(key=lambda r: r.get("path") or "")
+    shown = len(rows)
     rows = rows[: args.limit]
+    # A truncated answer must say so. `query --format wav` printed 50 paths and
+    # nothing else, in every format, so a caller could not tell a complete
+    # result from the first page of one -- and the JSON was a bare 50-element
+    # array with no marker at all.
+    truncated = (total_matched is not None and total_matched > len(rows))         or (total_matched is None and shown > len(rows))
 
     if not rows:
+        # An empty result still has to be VALID output in a machine format:
+        # `acidcat query --bpm 128 --json` emitted zero bytes, so `jq` and
+        # json.loads both fail on "no matches" -- in a tool whose whole design
+        # goal is piping, that turns an ordinary empty answer into a parse
+        # error downstream. The human note stays on stderr.
+        fmt = getattr(args, "output_format", "table")
+        if fmt == "json":
+            format_json([], sys.stdout)
         if not getattr(args, "paths_only", False):
             print("(no matches)", file=sys.stderr)
         return 0
 
+    def _note():
+        """One line on stderr when the limit hid something.
+
+        stderr, so `--paths-only` stays pipeable and the JSON stays parseable:
+        the note is for the human, the records are for the program.
+        """
+        if not truncated:
+            return
+        if total_matched is None:
+            print(f"acidcat query: showing {len(rows)}; the total could not be "
+                  f"counted (raise --limit to see more)", file=sys.stderr)
+        else:
+            print(f"acidcat query: showing {len(rows)} of {total_matched} "
+                  f"match(es) -- raise --limit to see more", file=sys.stderr)
+
     if args.paths_only:
         for r in rows:
             print(r["path"])
+        _note()
         return 0
 
     stream = sys.stdout
@@ -137,6 +201,7 @@ def run(args):
     finally:
         if stream is not sys.stdout:
             stream.close()
+    _note()
     return 0
 
 
@@ -161,7 +226,7 @@ def _scope_libraries(libs, scopes):
 def _run_compatible(args, libs):
     """--compatible-with: resolve the reference's key/BPM/kind, then fan out for
     harmonically- and tempo-compatible samples via core.search."""
-    from acidcat.core import search
+    from acidcat.core.catalogue import search
     ref = args.compatible_with
     if not os.path.exists(ref):
         print(f"acidcat query: --compatible-with file not found: {ref}",
@@ -210,17 +275,31 @@ def _run_compatible(args, libs):
 
 
 def _fan_out(libs, args):
-    """Open each library's DB, run the query, accumulate rows, dedup."""
-    sql, params = _build_sql(args)
+    """Open each library's DB, run the query, accumulate rows, dedup.
+
+    Returns (rows, total_matched). The total costs one extra COUNT per library
+    and is what lets the caller say "50 of 382" instead of "50". Without it a
+    truncated answer is indistinguishable from a complete one, in every output
+    format -- the JSON was a bare 50-element array with nothing marking it as a
+    prefix.
+    """
+    sql, count_sql, params = _build_sql(args)
     per_db_sql = sql + " LIMIT ?"
     per_db_limit = args.limit
 
     accumulated = []
     seen_paths = set()
+    total_matched = 0
+    counted_all = True
+    skipped_libs = []
     for lib in libs:
         try:
             conn = idx.open_db(lib["db_path"])
         except Exception as e:
+            # unreadable, corrupt, or written by a newer acidcat. Named on
+            # stderr, not just under -v: a library that silently drops out
+            # turns a partial search into one that looks complete.
+            skipped_libs.append((lib["label"], str(e)))
             _vlog(args, f"[query] {lib['label']} skipped: {e}")
             continue
         try:
@@ -239,6 +318,16 @@ def _fan_out(libs, args):
                     ) from e
                 _vlog(args, f"[query] {lib['label']} query failed: {e}")
                 continue
+            try:
+                # one extra COUNT per library, on the connection already open.
+                # A failed count must not lose the rows we did get, so this is
+                # its own try: a missing total is a weaker answer than a wrong
+                # one, and losing real results to get it would be worse than
+                # both.
+                total_matched += conn.execute(count_sql, params).fetchone()[0]
+            except Exception as e:
+                counted_all = False
+                _vlog(args, f"[query] {lib['label']} count failed: {e}")
         finally:
             try:
                 conn.close()
@@ -252,7 +341,10 @@ def _fan_out(libs, args):
                 continue
             seen_paths.add(p)
             accumulated.append(_shape_row(d))
-    return accumulated
+    for label, why in skipped_libs:
+        print(f"acidcat query: library {label!r} could not be searched: {why}",
+              file=sys.stderr)
+    return accumulated, (total_matched if counted_all else None)
 
 
 def _build_sql(args):
@@ -272,7 +364,8 @@ def _build_sql(args):
         creator=getattr(args, "creator", None),
         product=getattr(args, "product", None),
         tags=args.tag, text=args.text)
-    return query_sql.assemble(where, joins, order="s.path"), params
+    return (query_sql.assemble(where, joins, order="s.path"),
+            query_sql.assemble_count(where, joins), params)
 
 
 def _shape_row(row):
@@ -284,15 +377,26 @@ def _shape_row(row):
     return out
 
 
+class QueryUsageError(ValueError):
+    """A bad filter value. Raised so run() can exit 2 like every other usage
+    error, instead of the string SystemExit this used to raise -- that printed
+    to stderr, exited 1, and bypassed the CLI's dispatch entirely."""
+
+
 def _parse_range(spec, field_name="value"):
     """Accept '120', '120:130', ':130', '120:' and return (lo, hi)."""
     if ":" not in spec:
         try:
             v = float(spec)
         except ValueError:
-            raise SystemExit(f"acidcat query: bad --{field_name} value: {spec}")
+            raise QueryUsageError(f"bad --{field_name} value: {spec}")
         return v, v
     lo_s, hi_s = spec.split(":", 1)
-    lo = float(lo_s) if lo_s else None
-    hi = float(hi_s) if hi_s else None
+    # the bare branch above was guarded and this one was not, so
+    # `--bpm a:b` raised an uncaught ValueError and printed a traceback
+    try:
+        lo = float(lo_s) if lo_s else None
+        hi = float(hi_s) if hi_s else None
+    except ValueError:
+        raise QueryUsageError(f"bad --{field_name} range: {spec}")
     return lo, hi

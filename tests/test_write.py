@@ -5,8 +5,8 @@ import struct
 
 import pytest
 
-from acidcat.core import writer, edits, edit_riff
-from acidcat.core.edit_riff import _iter_chunks
+from acidcat.core.write import writer, edits, edit_riff
+from acidcat.core.write.edit_riff import _iter_chunks
 
 
 # ── helpers ────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ def test_atomic_write_readback_detects_mismatch(tmp_path, monkeypatch):
 def test_aiff_edit_clear_odd_and_unicode():
     # clearing a chunk, inserting an odd-length utf-8 value (pad byte), and
     # keeping metadata ahead of SSND -- the thin spots in AIFF edit coverage
-    from acidcat.core import edit_aiff
+    from acidcat.core.write import edit_aiff
 
     def ck(cid, payload):
         return (cid + struct.pack(">I", len(payload)) + payload
@@ -147,7 +147,8 @@ def test_tagged_easy_fields_roundtrip(name, suffix, tmp_path):
     # setup step; assert the values actually land and the audio is untouched
     mutagen = pytest.importorskip("mutagen")
     import os
-    p = os.path.join("data/test_formats", name)
+    from conftest import corpus_or_fixture
+    p = corpus_or_fixture(name, "tone" + suffix)
     if not os.path.isfile(p):
         pytest.skip(f"no {suffix} fixture")
     data = open(p, "rb").read()
@@ -271,7 +272,7 @@ def test_wav_smpl_root_note():
 
 
 def test_aiff_edit_preserves_audio_big_endian():
-    from acidcat.core import edit_aiff
+    from acidcat.core.write import edit_aiff
     def bc(cid, p):
         return cid + struct.pack(">I", len(p)) + p + (b"\x00" if len(p) % 2 else b"")
     body = b"AIFF" + bc(b"COMM", b"\x00" * 18) + bc(b"SSND", b"\x01" * 7)
@@ -284,19 +285,19 @@ def test_aiff_edit_preserves_audio_big_endian():
 
 
 def test_bitwig_meta_splice():
-    from acidcat.core import edits
+    from acidcat.core.write import edits
     def field(key, val):
         return (struct.pack(">I", len(key)) + key + b"\x08"
                 + struct.pack(">I", len(val)) + val)
     data = (b"BtWg0003000200" + field(b"creator", b"relo")
             + field(b"tags", b"old"))
     out, applied = edits.edit_bitwig(data, {"creator": "me", "tags": "a b c"})
-    m = __import__("acidcat.core.bitwig", fromlist=["parse_meta"]).parse_meta(out)
+    m = __import__("acidcat.core.formats.bitwig", fromlist=["parse_meta"]).parse_meta(out)
     assert m["creator"] == "me" and m["tags"] == "a b c"
 
 
 def test_ni_nksf_roundtrip():
-    from acidcat.core import ni
+    from acidcat.core.formats import ni
     data = open("data/test_formats/corpus/synth/New_Init_2.nksf", "rb").read() \
         if __import__("os").path.exists("data/test_formats/corpus/synth/New_Init_2.nksf") else None
     if data is None:
@@ -308,7 +309,7 @@ def test_ni_nksf_roundtrip():
 
 def test_ni_hsin_roundtrip():
     import os
-    from acidcat.core import ni
+    from acidcat.core.formats import ni
     p = "data/test_formats/corpus/synth/nicecombo.nmsv"
     if not os.path.exists(p):
         import pytest as _pt; _pt.skip("corpus nmsv not present")
@@ -327,7 +328,7 @@ def test_wav_edit_preserves_trailing_bytes_outside_riff():
     """MED-2: bytes after the RIFF container are preserved and NOT folded into
     the recomputed riff_size."""
     import struct
-    from acidcat.core import edit_riff
+    from acidcat.core.write import edit_riff
 
     def _chunk(cid, p):
         return cid + struct.pack("<I", len(p)) + p + (b"\x00" if len(p) % 2 else b"")
@@ -352,7 +353,7 @@ def test_bitwig_write_reenabled_cli(tmp_path):
     fmt, new_data, applied = _edit(str(p), {"creator": "new"})
     assert "Bitwig" in fmt and "experimental" in fmt
     assert applied == [("creator", "old", "new")]
-    from acidcat.core.bitwig import parse_meta
+    from acidcat.core.formats.bitwig import parse_meta
     assert parse_meta(new_data)["creator"] == "new"
 
 
@@ -360,7 +361,7 @@ def test_ni_write_routes_not_refused(tmp_path):
     # an NI hsin-magic file no longer hits the blanket refusal; it reaches edit_ni
     # (which will raise its own specific error on a stub, not the "not enabled" one)
     from acidcat.commands.write import _edit
-    from acidcat.core import edits
+    from acidcat.core.write import edits
     p = tmp_path / "x.nmsv"
     p.write_bytes(b"\x00" * 12 + b"hsin" + b"\x00" * 64)
     try:

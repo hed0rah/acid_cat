@@ -27,6 +27,17 @@ def _read(filepath):
         return f.read(_CAP)
 
 
+def _cap_warning(seen):
+    """A message when an IFF walk stopped at the cap rather than at the end.
+
+    The generator cannot warn -- it only yields -- so the callers count what
+    they got and ask here. Without this the chunk list simply ended, and a
+    truncated walk was indistinguishable from a short file.
+    """
+    return ([f"chunk walk stopped at the {_CHUNK_CAP}-chunk cap; "
+             f"the file may hold more"] if seen >= _CHUNK_CAP else [])
+
+
 def _iff_chunks(b, start):
     """Yield (id_bytes, offset, size, payload_bytes) for IFF-style id+u32size
     chunks from `start`, big-endian, word-padded. Bounded and clamping."""
@@ -62,7 +73,9 @@ def inspect_smus(filepath):
     tracks = instruments = 0
     from collections import Counter
     kinds = Counter()
+    seen = 0
     for cid, off, size, p in _iff_chunks(b, 12):
+        seen += 1
         cid_s = cid.decode("ascii", "replace")
         kinds[cid_s] += 1
         fields, summary = [], f"{size:,} bytes"
@@ -98,6 +111,7 @@ def inspect_smus(filepath):
         bits.append(f"'{name}'")
     if bits:
         chunks[0]["summary"] += " -- " + ", ".join(bits)
+    warns += _cap_warning(seen)
     return chunks, warns
 
 
@@ -115,7 +129,9 @@ def inspect_okt(filepath):
     channels = 0
     samples = 0
     first_sample = None
+    seen = 0
     for cid, off, size, p in _iff_chunks(b, 8):
+        seen += 1
         cid_s = cid.decode("ascii", "replace")
         fields, summary = [], f"{size:,} bytes"
         if cid == b"CMOD" and len(p) >= 8:
@@ -146,6 +162,7 @@ def inspect_okt(filepath):
         bits.append(f"'{first_sample}'")
     if bits:
         hdr["summary"] += " -- " + ", ".join(bits)
+    warns += _cap_warning(seen)
     return chunks, warns
 
 

@@ -11,10 +11,12 @@ is not indexed. Fans out across every registered library.
 import os
 import sys
 
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
-from acidcat.core import search
-from acidcat.core.formats import output
+from acidcat.util.argtypes import nonneg_int
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.catalogue import registry as reg
+from acidcat.core.catalogue import search
+from acidcat.core.infra.render import output
 
 _FIELDS = ["path", "similarity", "percentile_rank", "bpm", "key", "duration",
            "format", "library_label"]
@@ -25,7 +27,7 @@ def register(subparsers):
         "similar",
         help="Find samples similar to a reference file (over the index).")
     p.add_argument("target", help="Reference audio file.")
-    p.add_argument("-n", "--num", type=int, default=5, dest="num",
+    p.add_argument("-n", "--num", type=nonneg_int, default=5, dest="num",
                    help="Number of results (default 5).")
     p.add_argument("--kind", choices=["loop", "one_shot", "any"],
                    help="Filter candidates by kind (default: the target's own "
@@ -34,9 +36,7 @@ def register(subparsers):
                    help="Do not filter candidates by kind.")
     p.add_argument("--registry",
                    help="Override registry DB path (default ~/.acidcat/registry.db).")
-    p.add_argument("-f", "--output-format", dest="output_format",
-                   default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("--paths-only", action="store_true",
                    help="Print bare paths, one per line.")
@@ -47,7 +47,7 @@ def run(args):
     target = args.target
     if not os.path.exists(target):
         print(f"acidcat similar: file not found: {target}", file=sys.stderr)
-        return 1
+        return 2          # could not read the input, as everywhere else
 
     rconn = reg.open_registry(getattr(args, "registry", None))
     try:
@@ -57,7 +57,7 @@ def run(args):
     if not libs:
         print("acidcat similar: no libraries registered. Run "
               "`acidcat index DIR --features` first.", file=sys.stderr)
-        return 1
+        return 2          # nothing to search: the query could not run
 
     # reference features: from the index, else a live librosa extract
     target_feats, target_meta = search.resolve_target_features(target, libs)
@@ -65,7 +65,7 @@ def run(args):
         from acidcat.util.deps import require
         if not require("librosa", "numpy", group="analysis"):
             return 1
-        from acidcat.core.features import extract_audio_features
+        from acidcat.core.analysis.features import extract_audio_features
         target_feats = extract_audio_features(target)
         if target_feats is None:
             print(f"acidcat similar: could not extract features from {target}",

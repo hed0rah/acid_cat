@@ -3,22 +3,22 @@
 import threading
 
 import acidcat.mcp_server as M
-from acidcat.core import index as idx
+from acidcat.core.catalogue import index as idx
 
 
 def test_cached_conn_reuse_and_evict(tmp_path):
     db = str(tmp_path / "t.db")
     idx.open_db(db).close()
-    with M._CACHE_LOCK:
-        c1 = M._cached_conn(db)
-        c2 = M._cached_conn(db)
+    with M.handlers._CACHE_LOCK:
+        c1 = M.handlers._cached_conn(db)
+        c2 = M.handlers._cached_conn(db)
     assert c1 is c2                         # same connection reused
-    M._evict(db)
-    with M._CACHE_LOCK:
-        c3 = M._cached_conn(db)
+    M.handlers._evict(db)
+    with M.handlers._CACHE_LOCK:
+        c3 = M.handlers._cached_conn(db)
     assert c3 is not c1                     # reopened after eviction
-    M._evict()
-    assert db not in M._CONN_CACHE
+    M.handlers._evict()
+    assert db not in M.handlers._CONN_CACHE
 
 
 def test_cached_conn_thread_safe(tmp_path):
@@ -32,8 +32,8 @@ def test_cached_conn_thread_safe(tmp_path):
     def work():
         try:
             for _ in range(50):
-                with M._CACHE_LOCK:
-                    M._cached_conn(db).execute(
+                with M.handlers._CACHE_LOCK:
+                    M.handlers._cached_conn(db).execute(
                         "SELECT COUNT(*) FROM samples").fetchall()
         except Exception as e:              # noqa: BLE001
             errors.append(repr(e))
@@ -44,4 +44,4 @@ def test_cached_conn_thread_safe(tmp_path):
     for t in threads:
         t.join()
     assert not errors, errors
-    M._evict()
+    M.handlers._evict()

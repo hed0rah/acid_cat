@@ -2,7 +2,7 @@
 IT/MP4/WAV pointer (xref) annotations."""
 import struct
 
-from acidcat.core import sniff
+from acidcat.core.infra import sniff
 from acidcat.core.walk import tracker as wtk
 
 

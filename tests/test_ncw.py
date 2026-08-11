@@ -5,7 +5,7 @@ import struct
 
 import pytest
 
-from acidcat.core import ncw
+from acidcat.core.codecs import ncw
 
 _BLK = 512
 
@@ -149,8 +149,12 @@ def test_unpack_signed_is_invertible():
 
 class _CArgs:
     def __init__(self, **kw):
+        # force=True because these tests convert repeatedly into the same tmp
+        # dir; the real default REFUSES to overwrite a .wav that convert named
+        # for itself, which is the point of that guard.
         d = {"input": None, "output": None, "division": 480,
-             "skip_existing": False, "quiet": True, "to_pcm": False, "codec": None}
+             "skip_existing": False, "quiet": True, "to_pcm": False,
+             "codec": None, "force": True}
         d.update(kw)
         for k, v in d.items():
             setattr(self, k, v)

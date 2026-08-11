@@ -8,9 +8,12 @@ modified copy instead. `--dry-run` prints the field-level diff and writes nothin
 """
 
 import os
+import struct
 import sys
 
-from acidcat.core import writer, edits
+from acidcat.commands._output import add_output_format_arg, chosen_format
+from acidcat.core.infra.render import output as _render
+from acidcat.core.write import writer, edits
 
 
 def register(subparsers):
@@ -28,6 +31,9 @@ def register(subparsers):
                    help="Show the diff and write nothing.")
     p.add_argument("--overwrite", action="store_true",
                    help="Skip the _original backup on in-place edits.")
+    # write CHANGES your files and could not tell a script which fields moved,
+    # what they moved to, or where the backup went.
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("--strip", action="store_true",
                    help="Remove identifying metadata (tags/bext/iXML/ID3/etc.); "
                         "keeps audio and functional chunks. Ignores --set.")
@@ -65,10 +71,10 @@ def _strip(path):
         # vital keys are cleared to "", not deleted; say so in the report
         return ("Vital preset", new, [a[0] + " (cleared)" for a in applied])
     if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
-        from acidcat.core import edit_riff
+        from acidcat.core.write import edit_riff
         return ("WAV",) + edit_riff.strip_wav(data)
     if head[:4] == b"FORM" and head[8:12] in (b"AIFF", b"AIFC"):
-        from acidcat.core import edit_aiff
+        from acidcat.core.write import edit_aiff
         return ("AIFF",) + edit_aiff.strip_aiff(data)
     tagged = (head[:4] == b"fLaC" or head[:3] == b"ID3" or head[:4] == b"OggS"
               or head[4:8] == b"ftyp"
@@ -82,23 +88,44 @@ def _run_strip(args):
     if args.output and len(args.inputs) > 1:
         print("acidcat write: -o works with a single input file", file=sys.stderr)
         return 2
+    fmt_out = chosen_format(args)
+    rows = None if fmt_out == "table" else []
     rc = 0
     for path in args.inputs:
         try:
             fmt, new_data, removed = _strip(path)
-        except (edits.EditError, OSError, ValueError) as e:
+        except (edits.EditError,) + _mutagen_errors() as e:
             print(f"acidcat write: {path}: {e}", file=sys.stderr)
             rc = 1
             continue
-        print(f"{os.path.basename(path)}  [{fmt}]  "
-              f"stripped: {', '.join(removed) if removed else '(nothing to remove)'}")
+        row = None
+        if rows is not None:
+            row = {"path": path, "format": fmt, "written": None, "backup": None,
+                   "dry_run": bool(args.dry_run), "error": None,
+                   "detail": ", ".join(removed) or "(nothing to remove)",
+                   "stripped": list(removed)}
+            rows.append(row)
+        else:
+            print(f"{os.path.basename(path)}  [{fmt}]  "
+                  f"stripped: {', '.join(removed) if removed else '(nothing to remove)'}")
         if args.dry_run:
             continue
-        rc = _commit_and_report(path, new_data, args) or rc
+        rc = _commit_and_report(path, new_data, args, row) or rc
+    if rows is not None:
+        _emit_rows(rows, fmt_out)
     return rc
 
 
-def _commit_and_report(path, new_data, args):
+def _emit_rows(rows, fmt):
+    """Render the per-file records. csv/tsv drop the nested key rather than
+    stringify a list into a cell, the same choice validate and repair make."""
+    nested = ("changes", "stripped")
+    if fmt in ("csv", "tsv"):
+        rows = [{k: v for k, v in r.items() if k not in nested} for r in rows]
+    _render(rows, fmt=fmt)
+
+
+def _commit_and_report(path, new_data, args, row=None):
     """Persist edited bytes and print the outcome; returns 1 on failure, 0 on
     success. A commit failure (locked target, disk full, read-back mismatch)
     must print like any other per-file error, not traceback."""
@@ -107,7 +134,12 @@ def _commit_and_report(path, new_data, args):
             path, new_data, out=args.output, overwrite=args.overwrite)
     except OSError as e:
         print(f"acidcat write: {path}: {e}", file=sys.stderr)
-        return 1
+        if row is not None:
+            row.update(written=None, backup=None, error=str(e))
+        return 2
+    if row is not None:
+        row.update(written=written, backup=backup)
+        return 0
     if backup:
         note = f"  (backup: {os.path.basename(backup)})"
     elif not args.output and not args.overwrite:
@@ -118,6 +150,24 @@ def _commit_and_report(path, new_data, args):
         note = ""
     print(f"  wrote {os.path.basename(written)}{note}")
     return 0
+
+
+def _mutagen_errors():
+    """Whatever mutagen raises on a file it recognizes but cannot parse.
+
+    mutagen.MutagenError is the base for flac.error, mp3.HeaderNotFoundError,
+    id3 errors and friends, but it is not the only thing that escapes -- an
+    AIFF missing COMM raises a bare KeyError from inside its parser. These were
+    unhandled, so 15 malformed specimens (truncated FLAC, sample rate 0, an
+    all-0xFF MP3) reached the user as a raw traceback. Every other verb handles
+    the same files cleanly; only the write path did not.
+    """
+    base = (OSError, ValueError, KeyError, IndexError, struct.error)
+    try:
+        import mutagen
+        return base + (mutagen.MutagenError,)
+    except Exception:
+        return base
 
 
 def run(args):
@@ -136,22 +186,35 @@ def run(args):
         print("acidcat write: -o works with a single input file", file=sys.stderr)
         return 2
 
+    fmt_out = chosen_format(args)
+    rows = None if fmt_out == "table" else []
     rc = 0
     for path in args.inputs:
         try:
             fmt, new_data, applied = _edit(path, changes)
-        except (edits.EditError, OSError, ValueError) as e:
+        except (edits.EditError,) + _mutagen_errors() as e:
             print(f"acidcat write: {path}: {e}", file=sys.stderr)
             rc = 1
             continue
-        print(f"{os.path.basename(path)}  [{fmt}]")
-        for field, old, new in applied:
-            print(f"  {field}: {old!r} -> {new!r}")
+        row = None
+        if rows is not None:
+            row = {"path": path, "format": fmt, "written": None, "backup": None,
+                   "dry_run": bool(args.dry_run), "error": None,
+                   "detail": "; ".join(f"{f}: {o!r} -> {n!r}" for f, o, n in applied),
+                   "changes": [{"field": f, "old": o, "new": n}
+                               for f, o, n in applied]}
+            rows.append(row)
+        else:
+            print(f"{os.path.basename(path)}  [{fmt}]")
+            for field, old, new in applied:
+                print(f"  {field}: {old!r} -> {new!r}")
         if "experimental" in fmt:
             print("  note: proprietary preset editing is experimental -- verify "
                   "the preset reloads in its app; a _original backup is kept.",
                   file=sys.stderr)
         if args.dry_run:
             continue
-        rc = _commit_and_report(path, new_data, args) or rc
+        rc = _commit_and_report(path, new_data, args, row) or rc
+    if rows is not None:
+        _emit_rows(rows, fmt_out)
     return rc

@@ -6,7 +6,7 @@ import wave
 
 import pytest
 
-from acidcat.core import svx
+from acidcat.core.formats import svx
 
 
 def _chunk(cid, payload):

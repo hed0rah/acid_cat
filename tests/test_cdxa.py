@@ -9,7 +9,7 @@ import struct
 
 import pytest
 
-from acidcat.core import cdxa
+from acidcat.core.codecs import cdxa
 
 
 def _xa_sector(file, chan, coding, payload):
@@ -122,8 +122,8 @@ def test_split_gaps(tmp_path):
 
 def test_extract_wires_cdxa(tmp_path):
     """A raw CD-XA image sniffs as cdxa and iter_samples yields a soundtrack WAV."""
-    from acidcat.core import sniff as sniffmod
-    from acidcat.core import samples as smod
+    from acidcat.core.infra import sniff as sniffmod
+    from acidcat.core.extract import samples as smod
     import wave, io
 
     # a short, non-silent stereo stream: header 0 (filter 0, shift 12), buzz data

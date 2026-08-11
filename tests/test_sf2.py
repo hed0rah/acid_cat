@@ -3,7 +3,7 @@ import struct
 
 import pytest
 
-from acidcat.core import sf2
+from acidcat.core.formats import sf2
 
 
 def _riff(form, *chunks):
@@ -83,7 +83,7 @@ def test_not_sf2_raises():
 
 
 def test_walker_and_sniff():
-    from acidcat.core import sniff
+    from acidcat.core.infra import sniff
     from acidcat.core.walk.sf2 import inspect_sf2
     import tempfile, os
     data = _make_sf2([("Kick", 0, 100, 0, 0, 44100),

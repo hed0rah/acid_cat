@@ -6,7 +6,8 @@ on a synthetic sample embedded between invalid-header padding."""
 import array
 import random
 
-from acidcat.core import brr, snesrip
+from acidcat.core.extract import snesrip
+from acidcat.core.codecs import brr
 
 
 def _block(shift, filt, nibbles, loop=False, end=False):

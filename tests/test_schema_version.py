@@ -9,8 +9,8 @@ import sqlite3
 
 import pytest
 
-from acidcat.core import index as idx
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import registry as reg
 
 
 def _stamp_meta(db_path, value):

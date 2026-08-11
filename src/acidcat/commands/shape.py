@@ -17,8 +17,12 @@ file is skipped, one that crashes the walker is flagged (a specimen in itself).
 """
 
 import os
+import sys
 
-from acidcat.core import sniff as sniffmod
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.infra.render import output as _render
+
+from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import walk_file, _WALKERS
 from acidcat.core.walk.base import Unsupported
 
@@ -43,21 +47,38 @@ def register(subparsers):
                    help="only files whose format label contains FMT (case-insensitive)")
     p.add_argument("--warn-only", action="store_true",
                    help="only files that carry a warning / anomaly")
+    # tsv stays the DEFAULT -- shape's contract is `sort | uniq -c` and every
+    # existing use depends on it. The other renderings are additive: shape was
+    # the one verb producing records with no way to hand them to a JSON
+    # consumer, which is odd for the verb whose entire output IS data.
+    add_output_format_arg(p, default="tsv", only=("tsv", "csv", "json", "table"))
     p.set_defaults(func=run)
 
 
 def _iter_files(targets):
+    """Yield (path, named): `named` is True for a path the caller wrote on the
+    command line, False for one the directory recursion turned up."""
     for t in targets:
         if os.path.isfile(t):
-            yield t
+            yield t, True
         elif os.path.isdir(t):
             for root, _dirs, names in os.walk(t):
                 for name in names:
-                    yield os.path.join(root, name)
+                    yield os.path.join(root, name), False
 
 
 def _ids(seq):
     return ",".join(sorted({str(c).strip() for c in seq}))
+
+
+# A file you NAMED gets a row even when nothing can walk it; a file the
+# directory recursion FOUND does not. Naming a file is a question about that
+# file, and answering it with zero bytes and exit 0 is indistinguishable from
+# "walked it, the filters excluded it" -- `shape mystery.ch1` printed nothing,
+# and a sweep over a directory of one unknown format produced an empty
+# histogram rather than the cluster of N that is the whole signal. Recursion is
+# a question about a tree, where a row per README and .DS_Store is noise.
+_UNWALKED = "?unwalked"
 
 
 def _fast_fingerprint(path):
@@ -69,17 +90,19 @@ def _fast_fingerprint(path):
     ids = ""
     try:
         if fmt == "wav":
-            from acidcat.core.riff import iter_chunks
+            from acidcat.core.formats.riff import iter_chunks
             ids = _ids(c for c, _, _ in iter_chunks(path))
         elif fmt in ("aiff", "aifc"):
-            from acidcat.core.aiff import iter_chunks
+            from acidcat.core.formats.aiff import iter_chunks
             ids = _ids(c for c, _, _ in iter_chunks(path))
         elif fmt == "flac":
-            from acidcat.core.flac import iter_metadata_blocks
+            from acidcat.core.formats.flac import iter_metadata_blocks
             ids = _ids(b[1] for b in iter_metadata_blocks(path))
+        flag = ""
     except Exception:
-        pass
-    return (label, "", ids, "")
+        # a parse failure and a legitimately empty file emitted identical rows
+        flag = "!parse-failed"
+    return (label, "", ids, flag)
 
 
 def _full_fingerprint(path, want_anomalies):
@@ -95,23 +118,53 @@ def _full_fingerprint(path, want_anomalies):
     summary = next((c["summary"] for c in chunks
                     if str(c["id"]).strip() in _HEADER_IDS), "")
     if want_anomalies:
-        from acidcat.core import anomalies
+        from acidcat.core.forensics import anomalies
         try:
             findings = anomalies.scan(path, label, chunks, warns) or []
+            flag = ",".join(sorted({f["rule"] for f in findings}))
         except Exception:
-            findings = []
-        flag = ",".join(sorted({f["rule"] for f in findings}))
+            # a scan that crashed is not a file with no anomalies, and
+            # --warn-only filters on this flag -- so the empty string dropped
+            # exactly the crashiest specimens out of the listing
+            flag = "!anomaly-scan-failed"
     else:
         flag = "WARN" if warns else ""
     return (label, summary, ids, flag)
 
 
 def run(args):
-    for path in _iter_files(args.targets):
+    from acidcat.util.stdin import resolved_input
+    from contextlib import ExitStack
+    # `-` is stdin. Resolved to a real path up front so the walk below is
+    # untouched; a path that is not "-" passes through unchanged.
+    with ExitStack() as stack:
+        args.targets = [
+            stack.enter_context(resolved_input(t)) if t == "-" else t
+            for t in args.targets
+        ]
+        if any(t is None for t in args.targets):
+            print("acidcat shape: no data on stdin", file=sys.stderr)
+            return 1
+        return _run(args)
+
+
+def _run(args):
+    # a target that does not exist yielded nothing, printed nothing and exited
+    # 0 -- indistinguishable from "scanned it, matched nothing"
+    missing = [t for t in args.targets if not os.path.exists(t)]
+    for t in missing:
+        print(f"acidcat shape: {t}: No such file or directory", file=sys.stderr)
+    if missing and len(missing) == len(args.targets):
+        return 2
+    emitted = 0
+    rows = []
+    for path, named in _iter_files(args.targets):
         fp = (_fast_fingerprint(path) if args.fast
               else _full_fingerprint(path, args.anomalies))
         if fp is None:
-            continue
+            if not named:
+                continue
+            fp = (_UNWALKED, sniffmod.sniff(path) or "", "", "")
         label, summary, ids, flag = fp
         if args.fmt_filter and args.fmt_filter.lower() not in label.lower():
             continue
@@ -119,8 +172,21 @@ def run(args):
             continue
         if args.coarse:
             summary = ""
-        cols = [label, summary, ids, flag]
+        emitted += 1
+        row = {"format": label, "summary": summary, "chunks": ids, "flag": flag}
         if not args.no_path:
-            cols.append(path)
-        print("\t".join(cols))
-    return 0
+            row["path"] = path
+        rows.append(row)
+    fmt = getattr(args, "output_format", "tsv")
+    if rows:
+        if fmt == "tsv":
+            # Hand-rolled rather than through the renderer, deliberately: the
+            # historical format has NO header row, and shape's whole contract
+            # is `sort | uniq -c`, which would count a header as a data line.
+            for r in rows:
+                print("\t".join(str(v) for v in r.values()))
+        else:
+            _render(rows, fmt=fmt)
+    # a filter that matched nothing is a negative result, not a success --
+    # `shape lib --format flac && ...` used to proceed on an empty listing
+    return 0 if emitted else 1

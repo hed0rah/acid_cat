@@ -5,7 +5,7 @@ Fixtures are synthesized here from the documented shapes -- no real expansion.""
 import json
 import struct
 
-from acidcat.core.sniff import sniff
+from acidcat.core.infra.sniff import sniff
 from acidcat.core.walk import mpc
 from acidcat.core.walk.base import Unsupported
 

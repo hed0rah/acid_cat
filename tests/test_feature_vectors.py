@@ -7,9 +7,9 @@ import struct
 
 import pytest
 
-from acidcat.core import index as idx
-from acidcat.core import features as feat
-from acidcat.core import search
+from acidcat.core.catalogue import index as idx
+from acidcat.core.analysis import features as feat
+from acidcat.core.catalogue import search
 
 
 def test_pack_unpack_roundtrip():

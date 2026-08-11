@@ -9,7 +9,7 @@ import random
 import struct
 import wave
 
-from acidcat.core import locate
+from acidcat.core.forensics import locate
 
 
 def _noise(n, seed=1):
@@ -161,5 +161,120 @@ def test_invalid_mode_raises():
 
 
 def audioscan_window():
-    from acidcat.core import audioscan
+    from acidcat.core.forensics import audioscan
     return audioscan.DEFAULT_WINDOW
+
+
+def test_blob_overlapping_a_container_is_absorbed():
+    """The statistical detector works in windows, so a blob routinely opens a few
+    hundred bytes ahead of the container header it belongs to. An offset-only
+    containment test then reports that file twice -- once correctly as a
+    container, once as a redundant raw blob. Measured on a disk image of six real
+    WAVs: 8 regions for 6 files, both extras being exactly this."""
+    from acidcat.core.forensics.locate import _mostly_within
+
+    # a blob starting before a container but almost entirely inside it
+    assert _mostly_within(0x402000, 0x4E0000, [(0x40221A, 0x570000)])
+    # a blob that merely touches the edge is a separate find
+    assert not _mostly_within(0x100, 0x100000, [(0xFF000, 0x200000)])
+    # exact containment still absorbed
+    assert _mostly_within(0x500, 0x900, [(0x0, 0x1000)])
+    # nothing to overlap
+    assert not _mostly_within(0x0, 0x1000, [])
+
+
+def test_locate_reports_one_region_per_embedded_file(tmp_path):
+    """End to end: an image with real containers must yield one region each, not
+    a container plus a shadow blob."""
+    import os
+    from conftest import CORPUS_WAV as wav
+    if not os.path.isfile(wav):
+        import pytest
+        pytest.skip("test corpus WAV not present")
+    payload = open(wav, "rb").read()
+    blob = bytes(3000) + payload + bytes(2000) + payload + bytes(1000)
+    from acidcat.core.forensics import locate as locatemod
+    recs = locatemod.locate(blob, mode="normal")
+    containers = [r for r in recs if r["kind"] == "container"]
+    assert len(containers) == 2, f"expected 2 containers, got {len(containers)}"
+    # no blob may duplicate a container we already reported
+    for r in recs:
+        if r["kind"] != "blob":
+            continue
+        for c in containers:
+            overlap = min(r["end"], c["end"]) - max(r["offset"], c["offset"])
+            span = r["end"] - r["offset"]
+            assert not (span > 0 and overlap / span >= 0.5), \
+                f"blob at 0x{r['offset']:x} duplicates the container at 0x{c['offset']:x}"
+
+
+def test_oversize_input_reports_partial_statistical_coverage(tmp_path, capsys,
+                                                             monkeypatch):
+    """No silent caps. locate's signature sweep covers the whole buffer while
+    the statistical pass caps out, so a large image would otherwise report raw
+    audio from only part of it with nothing on screen saying so."""
+    from acidcat.cli import main
+    from acidcat.core.forensics import audioscan
+    from acidcat.core.forensics import framescan
+    monkeypatch.setattr(audioscan, "DEFAULT_READ_CAP", 4096)
+    monkeypatch.setattr(framescan, "_READ_CAP", 4096)
+    p = tmp_path / "big.img"
+    p.write_bytes(bytes(9000))
+    main(["locate", str(p)])
+    err = capsys.readouterr().err
+    # both bounded engines must name themselves -- an earlier version claimed
+    # streams were "found throughout" while the frame scan was capping too
+    assert "raw-audio scan covers the first" in err
+    assert "stream scan covers the first" in err
+    assert "container signatures are found throughout" in err
+
+
+def test_strict_mode_does_not_claim_partial_coverage(tmp_path, capsys,
+                                                     monkeypatch):
+    """strict skips the statistical pass entirely, so the caveat would be noise."""
+    from acidcat.cli import main
+    from acidcat.core.forensics import audioscan
+    from acidcat.core.forensics import framescan
+    monkeypatch.setattr(audioscan, "DEFAULT_READ_CAP", 4096)
+    monkeypatch.setattr(framescan, "_READ_CAP", 1 << 40)
+    p = tmp_path / "big.img"
+    p.write_bytes(bytes(9000))
+    main(["locate", str(p), "--mode", "strict"])
+    assert "raw-audio scan covers" not in capsys.readouterr().err
+
+
+def test_min_confidence_filters_and_says_what_it_withheld(tmp_path, capsys):
+    """`locate | carve --batch` should be a one-liner without jq in the middle.
+    But a filtered "nothing found" must not look like a genuine one, so the
+    count that was withheld goes to stderr."""
+    from acidcat.cli import main
+    import struct, math
+    # a tonal region (scores high) and noise (scores low)
+    tone = bytes((128 + int(90 * math.sin(2 * math.pi * i / 64))) & 0xFF
+                 for i in range(120_000))
+    rng = 1
+    noise = bytearray()
+    for _ in range(120_000):
+        rng = (1103515245 * rng + 12345) & 0x7FFFFFFF
+        noise.append((rng >> 16) & 0xFF)
+    p = tmp_path / "mix.img"
+    p.write_bytes(bytes(noise) + tone)
+
+    main(["locate", str(p), "--output-format", "tsv"])
+    all_rows = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+
+    main(["locate", str(p), "--output-format", "tsv", "--min-confidence", "0.99"])
+    cap = capsys.readouterr()
+    strict_rows = [l for l in cap.out.splitlines() if l.strip()]
+    assert len(strict_rows) < len(all_rows), "filter had no effect"
+    assert "not reported" in cap.err, "silently withheld regions"
+
+
+def test_min_confidence_zero_is_the_old_behaviour(tmp_path, capsys):
+    from acidcat.cli import main
+    p = tmp_path / "x.img"
+    p.write_bytes(bytes(9000))
+    main(["locate", str(p), "--output-format", "tsv"])
+    base = capsys.readouterr().out
+    main(["locate", str(p), "--output-format", "tsv", "--min-confidence", "0"])
+    assert capsys.readouterr().out == base

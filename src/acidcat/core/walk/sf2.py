@@ -4,7 +4,7 @@ core/sf2.py; `acidcat convert font.sf2` extracts the samples to WAV."""
 
 import os
 
-from acidcat.core import sf2 as sf2mod
+from acidcat.core.formats import sf2 as sf2mod
 from acidcat.core.walk.base import Unsupported, _PAYLOAD_CAP, _f
 
 _SAMPLE_LIST_CAP = 400          # named samples to list in inspect

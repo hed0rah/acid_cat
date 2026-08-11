@@ -6,6 +6,436 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-10
+
+The 1.0 release. Everything below landed after the 1.0.0b2 beta, and the theme
+is the same one that runs through the whole 1.0 cycle: **a tool that reports a
+partial answer as a whole one is worse than a tool that declines.** Most of what
+follows is either a check learning to say what it did not look at, or a CLI
+shape being fixed while it is still free to fix.
+
+### Breaking
+
+- **`probe` takes its operands last: `probe SUBVERB [OPTIONS] FILE...`.** The
+  old `probe FILE SUBVERB` could not survive a wildcard -- the shell turns
+  `probe *.wav strings` into `probe a.wav b.wav c.wav strings` before acidcat
+  sees it, and there was no reading of that which worked. No long-lived tool
+  puts an operand between a command and its subcommand. Two things fall out:
+  `probe strings --help` now works without naming a file, and multi-file output
+  is labelled per file, the grep and file(1) rule, so single-file output still
+  pipes unchanged. `probe diff` takes exactly two operands, like diff(1).
+
+- **Per-file report verbs accept many files and directories.** `audit`, `info`
+  and `chunks` took exactly one file and no directory, while `inspect` beside
+  them took a list and no directory: four arities across verbs that all do the
+  same thing. `audit *.wav` was a usage error. The rule now is testable rather
+  than aesthetic -- a verb takes `FILE...` when its output is per-file and
+  self-labelling, and one file only when it has arguments meaningless across
+  files, which is why `od`, `carve` and probe's offset sub-verbs stay singular.
+
+### Added
+
+- **`validate --deep` verifies the checksums a format carries about itself.**
+  FLAC frame CRC-8 and CRC-16, and MP3 frame validity. Neither needs a decoder.
+  A failure is proof rather than inference. acidcat previously parsed FLAC's
+  STREAMINFO MD5, displayed it, and never checked it -- `repair` called a file
+  "already consistent" that ffmpeg refuses to decode. Off by default because it
+  costs a full read. Worth recording: ffmpeg does not verify FLAC frame CRCs by
+  default either, so this class of damage passes quietly through the most
+  obvious tool for the job -- and `-err_detect crccheck`, the flag documented
+  for it, does not reliably catch it. Measured across the CI matrix: ffmpeg
+  exits 0 on a FLAC whose frame CRCs do not match, with the flag and without,
+  on every build tested.
+
+- **`audit --signal` reports CD ripper concealment.** Where a rip wrote silence,
+  a held sample, an interpolation or a repeated block over a sector it could not
+  read. This speaks to a file's ORIGIN rather than its damage: CD players
+  conceal errors in the playback path by design and say nothing, while the drives
+  used for ripping generally do not, so concealment reaching a file is evidence
+  it came off a disc that would not read cleanly. Measured against real material
+  at 0.0 to 0.4 percent false positives for the three structural strategies.
+  Raw uncorrected data is deliberately NOT claimed: measured over one CD sector,
+  real audio and random bytes overlap by 40 percent on the obvious statistic, so
+  detecting it would mean a false positive on roughly six files in ten.
+
+### Fixed
+
+- **Anomaly checks dispatched on the display label, so renaming a string could
+  turn a check off.** Seven checks branched on the walker's human-readable
+  label -- `fmt_label.startswith("Ogg")`, `"AIFF" in fmt_label` -- which made
+  the wording of a presentation string load-bearing across a module boundary.
+  Retitling `RIFF/WAVE` would have silently disabled two forensic checks, with
+  nothing at the definition site to warn anyone and no test to catch it.
+  Dispatch is on the sniff id now. One latent bug fell out of the conversion: a
+  guard that suppresses the spurious "embedded Ogg" finding on ordinary Ogg
+  files also required the label to be non-empty, so a walker returning `""`
+  would have had the guard fail open.
+
+- **Directory walks skipped supported formats, silently.** Eight commands each
+  had their own `os.walk` and their own extension list, so one directory holding
+  a FLAC, an MP3, an AIFF and a WAV was seen as 4, 3, 1 or 0 files depending
+  which verb you asked, and none of them said so. `detect` finds BPM and key,
+  matched `.wav` only, and reported nothing at all for a library of FLACs while
+  `detect a.flac` on the same file worked. There is one shared expander now: a
+  named file is never filtered, and a directory walk reports what it passed over.
+
+- **`od` on a directory produced a raw traceback** -- the only uncaught one
+  across 21 verbs and four kinds of bad input.
+
+- **`-` reads stdin on every verb that takes a file.** `shape`, `audit` and
+  `validate` had no stdin handling at all.
+
+- **The TUI's hex row lost two columns to a scrollbar it did not reserve.** The
+  width was measured from the pane minus its border, ignoring padding and the
+  scrollbar -- and because scrollbar presence depends on content height, which
+  depends on the width being chosen, the measurement fed back into itself and
+  landed one layout behind. That is why the wrapping looked intermittent and why
+  moving to a shorter field and back appeared to fix it.
+
+- **`tab` in the TUI handed focus to a pane the zoom had hidden**, so the arrow
+  keys drove a cursor nobody could see and the hex view jumped to a field the
+  user had not chosen. From outside that reads as "I cannot change fields",
+  which is the opposite of what was happening.
+
+- **The TUI's multi-pane view stated the same facts up to three times** on one
+  line -- offset, size, then both again -- putting a 110-character line into a
+  66-column pane. The two columns are symmetric now, and the byte views redraw
+  when the pane changes size instead of keeping their old dimensions until you
+  cycled away and back.
+
+- **A test wrote into the repository root** on every run, and asserted nothing.
+
+### Internal
+
+- CI went red on all five platforms from a guard that could never fire:
+  `subprocess.run` raises `FileNotFoundError` when a binary is absent rather
+  than returning non-zero, so `if result.returncode: skip()` never reached the
+  skip. There is one `have_tool()` helper now, verified by running the whole
+  suite with ffmpeg removed from PATH.
+
+
+## [1.0.0b2] - 2026-08-08
+
+A hardening pass ahead of the 1.0 release candidate. Almost every entry below
+has one shape: **work was skipped and the result was reported as complete.** A
+cap, a swallowed exception or a filter would drop part of the job, and the
+summary line counted what it had looked at rather than what it had been asked
+to look at -- so a partial answer was indistinguishable from a whole one. Six of
+these were introduced by the 1.0 restructure itself.
+
+### Breaking
+- **Python 3.9 is no longer supported.** The floor is 3.10. The code already
+  used 3.10 syntax; the metadata claimed 3.8+, so `pip` installed a package that
+  could not import on the versions it advertised. CI now runs the versions the
+  package actually claims.
+- **Exit codes are now one convention across every verb**, following `grep` and
+  `diff`: `0` it worked, `1` it ran fine and the answer is no, `2` it could not
+  run. Sixteen verbs disagreed, and the disagreements were not cosmetic:
+  `locate` exited 0 having found nothing, so `locate --json | carve --batch -`
+  on a blob with no audio in it succeeded end to end and a recovery script
+  carried on with an empty output directory; `validate` exited 0 for files it
+  never modelled, giving a clean bill of health to anything it did not
+  understand, on the same byte where `audit` had findings; `audit` always
+  exited 0, so the forensic verb could not gate anything; `repair --dry-run`
+  exited 0 over a list of pending repairs; a missing file was 1 in eleven verbs
+  and 2 in three; and `carve --chunk ZZZZ` was 2 (you typed it wrong) where
+  `dump FILE ZZZZ` was 1 (it is not in this file) for the identical question.
+  The convention is documented in the README and pinned by
+  `tests/test_exit_codes.py`, parametrized over every verb that takes a path --
+  the previous version of that test asserted `in (1, 2)` across three verbs,
+  which encoded the disagreement rather than catching it. **If you script
+  acidcat, check any `&&` / `||` chain and any `$?` branch.**
+
+### Fixed
+- **Bitwig wavetables: the `.wt` header word at offset 10 is a flags field, not
+  a data offset.** Read as an offset, 151 of 152 real wavetables were reported
+  corrupt. The flags say whether the payload is int16 or float32, whether the
+  file is a one-shot sample, and whether `<wtmeta>` XML follows. All 152 walk
+  clean. The synthetic test specimen had encoded the same misunderstanding,
+  which is why nothing caught it.
+- **`audit` trusted a declared PCM size past the end of the file**, reading
+  beyond the buffer instead of clamping to the bytes actually present.
+- **The TUI loudness guard never fired on compressed files**, and its prompt
+  could not be answered from the keyboard.
+- **`repair` could destroy audio, and exited 0.** On a WAV whose container size
+  had been truncated, the repairer rewrote the file to the size the header
+  declared -- orphaning 882,000 bytes of perfectly readable samples and
+  reporting success. `repair` now refuses to write when a fix would strand audio
+  data past the container, and says which bytes it would have lost.
+- **`carve -o` could destroy its own input.** Carving a region back over the
+  source path truncated the file to the region (2,044 bytes in, 4 bytes out).
+  The output path is now checked against the input, including through symlinks
+  and case-insensitive filesystems.
+- **`locate` could not find 16-bit PCM** -- the headline capability. The
+  statistical detector scored bytes only as 8-bit samples, so 16-bit little- and
+  big-endian raw audio, the two most common cases in a card dump, read as noise.
+  It now folds three decimated views (8-bit, 16-bit LE, 16-bit BE) per block and
+  keeps the best-scoring one.
+- **`locate` ranked silence above real audio.** The confidence score rewarded
+  low variance, so a run of zeros beat a drum loop. Digital silence is now
+  rejected outright rather than promoted.
+- **The MCP server was dead on every fresh install.** `mcp` 2.0 removed the
+  low-level `Server.list_tools` / `call_tool` decorators this server is built
+  on, and the dependency was unpinned -- so `pip install acidcat[mcp]` resolved
+  2.0 and `acidcat-mcp` died on startup with an `AttributeError`. Pinned to
+  `mcp>=1.0,<2`. Supporting the 2.x API is a port, not a version bump.
+- **MCP DNS-rebinding protection was off.** The SDK treats an omitted
+  `TransportSecuritySettings` as opt-*out*, so the HTTP transport accepted any
+  `Host`/`Origin` -- a page in the user's browser could drive the server. It is
+  now on by default, with the loopback origins allowed and a warning when bound
+  to a non-loopback address. Result limits are clamped so a client cannot ask
+  for an unbounded row count.
+- **`census` silently dropped 1.65% of files on Windows.** `os.open` without
+  `O_BINARY` opens in text mode, where `os.read` stops at the first `0x1A`
+  byte -- so any file with a `^Z` in its first block was truncated mid-scan and
+  counted as clean.
+- **`detect` invented tempos and keys.** A 0.4-second snare reported 304 BPM.
+  Tempo is now range-checked before it is reported, key detection gates on the
+  margin between the best and second-best profile rather than on raw
+  correlation, and `bandwidth.py`'s documented accuracy figures were corrected
+  (they had been tuned against white noise, which is not representative:
+  measured recall is 47%).
+- **`audit --signal` crashed on a WAV declaring a sample rate of 0.** The signal
+  analyzers ran outside the guard that protected the decode, so a division by
+  zero took the whole verb down with a traceback. A check that cannot run is now
+  reported as "NOT screened", not omitted.
+- **`od` was unbounded** -- a 285 MB input produced a 1.4 GB dump over five and
+  a half minutes with no way to stop it.
+- **`audioscan` peaked at 46x the input size** (32 MB in, 1.4 GB resident). The
+  vectorized path materialized whole-buffer slices per view and retained a dict
+  per block; it now decimates per block and accumulates running sums.
+- **`query` reported different errors on different machines.** `--bpm zzz`
+  checked the registry before it checked the argument, so the same bad command
+  exited 1 ("no libraries") on a fresh machine and 2 ("bad value") on a
+  populated one. Arguments are validated before any state is consulted.
+- **Empty results are now valid machine output.** `query --json` with no matches
+  emitted zero bytes, so `jq` and `json.loads` both failed on an ordinary empty
+  answer.
+- **`scan --json` and `features DIR --json` did nothing.** Both registered
+  `--output-format` and then ignored it, always writing a CSV file -- so the
+  flag was accepted, CSV came out, and neither command could be the left side of
+  a pipe. The default (a CSV file) is unchanged.
+- Malformed input produces a message and a usable exit code rather than a
+  traceback, across the verbs where hostile bytes reached an unguarded parse.
+- **`audit` died with a TypeError on any file triggering a "check_failed"
+  anomaly.** Four rules deliberately report `offset: None` -- they are the ones
+  whose job is to say "this rule could not run, the file was NOT screened" --
+  and the sort ordered on offset directly, so the moment such a finding shared a
+  severity with a positioned one, Python compared None against an int. A 3-byte
+  `ID3` was the smallest trigger; any ordinary corrupt file that crashes one
+  rule while another warns hit it.
+- **`extract` raised IndexError on an Impulse Tracker file of 48-51 bytes.**
+  `parse_it` was the one tracker parser without an upfront length guard: the
+  fields at 32..47 use `unpack_from` (the clean short-read signal every caller
+  handles) but gvol/mvol/speed/tempo at 48..51 were bare indices.
+- **`write -o` pointed at its own input edited in place and made no backup** --
+  that path is not a copy, and it took the branch that skips the `_original`, so
+  the one guaranteed-recoverable path was lost exactly when a script templates
+  output == input.
+- **MCP `reindex_features` wrote feature vectors `find_similar` could never
+  read**, tagging them version 1 (pre-vector) while the search filters on the
+  current version. It reported `{"processed": N, "failed": 0}` and the library
+  then returned a population of 0 -- and could not repair itself, because the
+  "remaining" count keyed on rows being absent rather than stale.
+- **The tag filter was the one case-SENSITIVE filter** in the shared query
+  builder, so `--tag wavetable` returned nothing against 85 rows stored as
+  `Wavetable`. The same builder backs the MCP search tool.
+- **`locate` ranked a statistical guess above a signature-validated container.**
+  A real WAV whose magic had been checked came back at confidence 0.900 and a
+  headerless region inferred from autocorrelation came back at 1.000, so
+  `--min-confidence 0.90` filtered out the containers and kept the guesses. On a
+  compressed proprietary container (byte entropy 7.8, which acidcat's own
+  `probe entropy` calls "encrypted or compressed") that meant four megabytes of
+  noise reported as raw PCM at confidence 1.00 with no threshold able to reject
+  it. Blobs now occupy `[0, 0.89]` and only a checked magic number reaches 0.90.
+  Rescaled rather than clipped, and the `normal`-mode detection gate moved onto
+  the new scale with it, so what `locate` *finds* is unchanged.
+- **JSON records could not locate their own bytes.** `dump --json` reported
+  `offset` for the 8-byte chunk header while `size` and `hex` described the
+  payload, so feeding a record into `carve --offset` read 8 bytes early and
+  returned the ASCII chunk id; `inspect --json` had the same skew between
+  `chunk.offset` and `field.off`. Format-dependent, so a script tuned on
+  trackers (no header, no skew) broke silently on RIFF. Chunks now carry
+  `payload_base` / `payload_offset` and fields carry `abs`, which `--full` has
+  always emitted.
+- **`inspect --force` and `--resync` emitted no JSON at all** under `--json` --
+  the human table verbatim, so `jq` failed on the two verbs you reach for when
+  no walker claims a file.
+- **`extract` counted samples it recovered nothing from.** A MOD declaring a
+  4,096-byte sample starting at EOF was listed at its declared size, counted,
+  and written as a 44-byte WAV header with no audio.
+- **`shape` answered with silence for files it cannot walk**, so
+  `shape mystery.ch1` printed nothing and a sweep of one unknown format gave an
+  empty histogram. A file you *name* now gets a row; directory recursion still
+  filters, so a tree sweep does not sprout a row per README.
+- **`census --limit` made whole-corpus claims from a prefix.** `--json` carried
+  no truncation marker, and the "rare chunks" section reported a chunk occurring
+  1,178 times as rare because only 20 files had been opened.
+- `extract` leaked the temp path it buffers stdin into, naming a file the user
+  never asked about.
+
+### Added
+- **The Ableton sidecar family is walked.** `.asd` analysis files, the Live Set
+  family, Max for Live devices and `.agr` grooves. The object tree's type
+  dictionary is decoded rather than guessed at, so typed values come out as
+  values; warp markers are decoded and the tempo derived from them, since `.asd`
+  does not store a tempo field. A sidecar that no longer describes its audio is
+  reported as such. The overview bin size is read from the file (128) rather
+  than inferred (64), and the "schema generations" the format appeared to have
+  turned out to be optional sections.
+- **Visualisation over a whole file, not a prefix.** `viz` gained a streamed
+  file-wide entropy pass and a 64x64 Hilbert map covering the entire file at a
+  flat read cost. Both say when they sampled; neither captions a cap as a fact.
+- **Two more anomaly rules, and fixtures that fire every one of them.** Two of
+  the thirteen shipped rules were referenced by no test at all -- a detector
+  nobody has made fire is a claim, not a check. Sixteen rules now, none untested.
+- **`probe.annotate()` and `od --marks`.** Per-byte tags (`class:*`, `mark:size`,
+  `mark:table`) for the hex path with no walker behind it -- `--offset`, a carved
+  region, an unknown header. Tags are strings, never colours, so the terminal,
+  the TUI and the HTML explorer each choose their own styling. The overlay is
+  bounded to 256 KB and its summary line says which bytes it actually scanned.
+- **A TUI you can drive.** A pane can take the whole screen (`z`), the hex row
+  width follows the pane instead of folding below ~154 columns, `tab` moves
+  focus, and the layout gives the hex view half the screen.
+- **One rendering rule across every verb.** There were six different
+  output-format sets: seven verbs offered `table/json/csv` but not `tsv`, two
+  offered `tsv` but not `csv`, three declared a private `--json` boolean that
+  bypassed the shared registry entirely (so `--output-format json` -- which
+  worked on 26 other verbs -- was an *error* on the forensic verb, the recovery
+  verb and the RE verb), and twelve had no machine-readable output at all. The
+  rule now: a verb whose output is flat records offers **table, json, csv and
+  tsv**; a verb whose output is nested (`inspect`'s chunk tree, `census`'s
+  histograms, `dump`'s native hex) offers table and json, because csv has no
+  honest representation for a tree. Three invariant tests read each verb's
+  declared choices straight off its parser and assert the rule holds.
+- **`shape`, `validate`, `repair` and `write` gained machine output.** `shape`
+  *is* the data verb -- its whole output is records built for `sort | uniq -c` --
+  and TSV was hardcoded with no route to a JSON consumer. `validate` is the
+  CI-gate verb: you could branch on its exit code but not read *which* file
+  failed or *why* without scraping the human table. `repair` and `write` change
+  your files and could not report what they changed or where the backup went;
+  `write --dry-run --json` is now a usable preview rather than prose. Defaults
+  are unchanged throughout -- `shape` stays TSV and stays headerless, because
+  `sort | uniq -c` would count a header as data.
+- **`acidcat probe FILE table AT`** -- walk a discovered offset table into
+  carve-ready regions. This is the gap between acidcat-as-hex-viewer and
+  acidcat-as-RE-workbench: an audit reverse-engineered a real proprietary
+  container in about eight acidcat commands (`od`, `probe read`,
+  `probe entropy`, cross-specimen `carve --encoding hex`) and then stopped,
+  because nothing let it express what it had learned. `--struct` decodes one
+  fixed record and cannot take a count from a field it just read, so carving the
+  375 frames meant leaving the tool and computing offsets in Python.
+  `--count-at` reads the entry count out of the file, `--base after-table`
+  handles the common layout where entries are relative to the byte just past the
+  table, and the records come out in `locate` shape so `--json` pipes straight
+  into `carve --batch -` with no jq in between. A count read from the file is
+  hostile by definition, so it is bounded by what the file can hold and the
+  report says when it was clamped rather than quoting the file's claim back.
+- **`probe --json`** on `read`, `scan`, `find`, `strings`, `diff` and `entropy`.
+  probe is the verb you live in while reverse-engineering an unknown format and
+  it had no machine output at all, so scripting `probe find` meant
+  `tail -n +2 | tr -d ' '`. The human summary lines also moved to stderr, so the
+  plain output pipes cleanly too.
+- **`acidcat wrap`** -- a filter that puts a WAV header on raw PCM read from
+  stdin (`--rate`, `--channels`, `--bits`, `--endian`, `--float`). This closes
+  the recovery chain: a region `locate` finds and `carve` cuts is now playable
+  without a detour through Python or sox.
+- **`carve --wrap`** does the same in bulk, so `locate --json | carve --batch -`
+  produces playable WAVs directly instead of headerless blobs.
+- **`acidcat classify`** -- a triage verdict for a file before committing to a
+  walker: single format, container, damaged, or not audio. It also names the
+  formats acidcat can identify but does not walk, rather than calling them
+  unknown.
+- **`inspect --resync`** rebuilds chunk structure from a damaged container by
+  scanning for plausible `[id][size]` records and keeping the ones that chain
+  end-to-start, showing what a corrupt size field costs the normal walk.
+- **`inspect --format`, `--region` and `--force`** -- parse as a named format
+  regardless of the magic bytes; walk the Nth region `locate` reported inside a
+  larger blob; on a file no walker claims, try every walker and report what each
+  made of it (leads, not identifications).
+- **`acidcat od`** dumps any bytes, not just a chunk, with `--offset` / `--at` /
+  `--region` to scope it.
+- **Lossy-transcode detection without librosa.** `core/analysis/bandwidth.py`
+  identifies a WAV that is really a decoded MP3 from the steepness of the
+  spectral edge rather than from a cutoff frequency, using numpy only.
+- **`python -m acidcat.mcp_server`** as an entry point alongside the
+  `acidcat-mcp` console script.
+
+### Performance
+- **`scripts/bench.py` -- a committed performance baseline.** One tracked number
+  per verb, driven through the real dispatcher, so a regression is visible
+  instead of felt. Runs with no arguments on a bare clone (it generates the
+  suite's synthetic corpus, so two machines can compare) or `--corpus DIR` for
+  real-world figures; `--json` writes a baseline and `--compare` diffs against
+  one. Reports cold and warm, min/median/max rather than best-of, and ms/file
+  alongside MB/s -- the walkers cap their reads, so their MB/s flatters them.
+  Interpreter startup is measured separately, being a per-invocation constant.
+- `audioscan` 22.9 s -> 1.4 s (16x) on large blobs: a vectorized feature path,
+  then batching to fix the memory blowup it introduced.
+- `framescan` 0.8 -> 67 MB/s (79x) on adversarial sync-byte runs.
+- `locate` 1.6x on the statistical scan, byte-identical output.
+
+### Internal
+- **A fresh clone can now reproduce the test results.** The suite depended on
+  gitignored corpora with no generation script anywhere, so sixteen test files
+  and the entire TUI suite skipped on CI while passing locally.
+  `tests/make_corpus.py` generates 23 synthetic specimens (15 KB, license-clean,
+  deterministic) from nothing.
+- **`scripts/preflight.py` reproduces CI locally** by hiding the gitignored
+  corpora and clearing `ACIDCAT_*` before running pytest. Three of seven pushes
+  had gone red from machine-only dependencies; the first preflight predicted
+  1,521 passed / 78 skipped against CI's 1,526 / 73.
+- **The test suite no longer writes into the real home directory.** `conftest`
+  now points `HOME`/`USERPROFILE` at a temp path instead of deleting the
+  variables, so a test run cannot touch a user's registry.
+- **`publish.yml` runs the tests before publishing.** It previously built,
+  ran `twine check`, and uploaded to PyPI without executing the suite at all.
+- CI gates `develop` as well as `main`, and pytest is configured in
+  `pyproject.toml` (`-rs`, so skips explain themselves) rather than depending on
+  the caller's flags.
+
+### Documentation
+- `README`, `CHEATSHEET.md` and `ARCHITECTURE.md` were re-derived from the
+  build. Between them they documented a `-f/--format` output flag that now
+  errors, omitted seven registered verbs, gave `audit`'s section count three
+  different ways, and reported 24 verbs / 48 modules against an actual 29 / 193.
+  `inspect`'s own docstring named 13 formats as though they were the whole set;
+  it now points at `acidcat formats`, which asks the binary.
+
+## [1.0.0b1] - 2026-07-31
+
+The 1.0 beta. Nothing here changes what acidcat can do -- the verb list, the
+walker registry, the extractable formats, and the public API are identical to
+0.90.0, verified by diffing the live registries rather than by inspection. What
+changed is the shape: a `core/` that had grown to 75 loose modules is now eleven
+packages whose order is the dependency direction, which is what makes the
+install tiers real rather than a promise in the README. The CLI vocabulary was
+tightened so a flag name tells you what it does, and the interactive surface --
+previously the least-tested part of the tree -- is now fully covered.
+
+Breaking, with shims: `--format json` is an error (use `--json`); `--format` now
+selects a *file* format. `carve --format` became `carve --encoding`. The old
+spellings still work and warn.
+
+### Changed
+- **One word, one meaning across the CLI.** `--format` was doing three unrelated jobs -- picking output rendering, filtering by file type, and choosing a byte encoding -- so a flag's name no longer told you what it did. Each axis now owns a word, matching how every tool that handles both file formats and output formats disambiguates them (ffprobe `-f` vs `-of`, exiftool "file type" vs `-json`, tshark dissector vs `-T`): **format** = the file's container/codec, **output** (`-o`) = where bytes go, **output-format** = how records render, **encoding** = how carved bytes are serialized. Everyday rendering is `--json` / `--csv`; `--output-format` takes the full list. The old `-f json` spelling still works and warns, but `--format json` is now an error -- `--format` selects a file format. `carve --format` became `carve --encoding` (old flag kept, hidden); `formats --format-out` became `--output-format` (ditto).
+- **`detect` reports failure when it could not detect.** A missing analysis stack that the filename could not cover now exits 1 instead of printing all-nulls with exit 0, so `acidcat detect f && ...` cannot proceed on an empty answer. With librosa present, an undetectable file remains a legitimate exit 0.
+- **`validate` follows the grep/diff exit-code family end to end**: 0 = every checked file is consistent, 1 = a file has a violation (ran fine), 2 = a named input could not be accessed. Previously a missing named file was swallowed as 0, breaking `&&` chains. A missing file *inside* a walked directory is still a skip, not an error.
+- **`--color=auto|always|never` everywhere it applies.** `probe`'s odd `--no-color` boolean is now `--color` (old flag kept as a deprecated alias), and `inspect`/`od` share one implementation. `probe map` lost its `-o` short form for `--order`, since `-o` means "output file" in seventeen other places.
+
+### Added
+- **Pipe a file into the byte-analysis commands.** `chunks`, `dump`, `od`, `detect`, and `probe` now accept `-` (or piped stdin), joining `info`, `carve`, and `locate`: `cat track.wav | acidcat chunks -`. stdin is buffered so the byte-level parsers can still seek, and it is reported as `<stdin>` rather than a temp path.
+- **Output formats are a registry.** `render.register_format(name, fn)` adds a rendering to every command's `--output-format` at once, rather than editing fourteen call sites. `tsv` is registered alongside table/json/csv; csv and tsv now emit `\n` instead of `\r\n`, so they pipe cleanly.
+- **BPM/key from a filename now works without librosa.** That parsing is pure-Python regex but sat behind the librosa import gate, so a base install lost a zero-dependency capability. `tests/test_lean_install.py` pins the tier boundary: a static invariant that no `core/` module imports an optional stack at module level, plus checks that the core verbs run with those stacks blocked and a gated verb prints `pip install acidcat[analysis]` instead of a traceback.
+
+### Fixed
+- `detect --json` leaked the internal temp-file path into its `filename` field when reading from stdin.
+- `od` ignored the `NO_COLOR` environment variable (it checked only whether stdout was a TTY).
+- The TUI's metadata-save path referenced an unimported name -- a latent crash on the edit screen, surfaced by a static undefined-name sweep while splitting the module.
+
+### Internal
+- **The flat `core/` package is now organized by concern**, from 76 top-level modules to 3: `codecs/`, `containers/`, `formats/`, `walk/`, `forensics/`, `analysis/`, `catalogue/`, `write/`, `extract/`, `infra/`, `primitives/`. Duplicated primitives (entropy, PCM coherence, ADPCM sample math, stereo interleave, WAV emission, zip offsets) were extracted and shared. `mcp_server.py` (1623 lines) and `tui_app.py` (2732) were split into packages along their real seams. `infra/formats.py` became `infra/render.py`, ending a three-way name collision. Behaviour-preserving throughout: the public API is unchanged and the suite stayed green at every step.
+
 ## [0.90.0] - 2026-07-30
 
 ### Changed

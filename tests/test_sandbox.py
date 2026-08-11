@@ -7,7 +7,7 @@ import struct
 
 import pytest
 
-from acidcat.core import sandbox
+from acidcat.core.infra import sandbox
 
 linux_only = pytest.mark.skipif(
     not sandbox.available("limits"),

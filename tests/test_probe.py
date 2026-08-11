@@ -76,7 +76,12 @@ def test_resolve_chunk_and_field(tmp_path):
 # ── command ────────────────────────────────────────────────────────
 
 def _args(file, verb, **kw):
-    base = dict(file=file, verb=verb, type="u32", count=1, be=False, le=False,
+    """Operands live in `files` now, and come last on the command line:
+    `probe SUBVERB [OPTIONS] FILE...`. The old `probe FILE SUBVERB` could not
+    survive a glob -- the shell turns `probe *.wav strings` into
+    `probe a.wav b.wav c.wav strings` before acidcat sees it."""
+    files = kw.pop("files", None) or [file]
+    base = dict(files=files, verb=verb, type="u32", count=1, be=False, le=False,
                 min=4, length=256, width=72, order=4, no_color=True)
     base.update(kw)
     return SimpleNamespace(**base)
@@ -92,8 +97,9 @@ def test_cmd_read_field_by_name(tmp_path, capsys):
 def test_cmd_scan_finds_rate(tmp_path, capsys):
     p = _wav(tmp_path, rate=44100)
     rc = cmd.run(_args(p, "scan", value="44100", type="u32"))
-    out = capsys.readouterr().out
-    assert rc == 0 and "hit(s)" in out and "(le)" in out
+    cap = capsys.readouterr()
+    # the summary is on stderr so the offsets on stdout pipe cleanly
+    assert rc == 0 and "hit(s)" in cap.err and "(le)" in cap.out
 
 
 def test_cmd_diff(tmp_path, capsys):
@@ -102,7 +108,7 @@ def test_cmd_diff(tmp_path, capsys):
     d = bytearray(open(a, "rb").read())
     d[0x18] ^= 0xFF                          # flip a byte in the fmt chunk
     b.write_bytes(bytes(d))
-    rc = cmd.run(_args(a, "diff", other=str(b)))
+    rc = cmd.run(_args(a, "diff", files=[str(a), str(b)]))
     out = capsys.readouterr().out
     assert rc == 0 and "changed range" in out
 
@@ -110,7 +116,7 @@ def test_cmd_diff(tmp_path, capsys):
 # ── viz primitives ─────────────────────────────────────────────────
 
 def test_windowed_entropy_uniform_vs_random():
-    from acidcat.core import viz
+    from acidcat.core.forensics import viz
     zeros = viz.windowed_entropy(b"\x00" * 4096, 8)
     assert max(zeros) == 0.0                     # a constant byte = 0 entropy
     varied = viz.windowed_entropy(bytes(range(256)) * 16, 8)
@@ -118,14 +124,14 @@ def test_windowed_entropy_uniform_vs_random():
 
 
 def test_hilbert_grid_shape():
-    from acidcat.core import viz
+    from acidcat.core.forensics import viz
     grid, side = viz.hilbert_grid(bytes(range(256)) * 4, order=4)
     assert side == 16 and len(grid) == 16 and len(grid[0]) == 16
     assert any(cell is not None for row in grid for cell in row)
 
 
 def test_byte_class():
-    from acidcat.core import viz
+    from acidcat.core.forensics import viz
     assert viz.byte_class(0x00)[0] == "."
     assert viz.byte_class(0xFF)[0] == "#"
     assert viz.byte_class(ord("A"))[0] == "o"

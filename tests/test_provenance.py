@@ -1,6 +1,6 @@
 """Provenance identification: canonicalizing writer strings and the structural
 fingerprints, with honest confidence levels."""
-from acidcat.core import provenance
+from acidcat.core.forensics import provenance
 
 
 def _chunks_with(fields):

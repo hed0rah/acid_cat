@@ -11,18 +11,19 @@
   as the NCW path.
 """
 
-import io
 import os
 import struct
 import sys
-import wave
 
-from acidcat.core import adpcm
-from acidcat.core import bitwig as bwmod
-from acidcat.core import ncw as ncwmod
-from acidcat.core import sf2 as sf2mod
-from acidcat.core import svx as svxmod
-from acidcat.core.midi_write import notes_to_smf
+from acidcat.util import outpath
+
+from acidcat.core.codecs import adpcm
+from acidcat.core.formats import bitwig as bwmod
+from acidcat.core.codecs import ncw as ncwmod
+from acidcat.core.formats import sf2 as sf2mod
+from acidcat.core.formats import svx as svxmod
+from acidcat.core.write.midi_write import notes_to_smf
+from acidcat.core.primitives.wavio import pcm_wav
 
 
 def _safe_name(name, idx, ext="wav"):
@@ -46,6 +47,11 @@ def register(subparsers):
                    help="MIDI ticks per beat for .bwclip output (default 480).")
     p.add_argument("--skip-existing", action="store_true",
                    help="Batch mode: skip an .ncw whose .wav already exists.")
+    p.add_argument("--force", action="store_true",
+                   help="Allow writing over an existing file at a path convert "
+                        "derived itself (by swapping the extension). Without "
+                        "this, such a write is refused rather than silently "
+                        "destroying an unrelated file of the same name.")
     p.add_argument("--to-pcm", action="store_true",
                    help="Decode a compressed/ADPCM WAV to a plain 16-bit PCM WAV "
                         "that plays anywhere (IMA/DVI ADPCM 0x0011, Microsoft "
@@ -61,7 +67,7 @@ def register(subparsers):
 def _batch_ncw(directory, args):
     """Convert every .ncw under `directory` to a sibling .wav. Read-only on the
     inputs; one bad file is counted and skipped, never fatal."""
-    done = skipped = failed = 0
+    done = skipped = failed = refused = 0
     for root, _dirs, files in os.walk(directory):
         for name in files:
             if not name.lower().endswith(".ncw"):
@@ -70,6 +76,13 @@ def _batch_ncw(directory, args):
             out = os.path.splitext(src)[0] + ".wav"
             if args.skip_existing and os.path.exists(out):
                 skipped += 1
+                continue
+            clash = outpath.refuse_clobber("convert", out, force=args.force)
+            if clash:
+                # counted and reported, not fatal: one pre-existing sibling
+                # should not abandon the rest of the directory
+                refused += 1
+                print(f"  [skip] {clash}", file=sys.stderr)
                 continue
             try:
                 with open(src, "rb") as f:
@@ -87,8 +100,11 @@ def _batch_ncw(directory, args):
                       file=sys.stderr)
     print(f"converted {done:,} .ncw -> .wav"
           + (f", skipped {skipped:,} existing" if skipped else "")
+          + (f", refused {refused:,} that would overwrite an existing file"
+             if refused else "")
           + (f", {failed:,} failed" if failed else ""))
-    return 0 if done or not failed else 1
+    # a refusal is a file NOT converted, so it must not report success
+    return 0 if done or not (failed or refused) else 1
 
 
 def _run_ncw(path, data, args):
@@ -99,6 +115,12 @@ def _run_ncw(path, data, args):
         print(f"acidcat convert: {path}: {e}", file=sys.stderr)
         return 1
     out = args.output or (os.path.splitext(path)[0] + ".wav")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if not err and not args.output:
+        err = outpath.refuse_clobber("convert", out, force=args.force)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     with open(out, "wb") as f:
         f.write(wav)
     print(f"wrote {out}: {hdr['channels']}ch {hdr['bits']}-bit "
@@ -143,6 +165,12 @@ def _run_svx(path, data, args):
         return 1
     wav = svxmod.to_wav(info, samples)
     out = args.output or (os.path.splitext(path)[0] + ".wav")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if not err and not args.output:
+        err = outpath.refuse_clobber("convert", out, force=args.force)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     with open(out, "wb") as f:
         f.write(wav)
     rate = info["rate"]
@@ -154,13 +182,7 @@ def _run_svx(path, data, args):
 
 
 def _pcm16_wav(frames, rate, channels):
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(channels)
-        w.setsampwidth(2)
-        w.setframerate(rate or 44100)
-        w.writeframes(frames)
-    return buf.getvalue()
+    return pcm_wav(frames, rate or 44100, channels)
 
 
 def _looks_audio(pcm):
@@ -227,6 +249,10 @@ def _run_to_pcm(path, data, args):
             return 1
 
     out = args.output or (os.path.splitext(path)[0] + "_pcm.wav")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     with open(out, "wb") as f:
         f.write(_pcm16_wav(pcm, rate, channels))
     frames = len(pcm) // 2 // max(channels, 1)
@@ -244,7 +270,7 @@ def run(args):
             data = f.read()
     except OSError as e:
         print(f"acidcat convert: {path}: {e}", file=sys.stderr)
-        return 1
+        return 2
     if (args.to_pcm or args.codec) and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
         return _run_to_pcm(path, data, args)
     if data[:4] == ncwmod.MAGIC:
@@ -254,9 +280,15 @@ def run(args):
     if sf2mod.is_sf2(data):
         return _run_sf2(path, data, args)
     if data[:4] != bwmod.MAGIC:
+        # 2, like every other "this verb does not model that format".
+        # The list also omitted --to-pcm, which is the documented path for a
+        # WAV -- so someone holding exactly that was told convert could not help
+        # while the feature they wanted went unmentioned.
         print(f"acidcat convert: {path}: unsupported input (expected a Bitwig "
-              f".bwclip, NCW .ncw, SF2 .sf2, or IFF 8SVX)", file=sys.stderr)
-        return 1
+              f".bwclip, NCW .ncw, SF2 .sf2, or IFF 8SVX). For a WAV, "
+              f"--to-pcm decodes ADPCM or a mistagged codec to plain PCM.",
+              file=sys.stderr)
+        return 2
     try:
         notes = bwmod.parse_notes(data)
     except Exception as e:
@@ -275,6 +307,10 @@ def run(args):
               f"({e.__class__.__name__})", file=sys.stderr)
         return 1
     out = args.output or (os.path.splitext(path)[0] + ".mid")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
     with open(out, "wb") as f:
         f.write(smf)
     print(f"wrote {out}: {len(notes)} notes, {bpm:g} bpm")

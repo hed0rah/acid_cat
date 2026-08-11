@@ -2,7 +2,7 @@
 predictor index 0 (memoryless) and scale 12 decodes (nibble<<12)>>12 = nibble."""
 import array
 
-from acidcat.core import dtk
+from acidcat.core.codecs import dtk
 
 
 def test_decode_frame():

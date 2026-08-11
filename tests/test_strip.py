@@ -6,11 +6,12 @@ import struct
 
 import pytest
 
-from acidcat.core import edit_aiff, edit_riff, edits
+from acidcat.core.write import edit_aiff, edit_riff, edits
 from acidcat.commands.write import _strip
 
 WAV = "data/samples/Drum_Loop.wav"
-MP3 = "data/test_formats/generated/mp3_44100.mp3"
+from conftest import corpus_or_fixture
+MP3 = corpus_or_fixture(os.path.join("generated", "mp3_44100.mp3"), "tone.mp3")
 FIXTURES = "data/test_formats"
 
 
@@ -111,7 +112,7 @@ def test_strip_dispatch_aiff(tmp_path):
 ])
 def test_strip_tagged_preserves_audio(name, suffix):
     pytest.importorskip("mutagen")
-    p = os.path.join(FIXTURES, name)
+    p = corpus_or_fixture(name, "tone" + suffix)
     if not os.path.isfile(p):
         pytest.skip(f"no {suffix} fixture")
     data = open(p, "rb").read()

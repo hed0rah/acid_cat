@@ -7,7 +7,7 @@ the live tables and prints one row per format with a tick under each capability.
 
     acidcat formats                 # the whole matrix
     acidcat formats sf2             # just one format's row
-    acidcat formats -f json         # machine-readable, for piping
+    acidcat formats --json         # machine-readable, for piping
 
 Inspect and Extract are read straight from their registries (walk._WALKERS and
 samples.EXTRACTABLE), so they never drift. Convert and Repair dispatch on magic
@@ -17,8 +17,11 @@ magic sample per format), so a stale entry fails the suite. Turning convert/repa
 into real format tables is the next housekeeping step.
 """
 
-import json
+import argparse
 import sys
+
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.infra.render import format_json
 
 # Convert and Repair have no format-keyed registry to read (they branch on magic
 # bytes in commands/convert.py and core/constraints.py), so these are listed here
@@ -47,15 +50,17 @@ def register(subparsers):
                         "support per format.")
     p.add_argument("format", nargs="?",
                    help="Show just this format id (as sniff/inspect report it).")
-    p.add_argument("-f", "--format-out", choices=("table", "json", "tsv"),
-                   default="table", dest="fmt_out", help="Output shape (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"), deprecated_f=False)
+    p.add_argument("--format-out", dest="output_format",
+                   choices=("table", "json", "tsv"),
+                   help=argparse.SUPPRESS)          # deprecated: use --output-format
     p.set_defaults(func=run)
 
 
 def _matrix():
     """Build [{id, label, inspect, extract, convert, repair}] over every format
     with any capability, read from the live registries."""
-    from acidcat.core import samples
+    from acidcat.core.extract import samples
     from acidcat.core.walk import _WALKERS
 
     labels = {fid: lbl for fid, (lbl, _fn) in _WALKERS.items()}
@@ -99,14 +104,16 @@ def run(args):
                   f"(try `acidcat formats` for the list)", file=sys.stderr)
             return 1
 
-    if args.fmt_out == "json":
-        json.dump(rows, sys.stdout, indent=2)
-        print()
-    elif args.fmt_out == "tsv":
+    if args.output_format == "json":
+        format_json(rows, sys.stdout)
+    elif args.output_format == "tsv":
         print("id\tlabel\t" + "\t".join(_CAPS))
         for r in rows:
             print(r["id"] + "\t" + r["label"] + "\t"
                   + "\t".join("1" if r[c] else "0" for c in _CAPS))
+    elif args.output_format == "csv":
+        from acidcat.core.infra.render import output as _render
+        _render(rows, fmt="csv")
     else:
         _print_table(rows)
     return 0

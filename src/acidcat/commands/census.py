@@ -8,20 +8,21 @@ millions of files without evicting the machine's working set; see
 ``acidcat.core.census`` for the traversal and read strategy.
 """
 
-import json
 import os
 import sys
+
+from acidcat.core.infra.render import format_json
 import time
 
 from acidcat.core import census as _census
+from acidcat.commands._output import add_output_format_arg
 
 
 def register(subparsers):
     p = subparsers.add_parser(
         "census", help="Chunk-ID histogram + open-question flags over a corpus.")
     p.add_argument("target", nargs="+", help="Directory tree(s) to scan.")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("--limit", type=int, help="Stop after N files opened.")
     p.add_argument("--top", type=int, default=60,
@@ -48,7 +49,7 @@ def run(args):
     for t in args.target:
         if not os.path.isdir(t):
             print(f"acidcat census: {t}: Not a directory", file=sys.stderr)
-            return 1
+            return 2
         roots.append(t)
 
     opts = _census.ScanOptions(
@@ -79,16 +80,15 @@ def run(args):
     if out_path:
         stream = open(out_path, "w", encoding="utf-8")
     try:
-        if args.format == "json":
-            json.dump(res, stream, indent=2)
-            stream.write("\n")
+        if args.output_format == "json":
+            format_json(res, stream)
         else:
             _write_table(stream, res)
     finally:
         if stream is not sys.stdout:
             stream.close()
 
-    if not quiet and args.format != "json":
+    if not quiet and args.output_format != "json":
         print(f"\n[census] {res['files_opened']} files, "
               f"{res['riff_family_files']} RIFF-family, "
               f"{res['distinct_chunks']} distinct chunks, "
@@ -132,7 +132,15 @@ def _write_table(w, res):
         w.write("\n")
 
     if res["rare_chunks"]:
+        # "rare" is a claim about the whole corpus, and --limit makes it a
+        # claim about a prefix. On a real library `--limit 20` reported
+        # "LIST 4" as rare -- LIST occurs 1,178 times there and is the 4th most
+        # common chunk in the tree. The counts are still worth showing; what
+        # they are not is evidence of rarity.
+        cap = (f" -- counts from the first {res['limit']} file(s) only; "
+               f"NOT evidence of rarity in the full tree"
+               if res.get("truncated") else "")
         w.write(f"Rare chunks (<=5 occurrences): "
-                f"{len(res['rare_chunks'])}\n")
+                f"{len(res['rare_chunks'])}{cap}\n")
         for cid, n, ex in res["rare_chunks"][:40]:
             w.write(f"  {cid:10s} {n}  {ex}\n")

@@ -5,12 +5,26 @@ chunk/block header and each decoded field on its own line, the field's byte-run
 colored (cycling palette) and labeled with its name/value/note, so the structure
 is legible directly in the raw byte stream. Bulk audio payload is elided.
 
+Like od(1), it never refuses to show you bytes. A format it can walk gets the
+annotated layout; anything else -- a proprietary container, a carved region, a
+raw dump off a device -- falls back to a plain hex dump. Structure is a bonus,
+not a precondition.
+
+    acidcat od song.wav                       # annotated, by chunk and field
+    acidcat od unknown.bin                    # plain hex, no walker needed
+    acidcat od blob.img --offset 0x5d1000 --length 2048
+    acidcat od blob.img --at find:RIFF --length 64
+    acidcat locate blob.img --json | acidcat od blob.img --region 0
+
 Complements `inspect --hex` (a value-first table); this is a bytes-first layout.
 """
 
+import os
 import sys
+from acidcat.util.color import add_color_arg, color_enabled
 
-from acidcat.core.mapped import map_file
+from acidcat.core.infra import bytefields as bf
+from acidcat.core.infra.mapped import map_file
 from acidcat.core.walk import walk_file
 from acidcat.core.walk.base import Unsupported
 
@@ -21,15 +35,34 @@ _FIELD_COLORS = (36, 32, 33, 35, 34, 31, 96, 92, 93, 95)
 def register(subparsers):
     p = subparsers.add_parser(
         "od", help="objdump-x-style annotated, colored hex dump of a file's structure")
-    p.add_argument("target")
-    p.add_argument("--color", choices=["auto", "always", "never"], default="auto")
+    p.add_argument("target", help="File to dump, or '-' for stdin.")
+    add_color_arg(p)
     p.add_argument("--width", type=int, default=16, metavar="N",
-                   help="max hex bytes shown per field before eliding (default 16)")
+                   help="hex bytes per line, and per field before eliding "
+                        "(default 16)")
+    # range selection -- same vocabulary as `carve`, so a region found by
+    # `locate` can be handed to either verb unchanged
+    p.add_argument("--offset", metavar="N",
+                   help="Start at this offset (0x.. or decimal). Forces the raw "
+                        "dump: a byte range has no chunk structure of its own.")
+    p.add_argument("--at", metavar="EXPR",
+                   help="Anchored start: 0xNN | end[-N] | find:STR|0xHEX[+N] | "
+                        "chunk:ID[+N].")
+    p.add_argument("--length", metavar="N",
+                   help="Number of bytes to dump from the start.")
+    p.add_argument("--end", metavar="N",
+                   help="End offset (exclusive), instead of --length.")
+    p.add_argument("--region", type=int, metavar="N",
+                   help="Dump the Nth region reported by `locate` (0-based); "
+                        "runs locate itself, so no piping is required.")
+    p.add_argument("--marks", action="store_true",
+                   help="Tint the raw dump by byte class, and highlight values "
+                        "that look like a file size or an offset table. "
+                        "Inferred, not decoded -- and only on the raw dump; "
+                        "a walked file already colours by decoded field.")
     p.set_defaults(func=run)
 
 
-def _use_color(mode):
-    return mode == "always" or (mode == "auto" and sys.stdout.isatty())
 
 
 def _c(code, text, on):
@@ -45,13 +78,248 @@ def _ascii(b):
 
 
 def run(args):
-    path = args.target
+    from acidcat.util.stdin import resolved_input
+    with resolved_input(args.target) as _p:
+        if _p is None:
+            print("acidcat od: no data on stdin", file=sys.stderr)
+            return 1
+        args.target = _p
+        return _run(args)
+
+
+def _size(path):
+    import os
+    return os.path.getsize(path)
+
+
+def _int(text, what):
     try:
-        label, chunks, warns = walk_file(path)
-    except Unsupported as e:
+        return int(text, 0)
+    except (ValueError, TypeError):
+        raise ValueError(f"{what}: not an offset/length: {text!r}")
+
+
+def _requested_range(args, path, size):
+    """(start, length) from --offset/--at/--length/--end/--region, or None when
+    the whole file was asked for. Raises ValueError on a bad expression.
+
+    Read through getattr so a programmatic caller (the TUI, a test, another
+    command) can pass a namespace carrying only the flags it cares about.
+    """
+    region = getattr(args, "region", None)
+    at = getattr(args, "at", None)
+    offset = getattr(args, "offset", None)
+    length_s = getattr(args, "length", None)
+    end_s = getattr(args, "end", None)
+    if region is not None:
+        from acidcat.core.forensics import locate as locatemod
+        with open(path, "rb") as f:
+            recs = locatemod.locate(f.read(), mode="normal")
+        if not recs:
+            raise ValueError("no regions located in this file")
+        if not 0 <= region < len(recs):
+            raise ValueError(f"--region {region} out of range "
+                             f"(locate found {len(recs)}: 0..{len(recs) - 1})")
+        r = recs[region]
+        return r["offset"], r["length"]
+
+    start = None
+    if at is not None:
+        start = bf.resolve_offset(at, path, size)
+    elif offset is not None:
+        start = _int(offset, "--offset")
+    if start is None and length_s is None and end_s is None:
+        return None
+    start = start or 0
+    if end_s is not None:
+        length = max(0, _int(end_s, "--end") - start)
+    elif length_s is not None:
+        length = _int(length_s, "--length")
+    else:
+        length = size - start
+    return start, length
+
+
+# How much an automatic (no-walker) dump shows before it stops and says so.
+# An explicit --offset/--length is never capped: the user asked for that range.
+_AUTO_DUMP_CAP = 16 * 1024 * 1024
+
+
+# Foreground says what kind of byte this is; background says the value means
+# something. Two channels, because the structured path already spends
+# foreground on field identity and an overlay must not fight it.
+_MARK_BG = {"mark:size": "#3A3E45", "mark:table": "#4A3327"}
+
+
+def _styled_cells(row, base, tags, on):
+    """Hex cells for one row, with escapes RUN-LENGTH ENCODED.
+
+    A per-byte escape is about 19 bytes. Emitting one per byte turns a 16 MB
+    dump into roughly 380 MB of stdout, on a path that has already cost this
+    project 1.4 GB of output in five and a half minutes (see the note in
+    _run). A style only changes when the tags change, and in a header the runs
+    are long -- a field of nulls is one escape, not sixty-four.
+    """
+    from acidcat.tui_theme import BYTE_CLASS_TEXT
+    from acidcat.util.color import bg, fg
+
+    out = []
+    run = []
+    run_key = object()
+
+    def flush():
+        if not run:
+            return
+        text = " ".join(f"{x:02x}" for x in run)
+        if on and run_key is not None:
+            cls, mark = run_key
+            if cls:
+                text = fg(BYTE_CLASS_TEXT[cls], text)
+            if mark:
+                text = bg(_MARK_BG[mark], text)
+        out.append(text)
+        run.clear()
+
+    for i, b in enumerate(row):
+        t = tags.get(base + i, ())
+        cls = next((x.split(":", 1)[1] for x in t if x.startswith("class:")), None)
+        mark = next((x for x in t if x.startswith("mark:")), None)
+        key = (cls, mark)
+        if key != run_key and run:
+            flush()
+        run_key = key
+        run.append(b)
+    flush()
+    return " ".join(out)
+
+
+# annotate() returns a tag list per byte, which is the right shape for a hex
+# window and the wrong one for a whole file: measured, it costs ~217 MB per MB
+# of input, so the 16 MB _AUTO_DUMP_CAP would ask for ~3.5 GB. Marks are a
+# header-reading aid -- nobody eyeballs 16 MB of hex for a size field -- so the
+# overlay is bounded and the summary line says where it stopped.
+_MARK_CAP = 256 * 1024
+
+
+def _marks_for(args, data, start, length):
+    """(tags, covered) for the window about to be dumped, or None if --marks
+    is off.
+
+    The window is what gets scanned, but the marks are defined against the
+    whole file: a size field means nothing measured against a slice, and an
+    offset that lands in-file is only checkable if you know how big the file
+    is. base_off keeps the 4-byte grid the file's, not the window's.
+    """
+    if not getattr(args, "marks", False):
+        return None
+    from acidcat.core.probe import annotate
+
+    end = min(start + length, len(data), start + _MARK_CAP)
+    covered = end - start
+    return annotate(bytes(data[start:end]), base_off=start,
+                    file_size=len(data)), covered
+
+
+def _raw_dump(data, start, length, width, on, note, marks=None):
+    """A plain hex dump of a byte range -- what od(1) does. Used when the file
+    has no walker, or when an explicit range was asked for."""
+    end = min(start + length, len(data))
+    tags, covered = marks if marks else (None, 0)
+    print(_c("1", note, on))
+    if tags:
+        line = _mark_summary(tags, on, covered, end - start)
+        if line:
+            print(line)
+    for base in range(start, end, width):
+        row = data[base:min(base + width, end)]
+        if tags and base - start < covered:
+            cells = _styled_cells(row, base - start, tags, on)
+            # cells carries escapes, so it cannot be width-padded by format
+            # spec -- the padding has to be computed from the visible length,
+            # which is the same 3n-1 the unstyled path produces.
+            pad = " " * max(0, width * 3 - (3 * len(row) - 1))
+            print(f"  0x{base:08x}  {cells}{pad} {_ascii(row)}")
+        else:
+            print(f"  0x{base:08x}  {_hexcells(row):<{width * 3}} {_ascii(row)}")
+    return 0
+
+
+def _mark_summary(tags, on, covered, dumped):
+    """One line naming what was inferred, rather than forty silent hints.
+
+    A statistical inference must never outrank a checked magic number
+    (core/forensics/locate.py), and a view that estimates has to say so
+    (tests/test_tui_viz_honesty.py). Saying it once discharges both.
+    """
+    kinds = {}
+    for ts in tags.values():
+        for t in ts:
+            if t.startswith("mark:"):
+                kinds[t] = kinds.get(t, 0) + 1
+    short = covered < dumped
+    if not kinds and not short:
+        return None
+    words = {"mark:size": "a value matching the file size",
+             "mark:table": "a run of ascending in-file offsets"}
+    parts = [f"{words[k]} ({n // 4} field(s))" for k, n in sorted(kinds.items())]
+    body = "; ".join(parts) if parts else "nothing found"
+    # A cap reported as a complete scan is the bug this project keeps finding
+    # in itself: say which bytes were actually looked at.
+    if short:
+        body += f" -- in the first {covered:,} of {dumped:,} bytes dumped"
+    return _c("2", "  marks: " + body + " -- inferred, not decoded", on)
+
+
+def _run(args):
+    path = args.target
+    on = color_enabled(args)
+    # A directory reaches _size() fine and only fails later, inside sniff, as a
+    # raw PermissionError on Windows or IsADirectoryError elsewhere -- the one
+    # uncaught traceback across 21 verbs x 4 kinds of bad input. `od` takes one
+    # file because its whole vocabulary is offsets into that file.
+    if path != "-" and os.path.isdir(path):
+        print(f"acidcat od: {path}: Is a directory", file=sys.stderr)
+        return 2
+    try:
+        rng = _requested_range(args, path, _size(path))
+    except (ValueError, KeyError, OSError) as e:
         print(f"acidcat od: {path}: {e}", file=sys.stderr)
         return 2
-    on = _use_color(args.color)
+
+    # an explicit byte range has no structure of its own -- dump it plainly
+    if rng is not None:
+        start, length = rng
+        data, close = map_file(path)
+        try:
+            return _raw_dump(data, start, length, args.width, on,
+                             f"{path}  0x{start:08x} .. 0x{start + length:08x}"
+                             f"  ({length:,} bytes)",
+                             _marks_for(args, data, start, length))
+        finally:
+            close()
+
+    try:
+        label, chunks, warns = walk_file(path)
+    except Unsupported:
+        # od never refuses to show bytes: no walker means a plain dump, not an
+        # error. `inspect` is where "I do not know this format" is the answer.
+        data, close = map_file(path)
+        try:
+            # Bounded, and it says so. Unbounded, this printed 285 MB as hex --
+            # 1.4 GB of stdout over five and a half minutes -- where the old
+            # behaviour was to refuse in 0.19s. `locate` in this same release
+            # learned to name the engine that stopped short; the fallback that
+            # replaced a refusal has to do the same.
+            shown = min(len(data), _AUTO_DUMP_CAP)
+            note = (f"{path}  {len(data):,} bytes  "
+                    f"(no structural walker -- raw dump)")
+            if shown < len(data):
+                note += (f"\n  showing the first {shown:,} bytes; "
+                         f"use --offset/--length for the rest")
+            return _raw_dump(data, 0, shown, args.width, on, note,
+                             _marks_for(args, data, 0, shown))
+        finally:
+            close()
     # mmap, not f.read(): od only slices small header/field/preview runs, and
     # a mapped file serves those without loading multi-GB payloads into RAM
     data, close = map_file(path)

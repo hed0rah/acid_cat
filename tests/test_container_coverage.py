@@ -198,7 +198,7 @@ def test_wav_ixml_chunk(tmp_path):
 def test_wav_data_before_fmt_flagged(tmp_path):
     # data-before-fmt violates RIFF chunk order; the walker already warns and the
     # scan surfaces it, so no separate detector is needed.
-    from acidcat.core import anomalies
+    from acidcat.core.forensics import anomalies
     fmt = b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, 44100, 88200, 2, 16)
     data = b"data" + struct.pack("<I", 4) + bytes(4)
     f = tmp_path / "dbf.wav"
@@ -216,19 +216,61 @@ def test_wav_data_before_fmt_flagged(tmp_path):
                    for x in anomalies.scan(str(g), la, ch, wa))
 
 
-def test_wt_bitwig_wavetable(tmp_path):
-    # vawt: 12-byte LE header + frame_count*frame_samples int16 LE samples
+def _wt(tmp_path, name, flags, width, trailer=b""):
+    # vawt: 12-byte LE header + frame_count*frame_samples samples, frame-major
     frame_samples, frame_count = 2048, 3
-    header = b"vawt" + struct.pack("<IHH", frame_samples, frame_count, 12)
-    data = bytes(frame_count * frame_samples * 2)
-    f = tmp_path / "t.wt"
-    f.write_bytes(header + data)
-    label, chunks, warns = walk_file(str(f))
+    header = b"vawt" + struct.pack("<IHH", frame_samples, frame_count, flags)
+    f = tmp_path / name
+    f.write_bytes(header + bytes(frame_count * frame_samples * width) + trailer)
+    return walk_file(str(f))
+
+
+def test_wt_wavetable(tmp_path):
+    # 0x0C is what Bitwig writes, on all 5,636 files in its factory library:
+    # int16 at full scale. It is also 12 decimal, which is why this word read
+    # convincingly as a data_offset for as long as it did.
+    label, chunks, warns = _wt(tmp_path, "i.wt", 0x0C, 2)
     assert "wavetable" in label.lower()
     assert not warns                                    # size matches header exactly
     assert _field(chunks, "frame_samples") == 2048
     assert _field(chunks, "frame_count") == 3
     assert _field(chunks, "magic") == "vawt"
+    assert _field(chunks, "flags") == "0x000C"
+    assert "16-bit" in chunks[0]["summary"]
+
+
+def test_wt_float32_is_not_corrupt(tmp_path):
+    # flags bit 2 clear means float32, so the payload is twice as wide. This is
+    # what Surge writes and what 151 of 152 real specimens are; a walker that
+    # assumes int16 calls every one of them size-mismatched.
+    label, chunks, warns = _wt(tmp_path, "f.wt", 0x00, 4)
+    assert not warns
+    assert "32-bit float" in chunks[0]["summary"]
+    assert _field(chunks, "flags") == "0x0000"
+
+
+def test_wt_size_mismatch_still_caught(tmp_path):
+    # the check must stay live: int16 flags with a float32-sized payload is wrong
+    _, _, warns = _wt(tmp_path, "b.wt", 0x04, 4)
+    assert any("header-implied" in w for w in warns)
+
+
+def test_wt_metadata_trailer(tmp_path):
+    # flag 0x10 puts null-terminated XML after the samples, so the payload size
+    # is a floor -- an exact-equality check calls a valid file corrupt
+    xml = b"<wtmeta><name>t</name></wtmeta>\x00"
+    _, chunks, warns = _wt(tmp_path, "m.wt", 0x14, 2, trailer=xml)
+    assert not warns
+    meta = [c for c in chunks if c["id"] == "wtmeta"]
+    assert len(meta) == 1
+    assert meta[0]["offset"] == 12 + 3 * 2048 * 2
+    assert meta[0]["size"] == len(xml)
+
+
+def test_wt_truncated_metadata_file_still_warns(tmp_path):
+    # the metadata bit must not become a blanket excuse for any size at all
+    _, _, warns = _wt(tmp_path, "t.wt", 0x14, 1)
+    assert any("header-implied" in w for w in warns)
 
 def test_multisample_bitwig(tmp_path):
     # a .multisample is a zip: multisample.xml manifest + member sample files

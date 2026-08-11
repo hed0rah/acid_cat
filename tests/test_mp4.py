@@ -1,7 +1,7 @@
 """MP4 box-walk: a large box read only in part is beyond_cap, not truncated."""
 import struct
 
-from acidcat.core import mp4
+from acidcat.core.formats import mp4
 
 
 def _boxes(data, **kw):

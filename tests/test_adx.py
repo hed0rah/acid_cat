@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from acidcat.core import adx
+from acidcat.core.codecs import adx
 
 
 def _adx_file(frame_data, ch=1, rate=44100, samples=32, hp=500, enc=2, blk=18):
@@ -54,8 +54,8 @@ def test_unsupported_type_raises():
 
 
 def test_extract_wires_adx(tmp_path):
-    from acidcat.core import sniff as sniffmod
-    from acidcat.core import samples as smod
+    from acidcat.core.infra import sniff as sniffmod
+    from acidcat.core.extract import samples as smod
     import wave, io
 
     frame = struct.pack(">H", 5) + bytes([0x12] * 16)

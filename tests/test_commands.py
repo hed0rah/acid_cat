@@ -67,14 +67,20 @@ class TestInfoWav:
         data = json.loads(out)
         assert "Format" in data or "format" in data or "File" in data
 
-    def test_not_riff_wav_no_crash(self, not_riff):
+    def test_not_riff_wav_says_so(self, not_riff):
+        """Was `code in (0, 1, None)` -- an assertion that accepted the old
+        behaviour, where a non-audio file got a card of dashes and exit 0.
+        Unrecognized is could-not-run (2), like validate and chunks."""
         code, out, err = run_cli(not_riff)
-        # should not raise -- either shows minimal info or prints an error
-        assert code in (0, 1, None)
+        assert "Traceback" not in err
+        assert code == 2
+        assert "not a format acidcat recognizes" in err
+        assert "acidcat classify" in err          # names the verb that can help
 
-    def test_empty_wav_no_crash(self, empty_file):
+    def test_empty_file_says_so(self, empty_file):
         code, out, err = run_cli(empty_file)
-        assert code in (0, 1, None)
+        assert "Traceback" not in err
+        assert code == 2
 
     def test_nonexistent_file_returns_error(self, tmp_path):
         code, out, err = run_cli(str(tmp_path / "ghost.wav"))
@@ -119,12 +125,17 @@ class TestChunksCommand:
 
     def test_not_riff_file(self, not_riff):
         code, out, err = run_cli("chunks", not_riff)
-        assert code == 1
-        assert "Not a RIFF" in err
+        # 2: a format this verb does not model is could-not-run, the same answer
+        # validate gives, and the README states that rule
+        assert code == 2
+        assert "not a RIFF container" in err
+        # and it names the verb that CAN read the file, rather than leaving the
+        # user to already know which one to switch to
+        assert "acidcat inspect" in err
 
     def test_nonexistent_file(self, tmp_path):
         code, out, err = run_cli("chunks", str(tmp_path / "missing.wav"))
-        assert code == 1
+        assert code == 2
 
     def test_json_output(self, minimal_wav):
         code, out, err = run_cli("chunks", minimal_wav, "-f", "json")
@@ -157,26 +168,31 @@ class TestDumpCommand:
 
     def test_nonexistent_file(self, tmp_path):
         code, out, err = run_cli("dump", str(tmp_path / "ghost.wav"), "fmt")
-        assert code == 1
+        assert code == 2
 
 
 class TestScanCommand:
-    def test_scan_directory_with_wav(self, tmp_path, minimal_wav):
+    def test_scan_directory_with_wav(self, tmp_path, minimal_wav, monkeypatch):
+        """`scan` writes its CSV relative to the working directory, so the test
+        has to own that directory. It did not, and every run dropped a
+        `<tmpdir>_metadata.csv` into the repo root -- containing absolute local
+        paths. The old version also asserted nothing at all: it collected a list
+        of candidate CSVs and never looked at it.
+        """
         import shutil
         shutil.copy(minimal_wav, tmp_path / "test.wav")
+        workdir = tmp_path / "cwd"
+        workdir.mkdir()
+        monkeypatch.chdir(workdir)
+
         code, out, err = run_cli("scan", str(tmp_path), "-q")
         assert code == 0 or code is None
-        csv_path = str(tmp_path / "_metadata.csv")
-        # a CSV should be written next to the dir or in cwd
-        # find written CSV
-        written = list(tmp_path.glob("*.csv")) + [
-            f for f in [
-                os.path.join(os.getcwd(), "test_metadata.csv"),
-                os.path.join(os.getcwd(), "tmp_metadata.csv"),
-            ] if os.path.isfile(f)
-        ]
-        # at least one CSV was created somewhere
-        # (we just check the command didn't crash)
+
+        written = list(workdir.glob("*.csv"))
+        assert written, f"scan wrote no CSV into {workdir}"
+        body = written[0].read_text(encoding="utf-8")
+        assert "filename" in body.splitlines()[0], "CSV has no header row"
+        assert "test.wav" in body, "the scanned file is missing from the CSV"
 
     def test_scan_empty_directory(self, tmp_path):
         code, out, err = run_cli("scan", str(tmp_path), "-q")
@@ -184,7 +200,7 @@ class TestScanCommand:
 
     def test_scan_not_a_directory(self, minimal_wav):
         code, out, err = run_cli("scan", minimal_wav, "-q")
-        assert code == 1
+        assert code == 2
 
     def test_scan_csv_has_header(self, tmp_path, minimal_wav):
         import shutil
@@ -366,11 +382,13 @@ class TestDumpJson:
 
     def test_survey_empty_directory(self, tmp_path):
         code, out, err = run_cli("survey", str(tmp_path), "-q")
-        assert code == 0 or code is None
+        # 1: it ran and found no audio. 0 said "surveyed a tree" about a
+        # tree it had found nothing in.
+        assert code == 1
 
     def test_survey_not_directory(self, minimal_wav):
         code, out, err = run_cli("survey", minimal_wav)
-        assert code == 1
+        assert code == 2
 
 
 class TestInfoMidiDivision:

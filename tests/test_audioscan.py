@@ -7,7 +7,7 @@ import math
 import random
 import struct
 
-from acidcat.core import audioscan
+from acidcat.core.forensics import audioscan
 
 
 def _noise(n, seed=1):
@@ -91,7 +91,13 @@ def test_buried_tone_is_located():
     assert reg["start"] >= a0 - audioscan.DEFAULT_WINDOW
     assert reg["end"] <= a1 + audioscan.DEFAULT_WINDOW
     assert reg["confidence"] > 0.5
-    assert reg["evidence"]["width"] == 1
+    # width now reports the reading that won, not a hardcoded 1: the scan tries
+    # 8-bit and both 16-bit byte orders and keeps whichever scores best. An
+    # 8-bit synthetic tone can legitimately also read as 16-bit, so assert the
+    # value is one the detector actually supports rather than pinning the old
+    # single-interpretation behaviour.
+    assert reg["evidence"]["width"] in (1, 2)
+    assert reg["evidence"]["view"] in ("8bit", "16bit-le", "16bit-be")
 
 
 def test_two_tones_two_regions():
@@ -162,3 +168,67 @@ def test_region_evidence_present():
     assert set(ev["autocorr"]) == set(audioscan.LAGS)
     assert 0.0 <= ev["entropy"] <= 8.0
     assert reg["windows"] >= 1
+
+
+def test_silence_does_not_outrank_real_audio():
+    """A near-constant run correlates perfectly, so before the liveness term it
+    scored 1.0 and pushed actual content down the list -- the top hits on a real
+    proprietary sample bank were all silence. Flat data is weak evidence (it is
+    equally consistent with padding or a sparse hole), so it must be damped
+    below genuine signal while still being reported in aggressive mode."""
+    import math
+    from acidcat.core.forensics.audioscan import window_features, audio_score
+
+    # near-silence as it really occurs: 16-bit LE samples dithering within a few
+    # LSBs of zero. A perfectly constant run is already caught by the entropy
+    # floor; this is the case that slipped past it, matching what a real
+    # proprietary bank contained (entropy ~2.8, ~13 distinct byte values).
+    import random
+    rng = random.Random(7)
+    v, buf = 0, bytearray()
+    for _ in range(768):
+        v = max(-6, min(6, v + rng.choice((-1, 0, 1))))
+        buf += (v & 0xFFFF).to_bytes(2, "little")
+    silence = bytes(buf)
+    # a smooth but live waveform: a sine sampled to 8-bit
+    live = bytes((int(64 * math.sin(i / 8.0)) + 128) & 0xFF for i in range(1024))
+
+    s_silence = audio_score(window_features(silence))
+    s_live = audio_score(window_features(live))
+    assert s_live > s_silence, (
+        f"silence ({s_silence:.3f}) must not outrank real audio ({s_live:.3f})")
+    # damped, not rejected outright -- aggressive mode still needs to see it
+    assert s_silence > 0.0, "flat regions should still be reported, just ranked low"
+
+
+def test_liveness_leaves_loud_audio_untouched():
+    """The damping must not cost recall on ordinary content."""
+    import math
+    from acidcat.core.forensics.audioscan import window_features, audio_score
+    loud = bytes((int(100 * math.sin(i / 5.0)) + 128) & 0xFF for i in range(1024))
+    feat = window_features(loud)
+    assert feat["spread"] > 16.0, "a loud waveform should clear the liveness ramp"
+
+
+def test_autocorr_lags_matches_the_per_lag_form():
+    """The scan computes every lag in one pass, sharing the centred deviations.
+    It must agree with the straightforward per-lag computation exactly -- this is
+    a speed change, not a behaviour change."""
+    import random
+    from acidcat.core.forensics.audioscan import _autocorr, _autocorr_lags, LAGS
+    rng = random.Random(3)
+    samples = [rng.randint(-128, 127) for _ in range(1024)]
+    mean = sum(samples) / len(samples)
+    den = sum((s - mean) ** 2 for s in samples)
+    one_by_one = {L: _autocorr(samples, mean, den, L) for L in LAGS}
+    together = _autocorr_lags(samples, mean, den, LAGS)
+    for L in LAGS:
+        assert abs(one_by_one[L] - together[L]) < 1e-12, f"lag {L} diverged"
+
+
+def test_autocorr_lags_handles_a_flat_window():
+    """Zero variance must not divide by zero."""
+    from acidcat.core.forensics.audioscan import _autocorr_lags, LAGS
+    flat = [7] * 256
+    out = _autocorr_lags(flat, 7.0, 0.0, LAGS)
+    assert all(out[L] == 0.0 for L in LAGS)

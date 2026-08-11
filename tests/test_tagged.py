@@ -24,7 +24,10 @@ def test_strip_bom_removes_leading_feff():
 
 
 def fixture_path(name):
-    return os.path.join(FIXTURES, name)
+    # the corpus file when it is here, the committed stand-in otherwise
+    from conftest import corpus_or_fixture
+    ext = os.path.splitext(name)[1]
+    return corpus_or_fixture(name, "tone" + ext)
 
 
 def has_fixture(name):

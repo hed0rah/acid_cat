@@ -179,7 +179,7 @@ def test_deep_listing_carries_raw_key_signature(tmp_path):
 def test_midi_scan_row_from_walker(tmp_path):
     """The scan row comes from the walker's ctx since the unification; a
     tempo + key + track name + copyright track round-trips into the row."""
-    from acidcat.core.indexing import _from_midi
+    from acidcat.core.catalogue.indexing import _from_midi
     track = (b"\x00\xFF\x51\x03\x07\xA1\x20"      # tempo 120 bpm
              b"\x00\xFF\x03\x04Bass"              # track name
              b"\x00\xFF\x02\x03(c)"               # copyright
@@ -201,7 +201,7 @@ def test_midi_scan_duration_null_without_tempo(tmp_path):
     """A PPQ file with no tempo event stores no scan duration (a default-120
     estimate would be a wrong number to filter on); the inspect view still
     shows the labeled estimate."""
-    from acidcat.core.indexing import _from_midi
+    from acidcat.core.catalogue.indexing import _from_midi
     track = b"\x87\x40\x90\x3C\x64\x00\xFF\x2F\x00"   # note, no tempo
     p = tmp_path / "notempo.mid"
     p.write_bytes(_build_smf([track], division=480))
@@ -214,7 +214,7 @@ def test_midi_scan_duration_null_without_tempo(tmp_path):
 def test_whole_file_read_is_capped(tmp_path, monkeypatch):
     """a forged multi-GB .mid must not be slurped whole (DoS). the cap
     is shrunk for the test; header metadata still parses."""
-    import acidcat.core.midi as midimod
+    import acidcat.core.formats.midi as midimod
     monkeypatch.setattr(midimod, "MAX_SMF_BYTES", 64)
     track = (b"\x00\xFF\x51\x03\x07\xA1\x20" + b"\x00\x90\x3C\x64" * 100
              + b"\x00\xFF\x2F\x00")

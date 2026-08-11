@@ -4,7 +4,7 @@ import struct
 
 import pytest
 
-from acidcat.core import bytefields as bf
+from acidcat.core.infra import bytefields as bf
 
 
 def test_parse_type_ints_and_endian():

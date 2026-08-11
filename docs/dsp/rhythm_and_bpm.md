@@ -168,7 +168,7 @@ only for future loop-alignment features.
 
 ## acidcat's implementation
 
-In `core/detect.py`:
+In `core/analysis/detect.py`:
 
 ```python
 detected_bpm = None
@@ -210,7 +210,7 @@ Same reasoning as chroma: median is robust to outlier frames where
 the tempo estimator briefly goes haywire (breaks, silence, fills).
 Mean pulls toward those outliers.
 
-In `core/features.py` the approach is different:
+In `core/analysis/features.py` the approach is different:
 
 ```python
 onset_env = librosa.onset.onset_strength(y=y, sr=sr)
@@ -260,7 +260,7 @@ estimate unreliable. Results can be anywhere.
 ## The validation pipeline
 
 Given the known failure modes, acidcat doesn't trust librosa's output
-naively. In `core/detect.py`:
+naively. In `core/analysis/detect.py`:
 
 ```python
 def validate_and_improve_bpm(detected_bpm, filename_bpm, confidence_threshold=20):
@@ -456,7 +456,7 @@ unusual value.
 
 ## Feature vector: `tempo_librosa` and `beat_count`
 
-In `core/features.py` these are used for ML similarity, not for the
+In `core/analysis/features.py` these are used for ML similarity, not for the
 canonical BPM of the indexed row:
 
 ```python

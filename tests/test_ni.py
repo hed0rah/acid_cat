@@ -5,7 +5,7 @@ import struct
 
 import pytest
 
-from acidcat.core import ni
+from acidcat.core.formats import ni
 
 
 # ── MessagePack codec ──────────────────────────────────────────────

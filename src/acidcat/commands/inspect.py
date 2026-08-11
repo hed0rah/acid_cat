@@ -6,24 +6,31 @@ decoded field breakdown per known chunk (with byte offsets), and any
 spec violations it noticed along the way. `--hex` adds the raw bytes
 next to each decoded field. `--frames` adds a per-element deep dump
 (every MPEG frame for MP3, every event for MIDI). `--color` syntax-
-highlights the table (auto/always/never, respects NO_COLOR). `-f json`
+highlights the table (auto/always/never, respects NO_COLOR). `--json`
 emits the same structure for machines.
 
-Supports WAV/RIFF, RF64, AIFF/AIFC, Standard MIDI Files, Xfer Serum
-presets, MP3 (ID3v2 + MPEG frames + Xing/LAME), and FLAC.
+The format walkers live in acidcat/core/walk and are dispatched through
+its registry, so what `inspect` supports is exactly what the registry
+holds -- `acidcat formats` prints it. Do not enumerate the list here: a
+hardcoded subset in a docstring reads as the whole set and goes stale
+every time a walker lands.
 
-The format walkers live in acidcat/core/walk (dispatched through its
-registry); this module is the CLI shell: argument parsing, chunk
-selection, and rendering.
+This module is the CLI shell: argument parsing, chunk selection, and
+rendering.
 """
 
+import contextlib
 import json
 import os
 import sys
+from acidcat.util.color import add_color_arg, color_enabled
 
-from acidcat.core import anomalies as anomaliesmod
-from acidcat.core import lsb as lsbmod
+from acidcat.core.forensics import anomalies as anomaliesmod
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.forensics import lsb as lsbmod
 from acidcat.core.walk import Unsupported, walk_file
+from acidcat.util.region import add_region_args, scoped_file
+from acidcat.util import stdin as stdinmod
 
 # --full emits raw region bytes for chunks that have decoded fields; cap the
 # hex so a huge header (embedded art) cannot bloat the dump without bound.
@@ -36,15 +43,14 @@ def register(subparsers):
         help="readelf-style structural dump of an audio or synth/DAW preset file.",
     )
     p.add_argument("targets", nargs="+", metavar="target",
-                   help="One or more audio/preset files (WAV, RF64, AIFF, MIDI, MP3, "
-                        "FLAC, Ogg, MP4/M4A, Serum, Bitwig, Vital, NCW, NI). "
-                        "With more than one, each is printed under a "
-                        "'File:' banner; JSON output becomes NDJSON (one record "
-                        "per line).")
+                   help="One or more audio, sampler or synth/DAW preset files. "
+                        "Run `acidcat formats` for the full list of what has a "
+                        "walker. With more than one target, each is printed "
+                        "under a 'File:' banner; JSON output becomes NDJSON "
+                        "(one record per line).")
     p.add_argument("--hex", action="store_true", dest="show_hex",
                    help="Show raw bytes next to each decoded field.")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json"))
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Chunk table only, no per-chunk field detail.")
     p.add_argument("--pretty", action="store_true",
@@ -62,7 +68,7 @@ def register(subparsers):
                    help="Hide these chunk ids (comma-separated). Applied after "
                         "--only.")
     p.add_argument("--full", action="store_true",
-                   help="Emit a self-contained structural dump (implies -f json): "
+                   help="Emit a self-contained structural dump (implies --json): "
                         "each chunk with its raw region bytes and every field's "
                         "absolute byte offset, so `acidcat explore` can render a "
                         "standalone HTML explorer for the file.")
@@ -70,10 +76,12 @@ def register(subparsers):
                    help="Forensic scan: flag trailing data past the container, "
                         "appended-format magic (polyglots), structural size "
                         "mismatches, and control bytes smuggled into text fields.")
-    p.add_argument("--color", choices=["auto", "always", "never"], default="auto",
-                   help="Colorize table output: auto (default, when stdout is a "
-                        "TTY), always, or never. Respects the NO_COLOR env var.")
-    p.add_argument("-v", "--verbose", action="store_true")
+    add_color_arg(p)
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="Synonym for --frames: request the walker's deep pass. "
+                        "What that adds is per-format -- every MPEG frame, "
+                        "every MIDI event, the Bitwig device tree, the Vital "
+                        "modulation matrix, the NI compressed subtree.")
     # experimental: parse untrusted input in a resource-limited worker so a
     # memory/CPU-bomb file takes down only the worker. Linux only; --sandbox
     # errors (never silently runs unsandboxed) where it cannot run.
@@ -89,6 +97,24 @@ def register(subparsers):
                    help="--sandbox address-space cap in MB (default 2048).")
     p.add_argument("--sandbox-timeout", type=int, default=None, metavar="S",
                    help="--sandbox CPU/wall-clock cap in seconds (default 60).")
+    # reverse-engineering escapes: name the format yourself, scope to a region
+    # inside a bigger image, or just tell it to try.
+    p.add_argument("--format", metavar="FMT", dest="fmt_override",
+                   help="Parse as FMT regardless of the magic bytes (an odd or "
+                        "old variant of a format we do model often walks fine "
+                        "once dispatch stops depending on the header). "
+                        "`acidcat formats` lists the ids.")
+    p.add_argument("--force", action="store_true",
+                   help="On a file no walker claims, try every walker and report "
+                        "what each made of it -- chunk/field counts, whether the "
+                        "chunk ids are really at those offsets, and the walker's "
+                        "own complaint. Leads for --format, not identifications.")
+    p.add_argument("--resync", action="store_true",
+                   help="Recover chunk structure from a damaged container by "
+                        "scanning for plausible [id][size] records and keeping "
+                        "the ones that chain end-to-start. Finds what a corrupt "
+                        "size field or a smashed magic costs the normal walk.")
+    add_region_args(p)
     p.set_defaults(func=run)
 
 
@@ -121,16 +147,6 @@ _ANSI = {
 _RESET = "\033[0m"
 
 
-def _color_enabled(args):
-    # explicit always/never win; NO_COLOR governs auto only.
-    mode = getattr(args, "color", "auto")
-    if mode == "never":
-        return False
-    if mode == "always":
-        return True
-    if os.environ.get("NO_COLOR"):
-        return False
-    return sys.stdout.isatty()
 
 
 class _Paint:
@@ -162,13 +178,13 @@ def _human_size(n):
         x /= 1024
 
 
-def _render_pretty(filepath, fmt_label, chunks, file_warns, args):
+def _render_pretty(filepath, fmt_label, chunks, file_warns, args, shown_as=None):
     """A clean, human-friendly view of the decoded tags/metadata: section per
     chunk, aligned key/value, no byte offsets. Made for presets and tagged
     files (Bitwig, Vital, Serum, MP4 tags, WAV/FLAC/MP3 metadata)."""
-    p = _Paint(_color_enabled(args))
+    p = _Paint(color_enabled(args))
     size = os.path.getsize(filepath)
-    print(p("id", os.path.basename(filepath)))
+    print(p("id", shown_as or os.path.basename(filepath)))
     print(p("dim", f"{fmt_label}, {_human_size(size)}"))
     for c in chunks:
         fields = [f for f in c["fields"]
@@ -195,7 +211,7 @@ def _render_pretty(filepath, fmt_label, chunks, file_warns, args):
 
 def _render_anomalies(findings, args):
     """Print the forensic findings from `--anomalies` under the main dump."""
-    p = _Paint(_color_enabled(args))
+    p = _Paint(color_enabled(args))
     role = {"alert": "warn", "warn": "warn", "notice": "dim"}
     print()
     if not findings:
@@ -209,14 +225,16 @@ def _render_anomalies(findings, args):
         print(f"    {tag} {off}  {f['rule']:16} {f['message']}")
 
 
-def _render_table(filepath, fmt_label, chunks, file_warns, args, total=None):
+def _render_table(filepath, fmt_label, chunks, file_warns, args, total=None,
+                  shown_as=None):
     file_size = os.path.getsize(filepath)
-    p = _Paint(_color_enabled(args))
+    p = _Paint(color_enabled(args))
     if total is not None and total != len(chunks):
         count = f"showing {len(chunks)} of {total} chunks"
     else:
         count = f"{len(chunks)} chunks"
-    print(f"{os.path.basename(filepath)}: {p('id', fmt_label)}, {file_size:,} bytes, "
+    name = shown_as or os.path.basename(filepath)
+    print(f"{name}: {p('id', fmt_label)}, {file_size:,} bytes, "
           f"{count}")
     print()
     print(p("dim", f"  {'idx':<5} {'id':<5} {'offset':<11} {'size':<11} summary"))
@@ -331,6 +349,159 @@ def _full_chunk(chunk, filepath):
     return c
 
 
+def _run_resync(filepath, paint, source_path=None, as_json=False):
+    """--resync: report the chunk grid still recoverable from a damaged container."""
+    from acidcat.core.forensics import resync as resyncmod
+
+    with open(filepath, "rb") as f:
+        data = f.read()
+    res = resyncmod.recover(data, known_only=True)
+    chain, recs = res["chain"], res["records"]
+    name = os.path.basename(source_path or filepath)
+    if as_json:
+        # --resync --json emitted the human table verbatim, so `jq` got a parse
+        # error on the one output a damaged-container workflow most wants to
+        # script over. The chain is a list of carve ranges; say so in the data.
+        sys.stdout.write(json.dumps({
+            "file": source_path or filepath,
+            "mode": "resync",
+            "endian": res["endian"],
+            "coverage": res["coverage"],
+            "isolated_records": len(recs),
+            "chunks": [{"id": r["id"], "offset": r["offset"], "size": r["size"],
+                        "payload_offset": r["offset"] + 8,
+                        "confidence": r["confidence"],
+                        "known_id": r["known"],
+                        "chains_onward": r["corroborated"]} for r in chain],
+        }) + "\n")
+        return 0 if chain else 1
+    if not chain:
+        print(f"{name}: no recoverable chunk grid "
+              f"({len(recs)} isolated record(s) found)")
+        print(paint("dim",
+                    "  nothing chains end-to-start, so there is no surviving\n"
+                    "  structure to rebuild. If the payload is still in there,\n"
+                    "  `acidcat locate` finds it statistically instead."))
+        return 1
+    print(f"{name}: recovered {len(chain)} chunk(s) by resync "
+          f"[{res['endian']}-endian, {res['coverage']:.0%} of the file]")
+    print(paint("dim", f"  {'offset':>10}  {'id':6} {'size':>12}  conf  evidence"))
+    for r in chain:
+        ev = []
+        if r["known"]:
+            ev.append("known id")
+        if r["corroborated"]:
+            ev.append("chains onward")
+        print(f"  0x{r['offset']:08x}  {r['id']:6} {r['size']:>12,}  "
+              f"{r['confidence']:.2f}  {', '.join(ev) or '-'}")
+    print(paint("dim",
+                "\n  found by scanning for [id][size] records and keeping the ones\n"
+                "  that link end-to-start. Corroborated hypotheses, not a validated\n"
+                "  parse -- carve one out to work on it:\n"
+                f"    acidcat carve {name} --offset 0x{chain[0]['offset']:x} "
+                f"--length {chain[0]['size'] + 8}"))
+    return 0
+
+
+_MAGIC_COMPLAINT = ("magic", "not a zip", "does not parse", "unknown iq",
+                    "no .sigmf-meta", "spec says")
+
+
+def _forced_candidates(filepath, deep):
+    """Try every walker on a file none of them claims, and report what each one
+    made of it -- ranked, with its own complaints attached.
+
+    Deliberately NOT a single answer. Walkers assume their magic rather than
+    verifying it, so a forced parse readily invents structure: pointed at an
+    arbitrary blob, the MIDI walker reports an MThd chunk larger than the file
+    and the FLAC walker reports a 'fLaC' magic that is not there. Picking a
+    "winner" out of that would manufacture a false identification, which is
+    worse than refusing. So this surfaces the candidates as leads for --format
+    and lets the person decide.
+
+    Each row carries: the chunk/field counts, whether the claimed sizes fit
+    inside the real file (a parse claiming more bytes than exist is
+    self-refuting), and the first thing the walker itself complained about.
+    """
+    from acidcat.core.walk import _WALKERS
+
+    size = os.path.getsize(filepath)
+    rows = []
+    for fmt in _WALKERS:
+        try:
+            label, chunks, warns = walk_file(filepath, deep, fmt_override=fmt)
+        except Exception:
+            continue
+        if not chunks:
+            continue
+        fits = all(c.get("offset", 0) + c.get("size", 0) <= size for c in chunks)
+        ids_ok = all(str(c.get("id", "")).isprintable() for c in chunks)
+        # the check a walker cannot talk its way past: if it reports a 4-byte id
+        # at an offset, are those bytes actually there? A walker that assumes
+        # its magic (FLAC reporting 'fLaC' over 03 13 a0 e0) fails this while
+        # warning about nothing, which is exactly the silent fabrication that
+        # would otherwise rank first.
+        anchored = 0
+        for c in chunks:
+            cid = str(c.get("id", ""))
+            if len(cid) == 4 and cid.isprintable():
+                with open(filepath, "rb") as fh:
+                    fh.seek(c.get("offset", 0))
+                    if fh.read(4) == cid.encode("latin-1", "replace"):
+                        anchored += 1
+        complaint = next((w for w in warns
+                          if any(k in w.lower() for k in _MAGIC_COMPLAINT)), "")
+        rows.append({
+            "format": fmt, "label": label,
+            "chunks": len(chunks),
+            "fields": sum(len(c.get("fields") or []) for c in chunks),
+            "fits": fits, "ids_ok": ids_ok, "anchored": anchored,
+            "complaint": complaint or (warns[0] if warns else ""),
+        })
+    # rank: a self-consistent parse that the walker did not complain about is
+    # the strongest lead; a parse claiming bytes the file does not have is last
+    # anchored ids first: bytes on disk beat a walker's silence. a parse that
+    # invents its magic ranks below one that admits a problem but reads real ids.
+    rows.sort(key=lambda r: (r["anchored"], r["fits"], r["ids_ok"],
+                             r["fields"], r["chunks"]), reverse=True)
+    return rows
+
+
+def _forced_json(filepath, rows):
+    """--force --json. The candidate list is the whole point of --force and it
+    was reachable only by eyeballing a table -- these are leads to feed back in
+    as `--format <id>`, which is a scripted loop if it is machine-readable."""
+    sys.stdout.write(json.dumps({
+        "file": filepath,
+        "mode": "force",
+        "identified": False,        # never an identification, always hypotheses
+        "candidates": [{"format": r["format"], "chunks": r["chunks"],
+                        "fields": r["fields"], "anchored": r["anchored"],
+                        "fits_file": r["fits"], "ids_at_offsets": r["ids_ok"],
+                        "plausible": bool(r["fits"] and r["ids_ok"]),
+                        "complaint": r["complaint"]} for r in rows],
+    }) + "\n")
+
+
+def _print_forced_candidates(filepath, rows, paint):
+    base = os.path.basename(filepath)
+    arg = f'"{base}"' if any(c in base for c in ' \t&()+;') else base
+    print(f"no walker claims {base}. forced-parse candidates "
+          f"(hypotheses, not identifications):\n")
+    print(paint("dim", f"  {'format':12} {'chunks':>6} {'fields':>6} {'ids':>4}"
+                       f" {'sane':>5}  walker's own complaint"))
+    for r in rows[:10]:
+        sane = "yes" if (r["fits"] and r["ids_ok"]) else "NO"
+        ids = f"{r['anchored']}/{r['chunks']}"
+        note = r["complaint"][:46]
+        line = (f"  {r['format']:12} {r['chunks']:6} {r['fields']:6} {ids:>4}"
+                f" {sane:>5}  {note}")
+        print(line if r["anchored"] else paint("dim", line))
+    print(f"\n  none of these verified a magic number -- a walker parses at fixed"
+          f"\n  offsets whether or not the header is really its format. Follow one"
+          f"\n  up with:  acidcat inspect {arg} --format <id>")
+
+
 def run(args):
     # accept either the multi-file `targets` or the legacy single `target`
     targets = getattr(args, "targets", None)
@@ -339,11 +510,19 @@ def run(args):
         targets = [one] if one else []
     if not targets:
         print("acidcat inspect: no target file given", file=sys.stderr)
-        return 1
+        return 2
+    # inspect took many files but refused a directory, which is the same split
+    # `audit` had in the other direction. One expander, so every verb agrees on
+    # what a directory holds and says what it skipped.
+    from acidcat.util import targets as _targets
+    targets, _skipped = _targets.expand(targets)
+    if not targets:
+        print("acidcat inspect: no readable files in that path", file=sys.stderr)
+        return 2
 
     deep = getattr(args, "frames", False) or getattr(args, "verbose", False)
     full = getattr(args, "full", False)
-    as_json = args.format == "json" or full  # --full is a JSON dump
+    as_json = args.output_format == "json" or full  # --full is a JSON dump
     multi = len(targets) > 1
     only = _parse_id_list(getattr(args, "only", None))
     exclude = _parse_id_list(getattr(args, "exclude", None))
@@ -353,24 +532,62 @@ def run(args):
     # silently runs unsandboxed) if the requested isolation cannot run here.
     sandbox_profile = None
     if getattr(args, "sandbox", False):
-        from acidcat.core import sandbox as _sb
+        from acidcat.core.infra import sandbox as _sb
         try:
             sandbox_profile = _sb.resolve_profile(getattr(args, "sandbox_profile", "auto"))
         except _sb.SandboxUnavailable as e:
             print(f"acidcat inspect: --sandbox: {e}", file=sys.stderr)
-            return 1
+            return 2               # asked for an isolation mode we cannot run
         if not getattr(args, "quiet", False):
             print(f"[sandbox: {sandbox_profile}]", file=sys.stderr)
 
+    # --region/--offset scope every verb below to a range inside a bigger file,
+    # so a blob `locate` found in a disk image is walked directly instead of
+    # being carved out by hand first. The copies live until run() returns,
+    # because rendering re-reads the file after the walk (--hex).
+    regions = contextlib.ExitStack()
     try:
         for filepath in targets:
-            if not os.path.isfile(filepath):
+            # `carve FILE --chunk data | inspect -` is the most natural
+            # two-step in the tool and inspect was the half that could not
+            # take a pipe, so every RE session detoured through a temp file.
+            # stdin is buffered to one here for the same reason chunks/dump/
+            # probe do it: the walkers seek.
+            if stdinmod.is_stdin_target(filepath):
+                filepath = regions.enter_context(
+                    stdinmod.resolved_input(filepath))
+                if filepath is None:
+                    print("acidcat inspect: no data on stdin", file=sys.stderr)
+                    exit_code = 2
+                    continue
+                source_path = "<stdin>"     # never the temp copy's path
+            elif not os.path.isfile(filepath):
                 print(f"acidcat inspect: {filepath}: No such file", file=sys.stderr)
-                exit_code = 1
+                exit_code = 2          # could not read it, as everywhere else
+                continue
+            else:
+                source_path = filepath      # for messages: never leak the temp copy
+            try:
+                filepath, region_scope = regions.enter_context(
+                    scoped_file(args, filepath))
+            except (ValueError, OSError) as e:
+                # a malformed --offset/--at/--region is a USAGE error, and `od`
+                # and `carve` already return 2 for the identical mistake. This
+                # returned 1, so a script could not branch on it without
+                # knowing which verb it had called.
+                print(f"acidcat inspect: {source_path}: {e}", file=sys.stderr)
+                exit_code = 2
+                continue
+            if getattr(args, "resync", False):
+                # a damaged container is exactly the case where the walk fails,
+                # so recovery runs instead of it rather than after it
+                rc = _run_resync(filepath, _Paint(color_enabled(args)),
+                                 source_path=source_path, as_json=as_json)
+                exit_code = exit_code or rc
                 continue
             try:
                 if sandbox_profile:
-                    from acidcat.core import sandbox as _sb
+                    from acidcat.core.infra import sandbox as _sb
                     try:
                         fmt_label, chunks, file_warns = _sb.run_walk(
                             filepath, deep, profile=sandbox_profile,
@@ -382,11 +599,41 @@ def run(args):
                         exit_code = 1
                         continue
                 else:
-                    fmt_label, chunks, file_warns = walk_file(filepath, deep)
+                    fmt_label, chunks, file_warns = walk_file(
+                        filepath, deep,
+                        fmt_override=getattr(args, "fmt_override", None))
+                    if region_scope:
+                        fmt_label = f"{fmt_label}  [region {region_scope}]"
             except Unsupported as e:
-                print(f"acidcat inspect: {filepath}: {e}", file=sys.stderr)
-                exit_code = 1
-                continue
+                if getattr(args, "force", False):
+                    rows = _forced_candidates(filepath, deep)
+                    if rows:
+                        if as_json:
+                            _forced_json(source_path, rows)
+                        else:
+                            _print_forced_candidates(
+                                filepath, rows, _Paint(color_enabled(args)))
+                        exit_code = 1     # still unidentified; these are leads
+                        continue
+                if True:
+                    # "I have no walker for this" is the honest answer here --
+                    # but a dead end is not. Point at the verbs that work on raw
+                    # bytes, so an unknown container starts the RE workflow
+                    # rather than ending it. Quote the name so the suggestion
+                    # survives a copy-paste: banks often have spaces and '+'.
+                    base = os.path.basename(source_path)
+                    arg = f'"{base}"' if any(c in base for c in ' \t&()+;') else base
+                    scoped = f" (region {region_scope})" if region_scope else ""
+                    print(f"acidcat inspect: {source_path}{scoped}: {e}",
+                          file=sys.stderr)
+                    print(f"  no structural walker, but the bytes are still yours:\n"
+                          f"    acidcat od {arg}                hex dump, no format needed\n"
+                          f"    acidcat locate {arg}            find embedded audio regions\n"
+                          f"    acidcat inspect {arg} --force   try every walker anyway\n"
+                          f"    acidcat inspect {arg} --format wav   parse as a known type",
+                          file=sys.stderr)
+                    exit_code = 1
+                    continue
             except Exception as e:  # a walker bug must not sink the whole run
                 print(f"acidcat inspect: {filepath}: {e.__class__.__name__}: {e}",
                       file=sys.stderr)
@@ -424,10 +671,28 @@ def run(args):
                     out_chunks = []
                     for c in shown:
                         oc = {k: v for k, v in c.items() if k != "_idx"}
-                        oc["fields"] = [_public_field(f) for f in c.get("fields", [])]
+                        # `offset` is the chunk header, `field.off` is relative
+                        # to the payload, so `chunk.offset + field.off` read
+                        # eight bytes early -- format-dependent, because a
+                        # headerless model like MOD has no skew and a script
+                        # tuned on trackers broke silently on RIFF. --full has
+                        # always emitted the absolute offsets; plain --json now
+                        # does too, at no extra cost.
+                        pb = c.get("payload_base", c["offset"] + 8)
+                        oc["payload_base"] = pb
+                        fields = []
+                        for f in c.get("fields", []):
+                            f2 = _public_field(f)
+                            f2["abs"] = (pb + f["off"]
+                                         if f.get("off") is not None else None)
+                            fields.append(f2)
+                        oc["fields"] = fields
                         out_chunks.append(oc)
                 sys.stdout.write(json.dumps({
-                    "file": filepath,
+                    # source_path, not filepath: with `-` the latter is a temp
+                    # copy whose name means nothing to the caller and is gone
+                    # by the time they read the record
+                    "file": source_path,
                     "format": fmt_label,
                     "size": os.path.getsize(filepath),
                     "full": full,
@@ -443,9 +708,11 @@ def run(args):
                 elif multi:
                     print()  # separate files; --pretty prints its own name header
                 if pretty:
-                    _render_pretty(filepath, fmt_label, shown, file_warns, args)
+                    _render_pretty(filepath, fmt_label, shown, file_warns, args,
+                                   shown_as=os.path.basename(source_path))
                 else:
-                    _render_table(filepath, fmt_label, shown, file_warns, args, total)
+                    _render_table(filepath, fmt_label, shown, file_warns, args, total,
+                                  shown_as=os.path.basename(source_path))
                 if findings is not None:
                     _render_anomalies(findings, args)
     except BrokenPipeError:
@@ -456,5 +723,7 @@ def run(args):
         except Exception:
             pass
         return exit_code
+    finally:
+        regions.close()
 
     return exit_code

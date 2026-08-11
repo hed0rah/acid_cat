@@ -28,7 +28,7 @@ def test_audit_reports_repairable_structure(tmp_path, capsys):
     p = tmp_path / "bad.wav"
     p.write_bytes(bytes(broken))
     rc = audit.run(_args(str(p)))
-    assert rc == 0
+    assert rc == 1                    # it has structural findings to report
     out = capsys.readouterr().out
     assert "STRUCTURE" in out and "repairable" in out
     assert "VERDICT" in out and "structural fix" in out
@@ -107,3 +107,29 @@ def test_audit_deep_walks_mp3_only(tmp_path, monkeypatch):
     wav.write_bytes(_wav())
     A._gather(str(wav))
     assert seen["deep"] is False
+
+
+def test_audit_survives_a_data_chunk_that_overruns_the_file(tmp_path, capsys):
+    """A declared size larger than the file is the commonest damage acidcat
+    describes, and it made `audit` traceback out with numpy installed.
+
+    `_effective_bits` built its spans from the DECLARED data size and never
+    clamped them to the buffer, so np.frombuffer raised ValueError. Nothing
+    caught it: zero stdout, a raw traceback, exit 1. The pure-Python fallback
+    hid it locally, and CI has numpy but no truncated specimen -- every one
+    lives in the gitignored corpus -- so nobody saw it. Hence a file built
+    here rather than a fixture path.
+    """
+    good = _wav(b"\x11\x22" * 400)
+    broken = bytearray(good)
+    # data says 176,400 bytes; far more than remain
+    struct.pack_into("<I", broken, len(good) - 800 - 4, 176400)
+    p = tmp_path / "overrun.wav"
+    p.write_bytes(bytes(broken))
+
+    rc = audit.run(_args(str(p)))                 # must not raise
+
+    out = capsys.readouterr().out
+    assert out.strip(), "audit produced no report at all"
+    assert "VERDICT" in out
+    assert rc in (0, 1)

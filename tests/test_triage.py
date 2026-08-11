@@ -3,7 +3,9 @@
 import os
 import struct
 
-from acidcat.core import triage
+import pytest
+
+from acidcat.core.forensics import triage
 from acidcat.core.walk import walk_file, Unsupported
 
 
@@ -89,3 +91,43 @@ def test_walk_file_still_rejects_noise(tmp_path):
         assert False, "random noise should not triage as a container"
     except Unsupported:
         pass
+
+
+# ── the display cap must not decide what IS a container ───────────────────
+
+def _grid(tmp_path, name, n, good_wrapper=False):
+    """A container of `n` tiling 4-byte chunks. With good_wrapper=False the
+    outer size is wrong, so recognition rests on tiling alone -- which is the
+    path the cap used to break."""
+    body = b"".join(b"CHNK" + struct.pack(">I", 4) + b"aaaa" for _ in range(n))
+    outer = len(body) if good_wrapper else 0xDEAD
+    p = tmp_path / name
+    p.write_bytes(b"BLOB" + struct.pack(">I", outer) + body)
+    return str(p)
+
+
+@pytest.mark.parametrize("n", [200, 256, 257, 300, 1000])
+def test_a_large_container_is_still_a_container(tmp_path, n):
+    """The display cap used to decide tiling too, so the walk stopped mid-file,
+    `tiled` came out False, and anything over 256 chunks was rejected outright
+    as "not a recognized audio/preset file". The cliff sat between 256 and 257.
+    """
+    assert triage.generic_walk(_grid(tmp_path, f"n{n}.bin", n)) is not None
+
+
+def test_the_reported_count_is_the_real_one(tmp_path):
+    _, chunks, _ = triage.generic_walk(_grid(tmp_path, "big.bin", 300))
+    assert "300 chunk(s)" in chunks[0]["summary"]
+
+
+def test_a_truncated_listing_says_so(tmp_path):
+    """"257 chunks" and "257 chunks we stopped counting at" must not read the
+    same."""
+    _, chunks, warns = triage.generic_walk(_grid(tmp_path, "big.bin", 300))
+    assert len(chunks) - 1 == triage._LIST_CAP
+    assert any("listing the first" in w for w in warns)
+
+
+def test_a_small_container_gets_no_truncation_warning(tmp_path):
+    _, _, warns = triage.generic_walk(_grid(tmp_path, "small.bin", 10))
+    assert not any("listing the first" in w for w in warns)

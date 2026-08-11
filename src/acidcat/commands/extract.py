@@ -15,7 +15,10 @@ import json
 import os
 import sys
 
-from acidcat.core import samples as smod
+from acidcat.core.extract import samples as smod
+from acidcat.core.infra.render import format_json
+from acidcat.commands._output import (add_output_format_arg,
+                                      chosen_format)
 from acidcat.util.stdin import is_stdin_target, stdin_to_tempfile
 
 
@@ -27,8 +30,10 @@ def register(subparsers):
                                  "for stdin.")
     p.add_argument("-o", "--output", metavar="DIR",
                    help="Output directory (default: <input>_samples).")
-    p.add_argument("--json", action="store_true",
-                   help="Emit a JSON manifest on stdout instead of writing files.")
+    # the manifest is one flat record per sample, so it gets the full set.
+    # Note this is a RENDERING choice, not a dry-run switch: the help below
+    # says a machine format prints the manifest INSTEAD of writing files.
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Suppress the per-sample line on stderr.")
     p.set_defaults(func=run)
@@ -42,20 +47,25 @@ def _safe(name, idx, ext="wav"):
 def run(args):
     tmp = None
     path = args.input
+    # the name to put in messages: stdin is buffered to a temp file so the
+    # byte-level parsers can seek, and leaking that path told the user about a
+    # file they never named and which no longer exists by the time they read it
+    display = path
     if is_stdin_target(path):
         tmp = stdin_to_tempfile()
         if tmp is None:
             print("acidcat extract: no input on stdin", file=sys.stderr)
-            return 1
+            return 2
         path = tmp
+        display = "<stdin>"
     elif not os.path.isfile(path):
         print(f"acidcat extract: {path}: No such file", file=sys.stderr)
-        return 1
+        return 2
 
     try:
         records = list(smod.iter_samples(path))
     except smod.SampleError as e:
-        print(f"acidcat extract: {path}: {e}", file=sys.stderr)
+        print(f"acidcat extract: {display}: {e}", file=sys.stderr)
         return 1
     finally:
         if tmp:
@@ -68,15 +78,30 @@ def run(args):
     written = [r for r in records if r.get("wav")]
     notes = [r["note"] for r in records if not r.get("wav")]
 
-    if args.json:
+    fmt = chosen_format(args)
+    if fmt != "table":
         manifest = [{"index": i, "name": r["name"], "bytes": len(r["wav"]),
                      "note": r.get("note")} for i, r in enumerate(written)]
-        json.dump({"samples": manifest, "notes": notes}, sys.stdout, indent=2)
-        sys.stdout.write("\n")
-        return 0
+        if fmt == "json":
+            # the envelope keeps `notes`, which is the channel that reports
+            # samples the bank declared but does not contain -- dropping it
+            # would put the count back to describing more work than was done
+            format_json({"samples": manifest, "notes": notes}, sys.stdout)
+        else:
+            # csv/tsv are one row per sample; the notes have no column, so they
+            # go to stderr rather than being silently discarded
+            from acidcat.core.infra.render import output as _render
+            _render(manifest, fmt=fmt)
+            for n in notes:
+                print(f"acidcat extract: {n}", file=sys.stderr)
+        # a manifest of nothing is the same negative result the table path
+        # reports; it used to return 0 here and 1 three lines below
+        return 0 if written else 1
 
     if not written:
-        print(f"acidcat extract: {args.input}: no extractable samples"
+        # `display`, not args.input: on the stdin path the latter is "-" and
+        # every other message in this function already says <stdin>
+        print(f"acidcat extract: {display}: no extractable samples"
               + (f" ({'; '.join(notes)})" if notes else ""), file=sys.stderr)
         return 1
 

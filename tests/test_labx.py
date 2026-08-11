@@ -5,7 +5,7 @@ Fixtures are synthesized here (a small STORED zip of minimal Boost archives with
 placeholder metadata) -- no real bank content."""
 import zipfile
 
-from acidcat.core.sniff import sniff
+from acidcat.core.infra.sniff import sniff
 from acidcat.core.walk import labx
 
 

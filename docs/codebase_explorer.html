@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>acidcat codebase explorer / v0.56.0</title>
-<meta name="description" content="Source-level reference for acidcat: the byte-level walker fleet, the dissection surface (inspect/probe/carve/repair), the declarative grammar engine, DSP internals, per-library SQLite storage, and the MCP server." />
-<meta property="og:title" content="acidcat codebase explorer / v0.56.0" />
+<title>acidcat codebase explorer / v0.90.0</title>
+<meta name="description" content="Source-level reference for acidcat: the 46-walker byte-dissection fleet, the concern-based core packages, forensic recovery, the constraint model for write/repair, DSP internals, per-library SQLite storage, and the MCP surface." />
+<meta property="og:title" content="acidcat codebase explorer / v0.90.0" />
 <meta property="og:type" content="article" />
 <style>
 /* theme: amp-orange (see skill themes/ for presets) */
@@ -139,310 +139,461 @@ code{font-family:"SFMono-Regular","SF Mono",Menlo,Consolas,monospace;font-size:0
   <p class="eyebrow">Engineering Reference / acidcat byte-level format dissector</p>
   <h1>acidcat: byte-level dissection and reverse-engineering of audio &amp; sampler formats</h1>
   <p class="lede">
-    <span class="spec-line">v0.56.0</span>
-    <span class="spec-line">python &gt;= 3.9</span>
-    <span class="spec-line">one hard dep: mutagen</span>
-    A readelf / radare2 / 010-Editor for audio, synth, DAW, and hardware-sampler file formats. A fleet of <span class="term" data-term="walker-fleet">26 byte-level walkers</span> exposes every header, chunk, and frame field with its exact offset so a human or a model can see precisely what a file is, flag anomalies, and repair its structure. <span class="term" data-term="inspect-cmd">inspect</span> dumps it readelf-style; <span class="term" data-term="probe-cmd">probe</span>, <span class="term" data-term="carve-cmd">carve</span>, and the <span class="term" data-term="constraint-model">repair/validate/audit</span> constraint model turn it into a forensic surface; a <span class="term" data-term="grammar-engine">declarative grammar engine</span> mirrors the walkers as data. An optional analysis side estimates BPM/key and indexes libraries into per-library SQLite, queryable from the CLI or a <span class="term" data-term="mcp-server">19-tool MCP server</span>.
-    <a class="repo-link" href="https://github.com/hed0rah/acidcat" target="_blank" rel="noopener">view on github</a>
+    A pure-Python scalpel for audio and preset files. It walks a container's real
+    byte structure, names every field, recovers audio from raw blobs and console
+    ROMs, repairs broken headers by re-satisfying their constraints, and -- wearing
+    its second hat -- listens to the audio itself to catalogue a sample library.
+    One engine underneath both.
+    <span class="spec-line">v0.90.0</span>
+    <span class="spec-line">pure Python 3.9+</span>
+    <span class="spec-line">core deps: mutagen only</span>
+    <a class="repo-link" href="https://github.com/hed0rah/acidcat">github.com/hed0rah/acidcat</a>
   </p>
 
   <div class="stat-grid">
-    <div class="stat"><div class="num">23</div><div class="lbl">CLI verbs</div></div>
-    <div class="stat"><div class="num">26</div><div class="lbl">format walkers</div></div>
-    <div class="stat"><div class="num">19</div><div class="lbl">MCP tools</div></div>
-    <div class="stat"><div class="num">~7,990</div><div class="lbl">tests passing</div></div>
+    <div class="stat"><div class="num">26</div><div class="lbl">CLI verbs</div></div>
+    <div class="stat"><div class="num">46</div><div class="lbl">format walkers</div></div>
+    <div class="stat"><div class="num">57</div><div class="lbl">formats known</div></div>
+    <div class="stat"><div class="num">8,294</div><div class="lbl">tests passing</div></div>
   </div>
 
   <h2>Source tree</h2>
+  <p>
+    <code>core/</code> is organized <em>by concern</em>, and the ordering below is
+    also the dependency direction: everything above may be imported by everything
+    below it, never the reverse. That is what lets the base install ship with
+    <span class="term" data-term="tier-boundary">only mutagen</span> while the
+    heavier tiers stay optional.
+  </p>
   <div class="tree">src/acidcat/
-  <span class="term" data-term="cli-py">cli.py</span>                 <span class="dim">argparse + bare-path auto-dispatch, 23 verbs</span>
-  __main__.py            <span class="dim">python -m acidcat entrypoint</span>
-  <span class="term" data-term="mcp-server">mcp_server.py</span>          <span class="dim">stdio MCP server, 19 tools, library fan-out</span>
-  <span class="term" data-term="tui-app">tui_app.py</span>             <span class="dim">Textual inspector/editor front-end</span>
-  commands/              <span class="dim">one module per verb, register/run pattern</span>
-    <span class="term" data-term="inspect-cmd">inspect</span> <span class="term" data-term="probe-cmd">probe</span> od <span class="term" data-term="carve-cmd">carve</span> <span class="term" data-term="shape-cmd">shape</span>   <span class="dim">the dissection surface</span>
-    <span class="term" data-term="constraint-model">repair validate audit</span>    <span class="dim">the constraint / forensic model</span>
-    info scan chunks survey dump    <span class="dim">metadata + hex surface</span>
-    detect features <span class="term" data-term="similar-cmd">similar</span>        <span class="dim">librosa analysis (opt-in extra)</span>
-    <span class="term" data-term="cmd-index">index</span> <span class="term" data-term="cmd-query">query</span> convert cover tui explore
-  core/
-    <span class="term" data-term="walk-pkg">walk/</span>                <span class="dim">26 format walkers + the field-model base</span>
-    <span class="term" data-term="grammar-pkg">grammar/</span>             <span class="dim">declarative descriptor engine (opt-in, frozen)</span>
-    <span class="term" data-term="riff-py">riff.py</span>              <span class="dim">RIFF primitives: iter_spans (lenient traversal)</span>
-    <span class="term" data-term="structure-py">structure.py</span>         <span class="dim">strict IFF engine, drives write + repair</span>
-    <span class="term" data-term="sniff-py">sniff.py</span> <span class="term" data-term="sniff-py">detect.py</span>     <span class="dim">magic-byte format identification</span>
-    <span class="term" data-term="anomalies-py">anomalies.py</span>         <span class="dim">forensic checks: polyglots, cavities, entropy</span>
-    <span class="term" data-term="provenance-py">provenance.py</span>        <span class="dim">writer/tool fingerprinting (sidecar signature DB)</span>
-    <span class="term" data-term="viz-py">viz.py</span>               <span class="dim">entropy + Hilbert byte-map</span>
-    <span class="term" data-term="constraints-py">constraints.py</span>       <span class="dim">derived-field model + repairers.py</span>
-    <span class="term" data-term="fieldcodec-py">fieldcodec.py</span> <span class="term" data-term="vocab-py">vocab.py</span>   <span class="dim">enc-language + core value tables</span>
-    <span class="term" data-term="features-py">features.py</span> <span class="term" data-term="camelot-py">camelot.py</span>    <span class="dim">51-dim vector + harmonic-mixing wheel</span>
-    <span class="term" data-term="search-py">search.py</span>            <span class="dim">similarity + compatibility (CLI + MCP share it)</span>
-    <span class="term" data-term="index-py">index.py</span> <span class="term" data-term="registry-py">registry.py</span> <span class="term" data-term="paths-py">paths.py</span>  <span class="dim">per-library SQLite + registry</span>
-  core/data/             <span class="dim">provenance_signatures.json (editable sidecar)</span>
-  util/                  <span class="dim">midi note names, csv, stdin buffer, deps gate</span></div>
+├── core/
+│   ├── <span class="term" data-term="core-primitives">primitives/</span>      <span class="dim">dependency-free leaves: entropy, PCM math, WAV emit, zip offsets</span>
+│   ├── <span class="term" data-term="core-codecs">codecs/</span>         <span class="dim">bytes -&gt; PCM decoders (ADPCM family, DSP, BRR, VADPCM, NCW)</span>
+│   ├── <span class="term" data-term="core-containers">containers/</span>     <span class="dim">disc images and filesystems: GCM, Wii, ISO 9660, cue sheets</span>
+│   ├── <span class="term" data-term="core-formats">formats/</span>        <span class="dim">per-format parsers: RIFF, AIFF, FLAC, MP3, MP4, MIDI, presets</span>
+│   ├── <span class="term" data-term="core-walk">walk/</span>           <span class="dim">33 structural walkers -- the chunk/field tree per format</span>
+│   ├── <span class="term" data-term="core-write">write/</span>          <span class="dim">the constraint model: edit = repair = re-satisfy and re-emit</span>
+│   ├── <span class="term" data-term="core-forensics">forensics/</span>      <span class="dim">read-only measurement: locate, anomalies, entropy, provenance</span>
+│   ├── <span class="term" data-term="core-extract">extract/</span>        <span class="dim">pull samples out of banks and console ROMs</span>
+│   ├── <span class="term" data-term="core-analysis">analysis/</span>       <span class="dim">the second hat: BPM, key, the ML feature vector (librosa)</span>
+│   ├── <span class="term" data-term="core-catalogue">catalogue/</span>      <span class="dim">per-library SQLite index and compatibility search</span>
+│   ├── <span class="term" data-term="core-infra">infra/</span>          <span class="dim">sniff, render, vocab, sandbox, typed-field readers</span>
+│   └── <span class="term" data-term="grammar-parked">grammar/</span>        <span class="dim">declarative format descriptors -- parked as a test oracle</span>
+├── commands/      <span class="dim">one module per CLI verb, thin over core</span>
+├── <span class="term" data-term="mcp-server">mcp_server/</span>    <span class="dim">handlers / schema / transport -- the MCP surface</span>
+├── <span class="term" data-term="tui-app">tui_app/</span>       <span class="dim">render / screens / app -- the interactive explorer</span>
+└── util/          <span class="dim">stdin buffering, color policy, optional-dep gates</span>
+</div>
 
   <h2>Data flow</h2>
-  <p>Everything acidcat does is one of three flows: <strong>ingest</strong> (parse files into a database), <strong>analyze</strong> (compute what metadata does not say), and <strong>query</strong> (fan out across every registered library). The diagrams below trace each one through the modules above.</p>
+  <p>
+    Three paths matter. The <strong>dissection path</strong> is the tool's spine:
+    magic bytes in, a named field tree out, and one place where a hostile file is
+    allowed to degrade rather than crash. The <strong>recovery pipeline</strong> is
+    the reason the verbs compose. The <strong>catalogue path</strong> is the second
+    hat, and the only one that pulls heavy dependencies.
+  </p>
 
-  <div class="figure">
-  <svg viewBox="0 0 740 218" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ingest pipeline flow">
-    <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" style="fill:var(--accent-deep,#1A2F3F)"/></marker></defs>
-    <style>
-      .bx{fill:var(--paper,#fcfcfa);stroke:var(--accent-deep,#1A2F3F);stroke-width:1.1}
-      .hot{stroke:var(--accent-hot,#EC503A)}
-      .lb{font:600 11px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--accent-deep,#1A2F3F)}
-      .sm{font:10px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--muted,#64625c)}
-      .fl{stroke:var(--accent-deep,#1A2F3F);stroke-width:1;fill:none;marker-end:url(#ar)}
-      .fl2{stroke:var(--accent-hot,#EC503A);stroke-width:1;fill:none;marker-end:url(#ar);stroke-dasharray:4 3}
-    </style>
-    <rect class="bx" x="8" y="32" width="74" height="34"/><text class="lb" x="20" y="52">file</text>
-    <path class="fl" d="M82,49 L116,49"/>
-    <rect class="bx" x="118" y="32" width="104" height="34"/><text class="lb" x="128" y="47">magic-byte</text><text class="sm" x="128" y="59">sniff, then ext</text>
-    <path class="fl" d="M222,49 L256,49"/>
-    <rect class="bx" x="258" y="14" width="142" height="70"/>
-    <text class="lb" x="270" y="30">format parser</text>
-    <text class="sm" x="270" y="44">riff / aiff / midi</text>
-    <text class="sm" x="270" y="56">serum / tagged</text>
-    <text class="sm" x="270" y="76">struct.unpack land</text>
-    <path class="fl" d="M400,49 L434,49"/>
-    <rect class="bx" x="436" y="32" width="92" height="34"/><text class="lb" x="448" y="47">row dict</text><text class="sm" x="448" y="59">27 columns</text>
-    <path class="fl" d="M528,49 L562,49"/>
-    <rect class="bx" x="564" y="26" width="168" height="46"/>
-    <text class="lb" x="576" y="44">upsert + FTS rebuild</text>
-    <text class="sm" x="576" y="58">commit every 100 files</text>
-    <rect class="bx" x="258" y="148" width="142" height="48"/>
-    <text class="lb" x="270" y="166">librosa analysis</text>
-    <text class="sm" x="270" y="180">bpm, key, 51 features</text>
-    <path class="fl2" d="M340,148 C360,110 410,70 434,56"/>
-    <text class="sm" x="350" y="120">fills gaps metadata left</text>
-    <path class="fl" d="M648,72 L648,146"/>
-    <rect class="bx hot" x="564" y="148" width="168" height="48"/>
-    <text class="lb" x="576" y="166">per-library DB</text>
-    <text class="sm" x="576" y="180">samples + fts5 + features</text>
-  </svg>
-  <div class="cap">fig. 1: ingest. one pass per file, analysis is opt-in (--deep / --features), batched commits amortize fsync.</div>
-  </div>
+  <style>
+    .bx rect,.bx2 rect{fill:var(--paper,#fcfcfa);stroke:var(--accent-deep,#1A2F3F);stroke-width:1.1}
+    .lbl text{font:600 11px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--accent-deep,#1A2F3F)}
+    .lbl text.sm{font:10px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--muted,#64625c)}
+    .arw line{stroke:var(--accent-deep,#1A2F3F);stroke-width:1;fill:none}
+  </style>
 
-  <div class="figure">
-  <svg viewBox="0 0 740 196" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="fan-out query flow">
-    <defs><marker id="ar2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" style="fill:var(--accent-deep,#1A2F3F)"/></marker></defs>
-    <style>
-      .bx2{fill:var(--paper,#fcfcfa);stroke:var(--accent-deep,#1A2F3F);stroke-width:1.1}
-      .hot2{stroke:var(--accent-hot,#EC503A)}
-      .lb2{font:600 11px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--accent-deep,#1A2F3F)}
-      .sm2{font:10px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--muted,#64625c)}
-      .fl3{stroke:var(--accent-deep,#1A2F3F);stroke-width:1;fill:none;marker-end:url(#ar2)}
-    </style>
-    <rect class="bx2" x="8" y="74" width="118" height="48"/>
-    <text class="lb2" x="20" y="92">acidcat query</text>
-    <text class="sm2" x="20" y="106">or any MCP read</text>
-    <path class="fl3" d="M126,98 L160,98"/>
-    <rect class="bx2" x="162" y="74" width="110" height="48"/>
-    <text class="lb2" x="174" y="92">registry.db</text>
-    <text class="sm2" x="174" y="106">scope by --root</text>
-    <path class="fl3" d="M272,86 C310,60 350,38 388,30"/>
-    <path class="fl3" d="M272,98 L388,98"/>
-    <path class="fl3" d="M272,110 C310,136 350,158 388,166"/>
-    <rect class="bx2 hot2" x="390" y="12" width="128" height="36"/><text class="lb2" x="400" y="34">drums_lib.db</text>
-    <rect class="bx2 hot2" x="390" y="80" width="128" height="36"/><text class="lb2" x="400" y="102">synths_lib.db</text>
-    <rect class="bx2 hot2" x="390" y="148" width="128" height="36"/><text class="lb2" x="400" y="170">field_rec.db</text>
-    <text class="sm2" x="400" y="62">same WHERE on each</text>
-    <path class="fl3" d="M518,30 C556,38 588,60 612,86"/>
-    <path class="fl3" d="M518,98 L610,98"/>
-    <path class="fl3" d="M518,166 C556,158 588,136 612,110"/>
-    <rect class="bx2" x="614" y="74" width="118" height="48"/>
-    <text class="lb2" x="626" y="90">merge rows</text>
-    <text class="sm2" x="626" y="103">dedup by path</text>
-    <text class="sm2" x="626" y="115">sort, final LIMIT</text>
-  </svg>
-  <div class="cap">fig. 2: fan-out read. writes instead route to exactly one library via longest-prefix matching on the sample path.</div>
-  </div>
+  <figure>
+    <svg viewBox="0 0 740 168" role="img" aria-label="Dissection path from bytes to named fields">
+      <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" style="fill:var(--accent-deep,#1A2F3F)"/></marker></defs>
+      <g class="bx">
+        <rect x="8"   y="52" width="96" height="40" rx="2"/>
+        <rect x="150" y="52" width="96" height="40" rx="2"/>
+        <rect x="292" y="52" width="110" height="40" rx="2"/>
+        <rect x="448" y="16" width="120" height="34" rx="2"/>
+        <rect x="448" y="60" width="120" height="34" rx="2"/>
+        <rect x="448" y="104" width="120" height="34" rx="2"/>
+        <rect x="614" y="52" width="112" height="40" rx="2"/>
+      </g>
+      <g class="lbl">
+        <text x="56"  y="70" text-anchor="middle">file bytes</text>
+        <text x="56"  y="83" text-anchor="middle" class="sm">or stdin</text>
+        <text x="198" y="70" text-anchor="middle">infra/sniff</text>
+        <text x="198" y="83" text-anchor="middle" class="sm">magic -&gt; format id</text>
+        <text x="347" y="70" text-anchor="middle">walk_file</text>
+        <text x="347" y="83" text-anchor="middle" class="sm">never-raise boundary</text>
+        <text x="508" y="37" text-anchor="middle">formats/ parser</text>
+        <text x="508" y="81" text-anchor="middle">walk/ walker</text>
+        <text x="508" y="125" text-anchor="middle">triage (unknown)</text>
+        <text x="670" y="70" text-anchor="middle">chunk tree</text>
+        <text x="670" y="83" text-anchor="middle" class="sm">+ warnings</text>
+      </g>
+      <g class="arw" marker-end="url(#ar)">
+        <line x1="104" y1="72" x2="146" y2="72"/>
+        <line x1="246" y1="72" x2="288" y2="72"/>
+        <line x1="402" y1="72" x2="444" y2="33"/>
+        <line x1="402" y1="72" x2="444" y2="77"/>
+        <line x1="402" y1="72" x2="444" y2="118" stroke-dasharray="3 3"/>
+        <line x1="568" y1="33" x2="610" y2="66"/>
+        <line x1="568" y1="77" x2="610" y2="72"/>
+        <line x1="568" y1="118" x2="610" y2="80" stroke-dasharray="3 3"/>
+      </g>
+    </svg>
+    <figcaption>
+      Dissection. <span class="term" data-term="sniff">sniff</span> identifies the
+      container by magic, <span class="term" data-term="walk-file">walk_file</span>
+      dispatches to one of 46 walkers, and an unrecognized-but-chunked file falls
+      through to <span class="term" data-term="triage">generic triage</span> rather
+      than a flat rejection. Every consumer -- inspect, od, audit, the TUI, the
+      public API -- shares that one boundary.
+    </figcaption>
+  </figure>
+
+  <figure>
+    <svg viewBox="0 0 740 132" role="img" aria-label="Recovery pipeline from blob to playable audio">
+      <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" style="fill:var(--accent-deep,#1A2F3F)"/></marker></defs>
+      <g class="bx2">
+        <rect x="8"   y="46" width="104" height="42" rx="2"/>
+        <rect x="158" y="46" width="112" height="42" rx="2"/>
+        <rect x="316" y="46" width="104" height="42" rx="2"/>
+        <rect x="466" y="46" width="112" height="42" rx="2"/>
+        <rect x="624" y="46" width="104" height="42" rx="2"/>
+      </g>
+      <g class="lbl">
+        <text x="60"  y="64" text-anchor="middle">disk image</text>
+        <text x="60"  y="78" text-anchor="middle" class="sm">/dev/sdcard, ROM</text>
+        <text x="214" y="64" text-anchor="middle">locate</text>
+        <text x="214" y="78" text-anchor="middle" class="sm">reports regions</text>
+        <text x="368" y="64" text-anchor="middle">carve</text>
+        <text x="368" y="78" text-anchor="middle" class="sm">cuts bytes out</text>
+        <text x="522" y="64" text-anchor="middle">convert</text>
+        <text x="522" y="78" text-anchor="middle" class="sm">--to-pcm</text>
+        <text x="676" y="64" text-anchor="middle">playable WAV</text>
+        <text x="676" y="78" text-anchor="middle" class="sm">+ validate</text>
+      </g>
+      <g class="arw" marker-end="url(#ar2)">
+        <line x1="112" y1="67" x2="154" y2="67"/>
+        <line x1="270" y1="67" x2="312" y2="67"/>
+        <line x1="420" y1="67" x2="462" y2="67"/>
+        <line x1="578" y1="67" x2="620" y2="67"/>
+      </g>
+      <g class="lbl"><text x="291" y="34" text-anchor="middle" class="sm">--json on stdout</text></g>
+      <g class="lbl"><text x="291" y="112" text-anchor="middle" class="sm">summaries on stderr, so the pipe stays clean</text></g>
+    </svg>
+    <figcaption>
+      Recovery. A region's offset/length <em>is</em> a
+      <span class="term" data-term="carve">carve</span> range, so
+      <span class="term" data-term="locate">locate</span> pipes straight into it:
+      <code>acidcat locate disk.img --json | acidcat carve disk.img --batch - -o out/</code>.
+      Records go to stdout and summaries to stderr, which is what makes the
+      composition work.
+    </figcaption>
+  </figure>
 
   <h2>Module reference</h2>
   <div class="tabs" id="mod-tabs">
-    <button class="tab-btn" data-filter="all" data-active="true">all</button>
-    <button class="tab-btn" data-filter="dissect">dissection</button>
-    <button class="tab-btn" data-filter="core">core</button>
-    <button class="tab-btn" data-filter="commands">commands</button>
-    <button class="tab-btn" data-filter="surface">cli + mcp</button>
+    <button class="tab-btn" data-active="true" data-filter="all">all</button>
+    <button class="tab-btn" data-filter="lean">lean core</button>
+    <button class="tab-btn" data-filter="heavy">optional tiers</button>
+    <button class="tab-btn" data-filter="surface">surfaces</button>
   </div>
   <table class="compare" id="mod-table">
-    <thead><tr><th>module</th><th>role</th><th>worth knowing</th></tr></thead>
+    <thead><tr><th>module</th><th>tier</th><th>what it owns</th></tr></thead>
     <tbody>
-      <tr data-mod="surface"><td><span class="term" data-term="cli-py">cli.py</span></td><td>argparse front door</td><td>bare paths auto-route: file to info, dir to scan, <code>-</code> to stdin</td></tr>
-      <tr data-mod="surface"><td><span class="term" data-term="mcp-server">mcp_server.py</span></td><td>stdio MCP server</td><td>19 tools, cost-prefixed descriptions, <span class="term" data-term="fan-out">fan-out</span> reads</td></tr>
-      <tr data-mod="commands"><td><span class="term" data-term="cmd-index">commands/index.py</span></td><td>walker + upserter</td><td><span class="term" data-term="sniff">magic-byte sniff</span>, <span class="term" data-term="commit-batch">batched commits</span>, prune of vanished files</td></tr>
-      <tr data-mod="commands"><td><span class="term" data-term="cmd-query">commands/query.py</span></td><td>index reads</td><td>bpm/key/duration/format/tag filters, FTS5 <code>--text</code>, scoped <code>--root</code></td></tr>
-      <tr data-mod="dissect"><td><span class="term" data-term="inspect-cmd">commands/inspect.py</span></td><td>structural dump</td><td>26 walkers, decoded fields with offsets, <span class="term" data-term="inspect-lint">spec lint</span>, <span class="term" data-term="inspect-frames">--frames</span>, <span class="term" data-term="anomalies-py">--anomalies</span></td></tr>
-      <tr data-mod="dissect"><td><span class="term" data-term="probe-cmd">commands/probe.py</span></td><td>byte-level RE surface</td><td>typed reads, value scan, pattern find, strings, hexdump, diff; <code>chunk.field</code> addressing</td></tr>
-      <tr data-mod="dissect"><td><span class="term" data-term="carve-cmd">commands/carve.py</span></td><td>byte-range extraction</td><td>pull a chunk, an appended blob, or an offset range out to a file</td></tr>
-      <tr data-mod="dissect"><td><span class="term" data-term="shape-cmd">commands/shape.py</span></td><td>structural fingerprint</td><td>one-line shape per file for specimen-hunting; <code>sort | uniq -c</code> surfaces rare shapes</td></tr>
-      <tr data-mod="dissect"><td><span class="term" data-term="constraint-model">commands/repair, validate, audit</span></td><td>constraint + forensics</td><td>derived-field repair, read-only validate, 4-part forensic <span class="term" data-term="anomalies-py">audit</span> verdict</td></tr>
-      <tr data-mod="dissect"><td><span class="term" data-term="walk-pkg">core/walk/</span></td><td>the walker fleet</td><td>26 walkers on one <span class="term" data-term="field-model">field-model contract</span>; <span class="term" data-term="walk-dispatch">walk_file</span> dispatch + degrade boundary</td></tr>
-      <tr data-mod="dissect"><td><span class="term" data-term="grammar-pkg">core/grammar/</span></td><td>declarative engine</td><td>format-as-data descriptors, byte-exact vs the walkers; opt-in, <span class="term" data-term="grammar-engine">frozen</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="provenance-py">core/provenance.py</span></td><td>writer fingerprints</td><td>string tells + structural chunk signatures, from an editable <span class="term" data-term="sidecar-db">sidecar JSON DB</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="anomalies-py">core/anomalies.py</span></td><td>forensic scanner</td><td>polyglots, cavities, trailing data, size mismatches, <span class="term" data-term="entropy">entropy</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="structure-py">core/structure.py</span></td><td>strict IFF engine</td><td>the <span class="term" data-term="two-engines">strict half</span>: clamps, rejects malformed input, drives write / repair</td></tr>
-      <tr data-mod="commands"><td>commands/info, scan, chunks, survey, dump</td><td>metadata surface</td><td>single file, batch CSV, chunk walk, chunk census, hex dump</td></tr>
-      <tr data-mod="commands"><td>commands/detect, features, <span class="term" data-term="similar-cmd">similar</span></td><td>analysis surface</td><td>librosa verbs; gated behind <code>pip install acidcat[analysis]</code></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="riff-py">core/riff.py</span></td><td>RIFF primitives</td><td><span class="term" data-term="acid-chunk">acid</span>, <span class="term" data-term="smpl-chunk">smpl</span>, <span class="term" data-term="cue-chunk">cue</span> helpers + the lenient <span class="term" data-term="two-engines">iter_spans</span> traversal</td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="aiff-py">core/aiff.py</span></td><td>AIFF/AIFC parser</td><td>big-endian, sample rate is an <span class="term" data-term="ieee-extended">80-bit extended float</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="midi-py">core/midi.py</span></td><td>SMF parser</td><td><span class="term" data-term="vlq">VLQ deltas</span>, <span class="term" data-term="running-status">running status</span>, <span class="term" data-term="tempo-meta">tempo meta events</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="serum-py">core/serum.py</span></td><td>Serum presets</td><td><span class="term" data-term="xferjson">XferJson header</span> + single-pass <code>raw_decode</code></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="mp3-py">core/mp3.py</span></td><td>MPEG audio primitives</td><td><span class="term" data-term="mpeg-frame">frame-header decode</span>, <span class="term" data-term="id3v2">synchsafe ID3v2</span>, <span class="term" data-term="xing-lame">Xing/LAME</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="flac-py">core/flac.py</span></td><td>FLAC blocks</td><td><span class="term" data-term="flac-blocks">metadata-block iterator</span>, last-block flag, stdlib only</td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="tagged-py">core/tagged.py</span></td><td>tag containers</td><td><span class="term" data-term="mutagen-map">ID3 / Vorbis / MP4 atom</span> field mapping, BOM strip</td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="detect-py">core/detect.py</span></td><td>BPM + key</td><td><span class="term" data-term="bpm-filename">filename heuristics</span>, <span class="term" data-term="tempo-est">librosa tempo</span>, <span class="term" data-term="bpm-validate">cross-validation</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="features-py">core/features.py</span></td><td>feature vector</td><td>51 features: <span class="term" data-term="mfcc">MFCCs</span>, <span class="term" data-term="spectral-shape">spectral shape</span>, <span class="term" data-term="tonnetz">tonnetz</span>, rhythm</td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="camelot-py">core/camelot.py</span></td><td>harmonic mixing</td><td><span class="term" data-term="camelot-wheel">wheel mapping</span>, <span class="term" data-term="parse-key">tolerant key parsing</span>, enharmonics</td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="index-py">core/index.py</span></td><td>per-library store</td><td><span class="term" data-term="db-schema">6-table schema</span>, <span class="term" data-term="fts5">FTS5 mirror</span>, <span class="term" data-term="schema-version">version gate</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="registry-py">core/registry.py</span></td><td>library catalog</td><td><span class="term" data-term="registry-overlap">overlap guard</span>, cached stats, <span class="term" data-term="longest-prefix">longest-prefix routing</span></td></tr>
-      <tr data-mod="core"><td><span class="term" data-term="paths-py">core/paths.py</span></td><td>DB layout</td><td><span class="term" data-term="storage-layout">central vs in-tree</span>, label slug + 12-hex path hash</td></tr>
+      <tr data-mod="lean"><td><code>core/primitives</code></td><td>core</td><td>Shannon entropy, lag-1 PCM coherence, ADPCM sample math, WAV emission, zip offsets -- the leaves that import nothing of ours</td></tr>
+      <tr data-mod="lean"><td><code>core/infra/sniff</code></td><td>core</td><td>The one magic-byte registry; 57 known formats, deep content checks loaded lazily</td></tr>
+      <tr data-mod="lean"><td><code>core/walk</code></td><td>core</td><td>33 walkers producing the chunk/field tree, behind one never-raise boundary</td></tr>
+      <tr data-mod="lean"><td><code>core/formats</code></td><td>core</td><td>16 per-format parsers: RIFF, AIFF, FLAC, MP3, MP4, Ogg, MIDI, UMP, trackers, SF2, and synth presets</td></tr>
+      <tr data-mod="lean"><td><code>core/codecs</code></td><td>core</td><td>11 decoders to linear PCM: IMA/MS ADPCM, PS-ADPCM, GameCube DSP/DTK, ADX, SNES BRR, N64 VADPCM, Kontakt NCW</td></tr>
+      <tr data-mod="lean"><td><code>core/containers</code></td><td>core</td><td>GameCube GCM, Wii partitions, ISO 9660, CD cue sheets</td></tr>
+      <tr data-mod="lean"><td><code>core/forensics</code></td><td>core</td><td>Statistical audio detection, region location, anomaly checks, LSB/transform lenses, provenance, terminal visualization</td></tr>
+      <tr data-mod="lean"><td><code>core/write</code></td><td>core</td><td>The constraint model plus the repairers and metadata editors built on it</td></tr>
+      <tr data-mod="lean"><td><code>core/extract</code></td><td>core</td><td>Sample extraction from banks and modules; signatureless recovery from N64 and SNES ROMs</td></tr>
+      <tr data-mod="lean"><td><code>core/infra</code></td><td>core</td><td>Output rendering registry, shared vocabulary, optional parse sandbox, typed-field decoding, mmap access</td></tr>
+      <tr data-mod="heavy"><td><code>core/analysis</code></td><td>[analysis]</td><td>BPM estimation, Krumhansl-Schmuckler key detection, the 51-dimension feature vector, Camelot wheel</td></tr>
+      <tr data-mod="heavy"><td><code>core/catalogue</code></td><td>[analysis]</td><td>Per-library SQLite index, shared filter-SQL builder, similarity and compatibility search, registry</td></tr>
+      <tr data-mod="surface"><td><code>commands/</code></td><td>core</td><td>26 CLI verbs, thin wrappers over core; shared output-format and color policy</td></tr>
+      <tr data-mod="surface"><td><code>mcp_server/</code></td><td>[mcp]</td><td>19 MCP tools over the index: handlers, JSON schemas, stdio and HTTP transports</td></tr>
+      <tr data-mod="surface"><td><code>tui_app/</code></td><td>[tui]</td><td>Textual explorer: hex pane, 11 modal screens, in-place byte editing</td></tr>
     </tbody>
   </table>
 
-  <h2>The dissection surface</h2>
-  <p>The center of gravity is not the index, it is the <span class="term" data-term="walker-fleet">walker fleet</span>: 26 hand-written byte decoders under <code>core/walk/</code>, one per format, all emitting the same <span class="term" data-term="field-model">field model</span> &mdash; a list of chunks, each a list of fields carrying <code>{offset, length, name, value, note}</code>. That one shape flows unchanged through <span class="term" data-term="inspect-cmd">inspect</span>, the TUI, <span class="term" data-term="probe-cmd">probe</span>, <span class="term" data-term="anomalies-py">anomalies</span>, and the index. The walkers are the correctness oracle and the default; every other parsing path is proven against them.</p>
+  <h2>The two hats, and the seam between them</h2>
+  <p>
+    acidcat reads a file two ways. The <strong>byte hat</strong> asks what the
+    container claims about itself -- chunk layout, declared sizes, field values,
+    where the audio physically sits. The <strong>sound hat</strong> asks what the
+    audio actually is -- its tempo, its key, its timbre. Most tools do one or the
+    other. Doing both over one engine is the point: the byte layer is what finds
+    and decodes the audio that the sound layer then listens to.
+  </p>
   <ul class="bul">
-    <li><strong>Read.</strong> <span class="term" data-term="inspect-cmd">inspect</span> is the readelf: a chunk table, every decoded field with its byte offset, <span class="term" data-term="inspect-lint">lint warnings</span> where a file contradicts its own spec, and <span class="term" data-term="inspect-frames">--frames</span> for per-element depth. <span class="term" data-term="probe-cmd">probe</span> is the radare2 layer: typed reads at an offset or a <code>chunk.field</code> address, value scans, pattern finds, strings, hexdump, and a byte diff of two files.</li>
-    <li><strong>Extract.</strong> <span class="term" data-term="carve-cmd">carve</span> pulls a named chunk, an appended trailing blob, or an arbitrary offset range out to its own file &mdash; the way you lift a polyglot's second payload out for study. <span class="term" data-term="shape-cmd">shape</span> prints a one-line structural fingerprint so a directory of thousands of files can be sorted by shape to surface the rare specimen.</li>
-    <li><strong>Verify &amp; repair.</strong> The <span class="term" data-term="constraint-model">constraint model</span> treats a container as a set of derived fields (sizes, offsets, counts) whose correct value is a function of the data. <code>validate</code> reports read-only, <code>repair</code> re-satisfies the constraints, and <code>audit</code> returns a four-part forensic verdict (structure, integrity, hidden data, provenance).</li>
-    <li><strong>Fingerprint.</strong> <span class="term" data-term="anomalies-py">anomalies</span> scans for polyglots, cavities, trailing data, and covert channels, annotating high-<span class="term" data-term="entropy">entropy</span> regions; <span class="term" data-term="provenance-py">provenance</span> identifies the writing tool from string tells and structural chunk signatures held in an editable <span class="term" data-term="sidecar-db">sidecar database</span>.</li>
-  </ul>
-  <p>Two design facts explain most of this. First, <span class="term" data-term="two-engines">two container engines exist on purpose</span>: <code>structure.py</code> is strict (it clamps sizes and rejects malformed input) and drives write and repair, while <code>riff.iter_spans</code> is lenient (it reports a chunk's declared-but-wrong size and never raises) and drives dissection &mdash; malformed files are the subject, not an error. Second, the <span class="term" data-term="grammar-engine">grammar engine</span> under <code>core/grammar/</code> re-expresses formats as <em>data</em>: a descriptor plus one interpreter, validated byte-for-byte against the walkers. It is opt-in, test-only, and currently frozen at WAV and FLAC STREAMINFO &mdash; its proven consumer is a descriptor-driven fuzzer that generates the walkers' own decision-point inputs.</p>
-
-  <h2>Under the hood: signal analysis</h2>
-  <p>The analysis layer exists because most sample libraries lie. Filenames claim tempos the audio does not have, key tags are missing or wrong, and ACID chunks survive format conversions their data did not. acidcat treats every source as a witness and cross-examines them.</p>
-
-  <h3>BPM estimation</h3>
-  <ul class="bul">
-    <li>librosa computes an <span class="term" data-term="onset-env">onset strength envelope</span>, then <span class="term" data-term="tempo-est">tempo candidates</span> two ways: once from the envelope, once from raw audio. The median of all candidates becomes <code>detected_bpm</code>.</li>
-    <li>In parallel, <span class="term" data-term="bpm-filename">filename parsing</span> hunts for <code>140bpm</code>, <code>bpm140</code>, and bare 2-3 digit runs, rejecting digits glued to letters so pack codes like <code>91V_SBH_126_...</code> resolve to 126, not 91.</li>
-    <li><span class="term" data-term="bpm-validate">validate_and_improve_bpm</span> reconciles the two. Beat trackers commonly lock onto half or double time, so it tests 2x, 0.5x, 1.5x, and 1/1.5x corrections against the filename claim before trusting either side.</li>
-    <li>Anything under 256 samples is declared a one-shot and skips tempo entirely.</li>
-  </ul>
-
-  <h3>Key detection, and why acidcat refuses to guess</h3>
-  <ul class="bul">
-    <li>A <span class="term" data-term="chroma-pcp">chroma vector</span> collapses the spectrum into 12 pitch-class bins. Its argmax names the strongest pitch class, but a pitch class is not a key: A minor and A major share a tonic and differ in mode.</li>
-    <li>Downstream code treats a bare letter as major, so emitting "A" for an A minor sample would route <code>find_compatible</code> to the wrong side of the wheel. Since v0.5.5 chroma-only detection returns <code>None</code> and the filename parser, which carries mode explicitly, wins.</li>
-    <li>The honest fix is <span class="term" data-term="krumhansl">Krumhansl-Schmuckler key profiles</span>: correlate the chroma vector against 24 rotated major and minor templates and take the best. On the roadmap; refusing to guess beats guessing wrong.</li>
-  </ul>
-
-  <h3>Harmonic compatibility</h3>
-  <ul class="bul">
-    <li>The <span class="term" data-term="camelot-wheel">Camelot wheel</span> renames the circle of fifths into clock positions DJs can add and subtract: 8A is A minor, 8B is its relative C major, and mixing rules become "move one number or flip the letter".</li>
-    <li><span class="term" data-term="parse-key">parse_key</span> accepts whatever the wild ships: <code>Am</code>, <code>A minor</code>, <code>F#min</code>, <code>Bb maj</code>, Camelot codes like <code>5A</code>, octave forms like <code>C4</code>, and the capital-M major convention (<code>CM</code>) used by Beatport, Mixed In Key, Serato, and Rekordbox.</li>
-    <li>Enharmonic spellings are expanded on filter (Db and C# both hit), and flats are normalized to sharps at ingest so the DB holds one canonical form.</li>
+    <li>
+      The seam is a strict dependency direction. Nothing in the lean core imports
+      <code>analysis/</code> or <code>catalogue/</code> -- verified by a
+      <span class="term" data-term="tier-boundary">static invariant in the suite</span>,
+      not by convention. So <code>pip install acidcat</code> is a working
+      byte-dissection tool with one dependency, and librosa arrives only when you
+      ask for it.
+    </li>
+    <li>
+      Capability degrades rather than disappearing. With the analysis stack absent,
+      <code>detect</code> still answers from
+      <span class="term" data-term="filename-detect">filename and path parsing</span>,
+      which is pure regex and has no business being gated behind numpy.
+    </li>
+    <li>
+      Where both hats need the same primitive, it lives in
+      <span class="term" data-term="core-primitives">primitives/</span>: the same
+      lag-1 autocorrelation that decides "is this region audio?" during forensic
+      recovery also gates the ROM rippers.
+    </li>
   </ul>
 
-  <h3>The 51-dimension feature vector</h3>
+  <h2>Under the hood: the byte hat</h2>
+
+  <h3>The never-raise contract</h3>
   <ul class="bul">
-    <li><span class="term" data-term="mfcc">13 MFCCs</span> (mean and std each) summarize timbre: mel filterbank, log compression, then a DCT that decorrelates the bands. Coefficient 1 tracks overall energy tilt; higher ones capture formant-like texture, which is why they cluster growls near growls.</li>
-    <li><span class="term" data-term="spectral-shape">Spectral shape stats</span>: centroid (brightness), rolloff (where 85 percent of energy sits), bandwidth, contrast (peak vs valley per octave band), plus zero-crossing rate and RMS energy for noisiness and loudness.</li>
-    <li><span class="term" data-term="tonnetz">Tonnetz coordinates</span> project chroma onto interlocking circles of fifths and thirds, giving a 6-dim harmonic position where consonant keys sit near each other.</li>
-    <li>Rhythm contributes <code>tempo_librosa</code> and a beat count from beat tracking; chroma and mel spectrogram statistics round out the set.</li>
-    <li><span class="term" data-term="cosine-sim">Similarity</span> z-scores every column then ranks by cosine distance, so a quiet and a loud version of the same kick still match on shape.</li>
-    <li>The index also runs <span class="term" data-term="infer-kind">kind inference</span>: ACID beats or 2+ seconds means loop, under 1 second with no beats means one-shot.</li>
+    <li>
+      A dissector points at hostile input by definition -- corrupt files, deliberate
+      fuzz, half-downloaded samples. The rule is that a walker
+      <span class="term" data-term="walk-file">degrades with warnings and never
+      raises</span>, and it is enforced at the single boundary every consumer
+      shares rather than in 33 walkers individually.
+    </li>
+    <li>
+      The test suite flips <code>ACIDCAT_WALKER_RAISE=1</code>, so the same code
+      path that shields a user from a walker bug turns that bug into a loud
+      traceback in CI. Degradation in the field, strictness in the lab.
+    </li>
+    <li>
+      <span class="term" data-term="triage">Generic triage</span> catches the middle
+      case: a file with no dedicated walker but obvious chunk structure still gets
+      its grid surfaced, so an unknown container is a partial answer instead of a
+      rejection.
+    </li>
   </ul>
 
-  <h2>File format internals</h2>
-  <p>The walker fleet spans 26 formats &mdash; audio containers (WAV, RF64, AIFF, MP3, FLAC, OGG, MP4), synth and DAW presets (Serum, Vital, Bitwig, VST FXP, Native Instruments), and hardware-sampler banks (E-mu, Akai S-series and the MPC family, Kurzweil KRZ, Arturia, ReCycle RX2, trackers, SigMF). The four below are the load-bearing primitives everything else patterns after; the MP3 and FLAC ones are hand-rolled with no mutagen so the dump shows real offsets and catches what the tag libraries paper over.</p>
-
-  <h3>RIFF / WAV</h3>
+  <h3>Reading a chunked container</h3>
   <ul class="bul">
-    <li>The <span class="term" data-term="riff-walk">chunk walker</span> seeks chunk to chunk: 4-byte id, uint32 little-endian size, payload, plus a pad byte when the size is odd. Payload reads are capped at 64 KB so a malformed size field cannot allocate gigabytes.</li>
-    <li>The <span class="term" data-term="acid-chunk">acid chunk</span> is the project's namesake: Sonic Foundry ACID wrote tempo, beat count, meter, and root note into WAVs two decades ago and half the sample industry still does.</li>
-    <li>The <span class="term" data-term="smpl-chunk">smpl chunk</span> carries the sampler's root key and loop points. Root key 0 means "unset", not C-1; a shared helper strips that sentinel at every call site.</li>
-    <li><span class="term" data-term="cue-chunk">cue chunks</span> hold marker offsets. The declared count is capped against the actual payload size, since a hostile uint32 here once meant 4 billion loop iterations.</li>
+    <li>
+      <span class="term" data-term="riff">RIFF/WAVE</span> and its IFF cousins are
+      the workhorse: a 4-byte id, a 32-bit size, payload, and a pad byte when the
+      size is odd. Endianness flips between RIFF (little) and AIFF/FORM (big), and
+      that single difference is why the walkers stay separate rather than sharing a
+      clever parameterized iterator.
+    </li>
+    <li>
+      <span class="term" data-term="smpl-acid">Loop and tempo metadata</span> hides
+      in optional chunks: <code>smpl</code> carries the MIDI root note and loop
+      points, <code>acid</code> carries the beat count and tempo that samplers
+      actually read. acidcat treats a root note of zero as unset rather than as C-1,
+      because that is what writers mean by it.
+    </li>
+    <li>
+      <span class="term" data-term="mp3">MPEG audio</span> has no container at all --
+      just a frame sync pattern -- so the walker validates a candidate header, then
+      confirms by walking to where the next frame should begin. That resync logic is
+      also what lets forensics find headerless MP3 inside a raw blob.
+    </li>
+    <li>
+      <span class="term" data-term="flac">FLAC</span> is a metadata block chain
+      whose STREAMINFO is fixed at 34 bytes -- a strong enough invariant that the
+      signature sweep uses it to reject a stray <code>fLaC</code> in noise.
+    </li>
   </ul>
 
-  <h3>AIFF / AIFC</h3>
+  <h3>Write is repair is re-satisfying constraints</h3>
   <ul class="bul">
-    <li>Apple's mirror image of RIFF: <code>FORM</code> container, big-endian everything, COMM instead of fmt.</li>
-    <li>The sample rate is stored as an <span class="term" data-term="ieee-extended">80-bit IEEE 754 extended-precision float</span>, a 68k-era format Python's struct cannot unpack. acidcat reassembles it by hand from the 15-bit exponent and 64-bit mantissa.</li>
+    <li>
+      A container is a set of fields, some free and some <em>derived</em> -- a
+      master size is a function of everything after it, an offset is a function of
+      where its target really sits. A derived field that disagrees with its function
+      is a <span class="term" data-term="constraints">Violation</span>.
+    </li>
+    <li>
+      That framing collapses four verbs into one idea: <code>validate</code> and
+      <code>audit</code> report violations, <code>repair</code> fixes them, and
+      <code>write</code> mutates first and then fixes. There is no separate "writer"
+      that could drift from the "checker".
+    </li>
+    <li>
+      The honesty rule is the <span class="term" data-term="witness">witness</span>:
+      a violation is repairable only when some independent source of truth exists --
+      end-of-file for a master size, the target's real position for an offset. No
+      witness, no automatic fix, and the report says so rather than guessing.
+    </li>
   </ul>
 
-  <h3>Standard MIDI Files</h3>
+  <h3>Finding audio that has no header</h3>
   <ul class="bul">
-    <li>Delta times and meta lengths are <span class="term" data-term="vlq">variable-length quantities</span>: 7 bits of payload per byte, high bit set means continue.</li>
-    <li><span class="term" data-term="running-status">Running status</span> lets consecutive events omit a repeated status byte. Every mainstream DAW exports this way, and the parser's bookkeeping here is exactly where v0.5.5 fixed a one-byte desynch that corrupted note counts.</li>
-    <li>Tempo lives in <span class="term" data-term="tempo-meta">FF 51 meta events</span> as microseconds per quarter note; key signature in FF 59 as a count of sharps or flats plus a minor flag.</li>
+    <li>
+      Signature carving finds files by their magic. Raw PCM has no magic, so a
+      signature scan walks straight past it. The
+      <span class="term" data-term="audioscan">statistical detector</span> fills
+      that gap using the property that makes audio compressible in the first place:
+      consecutive samples are similar, so the lag-1 autocorrelation is high while
+      noise sits near zero. Compressibility and detectability are the same coin.
+    </li>
+    <li>
+      <span class="term" data-term="locate">locate</span> runs both engines plus a
+      frame-cadence scanner, then reconciles them: a statistical hit inside a
+      container's extent is part of that file, not a separate find. A missing header
+      never discards a hit -- it only downgrades a container recovery to a blob
+      recovery.
+    </li>
+    <li>
+      <span class="term" data-term="geometry">Geometry inference</span> asks how to
+      read the bytes: 8- or 16-bit, mono or stereo, big- or little-endian, by
+      picking the interpretation that comes out smoothest. Sample rate is not
+      recoverable from the bytes, so it is reported as null with candidates rather
+      than invented.
+    </li>
+    <li>
+      The <span class="term" data-term="transforms">transform lens</span> handles
+      audio hidden under a cheap reversible obfuscation -- XOR, bit-rotate,
+      nibble-swap. These preserve entropy but scramble autocorrelation, which is
+      exactly how they slip past the detector; the lens un-applies each candidate
+      and asks whether it is audio now.
+    </li>
+    <li>
+      The same idea scales to cartridges. <span class="term" data-term="romrip">ROM
+      rippers</span> sweep an N64 or SNES image for decodable VADPCM or BRR runs and
+      keep the ones that decode to coherent audio -- recovering samples without the
+      bank structure that named them.
+    </li>
   </ul>
 
-  <h3>MP3 / MPEG audio</h3>
+  <h3>Codecs</h3>
   <ul class="bul">
-    <li>MP3 is not a container: it is an optional ID3v2 tag, a run of self-describing MPEG frames, and an optional ID3v1 trailer. There is no index, so the walker finds the first frame sync and steps frame to frame.</li>
-    <li>Each <span class="term" data-term="mpeg-frame">MPEG frame header</span> is 4 big-endian bytes of packed bitfields. Version and layer pick a bitrate table; bitrate and sample rate plus a padding bit give the frame length, which is the stride to the next sync. Free-format and reserved values are rejected so a false sync cannot derail the walk.</li>
-    <li>The <span class="term" data-term="id3v2">ID3v2 tag</span> size is synchsafe: seven bits per byte, so the length itself can never contain a phantom 0xFF sync. Text frames carry an encoding byte; the walker enumerates every frame id and decodes the common ones.</li>
-    <li>VBR files write a <span class="term" data-term="xing-lame">Xing/Info header</span> into the first frame with the true frame and byte counts, followed by a LAME extension carrying encoder, lowpass, and the gapless delay/padding. That is the only cheap way to an exact duration without walking every frame.</li>
-    <li><span class="term" data-term="inspect-frames">inspect --frames</span> dumps every frame's offset, bitrate, sample rate, and mode, which exposes the per-frame bitrate switching a VBR stream hides behind a single average.</li>
+    <li>
+      The <span class="term" data-term="adpcm-family">ADPCM family</span> is one
+      idea in many dialects: store a small delta and a per-block predictor rather
+      than absolute samples. Sony's PS-ADPCM, the GameCube's DTK, and CD-XA all
+      share the same 2-tap filter table, which is why it now lives once in
+      <code>primitives/pcm.py</code>.
+    </li>
+    <li>
+      <span class="term" data-term="brr">SNES BRR</span> packs 16 samples into 9
+      bytes with a 4-bit shift and a 2-bit filter selector, and every block carries
+      an end flag -- which is what makes a container-agnostic sweep of a ROM
+      possible at all.
+    </li>
+    <li>
+      <span class="term" data-term="ncw">Kontakt NCW</span> is lossless, not
+      protection: a DPCM predictor, bit-truncation, and mid/side. Decoding it is the
+      same class of work as decoding FLAC, and acidcat treats it that way.
+    </li>
   </ul>
 
-  <h3>FLAC</h3>
+  <h2>Under the hood: the sound hat</h2>
   <ul class="bul">
-    <li>FLAC is a clean chunked container: the <code>fLaC</code> marker, then a run of <span class="term" data-term="flac-blocks">metadata blocks</span> each with a 4-byte header (last-block flag, 7-bit type, 24-bit length), then the audio frames. The walker stops at the block whose last-block flag is set.</li>
-    <li><span class="term" data-term="flac-streaminfo">STREAMINFO</span> packs sample rate, channels, and bit depth into a bit-aligned 64-bit field, plus the total sample count and an MD5 of the unencoded audio. Duration is <code>total_samples / sample_rate</code>, no frame walk needed.</li>
-    <li>The one trap: FLAC is big-endian everywhere except the <span class="term" data-term="vorbis-le">VORBIS_COMMENT</span> block, whose string lengths are little-endian because the block was lifted wholesale from OGG Vorbis. A parser that assumes one endianness for the whole format misreads the tags.</li>
+    <li>
+      <span class="term" data-term="key-detection">Key detection</span> correlates a
+      12-bin pitch-class profile against the Krumhansl-Schmuckler major and minor
+      templates across all 24 rotations. A benchmark on real material put it around
+      67-72% on pitch class for tonal content, and notably weaker on mode -- so the
+      result is reported with its source, never asserted as ground truth.
+    </li>
+    <li>
+      Metadata beats inference. A <code>smpl</code> root note or an
+      <code>acid</code> tempo written by the tool that made the file is more
+      trustworthy than anything derived from the waveform, so
+      <span class="term" data-term="detect-precedence">detection is layered</span>:
+      chunk metadata, then filename, then analysis, with the winning source recorded
+      in the output.
+    </li>
+    <li>
+      The <span class="term" data-term="feature-vector">feature vector</span> is 51
+      dimensions of timbre and dynamics, extracted at a fixed 22050 Hz so vectors
+      from different source rates are actually comparable -- a spectral centroid
+      computed over a different frequency range is not a comparable number.
+    </li>
+    <li>
+      <span class="term" data-term="camelot">Harmonic compatibility</span> uses the
+      Camelot wheel: neighbours on the wheel, the relative major/minor, and
+      half-/double-time tempo matches, which is how a DJ or producer actually thinks
+      about whether two loops sit together.
+    </li>
   </ul>
 
-  <h3>Serum presets and tagged formats</h3>
+  <h2>Storage</h2>
+  <p>
+    One SQLite database <em>per library</em>, not one global index -- a library is a
+    folder you registered, and its index lives beside the registry entry rather than
+    in a single monolith. Queries fan out across registered libraries and merge.
+  </p>
+  <div class="wireblock"><span class="cm"># registry + per-library databases</span>
+~/.acidcat/registry.db          <span class="cm">the libraries you have registered</span>
+~/.acidcat/libs/&lt;label&gt;.db      <span class="cm">one index per library</span>
+
+<span class="cm"># samples table, abridged</span>
+path TEXT PRIMARY KEY           <span class="cm">normalized, comparable across platforms</span>
+format TEXT  bpm REAL  key TEXT
+duration REAL  acid_beats INT   <span class="cm">loop metadata, straight from the chunks</span>
+features BLOB                   <span class="cm">the 51-dim vector, versioned</span>
+feature_set_version INT         <span class="cm">stale vectors are re-extracted, not compared</span>
+</div>
   <ul class="bul">
-    <li>Serum .fxp files open with an <span class="term" data-term="xferjson">XferJson magic header</span>; a JSON metadata block (name, author, tags) precedes the binary wavetable data and is decoded in one linear <code>raw_decode</code> pass.</li>
-    <li>MP3, FLAC, OGG, and M4A go through <span class="term" data-term="mutagen-map">mutagen</span> with one extractor per tag dialect: ID3v2 frames, Vorbis comments, MP4 atoms. A stray UTF-8 BOM in tag text is stripped before storage.</li>
+    <li>
+      <span class="term" data-term="query-sql">One filter builder</span> serves both
+      the <code>query</code> verb and the MCP <code>search_samples</code> tool, so
+      the two surfaces cannot drift apart in what they support.
+    </li>
+    <li>
+      <span class="term" data-term="feature-version">Vectors carry a version</span>.
+      When the extraction changes, old vectors are not silently compared against new
+      ones -- candidates are filtered to the current version and a stale target is
+      re-extracted live.
+    </li>
   </ul>
 
-  <h2>Storage layer</h2>
-  <p>One SQLite database per registered library, plus one global registry that knows where they all live. Reads <span class="term" data-term="fan-out">fan out</span>; writes route to a single owner via <span class="term" data-term="longest-prefix">longest-prefix matching</span>.</p>
-
-  <div class="wireblock"><span class="cm"># central default (no --in-tree)</span>
-~/.acidcat/
-  <span class="hdr">registry.db</span>                <span class="cm"># every library: label, root, db_path, stats</span>
-  libraries/
-    <span class="hdr">&lt;label&gt;_&lt;hash12&gt;.db</span>      <span class="cm"># per-library index (12-hex path hash)</span>
-    &lt;label&gt;_&lt;hash12&gt;.db-shm  <span class="cm"># WAL shared memory</span>
-    &lt;label&gt;_&lt;hash12&gt;.db-wal  <span class="cm"># WAL log</span>
-
-<span class="cm"># in-tree opt-in (--in-tree): index travels with the samples</span>
-&lt;library_root&gt;/.acidcat/
-  <span class="hdr">index.db</span></div>
-
-  <ul class="bul">
-    <li>The <span class="term" data-term="db-schema">per-library schema</span> separates immutable audio facts (<code>samples</code>, 27 columns) from user annotations (<code>tags</code>, <code>descriptions</code>), librosa output (<code>features</code> as JSON), scan bookkeeping (<code>scan_roots</code>), and an <span class="term" data-term="fts5">FTS5 mirror</span> with porter stemming for free-text search.</li>
-    <li><span class="term" data-term="upsert">Upserts</span> are <code>INSERT ... ON CONFLICT(path) DO UPDATE</code>, so reindexing is idempotent and mtime+size short-circuits unchanged files.</li>
-    <li>The CLI walker <span class="term" data-term="commit-batch">commits every 100 files</span> to amortize fsync; on an HDD-backed sample drive this is the difference between minutes and seconds.</li>
-    <li><span class="term" data-term="registry-overlap">register_library</span> refuses nested or duplicate roots inside a <code>BEGIN IMMEDIATE</code> transaction, closing the race between two concurrent registrations.</li>
-    <li>Both DB kinds store a <span class="term" data-term="schema-version">schema_version</span> and refuse to open anything newer than they understand: a loud error instead of silent corruption.</li>
-  </ul>
-
-  <h2>MCP surface</h2>
-  <p>The MCP server speaks stdio to Claude Desktop or any MCP client. Tool descriptions lead with a <span class="term" data-term="cost-prefix">cost prefix</span> so the model reaches for cheap reads before expensive analysis.</p>
+  <h2>Command-line surface</h2>
+  <p>
+    The vocabulary is deliberately narrow: one word, one meaning, everywhere. That
+    was not free -- <code>--format</code> previously did three unrelated jobs -- and
+    the split follows how tools that handle both file formats and output formats
+    disambiguate them.
+  </p>
   <table class="compare">
-    <thead><tr><th>group</th><th>tools</th><th>cost</th></tr></thead>
+    <thead><tr><th>word</th><th>means</th><th>flag</th></tr></thead>
     <tbody>
-      <tr><td>index reads</td><td><code>search_samples</code> <code>get_sample</code> <code>locate_sample</code> <code>list_libraries</code> <code>list_tags</code> <code>list_keys</code> <code>list_formats</code> <code>index_stats</code></td><td>fast, SQL only</td></tr>
-      <tr><td>harmonic + similarity</td><td><code>find_compatible</code> <code>find_similar</code></td><td>fast, reads index + features</td></tr>
-      <tr><td>live analysis</td><td><code>analyze_sample</code> <code>detect_bpm_key</code></td><td class="note">slow: librosa, first call pays 30-60s numba JIT</td></tr>
-      <tr><td>index builds</td><td><code>reindex</code> <code>reindex_features</code></td><td class="note">very slow: walks the library</td></tr>
-      <tr><td>registry writes</td><td><code>register_library</code> <code>forget_library</code> <code>discover_libraries</code></td><td>mutating; discover defaults to dry_run</td></tr>
-      <tr><td>annotations</td><td><code>tag_sample</code> <code>set_sample_description</code></td><td>mutating, feeds FTS</td></tr>
+      <tr><td><code>format</code></td><td>the file's container/codec (WAV, FLAC, MP3)</td><td><code>--format</code> where a verb filters or forces the input type</td></tr>
+      <tr><td><code>output</code></td><td>where bytes go; stdout by default</td><td><code>-o</code> / <code>--output FILE</code></td></tr>
+      <tr><td><code>output-format</code></td><td>how records are rendered</td><td><span class="term" data-term="output-registry"><code>--output-format</code></span>, with <code>--json</code> / <code>--csv</code></td></tr>
+      <tr><td><code>encoding</code></td><td>how carved bytes are serialized</td><td><code>--encoding raw|hex|c|py|b64</code></td></tr>
     </tbody>
   </table>
+  <ul class="bul">
+    <li>
+      Verbs compose like coreutils:
+      <span class="term" data-term="stdin-pipe"><code>-</code> means stdin</span>
+      on the byte-analysis verbs, structured output goes to stdout while summaries
+      go to stderr, and <span class="term" data-term="exit-codes">exit codes follow
+      the grep family</span> so <code>&amp;&amp;</code> chains behave.
+    </li>
+    <li>
+      Nothing switches the <em>shape</em> of output based on whether stdout is a
+      terminal. Only color does, via <code>--color auto|always|never</code> honoring
+      <code>NO_COLOR</code>. A script that redirects output gets exactly what it
+      would have seen on screen.
+    </li>
+  </ul>
 
   <h2>References</h2>
-  <div class="refs">
-    <div class="ref-row"><span class="key">repo</span><span class="val"><a href="https://github.com/hed0rah/acidcat" target="_blank" rel="noopener">github.com/hed0rah/acidcat</a><span class="desc">source, issues, releases</span></span></div>
-    <div class="ref-row"><span class="key">riff</span><span class="val"><a href="https://learn.microsoft.com/en-us/windows/win32/xaudio2/resource-interchange-file-format--riff-" target="_blank" rel="noopener">Resource Interchange File Format</a><span class="desc">chunk grammar WAV inherits</span></span></div>
-    <div class="ref-row"><span class="key">smf</span><span class="val"><a href="https://midi.org/standard-midi-files" target="_blank" rel="noopener">Standard MIDI Files 1.0</a><span class="desc">VLQ, running status, meta events</span></span></div>
-    <div class="ref-row"><span class="key">fts5</span><span class="val"><a href="https://sqlite.org/fts5.html" target="_blank" rel="noopener">SQLite FTS5</a><span class="desc">full-text engine behind --text</span></span></div>
-    <div class="ref-row"><span class="key">librosa</span><span class="val"><a href="https://librosa.org/doc/latest/index.html" target="_blank" rel="noopener">librosa documentation</a><span class="desc">onset, tempo, chroma, MFCC implementations</span></span></div>
-    <div class="ref-row"><span class="key">key profiles</span><span class="val"><a href="https://rnhart.net/articles/key-finding/" target="_blank" rel="noopener">Krumhansl-Schmuckler key finding</a><span class="desc">the planned major/minor discriminator</span></span></div>
-    <div class="ref-row"><span class="key">mcp</span><span class="val"><a href="https://modelcontextprotocol.io/specification" target="_blank" rel="noopener">Model Context Protocol</a><span class="desc">stdio transport the server implements</span></span></div>
-    <div class="ref-row"><span class="key">internal</span><span class="val">docs/architecture.md, docs/format_internals.md, docs/dsp/<span class="desc">deeper dives per topic, same repo</span></span></div>
-  </div>
-
-  <div class="footer"><span class="signoff">acidcat codebase explorer</span> &middot; v0.56.0 &middot; 2026-07 &middot; hover any dotted term for source detail</div>
+  <table class="compare">
+    <thead><tr><th>source</th><th>what it settles</th></tr></thead>
+    <tbody>
+      <tr><td>Multimedia Programming Interface and Data Specifications 1.0 (IBM/Microsoft)</td><td>RIFF chunk layout, WAVE fmt tags, the pad-byte rule</td></tr>
+      <tr><td>Audio Interchange File Format 1.3 (Apple)</td><td>FORM/AIFF chunk structure, the 80-bit extended sample rate</td></tr>
+      <tr><td>ISO/IEC 11172-3 and 13818-3</td><td>MPEG audio frame headers, bitrate and sample-rate tables</td></tr>
+      <tr><td>FLAC format specification</td><td>Metadata block chain, STREAMINFO's fixed 34 bytes</td></tr>
+      <tr><td>Standard MIDI File 1.0 (MMA)</td><td>MThd/MTrk, delta-time varints, division encoding</td></tr>
+      <tr><td>SoundFont 2.04 specification</td><td>sfbk structure, sample headers, SF3 Ogg compression</td></tr>
+      <tr><td>Krumhansl &amp; Kessler (1982), Cognitive Foundations of Musical Pitch</td><td>The key profiles behind key detection</td></tr>
+      <tr class="internal"><td><code>docs/format_internals.md</code>, <code>docs/recovery.md</code></td><td>Per-format field notes and the recovery workflow in depth</td></tr>
+    </tbody>
+  </table>
 </article>
 
 <aside class="margin">
@@ -469,90 +620,360 @@ code{font-family:"SFMono-Regular","SF Mono",Menlo,Consolas,monospace;font-size:0
 
 <script id="reference-data" type="application/json">
 {
-"walker-fleet":{"title":"the walker fleet","code":"core/walk/ (26 walkers)","body":"The center of the tool: 26 hand-written byte decoders, one per format, all emitting the same field model. The correctness oracle and the default; every other parsing path (the grammar engine) is proven byte-for-byte against them.","meta":{"count":"26","contract":"walk/base._f","output":"chunks -> fields"},"rel":["field-model","walk-dispatch","grammar-engine"],"notes":["audio containers, synth/DAW presets, and hardware-sampler banks","add a format: teach sniff.py the magic, write walk/<fmt>.py, add one dispatch entry"]},
-"walk-pkg":{"title":"core/walk/","code":"the 26-walker subpackage","body":"One module per format plus base.py (the field-model helpers _f/_u16/_cstr) and __init__.py (the walk_file dispatch). Each walker returns (chunks, file_warnings) in the shared model.","meta":{"walkers":"26","base":"walk/base.py","dispatch":"walk/__init__.py"},"rel":["field-model","walk-dispatch","walker-fleet"],"notes":["recent additions: E-mu, Akai/MPC, Kurzweil KRZ, Arturia labx, SigMF","covered by test_inspect.py + per-format suites"]},
-"field-model":{"title":"the field model","code":"walk/base._f","body":"The one data shape the whole tool speaks: a chunk is {id, offset, size, summary, fields[], warnings[]}; a field is {off, len, name, value, note, enc?, raw?, xref?}. value is what a human reads; enc+raw is how to re-encode the exact bytes (the editor/repair contract); xref marks a pointer.","meta":{"chunk":"id/offset/size/fields","field":"off/len/name/value","re-encode":"enc + raw"},"rel":["walker-fleet","fieldcodec-py","two-engines"],"notes":["flows unchanged through inspect, TUI, probe, anomalies, index","xref lets the TUI follow a pointer field and flag a dangling one"]},
-"walk-dispatch":{"title":"walk_file + degrade boundary","code":"walk/__init__.py","body":"Sniffs the magic and routes to the format's walker. The structural 'degrade, never raise' contract is enforced HERE, at the one boundary every consumer shares: a walker bug on hostile input degrades to a warning instead of crashing. ACIDCAT_WALKER_RAISE re-raises so CI stays loud.","meta":{"raises":"Unsupported only","env":"ACIDCAT_WALKER_RAISE","boundary":"one, shared"},"rel":["walker-fleet","sniff-py"],"notes":["a mechanical test forbids argless reads in core/walk/ (the OOM class)","ctx keys every walker publishes must be registered in vocab.CTX_KEYS"]},
-"grammar-engine":{"title":"the grammar engine","code":"core/grammar/","body":"Formats expressed as data: a descriptor plus one interpreter that emits the same field model, validated byte-for-byte against the walkers (the oracle). Opt-in and test-only; import acidcat does not pull it. Currently FROZEN at WAV fmt/inst/acid + FLAC STREAMINFO.","meta":{"status":"frozen","validated":"vs walkers","consumer":"descriptor fuzzer"},"rel":["grammar-pkg","walker-fleet","two-engines"],"notes":["its proven payoff is a descriptor-driven fuzzer that reaches the walkers' decision points","Kaitai borrow-not-adopt: structured atoms (Switch/Valid/BitGroup), no expression language"]},
-"grammar-pkg":{"title":"core/grammar/","code":"model / interp / types / strategies","body":"model.py (the descriptor dataclasses: Field, Switch, Valid, BitGroup), interp.py (the interpreter), types.py (Int/Enum/Codec/Raw), strategies.py (container traversals), formats/ (the WAV and FLAC descriptors).","meta":{"loc":"~900","formats":"wav, flac","tests":"byte-exact corpus"},"rel":["grammar-engine","fieldcodec-py","vocab-py"],"notes":["construction-time validation of every name and reference","helper categories enforced by signature (a summary helper cannot decode bytes)"]},
-"two-engines":{"title":"two container engines, on purpose","code":"structure.py vs iter_spans","body":"structure.py is STRICT: it clamps sizes, rejects malformed input, probes for unpadded writers, and drives write + repair. riff.iter_spans is LENIENT: it reports a chunk's declared-but-wrong size, degrades, and never raises, driving dissection. Malformed files are the subject, not an error.","meta":{"strict":"structure.py (write/repair)","lenient":"iter_spans (dissect)"},"rel":["structure-py","riff-py","grammar-engine"],"notes":["the strict/lenient pair is the raw material for differential parsing","a differential-fuzz harness cross-checks the two"]},
-"structure-py":{"title":"core/structure.py","code":"strict IFF engine","body":"The strict half of the format grammar: parse to a tree and emit byte-exactly (emit(parse(m)) == m is its bedrock invariant), or raise StructError. Drives the write and repair engines; models a container as derived fields whose value is a function of the data.","meta":{"invariant":"exact round-trip","raises":"StructError","drives":"write / repair"},"rel":["two-engines","constraint-model","constraints-py"],"notes":["the opposite of the lenient walker traversal","memoryview-safe for mmap'd input"]},
-"probe-cmd":{"title":"acidcat probe","code":"commands/probe.py","body":"The byte-level RE surface. Typed reads at an offset or a chunk/chunk.field address (u16/u32/f32, LE+BE), value scans, hex-pattern finds, a strings dump, a hexdump, and a byte diff of two files. Where inspect shows structure, probe interrogates raw bytes.","meta":{"read":"typed, at offset or chunk.field","find":"value / pattern / strings","diff":"two files"},"rel":["inspect-cmd","carve-cmd","field-model"],"notes":["memory-maps the input so peak memory stays flat on huge files","AT can be a raw offset or a semantic chunk/field name"]},
-"carve-cmd":{"title":"acidcat carve","code":"commands/carve.py","body":"Read-only byte-range extraction: pull a named chunk's payload, the trailing blob appended past a container's declared end, or an arbitrary offset range, out to its own file. The way you lift a polyglot's hidden second payload out for separate analysis.","meta":{"targets":"--chunk / --trailing / --offset","output":"file or stdout"},"rel":["probe-cmd","anomalies-py"],"notes":["RF64-sentinel aware for the trailing case","refuses binary-to-TTY"]},
-"shape-cmd":{"title":"acidcat shape","code":"commands/shape.py","body":"A one-line structural fingerprint per file for specimen-hunting. Pipe a directory tree through it and 'sort | uniq -c' surfaces the rare shapes hiding among thousands of ordinary files. --fast is header-only; --anomalies flags the weird ones.","meta":{"output":"one line/file","use":"sort | uniq -c","flags":"--fast --anomalies"},"rel":["inspect-cmd","walker-fleet"],"notes":["built for hunting undocumented format variants at scale","a crash on a file IS a specimen -- it is flagged, not swallowed"]},
-"constraint-model":{"title":"repair / validate / audit","code":"the constraint model","body":"A container is derived fields (sizes, offsets, counts) whose correct value is a function of the data plus a witness. validate reports read-only with an exit code; repair re-satisfies the constraints; audit returns a four-part forensic verdict (structure, integrity, hidden data, provenance).","meta":{"validate":"read-only","repair":"re-satisfy","audit":"4-part verdict"},"rel":["structure-py","constraints-py","anomalies-py"],"notes":["repairers: IFF size-cascade, MP4 stco, FLAC blocks, RIFF counts","write = repair = re-satisfy the constraints"]},
-"anomalies-py":{"title":"core/anomalies.py","code":"forensic scanner","body":"The peepdf-style anomaly surface: trailing data past the declared end, appended-magic polyglots, cavities in unused regions, duplicate structural chunks, size mismatches, nonzero pad bytes (covert channels), and an LSB-stego notice, each annotated with a Shannon-entropy read.","meta":{"checks":"polyglot, cavity, trailing, dup","annotates":"entropy >= 7.2/8"},"rel":["entropy","carve-cmd","provenance-py"],"notes":["corpus-calibrated to zero false positives on thousands of real files","RF64 riffSize is read from ds64 so the trailing scan actually runs"]},
-"entropy":{"title":"Shannon byte-entropy","code":"anomalies._entropy","body":"Byte-histogram entropy in bits per byte. A region above ~7.2/8 over 64+ bytes is encrypted or compressed; text sits near 4.3, zeros at 0. Annotates cavity, id3-padding, and application-block findings so 'trailing data' becomes 'trailing data, 7.9/8 (encrypted or compressed)'.","meta":{"cipher":"~7.6","text":"~4.3","threshold":"7.2/8"},"rel":["anomalies-py","viz-py"],"notes":["purely additive: no new finding type, no new false-positive surface","the Hilbert byte-map in viz.py renders the same signal visually"]},
-"provenance-py":{"title":"core/provenance.py","code":"writer fingerprinting","body":"Identifies the tool that wrote a file. Explicit string tells (ISFT/encoder/vendor, canonicalized to tool+version) are 'high' confidence; structural chunk signatures (Logic's LGWV, Pro Tools' regn/minf, Steinberg's SMED) are 'likely'. Signatures live in an editable sidecar JSON DB.","meta":{"high":"a stamped version string","likely":"a signature chunk","db":"sidecar JSON"},"rel":["sidecar-db","anomalies-py"],"notes":["validated against an 807k-file WAV corpus census","never asserts a guess as fact: weak evidence is labelled weak"]},
-"sidecar-db":{"title":"the signature sidecar DB","code":"core/data/provenance_signatures.json","body":"Provenance signatures are data, not code: a JSON file of chunk-signature and canonicalization rules loaded at import. A user override at ~/.acidcat/provenance_signatures.json merges on top, so a signature can be added or fixed with no code change or re-release.","meta":{"packaged":"core/data/*.json","override":"~/.acidcat/","merge":"canon first, sigs appended"},"rel":["provenance-py"],"notes":["each entry carries a note documenting its evidence + census count","a broken user override is ignored, never a crash"]},
-"viz-py":{"title":"core/viz.py","code":"entropy + Hilbert byte-map","body":"Byte-visualization primitives: a per-region entropy sparkline and a Hilbert-curve byte-map that lays a file's bytes onto a 2D space-filling curve so runs, structure, and high-entropy blobs are visible at a glance. The TUI and the playground explorer both render these.","meta":{"views":"entropy, Hilbert, histogram","byte-class":"tinted"},"rel":["entropy","anomalies-py","tui-app"],"notes":["the same functions back the TUI's byte-map pane","shared with the acidcat-playground explorer"]},
-"constraints-py":{"title":"core/constraints.py","code":"derived-field framework","body":"Models the container invariants (SIZE, OFFSET, COUNT, ZERO) and runs every applicable repairer, aggregating the result. The framework behind validate/repair/audit; repairers.py holds the per-format fixers.","meta":{"kinds":"SIZE OFFSET COUNT ZERO","grammars":"WAV/AIFF, MP4, FLAC"},"rel":["constraint-model","structure-py"],"notes":["a witness decides the correct value of a derived field","robust: 6000 malformed inputs, 0 crashes"]},
-"fieldcodec-py":{"title":"core/fieldcodec.py","code":"the enc-language","body":"Turns a field's enc annotation (a struct format, a named codec, or a bit-packed spec) into a byte-exact encode/decode. This is what makes value-editing safe: encode(raw, enc) must equal the on-disk bytes before an edit is trusted.","meta":{"forms":"struct / codec / bits","codecs":"synchsafe, float80, u24be"},"rel":["field-model","grammar-pkg","vocab-py"],"notes":["bit-field enc does read-modify-write preserving neighbours","the TUI verifies enc/raw against real bytes before writing"]},
-"vocab-py":{"title":"core/vocab.py","code":"core value tables","body":"Core-owned value->label tables (WAVE_FORMAT_TAGS, speaker positions, ...) and the semantic ctx-key set both the walkers and the grammar descriptors read, so the grammar layer no longer reaches into walker privates.","meta":{"holds":"TABLES, FLAGS, CTX_KEYS","shared":"walkers + grammar"},"rel":["grammar-pkg","fieldcodec-py","walk-dispatch"],"notes":["CTX_KEYS is validated at Field construction","a superset test keeps it ahead of the walkers"]},
-"sniff-py":{"title":"core/sniff.py","code":"magic-byte identification","body":"Reads the leading bytes and returns a format id before trusting the extension: RIFF/WAVE, FORM/AIFF, MThd, fLaC, OggS, ftyp, PRAM (Kurzweil), and dozens more have unambiguous signatures. walk_file dispatches on this. detect.py is the audio-analysis BPM/key estimator (a different 'detect').","meta":{"order":"magic first, ext fallback","dispatches":"walk_file"},"rel":["walk-dispatch","walker-fleet"],"notes":["an ID3 tag wrapping a non-MP3 container is demoted to id3-wrapped","a .sigmf-meta or .mpcpattern (bare JSON) reroutes on extension"]},
-"search-py":{"title":"core/search.py","code":"similarity + compatibility","body":"The one implementation the CLI 'similar' verb and the MCP find_similar tool both call, so they can never drift. Z-standardized cosine over the packed feature vectors, fanned out across libraries, plus harmonic+tempo compatibility via the Camelot wheel.","meta":{"scoring":"z-std cosine","shared":"CLI + MCP","compat":"key + tempo"},"rel":["similar-cmd","features-py","camelot-py"],"notes":["numpy path with a pure-Python fallback (identical math)","population stats (percentile, above-mean) separate tight 0.99 clusters"]},
-"similar-cmd":{"title":"acidcat similar","code":"commands/similar.py","body":"Index-backed similarity: find samples that sound like a reference, ranked by z-standardized cosine over the stored feature vectors across every registered library, kind-filtered to the target by default. Calls core.search, the same code the MCP tool uses.","meta":{"backing":"the index","filter":"loop / one-shot","shared":"core.search"},"rel":["search-py","features-py"],"notes":["replaced the retired CSV-era verb; index-backed now","live-extracts the target's vector if it is not indexed"]},
-"tui-app":{"title":"tui_app.py","code":"Textual inspector/editor","body":"A single-screen terminal front-end: the chunk/field/row tree, a tinted hexdump pane, a forensics strip, an in-place field/byte/text editor with a live hex preview, and delta-based undo. Everything it shows comes from the same walk_file field model.","meta":{"framework":"Textual [tui] extra","edit":"value / hex / text","undo":"byte deltas"},"rel":["field-model","viz-py","fieldcodec-py"],"notes":["edits held in a working copy until an explicit atomic save + backup","g=goto, /=search, m=byte-map, v/r=validate/repair"]},
-"cli-py":{"title":"cli.py","code":"argparse + bare-path dispatch","body":"Twenty-three subcommands on a register/run pattern, plus a pre-parse pass that routes bare paths without a verb: files go to info, directories to scan, '-' reads stdin.","meta":{"loc":"~170","verbs":"23","entry":"acidcat / python -m acidcat"},"rel":["cmd-index","cmd-query","inspect-cmd"],"notes":["adding a verb is one import + one register() call","exit codes propagate through __main__.py"],"snippet":"# cli.py: bare-path fallback\nif os.path.isfile(t):\n    return info.run(a)\nelif os.path.isdir(t):\n    return scan.run(a)"},
-"mcp-server":{"title":"mcp_server.py","code":"stdio MCP server, 19 tools","body":"Registers tools into a flat TOOLS list with name, description, JSON schema, handler, and annotations. Reads fan out across every registered library; ToolError surfaces clean messages to the model instead of tracebacks.","meta":{"loc":"~1680","tools":"19","transport":"stdio"},"rel":["fan-out","cost-prefix","registry-py"],"notes":["librosa availability probed with find_spec, never an import, so probing stays instant","analysis tools answer with a pip install hint when deps are missing"],"snippet":"def _tool(name, description,\n          input_schema, handler,\n          annotations):\n    TOOLS.append({...})"},
-"cmd-index":{"title":"commands/index.py","code":"walker + upserter","body":"Walks a library root, sniffs each file's format by magic bytes before trusting the extension, extracts a row dict, and upserts in batches. Vanished files are pruned, scan roots recorded.","meta":{"loc":"~1127","batch":"100 files","dispatch":"magic bytes, then ext"},"rel":["sniff","commit-batch","index-py"],"notes":["mtime+size match skips re-parse on reindex","--discover walks a tree and registers many libraries at once"]},
-"cmd-query":{"title":"commands/query.py","code":"index reads","body":"Filter the index by bpm range, key (with Camelot and enharmonic expansion), duration, format, and tags, or free-text via FTS5. Opens every registered library, runs the same WHERE, merges and dedups.","meta":{"filters":"bpm key dur fmt tag text","scope":"--root LABEL_OR_PATH"},"rel":["fan-out","fts5","camelot-py"],"notes":["FTS5 syntax errors surface with a quoting hint since v0.5.5","bpm ranges accept 120:130 colon syntax"]},
-"riff-py":{"title":"core/riff.py","code":"RIFF/WAVE chunk parser","body":"Stdlib-only chunk walker that parses acid, smpl, inst, fmt, fact, cue, LIST/INFO, and bext chunks, with a header-only duration fallback for non-PCM codecs the wave module rejects.","meta":{"loc":"382","deps":"stdlib only","cap":"64 KB reads"},"rel":["riff-walk","acid-chunk","smpl-chunk"],"notes":["iter_chunks() yields (id, offset, size) without parsing payloads","duration falls back to fact samples or data bytes / frame size"]},
-"aiff-py":{"title":"core/aiff.py","code":"AIFF/AIFC parser","body":"Big-endian FORM container parser. COMM gives channels, frames, bit depth, and a sample rate encoded as an 80-bit extended float. AIFC compression types are validated against a known set.","meta":{"loc":"262","endian":"big","magic":"FORM..AIFF/AIFC"},"rel":["ieee-extended","riff-py"],"notes":["chunk reads bounded like the RIFF side","MARK and INST chunks carry loop and root data"]},
-"midi-py":{"title":"core/midi.py","code":"SMF parser","body":"Single-pass parser over MThd and MTrk chunks extracting tempo, time signature, key signature, track names, note count and range, and tick duration converted to seconds via the first tempo.","meta":{"loc":"232","events":"meta, sysex, channel","fixed":"v0.5.5 running status"},"rel":["vlq","running-status","tempo-meta"],"notes":["sysex lengths bounded against the track so corrupt files cannot bleed across MTrk boundaries","duration_sec = ticks / division * 60 / bpm"]},
-"serum-py":{"title":"core/serum.py","code":"Xfer Serum presets","body":"Finds the JSON metadata block after the XferJson magic and decodes it in one pass with JSONDecoder.raw_decode, which stops at the first complete object instead of brute-forcing prefixes.","meta":{"loc":"53","magic":"XferJson","fields":"name, author, tags, hash"},"rel":["xferjson"],"notes":["binary wavetable data after the JSON is never touched"],"snippet":"parsed, _ = json.JSONDecoder()\n    .raw_decode(text)"},
-"tagged-py":{"title":"core/tagged.py","code":"mutagen wrapper","body":"One parse function fronting three tag dialects: ID3v2 frames for MP3, Vorbis comments for FLAC and OGG, MP4 atoms for M4A. Each extractor maps its dialect onto the same row fields.","meta":{"loc":"255","dep":"mutagen (base)","formats":"mp3 flac ogg m4a"},"rel":["mutagen-map"],"notes":["UTF-8 BOMs stripped from tag text before storage","genre lands in the row but tag-table population is a known gap"]},
-"detect-py":{"title":"core/detect.py","code":"BPM + key estimation","body":"Three witnesses: RIFF chunk metadata, filename heuristics, and librosa analysis. Each can be wrong in its own way, so the module's real job is reconciliation, not detection.","meta":{"loc":"281","bpm range":"60-300 filename","gate":"acidcat[analysis]"},"rel":["bpm-filename","bpm-validate","chroma-pcp"],"notes":["clips under 256 samples short-circuit as one-shots","parent folder names are searched for key tokens up to 3 levels up"]},
-"features-py":{"title":"core/features.py","code":"51-dim feature vector","body":"Loads audio mono at native rate and computes spectral, timbral, rhythmic, and harmonic statistics. Stored as JSON in the features table and consumed by find_similar.","meta":{"dims":"51","heavy":"mfcc + mel + tonnetz","gate":"acidcat[analysis]"},"rel":["mfcc","spectral-shape","cosine-sim"],"notes":["mean and std per feature family, so time variation survives pooling","first librosa call in a process pays the numba JIT tax"]},
-"camelot-py":{"title":"core/camelot.py","code":"harmonic mixing wheel","body":"Maps (pitch_class, mode) pairs onto the 1A-12B Camelot wheel and back. compatible_keys returns the four-slot harmonic neighborhood used by find_compatible on both CLI and MCP surfaces.","meta":{"loc":"206","codes":"1A-12B","neighbors":"same, relative, +-1"},"rel":["camelot-wheel","parse-key"],"notes":["enharmonic table lets Db match C# in either direction","pure stdlib, fully unit-tested"]},
-"index-py":{"title":"core/index.py","code":"per-library SQLite store","body":"Owns the schema, upserts, FTS rebuilds, and the schema_version gate. Connections open with WAL journaling and foreign keys on; everything is stdlib sqlite3.","meta":{"loc":"465","tables":"6","journal":"WAL"},"rel":["db-schema","fts5","upsert","schema-version"],"notes":["b-tree indexes on bpm, key, duration, format, scan_root","FTSQueryError translates fts5 syntax errors into human messages"]},
-"registry-py":{"title":"core/registry.py","code":"global library catalog","body":"Single SQLite file listing every registered library with label, root, db_path, and cached sample/feature counts. Registration validates against overlapping roots inside an immediate transaction.","meta":{"loc":"393","path":"~/.acidcat/registry.db","guard":"BEGIN IMMEDIATE"},"rel":["registry-overlap","longest-prefix","paths-py"],"notes":["find_orphans flags entries whose DB file vanished","stats refresh on demand from each library DB"]},
-"paths-py":{"title":"core/paths.py","code":"DB layout + hashing","body":"Decides where a library's DB lives: central under ~/.acidcat/libraries as label_hash12.db, or in-tree at root/.acidcat/index.db so the index ships with the drive.","meta":{"loc":"165","hash":"12 hex of root path","compare":"case-insensitive on win"},"rel":["storage-layout","registry-py"],"notes":["hash includes the root path so renamed labels cannot collide","legacy v0.4 single index.db detected and warned about"]},
-"sniff":{"title":"magic-byte format sniff","code":"commands/index.py","body":"Dispatch reads the first bytes before trusting the extension: RIFF, FORM, MThd, XferJson, fLaC, OggS, ID3 frames, and MP4 ftyp all have unambiguous signatures. A foo.aiff.wav from a botched batch convert routes correctly.","meta":{"order":"magic first, ext fallback","formats":"8"},"rel":["cmd-index","riff-py","aiff-py"],"notes":["extension fallback only for signatureless cases","added in v0.5.4"]},
-"onset-env":{"title":"onset strength envelope","code":"librosa.onset.onset_strength","body":"Frame-by-frame spectral flux on a mel spectrogram: how much new energy appeared since the last frame, half-wave rectified. Percussive hits spike it, sustained tones do not, which makes it the substrate for tempo estimation.","meta":{"input":"mel spectrogram","output":"1 value / frame","hop":"512 samples"},"rel":["tempo-est","mfcc"],"notes":["drum-heavy material gives clean combs, pads give mush","also feeds beat_track for the feature vector's beat count"]},
-"tempo-est":{"title":"tempo estimation","code":"librosa.beat.tempo, median vote","body":"Autocorrelating the onset envelope produces a tempogram whose peaks are tempo candidates. acidcat runs the estimator twice, once on the envelope and once from raw audio, and takes the median of all candidates.","meta":{"method":"tempogram peaks","vote":"median of both runs"},"rel":["onset-env","bpm-validate"],"notes":["octave errors (half/double tempo) are the classic failure, handled downstream","aggregate=None returns the full candidate list, not one number"],"snippet":"t1 = librosa.beat.tempo(\n  onset_envelope=env, sr=sr,\n  aggregate=None)\nt2 = librosa.beat.tempo(\n  y=y, sr=sr, aggregate=None)\nbpm = median(t1 + t2)"},
-"bpm-filename":{"title":"filename BPM heuristics","code":"detect.parse_bpm_from_filename","body":"Tries 140bpm / bpm140 forms first, then bare 2-3 digit runs. The bare pattern rejects digits adjacent to letters or decimals, so pack identifiers like 91V never read as tempos, and iterates all matches rather than stopping at the first.","meta":{"range":"60-300","rejects":"91V, 03 in _03_126_"},"rel":["bpm-validate","detect-py"],"notes":["range covers DnB 174, hardcore 220, gabber 240","tightened twice from field testing on real packs"],"snippet":"r'(?<![\\d.A-Za-z])(\\d{2,3})(?![\\d.A-Za-z])'\n# letter-adjacent digits rejected:\n# 91V_SBH_126_fill -> 126, not 91"},
-"bpm-validate":{"title":"BPM cross-validation","code":"detect.validate_and_improve_bpm","body":"When librosa and the filename disagree, test whether the detected tempo is an octave or 1.5x error relative to the filename claim. Within 20 BPM after correction, trust the corrected detection; otherwise trust the filename.","meta":{"threshold":"20 bpm","corrections":"x2 /2 x1.5 /1.5"},"rel":["tempo-est","bpm-filename"],"notes":["detected values outside 60-200 defer to the filename outright","returns a source label so output shows where the number came from"],"snippet":"if abs(det*2 - fn) <= 20:\n    return det*2, 'corrected'\nif abs(det/2 - fn) <= 20:\n    return det/2, 'corrected'"},
-"chroma-pcp":{"title":"chroma / pitch class profile","code":"12-bin spectral fold","body":"Collapses all octaves of the spectrum into 12 bins, one per pitch class. The median over time gives a key fingerprint: which notes dominated the clip. Strongest bin names the likely tonic but says nothing about major versus minor.","meta":{"bins":"12","variant":"chroma_cqt / chroma_stft","pooling":"median over frames"},"rel":["krumhansl","tonnetz"],"notes":["CQT variant has log-spaced bins matching musical intervals","mode lives in the relative weights of the 3rd and 6th degrees, not the argmax"]},
-"krumhansl":{"title":"Krumhansl-Schmuckler profiles","code":"the planned mode detector","body":"Perceptual weightings of how strongly each pitch class implies a given key, derived from probe-tone experiments. Correlate a chroma vector against all 24 rotated major and minor profiles; the best correlation names key and mode together.","meta":{"templates":"24 (12 maj + 12 min)","cost":"~40 lines numpy","status":"roadmap"},"rel":["chroma-pcp","camelot-wheel"],"notes":["until it lands, chroma-only detection returns None by design","filename keys carry mode explicitly and win meanwhile"]},
-"camelot-wheel":{"title":"Camelot wheel","code":"camelot.camelot_neighbors","body":"The circle of fifths relabeled as clock positions: minor keys on the A ring, relative majors on the B ring at the same number. Harmonic mixing reduces to same code, flipped letter, or one step around the ring.","meta":{"codes":"1A-12B","8A":"Am","8B":"C"},"rel":["parse-key","camelot-py"],"notes":["adjacent numbers differ by a perfect fifth","find_compatible adds a bpm tolerance window on top"],"snippet":"return [f\"{num}{letter}\",  # same\n  f\"{num}{other}\",   # relative\n  f\"{down}{letter}\", # 4th\n  f\"{up}{letter}\"]   # 5th"},
-"parse-key":{"title":"tolerant key parsing","code":"camelot.parse_key","body":"One regex accepts note, accidental, and an optional mode suffix in every convention found in the wild, plus Camelot codes and octave forms. Suffix case is preserved: capital M means major in the Beatport / Mixed In Key convention.","meta":{"accepts":"Am, F#min, Bb maj, 5A, C4, CM","returns":"(pitch_class, mode)"},"rel":["camelot-wheel","camelot-py"],"notes":["lowercasing the suffix once collapsed CM onto C minor; fixed in v0.5.5","unparseable strings return None, never a guess"],"snippet":"suffix = m.group(3) or \"\"\nif suffix in (\"m\",\"min\",\"minor\"):\n    mode = 1\nelif suffix in (\"maj\",\"major\",\"M\"):\n    mode = 0"},
-"mfcc":{"title":"MFCCs","code":"mel-frequency cepstral coefficients","body":"Spectrum through a mel filterbank, log of the energies, then a discrete cosine transform. The DCT decorrelates the bands into a compact timbre code: low coefficients carry broad spectral tilt, higher ones formant-like detail.","meta":{"count":"13, mean + std each","share":"26 of 51 dims"},"rel":["spectral-shape","cosine-sim"],"notes":["the dominant timbre signal in the similarity metric","mel spacing mimics cochlear frequency resolution"],"snippet":"mfccs = librosa.feature.mfcc(\n  y=y, sr=sr, n_mfcc=13)\nfor i in range(13):\n  f[f'mfcc_{i+1}_mean'] = mean(m[i])\n  f[f'mfcc_{i+1}_std']  = std(m[i])"},
-"spectral-shape":{"title":"spectral shape statistics","code":"centroid, rolloff, bandwidth, contrast","body":"Centroid is the spectrum's center of mass, heard as brightness. Rolloff marks where 85 percent of energy has accumulated. Bandwidth measures spread around the centroid; contrast compares peaks to valleys per octave band, separating tonal from noisy.","meta":{"stats":"mean + std each","extras":"zcr, rms energy"},"rel":["mfcc","features-py"],"notes":["zero-crossing rate spikes on hi-hats and noise","rms mean+std capture loudness and its dynamics"]},
-"tonnetz":{"title":"tonnetz","code":"6-dim tonal centroid","body":"Projects chroma onto three interlocking circles: fifths, major thirds, minor thirds, each contributing a sine and cosine coordinate. Harmonically related keys land near each other, giving similarity a sense of harmonic distance.","meta":{"dims":"6","input":"chroma","origin":"neo-Riemannian theory"},"rel":["chroma-pcp","cosine-sim"],"notes":["distinguishes harmonically static loops from progressions","mean+std pooled like everything else"]},
-"cosine-sim":{"title":"similarity ranking","code":"StandardScaler + cosine","body":"Every feature column is z-scored so kHz-scale centroids cannot drown unit-scale ZCR, then samples rank by cosine similarity to the target vector. Euclidean is available as an alternative metric.","meta":{"scaler":"z-score per column","metric":"cosine (default)"},"rel":["features-py","mfcc"],"notes":["cosine compares shape, not magnitude: loudness-invariant","kind_filter narrows candidates to loops or one-shots first"],"snippet":"sims = cosine_similarity(\n  target_features,\n  self.features_scaled)[0]"},
-"infer-kind":{"title":"kind inference","code":"mcp_server.infer_kind","body":"Cheap classifier over data already in the index: any ACID beat count or 2+ seconds of duration means loop; under a second with no beats means one-shot; the 1-2s gap stays honest as 'any'.","meta":{"classes":"loop / one_shot / any","inputs":"duration, acid_beats"},"rel":["acid-chunk","cosine-sim"],"notes":["used by find_similar and find_compatible kind filters","no audio analysis needed, runs on every query"],"snippet":"if b > 0 or d >= 2.0:\n    return \"loop\"\nif d < 1.0 and b <= 0:\n    return \"one_shot\"\nreturn \"any\""},
-"riff-walk":{"title":"RIFF chunk walk","code":"riff.parse_riff","body":"Seek to chunk, read 8-byte header (4-char id + uint32 LE size), parse what we know, then jump size bytes plus a pad byte when size is odd. Word alignment is the detail every naive parser misses.","meta":{"cap":"64 KB per read","alignment":"2-byte word"},"rel":["acid-chunk","smpl-chunk","cue-chunk"],"notes":["the cap bounds malformed sizes; skip arithmetic still uses the real size","unknown chunks surface as hex previews in acidcat chunks"],"snippet":"pos += 8 + chunk_size\nif chunk_size % 2 == 1:\n    pos += 1   # pad byte"},
-"acid-chunk":{"title":"the acid chunk","code":"28 bytes of Sonic Foundry legacy","body":"Written by ACID and still emitted across the sample industry: file type flags, root note, beat count, meter, and tempo as a 32-bit float. When present it is the most trustworthy tempo source in the file.","meta":{"layout":"<IHHIII f","fields":"ver, root, beats, meter, tempo"},"rel":["smpl-chunk","infer-kind","riff-walk"],"notes":["the project's namesake","root note 0 treated as unset, same sentinel rule as smpl"],"snippet":"version, root, _, beats, den, \\\n  num, tempo = struct.unpack(\n    \"<IHHIII f\", chunk_data)"},
-"smpl-chunk":{"title":"the smpl chunk","code":"sampler root key + loop points","body":"36-byte header carrying the MIDI unity note (the sample's root pitch) followed by loop records with start and end frame offsets. Root key 0 is the documented unset sentinel, not an actual C-1.","meta":{"header":"<IIIIIIiiI","loop record":"24 bytes"},"rel":["acid-chunk","riff-walk"],"notes":["smpl_root_or_none strips the sentinel at all call sites since v0.5.5","loop points matter to hardware samplers and modern crate tools alike"]},
-"cue-chunk":{"title":"the cue chunk","code":"marker offsets, hostile by default","body":"A uint32 count followed by 24-byte cue records. The count comes from the file, so it is capped against the actual payload size before iterating: a malicious 0xFFFFFFFF once meant 4 billion loop spins.","meta":{"record":"24 bytes","cap":"(len - 4) // 24"},"rel":["riff-walk"],"notes":["hardened in v0.5.5 with a red test first"],"snippet":"max_cues = max(0,\n  (len(chunk_data) - 4) // 24)\nsafe = min(num_cues, max_cues)"},
-"ieee-extended":{"title":"80-bit extended float","code":"aiff._parse_ieee_extended","body":"AIFF stores sample rate in the 80-bit IEEE 754 extended format native to 68k-era Macs: 1 sign bit, 15 exponent bits biased by 16383, and an explicit 64-bit mantissa. Python's struct has no code for it, so the bytes are reassembled manually.","meta":{"width":"10 bytes","bias":"16383","mantissa":"explicit 64-bit"},"rel":["aiff-py"],"notes":["44100.0 encodes as 400E AC44 0000 0000 0000","explicit leading mantissa bit, unlike float64"],"snippet":"exp = ((d[0]&0x7F)<<8) | d[1]\nfor i in range(2,10):\n    man = (man<<8) | d[i]\nf = man / (1<<63)\nf = f * 2**(exp - 16383)"},
-"vlq":{"title":"variable-length quantity","code":"midi._read_vlq","body":"MIDI's integer encoding: seven payload bits per byte, high bit set means another byte follows. Delta times and meta event lengths both use it, so a parser that loses sync here misreads everything after.","meta":{"payload":"7 bits/byte","used for":"deltas, meta lengths"},"rel":["running-status","midi-py"],"notes":["same idea as protobuf varints, decades earlier"],"snippet":"while offset < len(data):\n    b = data[offset]\n    value = (value << 7) | (b & 0x7F)\n    offset += 1\n    if not (b & 0x80): break"},
-"running-status":{"title":"running status","code":"the byte every DAW omits","body":"Consecutive channel events with the same status may omit the repeated status byte; the parser must remember the last one and recognize that the byte it just read is already data. Ableton, Logic, FL, Cubase, and Reaper all export this way.","meta":{"2-byte msgs":"advance pos by 2","1-byte msgs":"advance pos by 1"},"rel":["vlq","midi-py"],"notes":["v0.5.5 fixed a one-byte under-advance here","the desynch corrupted note counts on most real-world MIDI"],"snippet":"# d1 already consumed into status;\n# d2 sits at pos+1. step past both.\nd2 = trk_data[pos + 1]\npos += 2"},
-"tempo-meta":{"title":"tempo meta event","code":"FF 51 03 tt tt tt","body":"Tempo lives in a 3-byte meta event as microseconds per quarter note. 500000 us means 120 BPM. acidcat records the first tempo and uses it with the header's tick division to estimate duration in seconds.","meta":{"formula":"60000000 / us_per_beat","also":"FF 58 time sig, FF 59 key sig"},"rel":["midi-py","vlq"],"notes":["key sig is a sharps/flats count plus a minor flag","track names from FF 03 surface in info output"],"snippet":"us = (d[0]<<16)|(d[1]<<8)|d[2]\nbpm = 60_000_000 / us"},
-"xferjson":{"title":"XferJson header","code":"serum preset magic","body":"Serum presets open with the 8-byte XferJson signature, then a JSON object holding preset name, author, description, and tags, then binary wavetable and modulation data the parser never touches.","meta":{"magic":"XferJson","decode":"raw_decode, one pass"},"rel":["serum-py"],"notes":["raw_decode stops at the first complete object: no brute-force prefix scanning","tags here feed the same search surface as user tags"]},
-"mutagen-map":{"title":"tag dialect mapping","code":"ID3v2 / Vorbis / MP4 atoms","body":"Three extractors normalize three metadata cultures onto one row shape: ID3 frames like TIT2 and TBPM, free-form Vorbis comments like TITLE and BPM, and Apple's four-char MP4 atoms.","meta":{"mp3":"ID3v2 frames","flac/ogg":"vorbis comments","m4a":"mp4 atoms"},"rel":["tagged-py"],"notes":["tag-frame BPM lands in the same bpm column as ACID tempo","BOM-prefixed tag text from sloppy editors is stripped"]},
-"db-schema":{"title":"per-library schema","code":"6 tables, schema v3","body":"samples holds 27 columns of audio and preset facts, keyed by an integer id with path kept UNIQUE. scan_roots tracks walk bookkeeping, tags and descriptions hold user annotations, features holds librosa JSON, samples_fts mirrors text fields for search.","meta":{"key":"id INTEGER PK, path UNIQUE","indexes":"bpm key dur format +lower() ci"},"rel":["fts5","upsert","schema-version"],"notes":["annotations live outside samples so reindex never clobbers them","features rows carry a version for future re-extraction","path was the primary key before v3; now an explicit integer id anchors the fts mirror"],"snippet":"CREATE TABLE samples (\n  id INTEGER PRIMARY KEY,\n  path TEXT UNIQUE NOT NULL,\n  format, duration, bpm, key,\n  device, product, creator, ...\n)"},
-"fts5":{"title":"FTS5 mirror","code":"samples_fts, porter stemmed","body":"A virtual table mirroring path, title, artist, album, genre, comment, description, tags, and the preset fields (preset_name, device, product, creator, category). Porter stemming means 'kicks' matches 'kick'. Keyed to rowid = samples.id, so a per-path refresh deletes by rowid instead of scanning the index. Rebuilt per row inside the caller's transaction whenever source fields change.","meta":{"tokenizer":"porter","key":"rowid = samples.id","feeds":"--text, search_samples"},"rel":["db-schema","cmd-query"],"notes":["syntax errors from * \" ( ) NOT AND OR surface with a quoting hint","rebuild participates in the batch transaction since v0.5.5","delete-by-rowid since schema v3 turned an O(n^2) --force rebuild into O(n)"],"snippet":"CREATE VIRTUAL TABLE samples_fts\nUSING fts5(path, title, artist,\n  album, genre, comment,\n  description, tags, preset_name,\n  device, product, creator,\n  category, tokenize='porter')"},
-"upsert":{"title":"idempotent upserts","code":"ON CONFLICT(path) DO UPDATE","body":"Each file becomes one INSERT with a full conflict-update clause, so reindexing is safe to repeat. A stored mtime+size pair short-circuits files that have not changed, leaving only a last_seen_at touch.","meta":{"key":"path","skip":"mtime + size match"},"rel":["db-schema","commit-batch"],"notes":["unchanged files cost one SELECT, not a re-parse"],"snippet":"INSERT INTO samples (...)\nVALUES (...)\nON CONFLICT(path) DO UPDATE\n  SET bpm=excluded.bpm, ..."},
-"commit-batch":{"title":"batched commits","code":"_COMMIT_EVERY_N_FILES = 100","body":"The walker holds a transaction open across 100 files before committing, amortizing the fsync that WAL pays per commit. On NVMe the difference is milliseconds; on a USB sample drive or network mount it is minutes.","meta":{"batch":"100 files","why":"fsync amortization"},"rel":["upsert","fts5"],"notes":["v0.5.5 fixed a nested transaction that silently committed per file","sample row and its FTS row land in the same transaction"]},
-"registry-overlap":{"title":"registration overlap guard","code":"registry.register_library","body":"Registering a root that contains, or is contained by, an existing library would double-index files, so registration checks both directions inside a BEGIN IMMEDIATE transaction that also closes the race between two concurrent registrations.","meta":{"guard":"BEGIN IMMEDIATE","compare":"case-insensitive on win"},"rel":["registry-py","longest-prefix"],"notes":["re-registering the same root is idempotent, not destructive","--discover pre-checks candidates against the same rule"]},
-"longest-prefix":{"title":"longest-prefix routing","code":"registry.find_library_for_path","body":"Writes target exactly one library: the registered root with the longest prefix match against the sample path wins. Tagging a file in a nested folder lands in the right DB without the caller naming it.","meta":{"used by":"tag_sample, set_sample_description","rule":"most specific root wins"},"rel":["fan-out","registry-py"],"notes":["reads never need it: they fan out and dedup instead"]},
-"fan-out":{"title":"fan-out reads","code":"open all, dedup by path","body":"Every read enumerates registered libraries, opens each DB, runs the same SQL, merges rows, dedups by path, sorts, and applies the final LIMIT. Missing DB files (orphans) are skipped rather than fatal.","meta":{"dedup":"by path","scope":"--root LABEL_OR_PATH"},"rel":["cmd-query","mcp-server","longest-prefix"],"notes":["per-library LIMIT plus final cap keeps memory bounded","dedup also masks accidental duplicate registrations"]},
-"schema-version":{"title":"schema version gate","code":"migrate-up, refuse-newer","body":"Both DB kinds store schema_version in a meta table. An older DB migrates forward on open; a DB written by a newer acidcat raises a clean SchemaVersionError telling the user to upgrade, instead of running old SQL against a new schema and corrupting silently.","meta":{"current":"3","older":"auto-migrate","newer":"refuse"},"rel":["db-schema","registry-py"],"notes":["older DBs migrate forward in one atomic transaction on open (v1 to v2 to v3); an interruption rolls back to the prior version","a DB newer than the client is refused, never silently downgraded"]},
-"storage-layout":{"title":"central vs in-tree layout","code":"paths.central_db_path_for","body":"Central mode keeps all library DBs under ~/.acidcat/libraries named label_hash12.db, where the hash digests the root path. In-tree mode drops index.db inside the library so a portable drive carries its own index.","meta":{"central":"~/.acidcat/libraries/","in-tree":"root/.acidcat/index.db"},"rel":["paths-py","registry-py"],"notes":["hash in the filename prevents label collisions across drives","legacy v0.4 ~/.acidcat/index.db is detected and warned about"]},
-"cost-prefix":{"title":"cost-prefix scheme","code":"Fast. / SLOW. / VERY SLOW.","body":"Every MCP tool description leads with a cost budget so the model ranks cheap reads above expensive analysis without special prompting. Mutating tools state what they modify up front.","meta":{"fast":"SQL reads","slow":"librosa calls","very slow":"library walks"},"rel":["mcp-server"],"notes":["analyze_sample's description warns about the 30-60s numba cold start","discover_libraries defaults to dry_run=true so a forgetful call previews instead of mutating"]},
-"inspect-cmd":{"title":"acidcat inspect","code":"commands/inspect.py","body":"A readelf for audio. Seven walkers print a chunk table, decode every known field with its byte offset, and flag spec violations. The -f json mode emits the same structure for machines; reads are bounded so a malformed size never allocates gigabytes.","meta":{"walkers":"7","formats":"wav rf64 aiff midi serum mp3 flac","output":"table / json"},"rel":["inspect-lint","inspect-frames","riff-walk"],"notes":["dispatch is on magic bytes, not the extension","the mp3 and flac walkers are hand-rolled, no mutagen"],"snippet":"if magic[:4]==b'RIFF':\n    inspect_wav(p)\nelif magic[:4]==b'fLaC':\n    inspect_flac(p)"},
-"inspect-lint":{"title":"spec lint warnings","code":"per-walker file_warnings","body":"Each walker accumulates warnings when a file contradicts its own spec: a riff_size that disagrees with the file length, a chunk that overruns its payload, fmt appearing after data, a loop past the last frame, or a FLAC stream whose first block is not STREAMINFO.","meta":{"surfaced":"end of the dump","kinds":"size, ordering, range"},"rel":["inspect-cmd","cue-chunk"],"notes":["warnings annotate the walk, they never abort it","reporting the broken, not just the readable, is the point"]},
-"inspect-frames":{"title":"inspect --frames","code":"per-element deep dump","body":"For formats whose elements carry structure: every MPEG frame for MP3 (offset, bitrate, sample rate, mode, size) and every event for MIDI (tick, type, decoded detail). The MP3 listing exposes the per-frame bitrate switching a VBR average hides. WAV, AIFF, and FLAC have no per-element metadata, so the flag is a no-op there.","meta":{"mp3":"per frame","midi":"per event","cap":"100k rows"},"rel":["inspect-cmd","mpeg-frame"],"notes":["the default summary collapses VBR to a min-max range","capped defensively, the summary count is unaffected"],"snippet":"rows.append({'offset': off,\n  'kbps': fh['bitrate'],\n  'Hz': fh['sample_rate']})"},
-"mp3-py":{"title":"core/mp3.py","code":"MPEG audio primitives","body":"The frame-header decoder, the synchsafe ID3v2 size reader, and a frame walker that re-syncs byte by byte when a stray tag interrupts the stream. Stdlib only; the inspect command shapes these into its chunk model.","meta":{"loc":"182","deps":"stdlib only","tables":"bitrate, sample rate"},"rel":["mpeg-frame","id3v2","xing-lame"],"notes":["a false 0xFFE sync is rejected by validating the whole header","frame length is the stride to the next frame"]},
-"flac-py":{"title":"core/flac.py","code":"FLAC block iterator","body":"Yields (type, name, offset, length, is_last) for each metadata block after the fLaC marker, stopping at the block whose last-block flag is set. Field decoding lives in the inspect command, mirroring the riff/aiff split.","meta":{"loc":"61","deps":"stdlib only","header":"4 bytes"},"rel":["flac-blocks","flac-streaminfo"],"notes":["audio frames begin right after the last block","length is a 24-bit big-endian field"]},
-"mpeg-frame":{"title":"MPEG frame header","code":"mp3.decode_frame_header","body":"Four big-endian bytes of packed bitfields. Version and layer select a bitrate table; bitrate, sample rate, and the padding bit give the frame length, which is the stride to the next sync. Free-format and reserved combinations are rejected.","meta":{"width":"4 bytes","layers":"I / II / III","stride":"frame_length"},"rel":["mp3-py","xing-lame"],"notes":["samples per frame is 1152 for mpeg1 layer III, 576 for mpeg2","an 11-bit sync gives false positives, so validate before trusting"],"snippet":"# mpeg1 layer III\nframe_len = (samples//8 * bitrate\n    // sample_rate) + padding"},
-"id3v2":{"title":"ID3v2 synchsafe size","code":"mp3.synchsafe","body":"The tag size uses seven bits per byte, so the length field can never contain a phantom 0xFF frame sync. Total tag size is 10 + size and the audio begins right after. Frames carry a four-char id, a size, and an encoding byte for text.","meta":{"bits":"7 per byte","versions":"2.2 / 2.3 / 2.4"},"rel":["mp3-py","mutagen-map"],"notes":["v2.4 frame sizes are synchsafe too, v2.3 are plain uint32","text encoding byte: latin-1, utf-16, or utf-8"],"snippet":"(b[0]<<21)|(b[1]<<14)\n  |(b[2]<<7)|b[3]"},
-"xing-lame":{"title":"Xing/Info + LAME tag","code":"inspect._parse_xing_lame","body":"VBR files write a header into the first frame, at a version- and channel-dependent offset, with the true frame and byte counts. A LAME extension follows carrying the encoder string, lowpass, and the gapless delay/padding pair players use to trim priming samples.","meta":{"Xing":"VBR","Info":"CBR by LAME","offset":"21/36 mpeg1"},"rel":["mpeg-frame","inspect-frames"],"notes":["the frame count gives an exact duration without a full walk","delay and padding are 12 bits each, packed into 3 bytes"],"snippet":"delay = (b[21]<<4)|(b[22]>>4)\npad = ((b[22]&0x0F)<<8)|b[23]"},
-"flac-blocks":{"title":"FLAC metadata blocks","code":"flac.iter_metadata_blocks","body":"After the fLaC marker, a run of blocks each headed by one flag-plus-type byte and a 24-bit length. The high bit is the last-block flag; the low seven bits are the type (STREAMINFO, VORBIS_COMMENT, PICTURE, SEEKTABLE, PADDING). The walk stops at the last block.","meta":{"types":"0..6","length":"24-bit big-endian"},"rel":["flac-py","flac-streaminfo","vorbis-le"],"notes":["STREAMINFO must be first and present","an unset last-block flag is a lint warning"],"snippet":"is_last = first & 0x80\nblock_type = first & 0x7F\nlength = (h[1]<<16)|(h[2]<<8)|h[3]"},
-"flac-streaminfo":{"title":"STREAMINFO bit layout","code":"inspect._flac_streaminfo","body":"Sample rate, channels, and bit depth are packed bit-aligned into a 64-bit field: rate in the top 20 bits, then 3 bits of channels-1, 5 bits of bits-1, and a 36-bit total sample count. Duration is total_samples over sample_rate, no frame walk required.","meta":{"rate":"20 bits","total":"36 bits","md5":"of raw audio"},"rel":["flac-blocks","ieee-extended"],"notes":["channels and bits are stored minus one","the md5 lets a decoder verify a bit-exact round trip"],"snippet":"rate  = (packed>>44) & 0xFFFFF\nch    = ((packed>>41)&7)+1\ntotal = packed & 0xFFFFFFFFF"},
-"vorbis-le":{"title":"the little-endian Vorbis trap","code":"VORBIS_COMMENT lengths","body":"FLAC is big-endian everywhere except this one block, whose vendor and comment lengths are little-endian because the block was lifted wholesale from the OGG Vorbis spec. A parser that assumes one endianness for the whole format misreads every tag.","meta":{"block":"VORBIS_COMMENT","lengths":"little-endian","text":"UTF-8 FIELD=value"},"rel":["flac-blocks","mutagen-map"],"notes":["multiple values for one field are allowed","same tag vocabulary as OGG Vorbis"],"snippet":"# little-endian here only\nvlen = b[0]|b[1]<<8|b[2]<<16|b[3]<<24"}
+"tier-boundary": {
+  "title": "The install tiers are enforced, not documented",
+  "code": "tests/test_lean_install.py",
+  "body": "Base install is mutagen only. The boundary holds because a test walks every module under core/ and fails if any of them imports an optional stack at module level -- lazy-inside-the-function is the contract.",
+  "snippet": "for path in _core_modules():\n    hits = _module_level_imports(\n        path) & OPTIONAL\n    if hits:\n        offenders.append(...)\nassert not offenders",
+  "meta": {"base dep": "mutagen", "extras": "analysis, mcp, tui, crypto", "guard": "static + behavioural"},
+  "rel": ["core-analysis", "core-catalogue", "filename-detect"],
+  "notes": ["A gated verb prints 'pip install acidcat[analysis]', never a traceback.", "find_spec is used to probe availability so numba is never cold-started just to check."]
+},
+"core-primitives": {
+  "title": "primitives/ -- the leaves",
+  "code": "core/primitives/ (4 modules, 149 LOC)",
+  "body": "Helpers that import nothing of ours: Shannon entropy, lag-1 PCM coherence, ADPCM sample math, WAV emission, zip local-header offsets. Extracted because the same math was living in five places.",
+  "snippet": "def pcm_coherence(pcm, min_peak=0):\n    # mean-centred lag-1 autocorr\n    m = sum(w) / len(w)\n    var = sum((x-m)**2 for x in w) or 1\n    cov = sum((w[k]-m)*(w[k+1]-m)\n              for k in range(len(w)-1))\n    return cov / var, peak, var ** 0.5",
+  "meta": {"modules": "signal, pcm, wavio, zipio", "imports": "stdlib only"},
+  "rel": ["audioscan", "adpcm-family", "romrip"],
+  "notes": ["Only genuinely identical code was merged. Three other autocorrelation sites measure different things and were deliberately left alone."]
+},
+"core-codecs": {
+  "title": "codecs/ -- bytes to linear PCM",
+  "code": "core/codecs/ (11 modules, 1,333 LOC)",
+  "body": "Every decoder that turns coded samples into 16-bit PCM: the ADPCM dialects, GameCube DSP and DTK, CRI ADX, SNES BRR, N64 VADPCM, Kontakt NCW. Depends only on primitives and stdlib.",
+  "meta": {"decoders": "11", "output": "interleaved 16-bit PCM"},
+  "rel": ["adpcm-family", "brr", "ncw", "core-primitives"],
+  "notes": ["Container decoders return (pcm, info); raw stream decoders return bytes, because a bare sample stream genuinely has no sample rate to report."]
+},
+"core-containers": {
+  "title": "containers/ -- discs and filesystems",
+  "code": "core/containers/ (4 modules, 462 LOC)",
+  "body": "Optical and cartridge images that hold audio as files or streams: GameCube GCM, Wii partitioned discs, ISO 9660, and CD cue sheets. They locate byte ranges; the codecs decode them.",
+  "meta": {"formats": "GCM, Wii, ISO 9660, cue", "deps": "pure Python (Wii needs crypto)"},
+  "rel": ["core-codecs", "core-extract"],
+  "notes": ["Wii partition decryption is the one place AES is needed, which is why crypto is its own opt-in extra."]
+},
+"core-formats": {
+  "title": "formats/ -- per-format parsers",
+  "code": "core/formats/ (16 modules, 3,371 LOC)",
+  "body": "One module per format, parsing its byte structure and metadata: RIFF, AIFF, FLAC, MP3, MP4, Ogg, MIDI, UMP, 8SVX, trackers, SF2, and the synth presets. The walkers build the display tree on top of these.",
+  "meta": {"parsers": "16", "sits beside": "walk/"},
+  "rel": ["riff", "mp3", "flac", "core-walk"],
+  "notes": ["The package name was free only after core/formats.py (output rendering) was renamed to infra/render.py, ending a three-way collision on the word."]
+},
+"core-walk": {
+  "title": "walk/ -- the structural walkers",
+  "code": "core/walk/ (33 modules, 7,522 LOC)",
+  "body": "The largest package: 46 registered walkers that turn a file into a chunk/field tree with offsets, decoded values, and lint warnings. This is what inspect, od, audit, the TUI, and the public API all render.",
+  "meta": {"walkers": "46", "registry": "_WALKERS", "contract": "degrade, never raise"},
+  "rel": ["walk-file", "triage", "core-formats"],
+  "notes": ["Walker count exceeds module count because several modules register a family (tracker covers MOD/S3M/XM/IT)."]
+},
+"core-write": {
+  "title": "write/ -- edit, repair, validate",
+  "code": "core/write/ (11 modules, 1,885 LOC)",
+  "body": "The constraint model plus everything built on it: the IFF structure engine, metadata editors for RIFF/AIFF/tagged formats, the format-specific repairers, and SMF emission.",
+  "meta": {"idea": "edit = repair = re-satisfy", "verbs served": "write, repair, validate, audit"},
+  "rel": ["constraints", "witness"],
+  "notes": ["acidcat.analyze and acidcat.repair are re-exported at package root as public API; the internal paths moved without breaking them."]
+},
+"core-forensics": {
+  "title": "forensics/ -- read-only measurement",
+  "code": "core/forensics/ (10 modules, 2,246 LOC)",
+  "body": "Nothing here mutates a file. Statistical audio detection, region location, structural anomaly checks, LSB and transform lenses, container-vs-claim integrity, tool-chain provenance, and terminal byte visualization.",
+  "meta": {"modules": "10", "writes": "never"},
+  "rel": ["audioscan", "locate", "transforms", "geometry"],
+  "notes": ["BPM/key detection deliberately lives in analysis/, not here -- it answers a musical question, not a forensic one."]
+},
+"core-extract": {
+  "title": "extract/ -- pull the audio out",
+  "code": "core/extract/ (3 modules, 972 LOC)",
+  "body": "The read-side counterpart to write/: one orchestrator that walks any bank or module acidcat understands and yields ready-to-write WAVs, plus the two signatureless ROM rippers.",
+  "meta": {"extractable formats": "23", "modules": "samples, n64rip, snesrip"},
+  "rel": ["romrip", "core-codecs"],
+  "notes": ["Grouping suggested unprompted by four of five reviewers during the structure vote."]
+},
+"core-analysis": {
+  "title": "analysis/ -- the sound hat",
+  "code": "core/analysis/ (3 modules, 775 LOC)",
+  "body": "BPM estimation, Krumhansl-Schmuckler key detection, the 51-dimension feature vector, and Camelot-wheel utilities. The only core package that reaches for librosa, and it does so inside functions.",
+  "meta": {"extra": "acidcat[analysis]", "rate": "fixed 22050 Hz"},
+  "rel": ["key-detection", "feature-vector", "camelot", "tier-boundary"],
+  "notes": ["Filename and path parsing lives here too and stays available when librosa does not."]
+},
+"core-catalogue": {
+  "title": "catalogue/ -- index and search",
+  "code": "core/catalogue/ (7 modules, 2,484 LOC)",
+  "body": "The library layer: walk a tree, extract per-file metadata and feature vectors, store them per library, and query across all of them. Depends on analysis/ for the vectors.",
+  "meta": {"store": "SQLite per library", "shared with": "MCP search tools"},
+  "rel": ["query-sql", "feature-version", "mcp-server"],
+  "notes": ["The one cross-tier dependency in the tree, and it points the right way: catalogue needs analysis, never the reverse."]
+},
+"core-infra": {
+  "title": "infra/ -- cross-cutting plumbing",
+  "code": "core/infra/ (7 modules, 1,473 LOC)",
+  "body": "Format detection by magic, the shared value-to-label vocabulary, the optional parse sandbox, output rendering, bounded mmap file access, and the typed-field read/decode engines.",
+  "meta": {"modules": "sniff, render, vocab, sandbox, mapped, bytefields, fieldcodec"},
+  "rel": ["sniff", "output-registry"],
+  "notes": ["sniff's deep content checks import format parsers lazily, so importing infra does not drag in formats/."]
+},
+"grammar-parked": {
+  "title": "grammar/ -- deliberately parked",
+  "code": "core/grammar/ (5 modules, 994 LOC)",
+  "body": "A declarative format-descriptor engine that reproduces walker output from data rather than code. It covers a WAV subset and FLAC STREAMINFO, is used only as a differential-fuzzing oracle, and ships in no verb.",
+  "meta": {"status": "frozen", "coverage": "2 of 34 formats", "consumers": "tests only"},
+  "rel": ["core-walk"],
+  "notes": ["Kept as a test oracle rather than expanded. The costliest state for an idea like this is limbo -- read as core, maintained as core, paying back nothing."]
+},
+"mcp-server": {
+  "title": "mcp_server/ -- 19 tools over the index",
+  "code": "mcp_server/{handlers,schema,transport}.py",
+  "body": "Split from a single 1,623-line module along its real seams: handlers own the tool implementations and the cached fan-out DB layer, schema owns registration, transport owns dispatch and the stdio/HTTP servers.",
+  "snippet": "def dispatch(name, arguments):\n    for t in TOOLS:\n        if t[\"name\"] == name:\n            return t[\"handler\"](\n                arguments or {})\n    raise ToolError(\n        f\"unknown tool: {name}\")",
+  "meta": {"tools": "19", "transports": "stdio, streamable HTTP", "extra": "acidcat[mcp]"},
+  "rel": ["core-catalogue", "query-sql"],
+  "notes": ["The dependency runs handlers <- schema <- transport with no cycles.", "Registration happens at import, so TOOLS is populated for any importer."]
+},
+"tui-app": {
+  "title": "tui_app/ -- the interactive explorer",
+  "code": "tui_app/{render,screens,app}.py",
+  "body": "Textual UI over the same walk engine: a tree of the file's structure, a hex pane that paints the selected node, in-place byte editing, and 11 modal screens. Split from one 2,732-line module.",
+  "meta": {"screens": "11", "actions": "32", "extra": "acidcat[tui]"},
+  "rel": ["walk-file", "core-write"],
+  "notes": ["The screens talk back to the app through callbacks, so nothing in screens imports the app -- render <- screens <- app, no cycle.", "The split surfaced a latent NameError on the metadata-save path that 8,285 passing tests had never reached."]
+},
+"sniff": {
+  "title": "sniff -- one magic registry",
+  "code": "core/infra/sniff.py",
+  "body": "The single place a byte prefix becomes a format id. 57 formats, checked against magic first, with deeper content checks (is this ID3 tag really wrapping MP3?) loaded lazily so the module stays cheap to import.",
+  "meta": {"formats": "57", "invariant": "KNOWN_FORMATS pinned by test"},
+  "rel": ["walk-file", "core-infra", "tier-boundary"],
+  "notes": ["MOD has no leading signature -- its magic sits at offset 1080 -- so it can be confirmed from disk but never from a header alone."]
+},
+"walk-file": {
+  "title": "walk_file -- the never-raise boundary",
+  "code": "core/walk/__init__.py:walk_file",
+  "body": "Sniff, dispatch, and absorb. Any exception escaping a walker is a walker bug, and the degrade-with-warnings contract is enforced here rather than in 33 walkers, because this is the one boundary every consumer shares.",
+  "snippet": "# degrade, never raise -- enforced\n# at the one shared boundary\nfmt = sniffmod.sniff(filepath)\nentry = _WALKERS.get(fmt)\nif entry is None:\n    generic = triage.generic_walk(\n        filepath)\n    if generic is not None:\n        return generic",
+  "meta": {"returns": "(label, chunks, warnings)", "raises": "Unsupported only", "CI override": "ACIDCAT_WALKER_RAISE=1"},
+  "rel": ["triage", "core-walk", "sniff"],
+  "notes": ["Unsupported means wrong format -- a dispatch miss. A malformed file of the right format degrades instead, which is a different signal."]
+},
+"triage": {
+  "title": "Generic structural triage",
+  "code": "core/forensics/triage.py",
+  "body": "The missing middle between a dedicated walker and a flat rejection. If an unknown file still looks like a chunked container, its chunk grid is surfaced with a confidence score instead of being refused.",
+  "meta": {"trigger": "no walker registered", "output": "same chunk tree shape"},
+  "rel": ["walk-file", "core-walk"],
+  "notes": ["Prototyped against a real proprietary container (BFD's .bfdlac) and scored 0.99 confidence before that format had a walker."]
+},
+"carve": {
+  "title": "carve -- the surgical extractor",
+  "code": "commands/carve.py",
+  "body": "Cut an exact byte range out to a file or stdout, never modifying the source. Ranges can be absolute, anchored to a pattern or chunk, typed as a decoded value, or read in bulk from locate's output.",
+  "meta": {"anchors": "0xNN, end-N, find:, chunk:", "encoding": "raw|value|hex|c|py|b64"},
+  "rel": ["locate", "exit-codes"],
+  "notes": ["Refuses to spew binary at a terminal -- an isatty guard, which is a safety behaviour rather than a formatting one.", "--format was renamed --encoding here, because it names how bytes are serialized, not a file type."]
+},
+"locate": {
+  "title": "locate -- find the audio in a blob",
+  "code": "commands/locate.py, core/forensics/locate.py",
+  "body": "Runs a signature sweep, the statistical detector, and a frame-cadence scanner over an unknown blob, then reconciles the hits into regions. It reports and never writes.",
+  "meta": {"modes": "strict, normal, aggressive", "output": "stdout; summary on stderr"},
+  "rel": ["audioscan", "carve", "geometry", "transforms"],
+  "notes": ["A statistical hit inside a container's extent is part of that file, not a separate find.", "A missing header never discards a hit; it downgrades a container recovery to a blob recovery."]
+},
+"filename-detect": {
+  "title": "Detection that survives a lean install",
+  "code": "core/analysis/detect.py",
+  "body": "BPM and key parsed from a filename or path is pure regex, but it used to sit behind the librosa import gate -- so a base install lost a zero-dependency capability and reported nulls as success.",
+  "snippet": "except ImportError:\n    # no analysis stack, but filename\n    # parsing is pure python\n    fn_bpm = parse_bpm_from_filename(fp)\n    fn_key = parse_key_from_path(fp)\n    return {\"estimated_bpm\": fn_bpm,\n            \"bpm_source\": \"filename\"}",
+  "meta": {"answers": "128 / Am from loop_128bpm_Am.wav", "exit code": "1 only when nothing is determinable"},
+  "rel": ["tier-boundary", "detect-precedence"],
+  "notes": ["Found while auditing the packaging tiers, not by a failing test -- the tests asserted the null result was fine."]
+},
+"riff": {
+  "title": "RIFF / WAVE",
+  "code": "core/formats/riff.py",
+  "body": "Four-byte id, 32-bit little-endian size, payload, and a pad byte when the size is odd. WAVE adds fmt and data; everything else -- loops, tempo, cue points, vendor blobs -- is an optional chunk.",
+  "meta": {"header": "'RIFF' + u32 size + 'WAVE'", "alignment": "word (pad odd)", "cousins": "RF64, AIFF, SF2"},
+  "rel": ["smpl-acid", "constraints", "core-formats"],
+  "notes": ["RF64 replaces the 32-bit size with a ds64 chunk once a file exceeds 4 GB, which is why the master-size constraint has a format-specific witness."]
+},
+"smpl-acid": {
+  "title": "smpl and acid -- the loop metadata",
+  "code": "core/formats/riff.py",
+  "body": "smpl carries the MIDI root note and loop points; acid carries beat count, tempo, and the one-shot flag that samplers actually read. Two chunks, written by different generations of tools, often disagreeing.",
+  "meta": {"smpl": "root note + loop points", "acid": "beats, tempo, one-shot"},
+  "rel": ["riff", "detect-precedence"],
+  "notes": ["A root note of 0 is the unset sentinel, not MIDI C-1. Treating it literally would report every untagged sample as being in C."]
+},
+"mp3": {
+  "title": "MPEG audio -- a format with no container",
+  "code": "core/formats/mp3.py, core/walk/mp3.py",
+  "body": "There is no header describing the file, only a repeating 11-bit frame sync. A candidate header is validated, then confirmed by walking to where the next frame must start -- a lone sync pattern proves nothing.",
+  "meta": {"sync": "11 bits set", "tags": "ID3v2 prefix, ID3v1 suffix", "extras": "Xing/LAME, free-format"},
+  "rel": ["audioscan", "core-formats"],
+  "notes": ["The same resync walk is what lets forensics find headerless MP3 inside a raw blob.", "An ID3 tag can wrap a non-MP3 container, which sniff reports as a distinct id rather than guessing."]
+},
+"flac": {
+  "title": "FLAC",
+  "code": "core/formats/flac.py",
+  "body": "A 'fLaC' magic then a chain of metadata blocks, each with a type byte and a 24-bit length, ending with a last-block flag. STREAMINFO must be first and is always exactly 34 bytes.",
+  "snippet": "# STREAMINFO is type 0, len 34 --\n# strong enough to reject a stray\n# 'fLaC' found in noise\nif (data[off + 4] & 0x7F) != 0:\n    return False\nreturn block_len == 34",
+  "meta": {"magic": "fLaC", "first block": "STREAMINFO (34 B)", "tags": "Vorbis comment"},
+  "rel": ["locate", "core-formats"],
+  "notes": ["That fixed length is used as a confirmation test during the signature sweep, where a 4-byte magic alone fires far too often."]
+},
+"constraints": {
+  "title": "The constraint model",
+  "code": "core/write/constraints.py",
+  "body": "A container is fields, some free and some derived from other parts of the file. A derived field disagreeing with its function is a Violation. Every structural verb is one move over violations.",
+  "snippet": "analyze(data) -> violations now\napply(data)   -> fix witnessed ones,\n                 re-emit\n# validate/audit read;\n# repair applies;\n# write mutates, then applies",
+  "meta": {"read verbs": "validate, audit", "write verbs": "repair, write"},
+  "rel": ["witness", "core-write"],
+  "notes": ["Collapsing four verbs into one model is what stops a writer and a checker from drifting apart."]
+},
+"witness": {
+  "title": "No witness, no automatic fix",
+  "code": "core/write/constraints.py:Violation",
+  "body": "A violation is repairable only when an independent source of truth exists: end-of-file for a master size, the target's real position for an offset, the spec for a pad byte. Otherwise it is reported and left alone.",
+  "meta": {"repairable": "has a witness", "otherwise": "reported, not guessed"},
+  "rel": ["constraints"],
+  "notes": ["This is the line between repairing a file and corrupting it more confidently."]
+},
+"audioscan": {
+  "title": "Finding audio with no signature",
+  "code": "core/forensics/audioscan.py",
+  "body": "Raw PCM has no magic, so signature carving walks past it. This detector uses the property that makes audio compressible: consecutive samples are similar, so lag-1 autocorrelation is high where noise sits near zero.",
+  "meta": {"signal": "lag-1 autocorrelation", "tuned for": "recall (precision comes later)"},
+  "rel": ["core-primitives", "locate", "geometry"],
+  "notes": ["Compressibility and detectability are the same coin -- the reason DPCM works on audio is the reason audio is findable in a blob."]
+},
+"geometry": {
+  "title": "Inferring how to read the bytes",
+  "code": "core/forensics/audioscan.py:analyze_geometry",
+  "body": "Given a headerless region, decide width, channel count, and endianness by trying the interpretations and keeping the one that comes out smoothest. Reports tells like silence, DC offset, and clipping.",
+  "meta": {"infers": "8/16-bit, mono/stereo, endian", "cannot infer": "sample rate"},
+  "rel": ["audioscan", "locate"],
+  "notes": ["Sample rate is genuinely not in the bytes, so it is reported null with common candidates rather than invented -- an honest gap beats a plausible number."]
+},
+"transforms": {
+  "title": "The transform lens",
+  "code": "core/forensics/transforms.py",
+  "body": "Audio hidden under a cheap reversible obfuscation -- XOR with a byte, bit-rotate, nibble-swap. These are byte permutations: they preserve entropy but scramble autocorrelation, which is exactly how they evade the detector.",
+  "meta": {"candidates": "XOR, rotate, nibble-swap", "cap": "reads at most 16 MB"},
+  "rel": ["audioscan", "locate"],
+  "notes": ["The reported key is a candidate, not gospel: a key and its bit-inverted twin leave equally smooth waveforms, and the low bits are dither-level."]
+},
+"romrip": {
+  "title": "Recovering samples from a cartridge",
+  "code": "core/extract/{n64rip,snesrip}.py",
+  "body": "Sweep an N64 or SNES image for runs that decode as VADPCM or BRR, keep the ones whose output is coherent audio. Container-agnostic: it rescues the samples without the bank structure that named them.",
+  "meta": {"N64": "VADPCM (ALBank)", "SNES": "BRR (9-byte blocks)", "gate": "pcm_coherence"},
+  "rel": ["brr", "core-primitives", "core-extract"],
+  "notes": ["Both rippers reuse the same coherence primitive as the forensic detector, which is why it was worth extracting."]
+},
+"adpcm-family": {
+  "title": "One idea, many dialects",
+  "code": "core/codecs/, core/primitives/pcm.py",
+  "body": "ADPCM stores a small delta plus a per-block predictor rather than absolute samples. Sony's PS-ADPCM, the GameCube's DTK, and CD-XA share the same 2-tap filter table, so it now lives in one place.",
+  "snippet": "PS_ADPCM_FILTER = ((0, 0), (60, 0),\n                   (115, -52),\n                   (98, -55),\n                   (122, -60))\n# cdxa/vag use all five;\n# dtk indexes only the first four",
+  "meta": {"shared": "clip16, signed_nibble, filter table", "dialects": "IMA, MS, PS, DTK, CD-XA"},
+  "rel": ["core-primitives", "core-codecs"],
+  "notes": ["dtk keeps a 4-entry view deliberately: it indexes unclamped, so widening the table would change its behaviour on malformed input."]
+},
+"brr": {
+  "title": "SNES BRR",
+  "code": "core/codecs/brr.py",
+  "body": "Sixteen samples packed into nine bytes: a header byte carrying a 4-bit shift, a 2-bit filter selector, and loop/end flags, followed by eight bytes of 4-bit deltas.",
+  "meta": {"block": "9 bytes -> 16 samples", "filters": "4", "flags": "loop, end"},
+  "rel": ["romrip", "core-codecs"],
+  "notes": ["The per-block end flag is what makes a container-agnostic ROM sweep viable: runs announce their own termination."]
+},
+"ncw": {
+  "title": "Kontakt NCW",
+  "code": "core/codecs/ncw.py",
+  "body": "NI's lossless codec: a DPCM predictor, bit-truncation to the smallest width that holds the residuals, and mid/side for stereo. Decoding reconstructs the original PCM exactly.",
+  "meta": {"kind": "lossless", "stages": "DPCM, truncation, mid/side"},
+  "rel": ["core-codecs"],
+  "notes": ["This is compression, not access control -- no key is involved and nothing is bypassed. The same class of work as decoding FLAC."]
+},
+"key-detection": {
+  "title": "Krumhansl-Schmuckler key detection",
+  "code": "core/analysis/detect.py",
+  "body": "Build a 12-bin pitch-class profile from the chroma, then correlate it against the K-K major and minor templates across all 24 rotations and take the best fit.",
+  "meta": {"profiles": "K-K major/minor", "candidates": "24", "measured": "~67-72% pitch class"},
+  "rel": ["detect-precedence", "camelot", "core-analysis"],
+  "notes": ["Benchmarked on real material: solid on tonal content, notably weaker on mode and on pads.", "Reported with its source attached, so a caller can weigh it against chunk metadata."]
+},
+"detect-precedence": {
+  "title": "Metadata beats inference",
+  "code": "core/analysis/detect.py",
+  "body": "A root note or tempo written by the tool that made the file outranks anything derived from the waveform. Detection is layered -- chunk metadata, then filename, then analysis -- and the winning source is recorded.",
+  "meta": {"order": "chunks > filename > analysis", "reported": "bpm_source, key_source"},
+  "rel": ["smpl-acid", "key-detection", "filename-detect"],
+  "notes": ["Recording the source is what lets a user decide whether to trust a value, instead of getting a bare number with no provenance."]
+},
+"feature-vector": {
+  "title": "The 51-dimension vector",
+  "code": "core/analysis/features.py",
+  "body": "Timbre and dynamics: MFCCs and their deltas, spectral centroid, rolloff, bandwidth, flatness, zero-crossing rate, RMS statistics. Extracted at a fixed 22050 Hz so vectors are comparable across source rates.",
+  "meta": {"dims": "51", "rate": "fixed 22050 Hz", "versioned": "feature_set_version"},
+  "rel": ["feature-version", "core-catalogue"],
+  "notes": ["Fixing the rate was a correctness fix, not just a speed one: a spectral centroid computed over a different frequency range is not a comparable number."]
+},
+"camelot": {
+  "title": "Harmonic compatibility",
+  "code": "core/analysis/camelot.py",
+  "body": "Maps a key to its Camelot wheel position, so compatibility becomes adjacency: neighbours on the wheel, the relative major/minor, plus half- and double-time tempo matches.",
+  "meta": {"wheel": "12 x 2 (major/minor)", "tempo": "half/double-time aware"},
+  "rel": ["key-detection", "query-sql"],
+  "notes": ["Encodes how a producer actually decides whether two loops sit together, rather than requiring an exact key match."]
+},
+"query-sql": {
+  "title": "One filter builder, two surfaces",
+  "code": "core/catalogue/query_sql.py",
+  "body": "The CLI query verb and the MCP search_samples tool build their WHERE clause through the same function, so the two surfaces cannot drift apart in which filters they support.",
+  "meta": {"used by": "query verb, MCP search", "covers": "bpm, key, duration, tags, text, preset fields"},
+  "rel": ["core-catalogue", "mcp-server"],
+  "notes": ["Cited during the architecture audit as the pattern worth replicating elsewhere -- anti-drift done right."]
+},
+"feature-version": {
+  "title": "Versioned vectors",
+  "code": "core/catalogue/index.py",
+  "body": "Every stored vector carries the extraction version. Similarity search filters candidates to the current version, and a stale target is re-extracted live rather than compared across incompatible feature spaces.",
+  "meta": {"column": "feature_set_version", "on mismatch": "re-extract, never compare"},
+  "rel": ["feature-vector", "core-catalogue"],
+  "notes": ["Without this, changing the extraction silently degrades every previously indexed result instead of failing visibly."]
+},
+"output-registry": {
+  "title": "Output formats are a registry",
+  "code": "core/infra/render.py",
+  "body": "One dict maps a format name to a renderer, and register_format extends it. Adding a rendering lights it up in every command's --output-format at once, rather than editing fourteen argument parsers.",
+  "snippet": "RENDERERS = {\"table\": _render_table,\n             \"json\": _render_json,\n             \"csv\": _render_csv,\n             \"tsv\": _render_tsv}\n\ndef register_format(name, fn):\n    RENDERERS[name] = fn",
+  "meta": {"built in": "table, json, csv, tsv", "choices from": "the registry itself"},
+  "rel": ["stdin-pipe", "exit-codes"],
+  "notes": ["csv and tsv emit \\n rather than \\r\\n, so they pipe cleanly.", "Commands never hardcode the choice list, so it cannot drift from what render can actually do."]
+},
+"stdin-pipe": {
+  "title": "'-' means stdin",
+  "code": "util/stdin.py:resolved_input",
+  "body": "The byte-analysis verbs read piped input. stdin is buffered to a temp file first, because structural parsing seeks and a pipe cannot -- then it is reported as <stdin> so no temp path leaks into output.",
+  "snippet": "with resolved_input(args.target) as p:\n    if p is None:\n        print(\"no data on stdin\")\n        return 1\n    args.target = p\n    return _run(args)",
+  "meta": {"verbs": "info, inspect, chunks, dump, od, probe, detect, carve, locate", "label": "<stdin>"},
+  "rel": ["output-registry", "exit-codes", "carve"],
+  "notes": ["Directory-walking verbs deliberately do not take stdin -- there is no meaningful stream to pipe into a tree walk."]
+},
+"exit-codes": {
+  "title": "Exit codes that compose",
+  "code": "commands/validate.py, commands/probe.py",
+  "body": "The verbs that answer a question follow the grep family: 0 when the answer is yes, 1 when it ran fine and the answer is no, 2 when something actually broke.",
+  "meta": {"0": "consistent / found", "1": "violation / no match", "2": "input inaccessible"},
+  "rel": ["stdin-pipe", "carve"],
+  "notes": ["validate previously swallowed a missing named file as 0, which quietly broke `validate f && ...` chains.", "A missing file inside a walked directory stays a skip -- only a named input is an error."]
+}
 }
 </script>
 

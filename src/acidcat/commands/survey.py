@@ -7,9 +7,17 @@ import os
 import sys
 from collections import Counter, defaultdict
 
-from acidcat.core.riff import iter_chunks
-from acidcat.core.formats import output
+from acidcat.util import targets
+from acidcat.core.formats.riff import iter_chunks
+from acidcat.commands._output import add_output_format_arg, out_stream
+from acidcat.core.infra.render import output
 from acidcat.util.csv_helpers import safe_basename_for_csv
+
+
+# The RIFF family, and only that: iter_chunks below is RIFF-specific and
+# returns nothing for AIFF or FLAC, so a wider set would just add files
+# that parse to zero chunks.
+_RIFF_EXTS = frozenset({".wav", ".wave", ".rf64", ".bwf"})
 
 
 def register(subparsers):
@@ -20,8 +28,7 @@ def register(subparsers):
     p.add_argument("--has", help="Only count files containing these chunk IDs (comma-separated).")
     p.add_argument("--examples", type=int, default=1,
                    help="Example file paths to store per chunk ID.")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.set_defaults(func=run)
 
@@ -30,7 +37,7 @@ def run(args):
     directory = args.target
     if not os.path.isdir(directory):
         print(f"acidcat survey: {directory}: Not a directory", file=sys.stderr)
-        return 1
+        return 2
 
     wanted = None
     has_val = getattr(args, 'has', None)
@@ -44,41 +51,52 @@ def run(args):
     counts = Counter()
     examples = defaultdict(list)
     files_scanned = 0
+    # a .wav the chunk walker cannot read is not "not a WAV" -- for a specimen
+    # hunter it is the interesting case, and dropping it from the denominator
+    # made a directory of broken files report "no RIFF/WAV files found"
+    unparseable = 0
+    capped = False
 
-    for root, _, files in os.walk(directory):
-        for fn in files:
-            if not fn.lower().endswith(".wav"):
+    # survey tabulates RIFF chunk ids, and iter_chunks is RIFF-specific -- it
+    # returns nothing for AIFF or FLAC. So the narrow set is correct here,
+    # unlike detect and features where it was an accident. It is declared
+    # rather than implied, it covers the whole RIFF family instead of ".wav"
+    # alone, and what it passes over is counted and reported.
+    found, skipped = targets.expand([directory], accept=_RIFF_EXTS)
+    if skipped:
+        note = targets.skip_note(skipped, kind="extension outside the RIFF family")
+        print(f"  {note}", file=sys.stderr)
+    for path in found:
+        ids = []
+        try:
+            for cid, _, _ in iter_chunks(path):
+                ids.append(cid)
+        except Exception:
+            unparseable += 1
+            continue
+
+        if not ids:
+            unparseable += 1
+            continue
+
+        if wanted:
+            u = {c.upper() for c in ids}
+            if not (u & wanted):
                 continue
-            path = os.path.join(root, fn)
-            ids = []
-            try:
-                for cid, _, _ in iter_chunks(path):
-                    ids.append(cid)
-            except Exception:
-                continue
 
-            if not ids:
-                continue
+        seen_local = set()
+        for c in ids:
+            if c not in seen_local:
+                seen_local.add(c)
+                counts[c] += 1
+                if len(examples[c]) < max_examples:
+                    examples[c].append(path)
 
-            if wanted:
-                u = {c.upper() for c in ids}
-                if not (u & wanted):
-                    continue
-
-            seen_local = set()
-            for c in ids:
-                if c not in seen_local:
-                    seen_local.add(c)
-                    counts[c] += 1
-                    if len(examples[c]) < max_examples:
-                        examples[c].append(path)
-
-            files_scanned += 1
-            if not quiet and files_scanned % 200 == 0:
-                print(f"  [survey] {files_scanned} files...", file=sys.stderr)
-            if files_scanned >= num:
-                break
+        files_scanned += 1
+        if not quiet and files_scanned % 200 == 0:
+            print(f"  [survey] {files_scanned} files...", file=sys.stderr)
         if files_scanned >= num:
+            capped = True
             break
 
     # Format results
@@ -90,25 +108,37 @@ def run(args):
             "example": examples[cid][0] if examples[cid] else "",
         })
 
-    fmt_name = getattr(args, 'format', 'table')
-    stream = sys.stdout
+    fmt_name = getattr(args, 'output_format', 'table')
     out_path = getattr(args, 'output', None)
-    if out_path:
-        stream = open(out_path, 'w', encoding='utf-8')
+    with out_stream(out_path) as stream:
+        if fmt_name == "table":
+            note = f", {unparseable} unparseable" if unparseable else ""
+            if capped:
+                note += f" (stopped at the -n {num} cap -- more files remain)"
+            stream.write(f"Chunk ID Survey -- {files_scanned} WAV files scanned"
+                         f"{note}\n\n")
+            if files_scanned == 0:
+                if unparseable:
+                    # "none found" and "found, none readable" are different
+                    # answers, and for a specimen hunter the second one is the
+                    # interesting one
+                    stream.write(f"  ({unparseable} .wav file(s) found, none "
+                                 f"readable as RIFF -- try: acidcat classify "
+                                 f"DIR, or acidcat inspect --resync FILE)\n")
+                else:
+                    stream.write("  (no RIFF/WAV files found -- survey only "
+                                 "processes .wav files)\n")
+            for r in rows:
+                stream.write(f"  {r['chunk_id']:6s} : {r['files']} files\n")
+        else:
+            output(rows, fmt=fmt_name, stream=stream)
 
-    if fmt_name == "table":
-        stream.write(f"Chunk ID Survey -- {files_scanned} WAV files scanned\n\n")
-        if files_scanned == 0:
-            stream.write("  (no RIFF/WAV files found -- survey only processes .wav files)\n")
-        for r in rows:
-            stream.write(f"  {r['chunk_id']:6s} : {r['files']} files\n")
-    else:
-        output(rows, fmt=fmt_name, stream=stream)
+    if not out_path and not quiet:
+        tail = f", {unparseable} unparseable" if unparseable else ""
+        if capped:
+            tail += f", stopped at the -n {num} cap"
+        print(f"\n[INFO] Scanned {files_scanned} WAV file(s), {len(counts)} "
+              f"unique chunk ID(s){tail}.", file=sys.stderr)
 
-    if stream is not sys.stdout:
-        stream.close()
-    elif not quiet:
-        print(f"\n[INFO] Scanned {files_scanned} WAV file(s), {len(counts)} unique chunk ID(s).",
-              file=sys.stderr)
-
-    return 0
+    # a tree with no parseable audio in it is a negative result
+    return 0 if files_scanned else 1

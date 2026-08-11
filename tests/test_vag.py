@@ -10,7 +10,7 @@ import wave
 
 import pytest
 
-from acidcat.core import vag
+from acidcat.core.codecs import vag
 
 
 def _vag_file(rate, name, body):
@@ -64,8 +64,8 @@ def test_loop_points():
 
 
 def test_extract_wires_vag(tmp_path):
-    from acidcat.core import sniff as sniffmod
-    from acidcat.core import samples as smod
+    from acidcat.core.infra import sniff as sniffmod
+    from acidcat.core.extract import samples as smod
 
     body = _block(0x00, 0x00, [0x11] * 14) * 4
     f = tmp_path / "sfx.vag"

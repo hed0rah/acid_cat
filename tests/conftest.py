@@ -11,13 +11,25 @@ os.environ.setdefault("ACIDCAT_WALKER_RAISE", "1")
 
 
 @pytest.fixture(autouse=True)
-def _isolate_acidcat_env(monkeypatch):
-    """Strip acidcat env vars so a dev shell with ACIDCAT_REGISTRY/ACIDCAT_DB
-    set cannot leak into the test process and corrupt the user's real
-    registry or single-DB index. Applied to every test.
+def _isolate_acidcat_env(monkeypatch, tmp_path_factory):
+    """Point every acidcat path at a throwaway home. Applied to every test.
+
+    Deleting the env vars was not enough, and was in fact the bug: with
+    ACIDCAT_REGISTRY unset, `paths.acidcat_home()` falls back to
+    `os.path.expanduser("~")`, so the suite wrote per-library databases into
+    the user's REAL `~/.acidcat/libraries/`. Two audit runs plus the test suite
+    left 1,786 orphaned .db files there, 126 MB, against 32 genuinely
+    registered libraries.
+
+    Setting a fake HOME is what actually contains it: expanduser reads
+    USERPROFILE on Windows and HOME on POSIX, and both have to be overridden
+    because acidcat is developed on the former and tested on the latter.
     """
+    home = tmp_path_factory.mktemp("acidcat_home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("ACIDCAT_REGISTRY", str(home / ".acidcat" / "registry.db"))
     monkeypatch.delenv("ACIDCAT_DB", raising=False)
-    monkeypatch.delenv("ACIDCAT_REGISTRY", raising=False)
 
 
 def _make_riff_wav(sample_rate=44100, channels=1, bits=16, num_samples=4):
@@ -107,3 +119,50 @@ def real_file(name):
 SAMPLE_WAV = os.path.join(
     os.path.dirname(__file__), "..", "data", "samples", "Drum_Loop.wav"
 )
+
+# data/test_formats/ is gitignored and 16 MB, so a fresh clone used to skip 64
+# tests -- the whole TUI suite and every tagging round-trip. data/fixtures/ is
+# a committed 34 KB stand-in: real encoder output, a third of a second each.
+# Prefer the big corpus when it is present so local runs still exercise it.
+SMALL_FIXTURES = os.path.join(os.path.dirname(__file__), "..", "data", "fixtures")
+
+
+def corpus_or_fixture(name, small):
+    """Path to the corpus file `name`, or the committed stand-in `small`."""
+    big = os.path.join(FIXTURES_DIR, name)
+    if os.path.isfile(big):
+        return big
+    return os.path.join(SMALL_FIXTURES, small)
+
+
+# a plain WAV for the tests that just need real audio to point at
+CORPUS_WAV = corpus_or_fixture(os.path.join("generated", "src.wav"), "tone.wav")
+
+
+def have_tool(name):
+    """Is an external tool actually runnable?
+
+    subprocess.run RAISES FileNotFoundError when the binary is absent -- it does
+    not return a non-zero code. A guard written as `run(...); if returncode:
+    skip()` therefore never fires, and the test dies with a traceback instead of
+    skipping. That is exactly how CI went red on every platform at once: the
+    local machine has ffmpeg, the runners do not.
+
+    One helper, so the mistake has one place to live.
+    """
+    import shutil
+    import subprocess
+    if shutil.which(name) is None:
+        return False
+    try:
+        subprocess.run([name, "-version"], capture_output=True, timeout=30)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def requires_tool(name):
+    """Skip the calling test unless `name` is runnable."""
+    import pytest as _pytest
+    if not have_tool(name):
+        _pytest.skip(f"{name} not available")

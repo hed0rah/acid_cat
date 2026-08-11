@@ -3,7 +3,7 @@ the header; the compressed blocks are opaque."""
 
 import os
 
-from acidcat.core import ncw as ncwmod
+from acidcat.core.codecs import ncw as ncwmod
 from acidcat.core.walk.base import Unsupported as _Unsupported
 from acidcat.core.walk.base import _f
 

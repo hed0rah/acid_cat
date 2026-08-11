@@ -6,7 +6,9 @@ import csv
 import os
 import sys
 
-from acidcat.core.formats import output
+from acidcat.util import targets
+from acidcat.core.infra.render import output
+from acidcat.commands._output import add_output_format_arg
 from acidcat.util.csv_helpers import safe_basename_for_csv
 
 
@@ -15,8 +17,7 @@ def register(subparsers):
     p.add_argument("target", help="WAV file or directory.")
     p.add_argument("-n", "--num", type=int, default=500, help="Max files to scan.")
     p.add_argument("-q", "--quiet", action="store_true")
-    p.add_argument("-f", "--format", default="csv", choices=["table", "json", "csv"],
-                   help="Output format (default: csv).")
+    add_output_format_arg(p, default="csv", only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Output file path.")
     p.set_defaults(func=run)
 
@@ -26,11 +27,11 @@ def run(args):
     if not require("librosa", "numpy", group="analysis"):
         return 1
 
-    from acidcat.core.features import extract_audio_features
+    from acidcat.core.analysis.features import extract_audio_features
 
     target = args.target
     quiet = getattr(args, 'quiet', False)
-    fmt_name = getattr(args, 'format', 'csv')
+    fmt_name = getattr(args, 'output_format', 'csv')
 
     # Single file
     if os.path.isfile(target):
@@ -50,31 +51,46 @@ def run(args):
     # Directory
     if not os.path.isdir(target):
         print(f"acidcat features: {target}: No such file or directory", file=sys.stderr)
-        return 1
+        return 2
 
     num = getattr(args, 'num', 500)
     rows = []
-    count = 0
-
-    for root, _, files in os.walk(target):
-        for fn in files:
-            if not fn.lower().endswith(".wav"):
-                continue
-            filepath = os.path.join(root, fn)
-            if not quiet:
-                print(f"  [features] {fn}...", file=sys.stderr)
-            feats = extract_audio_features(filepath)
-            if feats:
-                feats["filename"] = filepath
-                rows.append(feats)
-            count += 1
-            if count >= num:
-                break
-        if count >= num:
-            break
+    # matched ".wav" only, so a directory of FLAC or AIFF produced "No features
+    # extracted" -- indistinguishable from an empty directory, and wrong
+    files, skipped = targets.expand([target])
+    capped = len(files) > num
+    for filepath in files[:num]:
+        if not quiet:
+            print(f"  [features] {os.path.basename(filepath)}...", file=sys.stderr)
+        feats = extract_audio_features(filepath)
+        if feats:
+            feats["filename"] = filepath
+            rows.append(feats)
+    if not quiet:
+        note = targets.skip_note(skipped)
+        if note:
+            print(f"  {note}", file=sys.stderr)
+        if capped:
+            print(f"  read {num:,} of {len(files):,} file(s) "
+                  f"(raise with --num)", file=sys.stderr)
 
     if not rows:
         print("acidcat features: No features extracted.", file=sys.stderr)
+        return 0
+
+    # An explicitly requested rendering goes to stdout (or -o), like the
+    # single-file path above already did. The directory path read
+    # --output-format nowhere, so `features DIR --json` accepted the flag and
+    # wrote a CSV file -- and nothing at all reached a pipe.
+    if fmt_name in ("json", "table"):
+        stream = sys.stdout
+        if getattr(args, 'output', None):
+            stream = open(args.output, 'w', encoding='utf-8', newline='')
+        try:
+            output(rows, fmt=fmt_name, stream=stream)
+        finally:
+            if stream is not sys.stdout:
+                stream.close()
         return 0
 
     default_base = os.path.basename(os.path.normpath(target))
@@ -95,6 +111,9 @@ def run(args):
         writer.writeheader()
         writer.writerows(rows)
     if not quiet:
-        print(f"\n[INFO] Wrote features for {len(rows)} files to {out_path}", file=sys.stderr)
+        cap_note = (f" of {len(files):,} (stopped at the -n {num} cap)"
+                    if capped else "")
+        print(f"\n[INFO] Wrote features for {len(rows)} file(s){cap_note} "
+              f"to {out_path}", file=sys.stderr)
 
     return 0

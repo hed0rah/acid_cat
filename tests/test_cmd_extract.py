@@ -71,7 +71,7 @@ def test_extract_unsupported(tmp_path, capsys):
 
 def test_extract_missing_file(capsys):
     rc = extract.run(_args(input="/nope/x.mod"))
-    assert rc == 1
+    assert rc == 2
     assert "No such file" in capsys.readouterr().err
 
 

@@ -9,10 +9,16 @@ A low-level audio and preset metadata tool. readelf/exiftool for audio.
 | `acidcat FILE` | quick info for one file (bare path auto-routes to `info`) |
 | `acidcat DIR` | scan a directory (auto-routes to `scan`) |
 | `acidcat info FILE` | format, duration, key, bpm, tags (uses mutagen where it helps) |
+| `acidcat formats` | what this build supports, per capability (walk / extract / convert / repair) |
+| `acidcat classify FILE` | what is this? magic + structure, without committing to a walker |
 | `acidcat inspect FILE...` | readelf-style structural dump (see flags below) |
 | `acidcat chunks FILE` | RIFF chunk table (offsets, sizes, parsed fields) |
 | `acidcat dump FILE CHUNK` | hex-dump a named chunk |
+| `acidcat od FILE` | annotated, colored hex dump of any bytes (`--offset` `--at` `--region`) |
+| `acidcat shape FILE...` | one structural fingerprint per file, built for `sort \| uniq -c` |
+| `acidcat cover FILE` | extract, embed or remove embedded cover art (`-o` `--set` `--remove`) |
 | `acidcat survey DIR` | count chunk types across a tree |
+| `acidcat census DIR` | chunk-ID histogram + open-question flags over a tree (parallel, `--jobs`) |
 | `acidcat detect FILE\|DIR` | estimate bpm/key with librosa |
 | `acidcat features DIR` | extract 50+ audio features (ML) |
 | `acidcat scan DIR` | batch scan to CSV |
@@ -21,10 +27,12 @@ A low-level audio and preset metadata tool. readelf/exiftool for audio.
 | `acidcat query --compatible-with FILE` | samples that mix with FILE (key + tempo, `--same-key` `--bpm-tolerance` `--kind`) |
 | `acidcat similar FILE` | sounds like FILE over the index (`index --features` first); `-n` `--kind` `--no-kind-filter` `--paths-only` |
 | `acidcat convert FILE` | export/transcode: bwclip -> MIDI, NCW/8SVX -> WAV, SF2/SF3 -> samples; `--to-pcm` decodes ADPCM/mistagged WAV to plain PCM (`--codec ima` forces it) |
-| `acidcat probe FILE read AT\|scan V\|find HEX\|strings\|hexdump AT\|diff F2` | byte dissection (RE surface): typed read, value scan, pattern find, strings, hexdump, diff; AT can be an offset or `chunk`/`chunk.field` |
-| `acidcat locate BLOB` | "PhotoRec for audio": find audio regions in a blob/disk image (containers + raw PCM + headerless MP3); `--mode`, `--analyze`, `--transforms`, `-v`. Pipe `-f json` to `carve --batch` |
+| `acidcat probe read AT\|scan V\|find HEX\|strings\|hexdump AT FILE...`, `probe diff OLD NEW` | byte dissection (RE surface): typed read, value scan, pattern find, strings, hexdump, diff; AT can be an offset or `chunk`/`chunk.field` |
+| `acidcat probe table AT --count-at EXPR --base after-table FILE` | walk a discovered offset table into carve-ready regions; `--json` pipes straight into `carve --batch -` |
+| `acidcat locate BLOB` | find audio regions in a blob/disk image (containers + raw PCM + headerless MP3); `--mode`, `--analyze`, `--transforms`, `-v`. Pipe `--json` to `carve --batch` |
 | `acidcat extract BANK` | pull every embedded sample out of a bank/module as WAVs (MOD/XM/IT/S3M, `.pat`, 8SVX, NCW, SF2/SF3, `.multisample`, `.krz`, `.e4b`/`.e5b`, `.snd`) |
-| `acidcat carve FILE --chunk ID\|--trailing\|--offset N\|--batch SRC` | extract a byte region (chunk / appended blob / range) to a file; `--batch` cuts every `locate` region into a dir |
+| `acidcat carve FILE --chunk ID\|--trailing\|--offset N\|--batch SRC` | extract a byte region (chunk / appended blob / range) to a file; `--batch` cuts every `locate` region into a dir; `--wrap` puts a WAV header on raw PCM |
+| `acidcat wrap < raw.pcm` | filter: wrap raw PCM bytes in a WAV header (`--rate` `--channels` `--bits` `--endian` `--float`) |
 | `acidcat repair FILE` | fix stale sizes, offset tables, counts, pad bytes (audio untouched, keeps a backup) |
 | `acidcat validate FILE\|DIR` | read-only structural check, exit 0 clean / 1 broken |
 | `acidcat audit FILE` | forensic verdict: structure, integrity (fake hi-res, duration), hidden data, provenance |
@@ -37,8 +45,9 @@ Read from stdin: `acidcat -` or `cat f.wav | acidcat`.
 ## inspect flags
 
 ```
-acidcat inspect FILE... [-f table|json] [--pretty] [--hex] [--frames]
+acidcat inspect FILE... [--json] [--pretty] [--hex] [--frames]
                         [--only IDS] [--exclude IDS] [--full] [--color auto|always|never]
+                        [--format FMT] [--force] [--resync] [--region N]
 ```
 
 | flag | effect |
@@ -51,20 +60,30 @@ acidcat inspect FILE... [-f table|json] [--pretty] [--hex] [--frames]
 | `--exclude data` | hide these chunks |
 | `--full` | self-contained JSON dump (raw region bytes + absolute field offsets) |
 | `--anomalies` | forensic scan: trailing data, polyglots, cavities, size mismatches, LSB-stego notice |
-| `--verbose` | deep deconstruction (Bitwig device tree + parameters + notes, Vital modulation matrix, NI hsin FastLZ subtree) |
-| `-f json` | JSON output; multiple files become NDJSON (one record per line) |
+| `-v`, `--verbose` | synonym for `--frames` (Bitwig device tree + parameters + notes, Vital modulation matrix, NI hsin FastLZ subtree) |
+| `--json` | JSON output; multiple files become NDJSON (one record per line) |
 | `--color` | auto (TTY) / always / never; honors NO_COLOR |
+| `--format FMT` | parse as FMT regardless of the magic bytes (old/odd variants) |
+| `--force` | on a file no walker claims, try them all and report what each made of it |
+| `--resync` | rebuild chunk structure from a damaged container by scanning for `[id][size]` records |
+| `--region N` | walk the Nth region `locate` reported, inside a larger blob |
 | multiple files | each under a `File:` banner |
 
-## formats `inspect` decodes natively
+## what this build supports
 
-audio: WAV/RIFF, RF64, AIFF/AIFC, FLAC, MP3 (ID3v2/v1, Xing/VBRI/LAME), MIDI,
-RMID, Ogg/Opus, MP4/M4A (box tree, codec, iTunes tags).
-samplers: SoundFont (`.sf2`/`.sf3`, samples carveable at their byte offset),
-tracker modules (`.mod`/`.xm`/`.it`), NI Compressed Wave (`.ncw`).
-presets: Serum 1 + 2 (`.serum`/`.SerumPreset`), Bitwig (`.bwpreset`/`.bwclip`),
-Vital (`.vital`), Native Instruments (`.nmsv`/`.nabs`/`.ksd`/`.nksf`/`.nki`),
-VST FXP (`.fxp`), ReCycle RX2 (`.rx2`), Bitwig wavetable (`.wt`).
+Do not trust a list in a doc -- ask the binary:
+
+```
+acidcat formats                 # the capability matrix: walk / extract / convert / repair
+acidcat formats wav             # one format
+acidcat formats --json | jq -r '.[] | select(.extract) | .id'
+```
+
+Broadly: audio containers (WAV/RIFF, RF64, AIFF/AIFC, FLAC, MP3, MIDI, RMID,
+Ogg/Opus, MP4/M4A), sampler and tracker banks (SF2/SF3, `.mod`/`.xm`/`.it`/`.s3m`,
+E-mu, Akai, Kurzweil, MPC, 8SVX, NCW), console formats (SNES BRR, N64 ALBank,
+Wii/GameCube BRSTM), and synth/DAW presets (Serum, Bitwig, Vital, Native
+Instruments, VST FXP, ReCycle RX2).
 
 ## repair / validate / audit (the constraint model)
 
@@ -91,7 +110,7 @@ acidcat inspect --pretty MyPatch.bwpreset
 acidcat inspect --only fmt --hex loop.wav
 
 # machine-readable, many files, into jq
-acidcat inspect -f json *.wav | jq -c '.chunks[].id'
+acidcat inspect --json *.wav | jq -c '.chunks[].id'
 
 # build a standalone interactive byte explorer for any file
 acidcat explore song.mp3 -o song.html
@@ -110,7 +129,7 @@ acidcat query --device Polysynth --category Reverb   # search preset metadata
 acidcat query --product Vital --creator someone
 ```
 
-## recovery / rescue (PhotoRec for audio)
+## recovery / rescue
 
 `locate` finds audio in a raw blob; `carve` cuts it out; `extract` unpacks a known
 bank; `convert --to-pcm` makes odd codecs playable. Full workflow in
@@ -122,7 +141,7 @@ acidcat locate disk.img --mode aggressive --analyze
 dd if=/dev/sdcard | acidcat locate -                 # straight off a device
 
 # the pipeline: locate every region, carve each into a directory
-acidcat locate disk.img -f json | acidcat carve disk.img --batch - -o recovered/
+acidcat locate disk.img --json | acidcat carve disk.img --batch - -o recovered/
 
 # pull every sample out of a sampler bank / tracker module
 acidcat extract kit.sf2 -o kit_samples/
@@ -134,6 +153,33 @@ acidcat convert mistagged.wav --to-pcm --codec ima   # force IMA on a wrong tag
 # CTF: audio hidden under a reversible transform (XOR / rotate / nibble-swap)
 acidcat locate challenge.bin --transforms
 ```
+
+## reverse-engineering an unknown container
+
+The loop that takes a file from "opaque" to a spec, then acts on it:
+
+```
+acidcat classify mystery.ch1              # triage: is there anything here
+acidcat od mystery.ch1 --length 256       # look at the header
+acidcat probe entropy mystery.ch1         # compressed/encrypted, or plain?
+acidcat probe read 0x07 --type u32 --le mystery.ch1      # is that a count?
+acidcat probe read 0x0b --type u32 --le -n 8 mystery.ch1 # is that a table?
+
+# cross-specimen: which header bytes are constant across a whole family
+for f in *.ch1; do acidcat carve "$f" --offset 0 --length 16 --encoding hex; done
+
+# then act on what you found, without leaving the tool
+acidcat probe --json table 0x0b mystery.ch1 \
+    --count-at 0x07 --type u32 --le --base after-table \
+  | acidcat carve mystery.ch1 --batch - -o frames/
+```
+
+`table` walks an offset table into regions: `--count-at` reads the entry count
+out of the file, `--base after-table` handles the common layout where entries
+are relative to the byte just past the table itself (use `--base EXPR` for a
+fixed origin, or omit it when the entries are absolute). A count read from the
+file is bounded by what the file can actually hold, and the report says when it
+was clamped rather than quoting the file's claim back at you.
 
 ## install / upgrade
 

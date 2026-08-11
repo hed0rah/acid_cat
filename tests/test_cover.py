@@ -3,7 +3,8 @@ import pytest
 
 mutagen = pytest.importorskip("mutagen")  # cover/TXXX ride on mutagen (an extra)
 
-from acidcat.core import cover, edits  # noqa: E402
+from acidcat.core.formats import cover  # noqa: E402
+from acidcat.core.write import edits
 
 # 16 MPEG1 Layer III 128 kbps / 44.1 kHz frames (417 bytes each) -> mutagen syncs
 _MP3 = (b"\xff\xfb\x90\x00" + b"\x00" * 413) * 16

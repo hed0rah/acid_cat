@@ -2,7 +2,7 @@
 
 import struct
 
-from acidcat.core import adpcm
+from acidcat.core.codecs import adpcm
 
 
 def test_ima_step_known_values():

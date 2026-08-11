@@ -2,8 +2,8 @@
 and the multi-repairer aggregation (size + count in one pass)."""
 import struct
 
-from acidcat.core import constraints as C
-from acidcat.core import countrepair
+from acidcat.core.write import constraints as C
+from acidcat.core.write import countrepair
 
 
 def _wav(*chunks, size=None):

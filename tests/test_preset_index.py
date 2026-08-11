@@ -3,8 +3,8 @@
 import sqlite3
 import struct
 
-from acidcat.core import preset_meta
-from acidcat.core import index as idx
+from acidcat.core.catalogue import preset_meta
+from acidcat.core.catalogue import index as idx
 
 
 def _bw_field(key, val):

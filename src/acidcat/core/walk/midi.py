@@ -5,8 +5,8 @@ the event grammar in core/midi.py."""
 import os
 import struct
 
-from acidcat.core import midi as midimod
-from acidcat.core.midi import _read_vlq
+from acidcat.core.formats import midi as midimod
+from acidcat.core.formats.midi import _read_vlq
 from acidcat.core.walk.base import _FRAME_LISTING_CAP, _dtext, _f
 from acidcat.util.midi import key_signature_name, midi_note_to_name
 

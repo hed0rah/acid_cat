@@ -1,7 +1,7 @@
 """Integrity checks: effective-bit-depth (fake hi-res) detection on WAV PCM."""
 import struct
 
-from acidcat.core import integrity
+from acidcat.core.forensics import integrity
 from acidcat.core.walk.wav import inspect_wav
 
 

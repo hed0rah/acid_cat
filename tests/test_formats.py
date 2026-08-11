@@ -9,9 +9,9 @@ enforcement the `formats` command only visualizes."""
 import re
 from pathlib import Path
 
-import acidcat.core.sniff as sniffmod
+import acidcat.core.infra.sniff as sniffmod
 from acidcat.commands import formats
-from acidcat.core import samples
+from acidcat.core.extract import samples
 from acidcat.core.walk import _WALKERS
 
 
@@ -61,7 +61,7 @@ def test_audio_container_table_is_single_source():
     # table in sniff (Tier-2 dedup). Pin that they stay wired to it and consistent,
     # so nobody re-hardcodes a copy that can drift.
     from acidcat.commands import carve
-    from acidcat.core import locate
+    from acidcat.core.forensics import locate
     assert carve._EXT is sniffmod.AUDIO_CONTAINER_EXT
     assert locate._CONTAINER_MAGICS is sniffmod.AUDIO_CONTAINER_MAGICS
     assert set(locate._AUDIO_CONTAINER_FMTS) == set(sniffmod.AUDIO_CONTAINERS)
@@ -75,15 +75,16 @@ def test_repair_set_matches_live_dispatch():
     # derive the repair-capable set by probing constraints.repairer_for with a real
     # magic per format; it must equal _REPAIR exactly. Catches both the omission
     # class (flac was missing) and any over-claim.
-    from acidcat.core import constraints
+    from acidcat.core.write import constraints
     derived = {fid for fid, m in _MAGIC.items() if constraints.repairer_for(m)}
     assert derived == formats._REPAIR
 
 
 def test_convert_set_matches_live_dispatch():
     # convert.run() branches on these predicates; probe them the same way.
-    from acidcat.core import ncw as ncwmod, sf2 as sf2mod, svx as svxmod
-    from acidcat.core import bitwig as bwmod
+    from acidcat.core.formats import sf2 as sf2mod, svx as svxmod
+    from acidcat.core.codecs import ncw as ncwmod
+    from acidcat.core.formats import bitwig as bwmod
     def convertible(fid, m):
         return (m[:4] == ncwmod.MAGIC or svxmod.is_8svx(m) or sf2mod.is_sf2(m)
                 or m[:4] == bwmod.MAGIC or (m[:4] == b"RIFF" and m[8:12] == b"WAVE"))
@@ -123,7 +124,7 @@ def test_command_runs_table_json_tsv(capsys):
     class A:
         format = None
     for shape in ("table", "json", "tsv"):
-        A.fmt_out = shape
+        A.output_format = shape
         assert formats.run(A) == 0
     out = capsys.readouterr().out
     assert out                                          # produced output for the last shape
@@ -131,7 +132,7 @@ def test_command_runs_table_json_tsv(capsys):
 
 def test_command_single_format_and_miss(capsys):
     class A:
-        format = "sf2"; fmt_out = "table"
+        format = "sf2"; output_format = "table"
     assert formats.run(A) == 0
     A.format = "nope-not-real"
     assert formats.run(A) == 1

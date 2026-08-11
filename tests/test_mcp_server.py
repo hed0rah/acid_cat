@@ -7,9 +7,9 @@ import time
 import pytest
 
 from acidcat import mcp_server
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def two_lib_setup(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
     registry_path = str(tmp_path / "registry.db")
-    monkeypatch.setattr(mcp_server, "_REGISTRY_PATH", registry_path)
+    monkeypatch.setattr(mcp_server.handlers, "_REGISTRY_PATH", registry_path)
 
     lib_a_root_dir = tmp_path / "libA"
     lib_a_root_dir.mkdir()
@@ -260,8 +260,8 @@ class TestFindCompatible:
         # samples in the BPM tolerance regardless of key, including
         # tonal samples that are musically nonsensical to layer with
         # drums. Now we restrict to also-keyless rows.
-        from acidcat.core import paths as acidpaths
-        from acidcat.core import index as idx
+        from acidcat.core.catalogue import paths as acidpaths
+        from acidcat.core.catalogue import index as idx
 
         a_root = two_lib_setup["lib_a_root"]
         db_a = acidpaths.central_db_path_for(a_root, "A")
@@ -299,7 +299,7 @@ class TestFindCompatible:
 class TestFindSimilar:
     def _seed_features(self, two_lib_setup):
         """Add stub feature vectors so find_similar has something to score."""
-        from acidcat.core import paths as acidpaths
+        from acidcat.core.catalogue import paths as acidpaths
 
         # P_KICK: loop (acid_beats=4 in the seed). P_HAT: one_shot.
         # P_SYNTH: loop (8s, no acid_beats but duration >= 2.0).
@@ -536,13 +536,13 @@ class TestDescribeSample:
 
 class TestAnalysisDegrades:
     def test_analyze_sample_no_librosa(self, two_lib_setup, monkeypatch):
-        monkeypatch.setattr(mcp_server, "_librosa_available", lambda: False)
+        monkeypatch.setattr(mcp_server.handlers, "_librosa_available", lambda: False)
         r = mcp_server.dispatch("analyze_sample",
                                 {"path": two_lib_setup["P_HAT"]})
         assert "error" in r
 
     def test_detect_bpm_key_no_librosa(self, two_lib_setup, monkeypatch):
-        monkeypatch.setattr(mcp_server, "_librosa_available", lambda: False)
+        monkeypatch.setattr(mcp_server.handlers, "_librosa_available", lambda: False)
         r = mcp_server.dispatch("detect_bpm_key",
                                 {"path": two_lib_setup["P_HAT"]})
         assert "error" in r

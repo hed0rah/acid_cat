@@ -22,7 +22,7 @@ import sys
 import pytest
 
 from conftest import SAMPLE_WAV, _make_riff_wav
-from acidcat.core import fieldcodec
+from acidcat.core.infra import fieldcodec
 from acidcat.core.grammar import interpret
 from acidcat.core.grammar.formats.wav import WAVE
 from acidcat.core.walk import walk_file
@@ -80,18 +80,31 @@ def test_wav_ctx_matches_walker(tmp_path):
         assert gctx.get(k) == wctx.get(k), k
 
 
-# the local corpus sweep (~/sample_packs on the dev box); absent on CI, where
-# the hermetic tests above carry coverage
-_CORPUS = os.environ.get(
-    "ACIDCAT_CORPUS", os.path.join(os.path.expanduser("~"), "sample_packs"))
+# The corpus these three sweeps run over. ACIDCAT_CORPUS points them at a big
+# local library (~/sample_packs on the dev box, 2,327 files); with nothing set
+# they fall back to a generated one that is committed with the tests.
+#
+# That fallback matters more than it looks. These sweeps used to skip entirely
+# without a local corpus, which meant 6,998 of the suite's 8,515 collected tests
+# -- 82% -- existed on one machine and nowhere else, while CI reported a green
+# run over three skips. The generated corpus is synthetic and license-clean, so
+# grammar/walker parity is now actually asserted on a fresh clone.
+_CORPUS = os.environ.get("ACIDCAT_CORPUS")
 
 
 def _corpus_wavs():
-    if not os.path.isdir(_CORPUS):
+    corpus = _CORPUS
+    if not corpus:
+        from make_corpus import ensure
+        corpus = ensure()
+    if not os.path.isdir(corpus):
         return [pytest.param(None,
                              marks=pytest.mark.skip(reason="corpus not present"))]
-    paths = sorted(glob.glob(os.path.join(_CORPUS, "**", "*.wav"),
+    paths = sorted(glob.glob(os.path.join(corpus, "**", "*.wav"),
                              recursive=True))
+    if not paths:
+        return [pytest.param(None,
+                             marks=pytest.mark.skip(reason="corpus is empty"))]
     limit = os.environ.get("ACIDCAT_CORPUS_LIMIT")
     return paths[:int(limit)] if limit else paths
 
@@ -152,7 +165,7 @@ def test_ctx_keys_covers_walker(path):
     descriptor field at construction). Self-maintaining across the corpus,
     which exercises smpl/acid/cue/fact chunks a hermetic file does not."""
     from acidcat.core.walk.wav import inspect_wav
-    from acidcat.core.vocab import CTX_KEYS
+    from acidcat.core.infra.vocab import CTX_KEYS
     ctx = {}
     inspect_wav(path, ctx=ctx)  # non-WAV degrades to an empty ctx (passes)
     missing = set(ctx) - set(CTX_KEYS)
@@ -297,7 +310,7 @@ def test_adpcm_variant_matches_walker(tmp_path):
 def test_extensible_variant_matches_walker(tmp_path):
     """WAVEFORMATEXTENSIBLE (tag 0xFFFE): decode helper #2 -- GUID sub_format,
     channel_mask NoteFlags, and the later-field-wins ctx override, byte-exact."""
-    from acidcat.core.vocab import KSDATAFORMAT_TAIL
+    from acidcat.core.infra.vocab import KSDATAFORMAT_TAIL
     sub = struct.pack("<H", 1) + KSDATAFORMAT_TAIL           # PCM subtype, std tail
     ext = struct.pack("<HI", 16, 0x3) + sub                 # valid_bits, mask=FL|FR
     fmt_payload = (struct.pack("<HHIIHH", 0xFFFE, 2, 44100, 176400, 4, 16)

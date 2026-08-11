@@ -186,6 +186,10 @@ class Census:
         self.files = 0
         self.riff_files = 0
         self.errors = 0
+        # set by run_census when --limit stopped the walk early, so every
+        # consumer can tell a prefix of a corpus from the whole thing
+        self.truncated = False
+        self.limit = None
         self.by_container = {}
         self.chunk_counts = {}
         self.chunk_first = {}
@@ -209,6 +213,8 @@ class Census:
         self.files += other.files
         self.riff_files += other.riff_files
         self.errors += other.errors
+        self.truncated = self.truncated or other.truncated
+        self.limit = self.limit if self.limit is not None else other.limit
         for attr in ("by_container", "chunk_counts", "fmt_tags", "list_types",
                      "fact_sizes", "bext_versions"):
             dst, src = getattr(self, attr), getattr(other, attr)
@@ -228,7 +234,17 @@ class Census:
         """Dissect one file into this accumulator. Positioned reads of chunk
         headers only; degrades on any malformed/short file, never raises."""
         self.files += 1
-        flags = os.O_RDONLY
+        # O_BINARY is mandatory on Windows and a no-op everywhere else. Without
+        # it os.open gives a TEXT-mode descriptor, and os.read stops dead at the
+        # first 0x1A (DOS end-of-file). Every count this module produces then
+        # silently understates the corpus: measured on a real 39,369-file tree,
+        # 651 valid RIFF/WAVE files (1.65%) were dropped entirely and 573 more
+        # truncated mid-walk, with `errors` reporting 0 throughout.
+        #
+        # It survived because the buggy path is the fallback used when os.pread
+        # is missing -- i.e. Windows only -- and CI ran ubuntu alone, so the
+        # branch was never executed on the platform this is developed on.
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
         if noatime and _HAS_NOATIME:
             try:
                 fd = os.open(path, flags | os.O_NOATIME)
@@ -391,6 +407,14 @@ class Census:
             "fact_sizes": {str(k): v for k, v in self.fact_sizes.items()},
             "bext_versions": {str(k): v for k, v in self.bext_versions.items()},
             "flags": self.flags,
+            # A truncated census makes the same claims as a complete one. The
+            # table disclosed "20 files opened" but --json had no limit or
+            # truncation field at all, so a consumer could not tell a prefix
+            # from a whole corpus -- `--limit 20` reported "Rare chunks
+            # (<=5 occurrences): LIST 4" for a chunk that occurs 1,178 times
+            # and is the 4th most common in the tree.
+            "truncated": bool(self.truncated),
+            "limit": self.limit,
         }
 
 
@@ -445,6 +469,8 @@ def run_census(roots, opts=None, jobs="auto", io_hint="auto", limit=None,
                     progress(cx.files, cx.riff_files, cx.errors)
                 if limit and cx.files >= limit:
                     break
+            cx.limit = limit
+            cx.truncated = bool(limit and cx.files >= limit)
             return cx
 
         q = queue.Queue(maxsize=jobs * 256)
@@ -484,6 +510,8 @@ def run_census(roots, opts=None, jobs="auto", io_hint="auto", limit=None,
         merged = Census()
         for local in workers_out:
             merged.merge(local)
+        merged.limit = limit
+        merged.truncated = bool(limit and fed >= limit)
         return merged
     finally:
         gc.collect()

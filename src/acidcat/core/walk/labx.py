@@ -19,6 +19,7 @@ import zipfile
 from collections import Counter
 from datetime import datetime, timezone
 
+from acidcat.core.primitives.zipio import zip_data_offset
 from acidcat.core.walk.base import _f
 
 _PRESET_CAP = 48                          # cap chunks like multisample's _ZONE_CAP
@@ -29,16 +30,11 @@ _ARCHIVE_MAGIC = b"serialization::archive"
 
 
 def _data_offset(z, zi):
-    """Absolute file offset of a zip entry's data (past the local file header),
-    leaving z.fp positioned there. ZipInfo.header_offset points at the PK local
-    header, not the payload, so a carve region must start here to be the literal
-    entry bytes -- for a STORED entry, the archive itself."""
-    z.fp.seek(zi.header_offset)
-    h = z.fp.read(30)
-    n = int.from_bytes(h[26:28], "little")
-    m = int.from_bytes(h[28:30], "little")
-    z.fp.read(n + m)                       # skip filename + extra field
-    return zi.header_offset + 30 + n + m
+    """As primitives.zipio.zip_data_offset, but leaves z.fp positioned at the
+    data start -- _entry_bytes reads straight from z.fp for a STORED entry."""
+    off = zip_data_offset(z, zi)
+    z.fp.seek(off)
+    return off
 
 
 def _read_head(z, zi, cap=_META_CAP):

@@ -6,7 +6,7 @@ import wave
 
 import pytest
 
-from acidcat.core import samples as smod
+from acidcat.core.extract import samples as smod
 
 
 def _make_mod(pcm_bytes=20):
@@ -295,3 +295,29 @@ def test_it_uncompressed_extraction(tmp_path):
 def test_extractable_set():
     assert {"mod", "xm", "it", "s3m", "gf1pat", "8svx", "ncw", "sf2",
             "multisample", "krz", "e4b", "e5b", "snd"} <= smod.EXTRACTABLE
+
+
+def test_malformed_bank_raises_sample_error_not_a_parser_error(tmp_path):
+    """A bank that claims a format but is too broken to parse must surface as
+    SampleError, the documented contract. Previously the format parser's own
+    exception escaped iter_samples and reached the CLI as a raw traceback."""
+    p = tmp_path / "stub.sf2"
+    # sfbk header with no smpl/shdr chunks: sniffs as sf2, cannot be parsed
+    p.write_bytes(b"RIFF\x24\x00\x00\x00sfbkLIST\xff\xff\xff\xffINFO")
+    with pytest.raises(smod.SampleError):
+        list(smod.iter_samples(str(p)))
+
+
+def test_extract_command_reports_a_malformed_bank_cleanly(tmp_path, capsys):
+    """The verb prints a one-line error and exits non-zero -- no traceback."""
+    from acidcat.commands import extract as ecmd
+    from types import SimpleNamespace
+
+    p = tmp_path / "stub.sf2"
+    p.write_bytes(b"RIFF\x24\x00\x00\x00sfbkLIST\xff\xff\xff\xffINFO")
+    args = SimpleNamespace(input=str(p), output=None, json=False, quiet=True)
+    rc = ecmd.run(args)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "Traceback" not in err
+    assert "acidcat extract" in err

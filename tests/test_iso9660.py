@@ -8,7 +8,7 @@ import struct
 
 import pytest
 
-from acidcat.core import iso9660
+from acidcat.core.containers import iso9660
 
 _USER = 2048
 

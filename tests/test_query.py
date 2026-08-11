@@ -7,9 +7,9 @@ import time
 import pytest
 
 from acidcat.commands import query as query_cmd
-from acidcat.core import index as idx
-from acidcat.core import paths as acidpaths
-from acidcat.core import registry as reg
+from acidcat.core.catalogue import index as idx
+from acidcat.core.catalogue import paths as acidpaths
+from acidcat.core.catalogue import registry as reg
 
 
 class _Args:
@@ -115,10 +115,18 @@ def two_library_setup(tmp_path, monkeypatch):
 
 
 def _run(args):
-    """Run the query command capturing stdout to JSON."""
-    args.output_format = "json"
-    args.output = "/tmp/_acidcat_query_test.json"  # any tmp path
+    """Run the query command capturing stdout to JSON.
+
+    The scratch path comes from tempfile rather than a literal "/tmp/...":
+    that path exists under Git Bash on a developer's Windows box but not on a
+    Windows CI runner, so the hardcoded version passed locally and failed the
+    moment the suite ran anywhere else.
+    """
     import os
+    import tempfile
+    args.output_format = "json"
+    args.output = os.path.join(tempfile.gettempdir(),
+                               "_acidcat_query_test.json")
     if os.path.isfile(args.output):
         os.remove(args.output)
     rc = query_cmd.run(args)
@@ -210,7 +218,10 @@ class TestFTS5SyntaxError:
         captured = capsys.readouterr()
         # exit non-zero, and the user gets a message that mentions
         # both the FTS5 special chars and the offending input
-        assert rc == 1
+        # 2: a malformed --text is the same class of mistake as a malformed
+        # --bpm, which has always been 2. It was 1, so a script could not
+        # tell "your syntax is wrong" from "nothing matched".
+        assert rc == 2
         assert "(foo" in captured.err
         # must mention at least one of the metacharacters by name so
         # the user knows what to escape
@@ -221,7 +232,10 @@ class TestNoLibraries:
     def test_no_libs_registered_returns_error(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ACIDCAT_REGISTRY", str(tmp_path / "empty.db"))
         rc = query_cmd.run(_Args())
-        assert rc == 1
+        # 2, not 1: nothing to search means the query could not run. With 1,
+        # `query ... || echo "no matches"` reports no matches on a machine that
+        # has simply never been indexed.
+        assert rc == 2
 
 
 class TestLimit:

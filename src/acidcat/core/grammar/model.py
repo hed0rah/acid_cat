@@ -17,7 +17,7 @@ existing descriptors never break as the vocabulary grows.
 import operator
 from dataclasses import dataclass
 
-from acidcat.core.vocab import CTX_KEYS, FLAGS, TABLES
+from acidcat.core.infra.vocab import CTX_KEYS, FLAGS, TABLES
 
 # guards are structured atoms, not an expression language: a field-vs-constant
 # comparison and a remaining-bytes check over a FIXED operator set. Anything

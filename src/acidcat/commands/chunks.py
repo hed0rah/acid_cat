@@ -4,16 +4,18 @@ acidcat chunks -- walk RIFF chunks in a file, showing offsets and parsed fields.
 
 import os
 import sys
+from acidcat.util.stdin import display_name
 
-from acidcat.core.riff import iter_chunks, get_riff_info
-from acidcat.core.formats import output
+from acidcat.core.formats.riff import iter_chunks, get_riff_info
+from acidcat.commands._output import add_output_format_arg, out_stream
+from acidcat.core.infra.render import output
 
 
 def register(subparsers):
     p = subparsers.add_parser("chunks", help="Walk RIFF chunks in a WAV file.")
-    p.add_argument("target", help="Path to a WAV file.")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    p.add_argument("target", nargs="+", metavar="FILE",
+                   help="File(s) or directory(ies), or '-' for stdin.")
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("-o", "--output", help="Write output to file.")
     p.add_argument("-q", "--quiet", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -27,24 +29,47 @@ def _vlog(args, msg):
 
 
 def run(args):
+    """Per-file report, so it takes as many as you hand it."""
+    from acidcat.util import targets
+    return targets.each(args, "target", _run_one, verb="chunks")
+
+
+def _run_one(args):
+    from acidcat.util.stdin import resolved_input
+    with resolved_input(args.target) as _p:
+        if _p is None:
+            print("acidcat chunks: no data on stdin", file=sys.stderr)
+            return 1
+        args.target = _p
+        return _run(args)
+
+
+def _run(args):
     filepath = args.target
     if os.path.isdir(filepath):
         print(f"acidcat chunks: {filepath}: is a directory (expected a file)", file=sys.stderr)
-        return 1
+        return 2
     if not os.path.isfile(filepath):
         print(f"acidcat chunks: {filepath}: No such file", file=sys.stderr)
-        return 1
+        return 2
 
-    fmt_name = getattr(args, 'format', 'table')
+    fmt_name = getattr(args, 'output_format', 'table')
 
-    _vlog(args, f"[chunks] file={os.path.basename(filepath)} "
+    _vlog(args, f"[chunks] file={display_name(filepath)} "
                 f"size={os.path.getsize(filepath)}")
 
     # Get RIFF container info
     riff_info = get_riff_info(filepath)
     if riff_info is None:
-        print(f"acidcat chunks: {filepath}: Not a RIFF file", file=sys.stderr)
-        return 1
+        # 2, not 1: a format this verb does not model is "could not run", the
+        # same answer `validate` gives, and the README states that rule. It said
+        # 1, so a script could not tell "not a RIFF" from "a RIFF with no
+        # matching chunks". Point at the verb that DOES read this file, rather
+        # than making the user already know which one to switch to.
+        print(f"acidcat chunks: {filepath}: not a RIFF container "
+              f"(try: acidcat inspect {os.path.basename(filepath)})",
+              file=sys.stderr)
+        return 2
 
     # Walk raw chunks (offsets + sizes)
     chunk_list = []
@@ -72,35 +97,27 @@ def run(args):
     _vlog(args, f"[chunks] parsed {len(results)} fields from "
                 f"{len(walked)} chunks")
 
-    if fmt_name == "table":
-        stream = sys.stdout
-        if getattr(args, 'output', None):
-            stream = open(args.output, 'w', encoding='utf-8')
+    with out_stream(getattr(args, 'output', None)) as stream:
+        if fmt_name == "table":
+            stream.write(f"RIFF container: {riff_info['size']} bytes, "
+                         f"type={riff_info['type']}\n")
+            stream.write(f"File: {display_name(filepath)}\n\n")
 
-        stream.write(f"RIFF container: {riff_info['size']} bytes, type={riff_info['type']}\n")
-        stream.write(f"File: {os.path.basename(filepath)}\n\n")
+            # Raw chunk layout
+            stream.write("Chunk Layout:\n")
+            for c in chunk_list:
+                stream.write(f"  {c['chunk']:4s}  @ {c['offset']:>8d}  "
+                             f"size={c['size']}\n")
 
-        # Raw chunk layout
-        stream.write("Chunk Layout:\n")
-        for c in chunk_list:
-            stream.write(f"  {c['chunk']:4s}  @ {c['offset']:>8d}  size={c['size']}\n")
-
-        # Parsed fields
-        if results:
-            stream.write(f"\nParsed Fields:\n")
-            for cid, key, val in results:
-                stream.write(f"  {cid}.{key} = {val}\n")
-
-        if stream is not sys.stdout:
-            stream.close()
-    else:
-        # JSON or CSV: emit the parsed fields
-        data = [{"chunk": cid, "key": key, "value": val} for cid, key, val in results]
-        stream = sys.stdout
-        if getattr(args, 'output', None):
-            stream = open(args.output, 'w', encoding='utf-8')
-        output(data, fmt=fmt_name, stream=stream)
-        if stream is not sys.stdout:
-            stream.close()
+            # Parsed fields
+            if results:
+                stream.write(f"\nParsed Fields:\n")
+                for cid, key, val in results:
+                    stream.write(f"  {cid}.{key} = {val}\n")
+        else:
+            # JSON or CSV: emit the parsed fields
+            data = [{"chunk": cid, "key": key, "value": val}
+                    for cid, key, val in results]
+            output(data, fmt=fmt_name, stream=stream)
 
     return 0

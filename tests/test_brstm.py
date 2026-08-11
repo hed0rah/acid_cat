@@ -7,7 +7,8 @@ import struct
 
 import pytest
 
-from acidcat.core import brstm, wiidisc
+from acidcat.core.containers import wiidisc
+from acidcat.core.codecs import brstm
 
 
 def _brstm_file():
@@ -73,8 +74,8 @@ def test_decode_first_nibble():
 
 
 def test_extract_wires_brstm(tmp_path):
-    from acidcat.core import sniff as sniffmod
-    from acidcat.core import samples as smod
+    from acidcat.core.infra import sniff as sniffmod
+    from acidcat.core.extract import samples as smod
     import wave, io
 
     f = tmp_path / "bgm.brstm"

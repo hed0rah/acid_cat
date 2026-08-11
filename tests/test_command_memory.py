@@ -22,7 +22,7 @@ import pytest
 from conftest import _make_riff_wav
 from acidcat.commands import audit, od
 from acidcat.commands import probe as probe_cmd
-from acidcat.core.mapped import map_file
+from acidcat.core.infra.mapped import map_file
 
 _DATA_SIZE = 48 * 1024 * 1024
 # well below the 48 MB file (and the ~96 MB the old f.read() path peaked at),
@@ -75,7 +75,7 @@ def test_od_peak_bounded_on_large_file(big_wav, capsys):
 
 def test_probe_read_peak_bounded_on_large_file(big_wav, capsys):
     rc, peak = _peak(lambda: probe_cmd.run(SimpleNamespace(
-        file=big_wav, verb="read", at="fmt.sample_rate", type="u32",
+        files=[big_wav], verb="read", at="fmt.sample_rate", type="u32",
         count=1, be=False, le=False)))
     out = capsys.readouterr().out
     assert rc == 0 and "44100" in out
@@ -84,7 +84,7 @@ def test_probe_read_peak_bounded_on_large_file(big_wav, capsys):
 
 def test_probe_scan_peak_bounded_on_large_file(big_wav, capsys):
     rc, peak = _peak(lambda: probe_cmd.run(SimpleNamespace(
-        file=big_wav, verb="scan", value="44100", type="u32")))
+        files=[big_wav], verb="scan", value="44100", type="u32")))
     capsys.readouterr()
     assert rc == 0
     assert peak < _PEAK_BOUND, f"probe scan peaked at {peak:,} bytes"
@@ -97,7 +97,7 @@ def test_probe_strings_iterates_mapped_file(tmp_path, capsys):
     # memoryview so pr.strings sees ints -- this would TypeError otherwise
     p = tmp_path / "s.wav"
     p.write_bytes(_make_riff_wav())
-    rc = probe_cmd.run(SimpleNamespace(file=str(p), verb="strings", min=4))
+    rc = probe_cmd.run(SimpleNamespace(files=[str(p)], verb="strings", min=4))
     out = capsys.readouterr().out
     assert rc == 0
     assert "WAVEfmt" in out
@@ -106,9 +106,9 @@ def test_probe_strings_iterates_mapped_file(tmp_path, capsys):
 def test_probe_entropy_and_map_on_mapped_file(tmp_path, capsys):
     p = tmp_path / "s.wav"
     p.write_bytes(_make_riff_wav(num_samples=256))
-    assert probe_cmd.run(SimpleNamespace(file=str(p), verb="entropy", width=32)) == 0
+    assert probe_cmd.run(SimpleNamespace(files=[str(p)], verb="entropy", width=32)) == 0
     assert probe_cmd.run(SimpleNamespace(
-        file=str(p), verb="map", order=3, no_color=True)) == 0
+        files=[str(p)], verb="map", order=3, color="never")) == 0
     capsys.readouterr()
 
 
@@ -125,7 +125,7 @@ def test_map_file_empty_falls_back_to_bytes(tmp_path):
 def test_audit_empty_file(tmp_path, capsys):
     p = tmp_path / "empty.wav"
     p.write_bytes(b"")
-    assert audit.run(SimpleNamespace(input=str(p), json=False)) == 0
+    assert audit.run(SimpleNamespace(input=str(p), json=False)) == 2
     assert "unknown" in capsys.readouterr().out
 
 
@@ -133,9 +133,10 @@ def test_probe_empty_file(tmp_path, capsys):
     p = tmp_path / "empty.bin"
     p.write_bytes(b"")
     rc = probe_cmd.run(SimpleNamespace(
-        file=str(p), verb="read", at="0x0", type="u32",
+        files=[str(p)], verb="read", at="0x0", type="u32",
         count=1, be=False, le=False))
     capsys.readouterr()
     assert rc == 1                     # nothing to read, but no crash
-    assert probe_cmd.run(SimpleNamespace(file=str(p), verb="strings", min=4)) == 0
+    # 1: it ran fine and found no strings, per the exit-code convention
+    assert probe_cmd.run(SimpleNamespace(files=[str(p)], verb="strings", min=4)) == 1
     capsys.readouterr()

@@ -8,7 +8,7 @@ from ~0.9 to ~0.07), so it is a real round-trip for the lens.
 
 import math
 
-from acidcat.core import transforms
+from acidcat.core.forensics import transforms
 
 
 def _tone(n, period=40, amp=60):

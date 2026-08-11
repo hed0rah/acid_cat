@@ -6,7 +6,7 @@ import os
 import re
 import struct
 
-from acidcat.core import mp3 as mp3mod
+from acidcat.core.formats import mp3 as mp3mod
 from acidcat.core.walk.base import (
     _FRAME_LISTING_CAP, _ID3_READ_CAP, _bu16, _bu32, _f,
 )

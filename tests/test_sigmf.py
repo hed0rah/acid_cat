@@ -8,7 +8,7 @@ import hashlib
 import json
 import struct
 
-from acidcat.core.sniff import sniff
+from acidcat.core.infra.sniff import sniff
 from acidcat.core.walk import sigmf
 
 

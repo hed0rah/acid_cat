@@ -2,7 +2,7 @@
 
 import struct
 
-from acidcat.core import sniff as sniffmod
+from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import walk_file
 
 
@@ -87,3 +87,31 @@ def test_non_amiga_declined(tmp_path):
     d1 = b"FORM" + struct.pack(">I", 8) + b"AIFF"
     assert inspect_smus(_write(tmp_path, "x.aiff", d1))[0] == []
     assert inspect_okt(_write(tmp_path, "x.bin", b"NOTOKTAS"))[0] == []
+
+
+def test_a_chunk_walk_that_stops_at_the_cap_says_so():
+    """A cap you hit is a warning, not silence.
+
+    _iff_chunks is a generator and cannot warn on its own, so the callers count
+    what they got. Before that, a walk stopping at the cap simply ended its
+    chunk list and was indistinguishable from a short file.
+    """
+    from acidcat.core.walk import amiga
+
+    # a FORM SMUS whose body is more minimal chunks than the cap allows
+    # non-empty chunks: a zero-size chunk trips the step<=8 guard and ends the
+    # walk for a different reason
+    n = amiga._CHUNK_CAP + 50
+    body = b"SMUS" + b"".join(b"NULL" + struct.pack(">I", 2) + b"xy"
+                              for _ in range(n))
+    data = b"FORM" + struct.pack(">I", len(body)) + body
+
+    import tempfile, os
+    fd, path = tempfile.mkstemp(suffix=".smus")
+    os.write(fd, data)
+    os.close(fd)
+    try:
+        _chunks, warns = amiga.inspect_smus(path)
+        assert any("cap" in w for w in warns), warns
+    finally:
+        os.unlink(path)

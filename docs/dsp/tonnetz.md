@@ -202,7 +202,7 @@ Harte, Sandler, and Gasser's definition.
 
 ## acidcat implementation
 
-In `core/features.py`:
+In `core/analysis/features.py`:
 
 ```python
 tonnetz = librosa.feature.tonnetz(y=y, sr=sr)

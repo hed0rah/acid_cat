@@ -3,7 +3,7 @@
 import io
 import wave
 
-from acidcat.core import cue
+from acidcat.core.containers import cue
 
 
 def test_cue_single_bin(tmp_path):
@@ -38,8 +38,8 @@ def test_cue_split_bins_skips_pregap(tmp_path):
 
 
 def test_cue_extract_wires(tmp_path):
-    from acidcat.core import sniff as sniffmod
-    from acidcat.core import samples as smod
+    from acidcat.core.infra import sniff as sniffmod
+    from acidcat.core.extract import samples as smod
 
     (tmp_path / "t1.bin").write_bytes(bytes(2352 * 10))          # data track
     (tmp_path / "t2.bin").write_bytes(b"\x11\x22" * (2352 * 20 // 2))   # audio

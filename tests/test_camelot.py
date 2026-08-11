@@ -1,6 +1,6 @@
 """Tests for the Camelot key helper."""
 
-from acidcat.core import camelot
+from acidcat.core.analysis import camelot
 
 
 def test_parse_simple_major():

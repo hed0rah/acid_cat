@@ -1,9 +1,9 @@
-"""tests for acidcat.core.aiff primitives and the AIFF walker behaviors
+"""tests for acidcat.core.formats.aiff primitives and the AIFF walker behaviors
 that replaced the legacy parse_aiff parser."""
 
 import struct
 
-from acidcat.core.aiff import _parse_ieee_extended
+from acidcat.core.formats.aiff import _parse_ieee_extended
 from acidcat.core.walk.aiff import inspect_aiff
 
 

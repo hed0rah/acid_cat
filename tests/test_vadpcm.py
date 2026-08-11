@@ -6,7 +6,7 @@ be hand-fabricated meaningfully. A book of all-2048 (= 1.0 in Q11) turns the
 predictor into a pure integrator, which gives an exact, checkable trace."""
 import array
 
-from acidcat.core import vadpcm
+from acidcat.core.codecs import vadpcm
 
 
 def _decode(book, order, npred, hist, frame):

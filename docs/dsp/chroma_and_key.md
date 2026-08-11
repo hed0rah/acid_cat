@@ -101,7 +101,7 @@ For key detection on pitched content this asymmetry hurts. A low bass
 note can get mis-classified because not enough frequency resolution
 exists to separate adjacent semitones.
 
-Where we use it: `core/features.py`, as part of the general feature
+Where we use it: `core/analysis/features.py`, as part of the general feature
 vector used for similarity scoring. Here the bias is acceptable
 because all samples go through the same extractor and the feature is
 used comparatively, not as an absolute pitch-class reading.
@@ -137,7 +137,7 @@ semitone resolution matters.
 
 ## Current key estimator (argmax of median chroma)
 
-In `core/detect.py`:
+In `core/analysis/detect.py`:
 
 ```python
 chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=512)

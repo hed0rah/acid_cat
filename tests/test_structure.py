@@ -4,7 +4,7 @@ import struct
 
 import pytest
 
-from acidcat.core import structure as S
+from acidcat.core.write import structure as S
 
 
 # ── builders ───────────────────────────────────────────────────────

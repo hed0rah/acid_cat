@@ -1,8 +1,12 @@
 """stdin buffering for pipe support."""
 
+import contextlib
 import os
 import sys
 import tempfile
+
+
+_STDIN_SUFFIX = ".acidcat_stdin"
 
 
 def stdin_to_tempfile():
@@ -18,12 +22,45 @@ def stdin_to_tempfile():
     if not data:
         return None
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".acidcat_stdin")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=_STDIN_SUFFIX)
     tmp.write(data)
     tmp.close()
     return tmp.name
 
 
+def display_name(path):
+    """Human/machine-facing name for an input path: ``<stdin>`` for a stdin
+    buffer (so a random temp path never leaks into output), else the basename."""
+    if path and path.endswith(_STDIN_SUFFIX):
+        return "<stdin>"
+    return os.path.basename(path)
+
+
 def is_stdin_target(target):
     """Check if target means 'read from stdin'."""
     return target == "-"
+
+
+@contextlib.contextmanager
+def resolved_input(target):
+    """Yield a real filesystem path for ``target`` for commands that parse a file.
+
+    A normal path is yielded unchanged. ``-`` (stdin) is buffered to a temp file
+    -- so byte-level parsers can still seek -- and the temp file is removed on
+    exit. Yields ``None`` when ``-`` is given but stdin is a TTY or empty, so the
+    caller can report "no data on stdin" and exit. Use as::
+
+        with resolved_input(args.target) as path:
+            if path is None:
+                return 1
+            ...  # parse path; is_stdin_target(args.target) tells you it was stdin
+    """
+    if is_stdin_target(target):
+        tmp = stdin_to_tempfile()
+        try:
+            yield tmp
+        finally:
+            if tmp:
+                os.unlink(tmp)
+    else:
+        yield target

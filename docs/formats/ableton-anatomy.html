@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>acidcat / ableton anatomy</title>
+<link rel="icon" id="acidcat-fav" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTEyIDUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48bWFzayBpZD0iayI+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMwMDAiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0MC4yMSw0Mi43Mikgc2NhbGUoMC4yKSI+PGNpcmNsZSBjeD0iMTA3OC45NyIgY3k9IjEyNDYuNDEiIHI9Ijg0Ny45NTgiIGZpbGw9IiNmZmYiPjwvY2lyY2xlPjxwYXRoIGQ9Ik04MjMuNzgsNDM2LjY1M2MtMjQ1LDg0IC0zNjAsMjE1IC0zOTMuNzgsMjYzLjk1Yy0zNCw3MCAtMzMsLTEzNSAyNSwtMzQwLjZjMzcsLTEzNSAxMTgsLTMwMCAxNTEuNzgsLTM1OS4zNWM2MCwtNTUgNjAsMzAgMjE3LDQzNi4wNVoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNMTMzNC4xNiw0MzYuNjUzYzI0NSw4NCAzNjAsMjE1IDM5My43OCwyNjMuOTVjMzQsNzAgMzMsLTEzNSAtMjUsLTM0MC42Yy0zNywtMTM1IC0xMTgsLTMwMCAtMTUxLjc4LC0zNTkuMzVjLTYwLC01NSAtNjAsMzAgLTIxNyw0MzYuMDVaIiBmaWxsPSIjZmZmIj48L3BhdGg+PGVsbGlwc2UgY3g9Ijc3MiIgY3k9Ijk3NSIgcng9Ijk3IiByeT0iMTM3IiBmaWxsPSIjMDAwIj48L2VsbGlwc2U+PGVsbGlwc2UgY3g9IjEzOTQiIGN5PSI5NzUiIHJ4PSI5NyIgcnk9IjEzNyIgZmlsbD0iIzAwMCI+PC9lbGxpcHNlPjxwYXRoIGQ9Ik01MjAuMTE2LDE1MDUuMjRjMzUwLjMzMSw0MTQuNzQ0IDcyMi4wMzksNDIxLjk2OCAxMTE3LjcyLDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxNzUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPjwvZz48L21hc2s+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMxNzE0MGYiIG1hc2s9InVybCgjaykiLz48cGF0aCBkPSJNOTgsMzI0IEw2MCwzMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzE3MTQwZiIgc3Ryb2tlLXdpZHRoPSIzMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTk4LDM2MiBMNjAsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzI0IEw0NTIsMzE2IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzYyIEw0NTIsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg=="><script>(function(){var l="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTEyIDUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48bWFzayBpZD0iayI+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMwMDAiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0MC4yMSw0Mi43Mikgc2NhbGUoMC4yKSI+PGNpcmNsZSBjeD0iMTA3OC45NyIgY3k9IjEyNDYuNDEiIHI9Ijg0Ny45NTgiIGZpbGw9IiNmZmYiPjwvY2lyY2xlPjxwYXRoIGQ9Ik04MjMuNzgsNDM2LjY1M2MtMjQ1LDg0IC0zNjAsMjE1IC0zOTMuNzgsMjYzLjk1Yy0zNCw3MCAtMzMsLTEzNSAyNSwtMzQwLjZjMzcsLTEzNSAxMTgsLTMwMCAxNTEuNzgsLTM1OS4zNWM2MCwtNTUgNjAsMzAgMjE3LDQzNi4wNVoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNMTMzNC4xNiw0MzYuNjUzYzI0NSw4NCAzNjAsMjE1IDM5My43OCwyNjMuOTVjMzQsNzAgMzMsLTEzNSAtMjUsLTM0MC42Yy0zNywtMTM1IC0xMTgsLTMwMCAtMTUxLjc4LC0zNTkuMzVjLTYwLC01NSAtNjAsMzAgLTIxNyw0MzYuMDVaIiBmaWxsPSIjZmZmIj48L3BhdGg+PGVsbGlwc2UgY3g9Ijc3MiIgY3k9Ijk3NSIgcng9Ijk3IiByeT0iMTM3IiBmaWxsPSIjMDAwIj48L2VsbGlwc2U+PGVsbGlwc2UgY3g9IjEzOTQiIGN5PSI5NzUiIHJ4PSI5NyIgcnk9IjEzNyIgZmlsbD0iIzAwMCI+PC9lbGxpcHNlPjxwYXRoIGQ9Ik01MjAuMTE2LDE1MDUuMjRjMzUwLjMzMSw0MTQuNzQ0IDcyMi4wMzksNDIxLjk2OCAxMTE3LjcyLDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxNzUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPjwvZz48L21hc2s+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMxNzE0MGYiIG1hc2s9InVybCgjaykiLz48cGF0aCBkPSJNOTgsMzI0IEw2MCwzMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzE3MTQwZiIgc3Ryb2tlLXdpZHRoPSIzMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTk4LDM2MiBMNjAsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzI0IEw0NTIsMzE2IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzYyIEw0NTIsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzE0MGYiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==",d="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTEyIDUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48bWFzayBpZD0iayI+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiMwMDAiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0MC4yMSw0Mi43Mikgc2NhbGUoMC4yKSI+PGNpcmNsZSBjeD0iMTA3OC45NyIgY3k9IjEyNDYuNDEiIHI9Ijg0Ny45NTgiIGZpbGw9IiNmZmYiPjwvY2lyY2xlPjxwYXRoIGQ9Ik04MjMuNzgsNDM2LjY1M2MtMjQ1LDg0IC0zNjAsMjE1IC0zOTMuNzgsMjYzLjk1Yy0zNCw3MCAtMzMsLTEzNSAyNSwtMzQwLjZjMzcsLTEzNSAxMTgsLTMwMCAxNTEuNzgsLTM1OS4zNWM2MCwtNTUgNjAsMzAgMjE3LDQzNi4wNVoiIGZpbGw9IiNmZmYiPjwvcGF0aD48cGF0aCBkPSJNMTMzNC4xNiw0MzYuNjUzYzI0NSw4NCAzNjAsMjE1IDM5My43OCwyNjMuOTVjMzQsNzAgMzMsLTEzNSAtMjUsLTM0MC42Yy0zNywtMTM1IC0xMTgsLTMwMCAtMTUxLjc4LC0zNTkuMzVjLTYwLC01NSAtNjAsMzAgLTIxNyw0MzYuMDVaIiBmaWxsPSIjZmZmIj48L3BhdGg+PGVsbGlwc2UgY3g9Ijc3MiIgY3k9Ijk3NSIgcng9Ijk3IiByeT0iMTM3IiBmaWxsPSIjMDAwIj48L2VsbGlwc2U+PGVsbGlwc2UgY3g9IjEzOTQiIGN5PSI5NzUiIHJ4PSI5NyIgcnk9IjEzNyIgZmlsbD0iIzAwMCI+PC9lbGxpcHNlPjxwYXRoIGQ9Ik01MjAuMTE2LDE1MDUuMjRjMzUwLjMzMSw0MTQuNzQ0IDcyMi4wMzksNDIxLjk2OCAxMTE3LjcyLDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxNzUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPjwvZz48L21hc2s+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiNmMmVmZTgiIG1hc2s9InVybCgjaykiLz48cGF0aCBkPSJNOTgsMzI0IEw2MCwzMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2YyZWZlOCIgc3Ryb2tlLXdpZHRoPSIzMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTk4LDM2MiBMNjAsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmMmVmZTgiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzI0IEw0NTIsMzE2IiBmaWxsPSJub25lIiBzdHJva2U9IiNmMmVmZTgiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik00MTQsMzYyIEw0NTIsMzc0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmMmVmZTgiIHN0cm9rZS13aWR0aD0iMzIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==",e=document.getElementById("acidcat-fav"),m=matchMedia("(prefers-color-scheme: dark)");function s(){e.setAttribute("href",m.matches?d:l);}try{m.addEventListener("change",s)}catch(x){m.addListener(s)}s();})();</script>
+<script>(function(){try{var m=localStorage.getItem("acidcat-theme");if(!m)m=matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",m);}catch(e){}})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E6E6E1; --panel:#EBEBE6; --ink:#1E201D; --soft:#67685F;
+  --faint:#979889; --line:#CACCC0; --hair:#D7D8CD;
+  /* shared anatomy palette: moss value, ochre grid, slate structural */
+  --enum:#3F6B57;  --enum-soft:#D4E0D9;
+  --flag:#9A7B3F;  --flag-soft:#E7DECA;
+  --rsv:#9C9889;   --rsv-soft:rgba(32,31,27,0.03);
+  --sync:#5A5560;  --sync-soft:#DBD8DE;
+  --ff:"IBM Plex Mono","SFMono-Regular",ui-monospace,monospace;
+}
+:root[data-theme="dark"]{--paper:#191a17;--panel:#212320;--ink:#e6e6e1;--soft:#abaca1;--faint:#7c7d72;--line:#383a32;--hair:#2b2d26;--enum:#8fb09e;--enum-soft:#1f2622;--flag:#c3b492;--flag-soft:#2c291d;--rsv:#bcbaae;--rsv-soft:rgba(230,230,225,0.04);--sync:#a7a4a7;--sync-soft:#232322;}
+:root[data-theme="acid"]{--paper:#0b0912;--panel:#161022;--ink:#f4ecff;--soft:#ccb9f2;--faint:#8f7ec6;--line:#3b2c5c;--hair:#241a3a;--enum:#3fd0ff;--enum-soft:#0f2942;--flag:#ff45a8;--flag-soft:#3a1030;--rsv:#bb8cff;--rsv-soft:rgba(244,236,255,0.05);--sync:#f2e400;--sync-soft:#33300a;}
+:root[data-theme="house-light"]{--paper:#F2F1EE;--panel:#FBFAF6;--ink:#17150F;--soft:#4A4744;--faint:#8C877E;--line:#C9C5BB;--hair:#E4E0D7;--enum:#007870;--enum-soft:#D8E7E5;--flag:#E85000;--flag-soft:#F6E1D4;--sync:#33518C;--sync-soft:#DEE3EF;--rsv:#8C877E;--rsv-soft:rgba(23,21,15,0.04);}
+:root[data-theme="house-dark"]{--paper:#121213;--panel:#1c1c1e;--ink:#ececea;--soft:#a9a9a4;--faint:#6f6f6b;--line:#313135;--hair:#26262a;--enum:#08F9DF;--enum-soft:#0e2a29;--flag:#FF4D00;--flag-soft:#2c1a10;--sync:#7fb2e0;--sync-soft:#16232f;--rsv:#8b8b88;--rsv-soft:rgba(236,236,234,0.05);}.theme-toggle{position:fixed;bottom:0.9rem;right:0.9rem;z-index:50;font-family:var(--ff);font-size:0.56rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--soft);background:var(--panel);border:1px solid var(--line);padding:0.45rem 0.7rem;cursor:pointer;font-weight:400;transition:color .15s,border-color .15s}.theme-toggle:hover{color:var(--enum);border-color:var(--enum)}*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--ff);font-weight:300;line-height:1.7;font-size:14px;-webkit-font-smoothing:antialiased}
+::selection{background:var(--enum);color:var(--paper)}
+.sheet{max-width:1040px;margin:0 auto;padding:clamp(1.5rem,4vw,3.25rem) clamp(1.25rem,4vw,3rem) 5rem}
+.head{border:1px solid var(--ink);margin-bottom:1.8rem}
+.head .row{display:grid;grid-template-columns:1fr auto;align-items:stretch}
+.head .title{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.9rem 1.1rem}
+.head .title acidcat-toggle{--acidcat-size:64px;color:var(--soft);flex:0 0 auto;transition:color .15s}
+.head .title acidcat-toggle:hover{color:var(--enum)}
+:root[data-theme="acid"] .head .title acidcat-toggle{color:var(--sync)}
+:root[data-theme="acid"] .head .title acidcat-toggle:hover{color:var(--flag)}
+:root[data-theme="house-light"] .head .title acidcat-toggle{color:var(--flag)}
+:root[data-theme="house-dark"] .head .title acidcat-toggle{color:var(--enum)}
+:root[data-theme="house-light"] .head .title acidcat-toggle:hover{color:var(--enum)}
+:root[data-theme="house-dark"] .head .title acidcat-toggle:hover{color:var(--flag)}
+:root[data-theme="house-light"] .head .stamp b{color:var(--enum)}
+:root[data-theme="house-dark"] .head .stamp b{color:var(--flag)}
+:root[data-theme="house-light"] .head .title{border-left:3px solid var(--enum)}
+:root[data-theme="house-dark"] .head .title{border-left:3px solid var(--flag)}
+.head .sysmark{font-size:0.62rem;letter-spacing:0.34em;color:var(--soft)}
+.head h1{font-weight:500;font-size:clamp(1.5rem,4vw,2rem);letter-spacing:0.02em;line-height:1.1;margin-top:0.2rem}
+.head .stamp{border-left:1px solid var(--line);padding:0.9rem 1.1rem;text-align:right;font-size:0.6rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--faint);display:flex;flex-direction:column;justify-content:center;gap:0.2rem}
+.head .stamp b{color:var(--enum);font-weight:500}
+.head .strip{border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase}
+.head .strip div{padding:0.5rem 1.1rem;border-right:1px solid var(--hair);color:var(--soft)}
+.head .strip div:last-child{border-right:none}
+.head .strip b{color:var(--ink);font-weight:500}
+.lede{color:var(--soft);max-width:74ch;margin-bottom:2.2rem;font-size:0.85rem;line-height:1.75}
+.lede b{color:var(--ink);font-weight:500}
+.intro{display:flex;gap:1.2rem;align-items:stretch;margin-bottom:2.2rem}
+.intro .lede{margin-bottom:0}
+.sig{flex:0 0 auto;align-self:stretch;display:flex;flex-direction:row;align-items:center;gap:0.9rem;padding-left:1.5rem;border-left:1px solid var(--hair)}
+.sig .legrows{display:flex;flex-direction:column;gap:0.42rem}
+.sig .siglabel{writing-mode:vertical-rl;text-orientation:mixed;align-self:stretch;display:flex;align-items:center;justify-content:center;font-size:0.5rem;letter-spacing:0.34em;text-transform:uppercase;color:var(--faint);padding-left:0.9rem;border-left:1px solid var(--hair)}
+.sig .row{display:flex;align-items:center;gap:0.4rem;font-size:0.68rem;color:var(--soft);letter-spacing:0.02em;white-space:nowrap}
+.sig .swsep{color:var(--faint);font-size:0.62rem}
+.sig .misnote{font-size:0.66rem;color:var(--soft);line-height:1.7;text-align:center;max-width:11rem}
+/* two boxes per row: the dark (selected) state naming the color, and the light
+   (resting) state naming the meaning, matching how a field looks in the map. */
+.sig .sw{display:inline-flex;align-items:center;justify-content:center;width:6.1rem;height:1.45rem;padding:0;font-size:0.58rem;letter-spacing:0.1em;text-transform:lowercase;flex-shrink:0}
+.sig .sw.dark{color:var(--paper)}
+.sig .sw.light{color:var(--ink);border:1px solid var(--hair)}
+.sig .sw.dark.k-enum{background:var(--enum)} .sig .sw.light.k-enum{background:var(--enum-soft)}
+.sig .sw.dark.k-flag{background:var(--flag)} .sig .sw.light.k-flag{background:var(--flag-soft)}
+.sig .sw.dark.k-sync{background:var(--sync)} .sig .sw.light.k-sync{background:var(--sync-soft)}
+.sig .sw.dark.k-rsv{background:var(--faint)} .sig .sw.light.k-rsv{background:var(--rsv-soft)}
+.tree{font-size:0.8rem;color:var(--soft);line-height:1.85;padding:1rem 1.4rem;border:1px solid var(--line);background:var(--panel);overflow-x:auto;margin-bottom:2rem}
+.tree b{color:var(--ink);font-weight:500}
+.tree .kf{color:var(--enum)} .tree .kr{color:var(--flag)}
+footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color:var(--enum);border-color:var(--enum)}
+@media(max-width:720px){.intro{display:block}.sig{display:none}}
+.k-en{color:var(--enum)} .k-fl{color:var(--flag)}
+.sec{font-size:0.66rem;letter-spacing:0.26em;text-transform:uppercase;font-weight:600;color:var(--ink);margin:2.6rem 0 0.3rem;display:flex;align-items:center;gap:0.7rem}
+.sec::after{content:"";flex:1;height:1px;background:var(--line)}
+.note{font-size:0.78rem;color:var(--soft);margin:0.5rem 0 1.1rem;max-width:72ch}
+.callout{font-size:0.76rem;color:var(--soft);line-height:1.7;border:1px solid var(--line);border-left:2px solid var(--flag);background:var(--panel);padding:0.8rem 1rem;margin:1.2rem 0 0.4rem;max-width:74ch}
+.callout b{color:var(--ink);font-weight:500}
+.region{border:1px solid var(--line);border-bottom:none;background:var(--panel)}
+.region:last-child{border-bottom:1px solid var(--line)}
+.region>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:1.2rem 1fr auto;gap:0.8rem;align-items:center;padding:0.7rem 1rem;font-size:0.82rem}
+.region>summary::-webkit-details-marker{display:none}
+.region>summary:hover{background:var(--enum-soft)}
+.region .chev{color:var(--enum);transition:transform .18s;font-size:0.7rem}
+.region[open] .chev{transform:rotate(90deg)}
+.region .rname{font-weight:500} .region .rspan{font-size:0.64rem;color:var(--faint);letter-spacing:0.08em;text-transform:uppercase}
+.region.opt .rname::after{content:"opt";margin-left:0.6rem;font-size:0.54rem;letter-spacing:0.14em;color:var(--faint);border:1px solid var(--line);padding:1px 4px}
+.region.req .rname::after{content:"req";margin-left:0.6rem;font-size:0.54rem;letter-spacing:0.14em;color:var(--enum);border:1px solid var(--enum);padding:1px 4px}
+.region .rbody{padding:0.6rem 1rem 1.1rem 3rem;border-top:1px solid var(--hair)}
+.kv{font-size:0.74rem}
+.kv div{display:grid;grid-template-columns:12rem 1fr;gap:1rem;padding:0.3rem 0;border-bottom:1px solid var(--hair)}
+.kv div:last-child{border-bottom:none}
+.kv .k{color:var(--soft)} .kv .v{color:var(--ink)}
+
+/* variant tabs */
+.tabs{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-bottom:none;margin-bottom:0}
+.tab{padding:0.55rem 0.9rem;font-size:0.64rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--soft);cursor:pointer;border-right:1px solid var(--hair);background:none;font-family:var(--ff);border-top:none;border-left:none;border-bottom:2px solid transparent;text-align:left}
+.tab:last-child{border-right:none}
+.tab:hover{color:var(--enum)}
+.tab.on{color:var(--ink);border-bottom-color:var(--enum);background:var(--panel)}
+.tab small{display:block;font-size:0.5rem;color:var(--faint);letter-spacing:0.08em;margin-top:1px;text-transform:none}
+.panelwrap{border:1px solid var(--line);border-top:none;padding:1.6rem clamp(1rem,3vw,1.8rem) 2rem;margin-bottom:2rem}
+.panel{display:none}
+.panel.on{display:block}
+.panel .plede{color:var(--soft);max-width:76ch;font-size:0.82rem;line-height:1.75;margin-bottom:0.3rem}
+.panel .plede b{color:var(--ink);font-weight:500}
+.panel .pfacts{display:flex;flex-wrap:wrap;gap:0 1.8rem;font-size:0.64rem;letter-spacing:0.06em;color:var(--soft);text-transform:uppercase;margin-bottom:1.1rem;border-bottom:1px solid var(--hair);padding-bottom:0.7rem}
+.panel .pfacts b{color:var(--enum);font-weight:500;margin-left:0.4rem;text-transform:none;letter-spacing:0.02em}
+
+/* bit diagram (canonical renderer, used when a field is drawn bit-by-bit) */
+.diagram{display:flex;flex-wrap:wrap;gap:12px;margin:0.6rem 0 1.4rem}
+.bytegrp{border:1px solid var(--line);background:var(--panel)}
+.bytegrp .ticks{display:flex;border-bottom:1px solid var(--hair)}
+.bytegrp .ticks span{width:1.55rem;text-align:center;font-size:0.5rem;color:var(--faint);padding:2px 0}
+.bytegrp .brow{display:flex}
+.bit{width:1.55rem;height:1.85rem;display:flex;align-items:center;justify-content:center;font-size:0.8rem;color:var(--soft);border-right:1px solid var(--hair);transition:background .12s,color .12s;cursor:pointer}
+.bit:last-child{border-right:none}
+.bytegrp .hex{text-align:center;font-size:0.6rem;letter-spacing:0.12em;color:var(--ink);padding:3px 0;border-top:1px solid var(--hair);font-weight:500}
+
+/* byte diagram */
+.dbytes{display:flex;flex-wrap:wrap;gap:4px;margin:0.6rem 0 1.4rem}
+.bcol{display:flex;flex-direction:column;align-items:center}
+.bcol .off{font-size:0.5rem;color:var(--faint);margin-bottom:2px;letter-spacing:0.02em}
+.bcell{width:2.5rem;height:1.9rem;display:flex;align-items:center;justify-content:center;font-size:0.78rem;border:1px solid var(--hair);color:var(--soft);transition:background .12s,color .12s;cursor:pointer}
+.bcell.k-sync{background:var(--sync-soft)} .bcell.k-enum{background:var(--enum-soft)}
+.bcell.k-flag{background:var(--flag-soft)} .bcell.k-rsv{background:var(--rsv-soft)}
+.bcell.fstart{border-left:2px solid var(--line)}
+.bcell.hi.k-sync{background:var(--sync);color:var(--paper)}
+.bcell.hi.k-enum{background:var(--enum);color:var(--paper)}
+.bcell.hi.k-flag{background:var(--flag);color:var(--paper)}
+.bcell.hi.k-rsv{background:var(--faint);color:var(--paper)}
+.bit.k-sync{background:var(--sync-soft)} .bit.k-enum{background:var(--enum-soft)}
+.bit.k-flag{background:var(--flag-soft)} .bit.k-rsv{background:var(--rsv-soft)}
+.bit.hi.k-sync{background:var(--sync);color:var(--paper)}
+.bit.hi.k-enum{background:var(--enum);color:var(--paper)}
+.bit.hi.k-flag{background:var(--flag);color:var(--paper)}
+.bit.hi.k-rsv{background:var(--faint);color:var(--paper)}
+
+.block{display:grid;grid-template-columns:1fr 330px;gap:1.6rem;align-items:stretch}
+.left{min-width:0}
+.detailcol{position:relative}
+@media(max-width:820px){.block{grid-template-columns:1fr}.detailcol{position:static}}
+.fields{border-top:1px solid var(--line)}
+.field{display:grid;grid-template-columns:5rem 1fr auto;gap:0.8rem;align-items:baseline;padding:0.46rem 0;border-bottom:1px solid var(--hair)}
+.field{cursor:pointer}
+.field:hover,.field.active,.field.cued{background:var(--panel)}
+.field .fb{font-size:0.6rem;color:var(--faint)} .field .fn{font-size:0.82rem;color:var(--ink)}
+.field[data-branch] .fn::after{content:"+";margin-left:0.4rem;color:var(--enum);font-weight:500}
+.field.active[data-branch] .fn::after{content:"\2212"}
+.fv{font-size:0.76rem;text-align:right}
+.fv.k-sync{color:var(--sync)} .fv.k-enum{color:var(--enum)} .fv.k-flag{color:var(--flag)} .fv.k-rsv{color:var(--faint)}
+.branch{grid-column:1 / -1;display:none;padding:0.5rem 0 0.2rem 5.8rem}
+.field.active .branch{display:block}
+.branch table{border-collapse:collapse;font-size:0.7rem;width:100%;max-width:26rem}
+.branch td{padding:1px 10px 1px 0;color:var(--soft)} .branch td.k{color:var(--faint);width:3.4rem;text-align:right}
+.branch tr.sel td{color:var(--ink)} .branch tr.sel td.k{color:var(--enum);font-weight:500}
+.detail{position:absolute;inset:0;border:1px solid var(--line);background:var(--panel);padding:1rem 1.05rem;overflow-y:auto}
+@media(max-width:820px){.detail{position:static;height:15rem}}
+.detail .dl{font-size:0.56rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--hair);padding-bottom:0.5rem;margin-bottom:0.6rem;display:flex;justify-content:space-between}
+.detail .dl .kind{color:var(--soft)}
+.detail h3{font-weight:500;font-size:0.98rem} .detail .dc{font-size:0.66rem;color:var(--enum);margin:0.25rem 0 0.7rem}
+.detail p{font-size:0.77rem;color:var(--soft);line-height:1.65}
+.detail .dn{font-size:0.67rem;color:var(--ink);margin-top:0.7rem;line-height:1.55;border-top:1px solid var(--hair);padding-top:0.6rem}
+.timeline{font-size:0.76rem;color:var(--soft);line-height:1.9;margin:1rem 0 0.4rem}
+.timeline div{display:grid;grid-template-columns:5.5rem 1fr;gap:1rem;padding:0.15rem 0}
+.timeline .y{color:var(--enum);font-weight:500} .timeline b{color:var(--ink);font-weight:500}
+footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);display:flex;justify-content:space-between;font-size:0.58rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);flex-wrap:wrap;gap:0.5rem}
+.tbl{border-collapse:collapse;font-size:0.7rem;width:100%;margin:0.5rem 0 1.3rem;display:block;overflow-x:auto;max-width:100%}.tbl th,.tbl td{text-align:left;padding:0.34rem 1.1rem 0.34rem 0;border-bottom:1px solid var(--hair);vertical-align:top}.tbl th{font-size:0.56rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--line);white-space:nowrap}.tbl td:first-child{color:var(--ink);white-space:nowrap}</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="head">
+    <div class="row">
+      <div class="title"><div class="tt"><div class="sysmark">ACIDCAT . FILE FORMAT REFERENCE</div><h1>Ableton Anatomy</h1></div><acidcat-toggle aria-label="Toggle light and dark theme"></acidcat-toggle></div>
+      <div class="stamp"><b>Live 9 &ndash; Live 12</b>.asd . .als . .adg . .amxd<br>rev 2026.08</div>
+    </div>
+    <div class="strip">
+      <div>magic <b>06 'I' / 06 'M'</b></div><div>endian <b>both, declared</b></div>
+      <div>container <b>grid + object tree</b></div><div>grain <b>30 ms ceiling</b></div>
+    </div>
+  </div>
+
+  <div class="intro">
+  <p class="plede lede">Ableton writes a <b>.asd</b> beside every audio file it analyses. It is usually described as a waveform cache, and that is wrong: it holds <b>warp markers, loop points, onsets, pitch marks and time signature</b> &mdash; Live's whole reading of the audio. The head is a <b>frame-position grid</b> whose last entry is the source file's exact frame count and whose steps never exceed <b>30&nbsp;ms</b> of audio; because that ceiling is a fixed fraction of the sample rate, an <b>orphaned sidecar still describes audio that has been deleted</b>. The body is a serialised object tree whose field names are stored in <b>UTF-16</b>, which is why an ASCII scan makes the file look like noise. It also states a <b>tempo</b> -- not as a number, but as a mapping from seconds to beats that the tempo falls out of. <b>Hover</b> a field to light its bytes.</p>
+  <aside class="sig" aria-label="color key">
+    <div class="legrows">
+    <div class="row"><span class="sw dark k-enum">moss</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
+    <div class="row"><span class="sw dark k-flag">ochre</span><span class="swsep">&#8594;</span><span class="sw light k-flag">grid</span></div>
+    <div class="row"><span class="sw dark k-sync">slate</span><span class="swsep">&#8594;</span><span class="sw light k-sync">structural</span></div>
+    <div class="row"><span class="sw dark k-rsv">faint</span><span class="swsep">&#8594;</span><span class="sw light k-rsv">reserved</span></div>
+    </div>
+    <div class="siglabel">color key</div>
+  </aside>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-p="overview">Overview<small>the family</small></button>
+    <button class="tab" data-p="header">.asd header<small>10 bytes</small></button>
+    <button class="tab" data-p="grid">Frame grid<small>the 30 ms rule</small></button>
+    <button class="tab" data-p="objects">Object tree<small>UTF-16 names</small></button>
+    <button class="tab" data-p="warp">Warp + tempo<small>the mapping</small></button>
+    <button class="tab" data-p="onsets">Onsets<small>transients</small></button>
+    <button class="tab" data-p="liveset">Live Set family<small>.als .alc .adg .adv</small></button>
+    <button class="tab" data-p="m4l">Max for Live<small>.amxd</small></button>
+    <button class="tab" data-p="impostors">Impostors<small>what lies</small></button>
+  </div>
+  <div class="panelwrap">
+
+    <!-- ===================== OVERVIEW ===================== -->
+    <div class="panel on" data-panel="overview">
+      <div class="pfacts"><span>binary<b>.asd .amxd</b></span><span>gzipped XML<b>.als .alc .adg .adv</b></span><span>archive<b>.alp</b></span><span>chunked<b>.amxd</b></span></div>
+      <p class="plede">Three unrelated shapes ship under one brand. <b>.asd</b> is binary and undocumented; the Live Set family is gzipped XML that names its own type; <b>.amxd</b> is a plain chunk chain. They are grouped here because a project folder holds all of them at once.</p>
+      <div class="sec">the document types</div>
+      <table class="tbl">
+        <thead><tr><th>ext</th><th>what it is</th><th>shape</th></tr></thead>
+        <tbody>
+        <tr><td><code>.asd</code></td><td>per-sample analysis sidecar</td><td>binary, byte-order-declared</td></tr>
+        <tr><td><code>.adg</code></td><td>device group / rack preset</td><td>gzip + XML <code>&lt;GroupDevicePreset&gt;</code></td></tr>
+        <tr><td><code>.als</code></td><td>Live Set (project)</td><td>gzip + XML <code>&lt;LiveSet&gt;</code></td></tr>
+        <tr><td><code>.alp</code></td><td>Live Pack</td><td>gzip archive, not XML</td></tr>
+        <tr><td><code>.alc</code></td><td>Live Clip</td><td>gzip + XML <code>&lt;LiveSet&gt;</code></td></tr>
+        <tr><td><code>.adv</code></td><td>device preset</td><td>gzip + XML, device-named root</td></tr>
+        <tr><td><code>.amxd</code></td><td>Max for Live device</td><td><code>ampf</code> chunk chain</td></tr>
+        <tr><td><code>.agr</code></td><td>groove / quantize</td><td>gzip + XML <code>&lt;Groove&gt;</code></td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><b>Live has more document types than these.</b> <code>.ams</code> (Operator meta sound), <code>.abl</code> and <code>.ablbundle</code> (Note) and <code>.ask</code> (theme) are the same gzip + <code>&lt;Ableton&gt;</code> XML shape. The root child element names the type, so an unmapped document still identifies itself.</div>
+    </div>
+
+    <!-- ===================== HEADER ===================== -->
+    <div class="panel" data-panel="header">
+      <div class="pfacts"><span>size<b>10 bytes</b></span><span>magic<b>0x06 + BOM</b></span><span>count<b>grid + 1</b></span><span>reserved<b>always 0</b></span></div>
+      <p class="plede">A ten-byte head, then the grid. The interesting part is byte 1: it is a <b>byte-order mark</b> in the TIFF style, <code>'I'</code> for Intel and <code>'M'</code> for Motorola. Big-endian files, written by PowerPC-era Macs, exist and parse only big-endian. A reader that assumes little-endian silently mangles them.</p>
+      <div class="sec">.asd header + first grid entries (18 bytes)</div>
+      <p class="note">A 44.1 kHz stereo sidecar, 7.774 s of source audio, written by Live 12.</p>
+      <div id="asd-hdr" data-build></div>
+      <div class="callout"><b>Two magic bytes are not an identification.</b> 0x06 plus a byte-order mark would fire on plenty of unrelated binaries. A safe check also requires the reserved word at offset 6 to be zero and the entry count to be sane.</div>
+    </div>
+
+    <!-- ===================== GRID ===================== -->
+    <div class="panel" data-panel="grid">
+      <div class="pfacts"><span>entries<b>count - 1</b></span><span>type<b>u32 frame offsets</b></span><span>ceiling<b>30 ms of audio</b></span><span>last entry<b>= total frames</b></span></div>
+      <p class="plede">The grid is a strictly increasing list of <b>absolute sample offsets</b> into the source audio. Two properties make it far more useful than it looks. First, the <b>last entry equals the source file's exact total frame count</b>, with no rounding. Second, <b>no step ever exceeds 30&nbsp;ms of audio</b>: 1,323 frames at 44.1&nbsp;kHz, 1,440 at 48&nbsp;kHz, and so on.</p>
+      <div class="sec">recovering a deleted file from its sidecar</div>
+      <p class="note">Because the ceiling is a fixed fraction of the rate, the largest observed step identifies the rate, and the last entry then gives the duration.</p>
+      <table class="tbl">
+        <thead><tr><th>quantity</th><th>how</th><th>confidence</th></tr></thead>
+        <tbody>
+        <tr><td>sample rate</td><td>smallest standard rate whose 30 ms grain is not smaller than the largest step</td><td>exact when the ceiling was reached, otherwise a lower bound</td></tr>
+        <tr><td>frame count</td><td>last grid entry, read directly</td><td>exact</td></tr>
+        <tr><td>duration</td><td>frame count / rate</td><td>inherits the rate's</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><b>This is the reason to walk the format.</b> An orphaned <code>.asd</code> in a folder is evidence about a file that no longer exists &mdash; its rate, its length, its exact sample count. Nothing else in the toolchain recovers that, because nothing else survives the audio.</div>
+      <div class="callout"><b>No tempo NUMBER is stored, but the tempo is recoverable.</b> The value appears nowhere &mdash; at no byte offset, as neither f32 nor f64, and in no derived form. Live keeps a mapping instead: warp markers pin seconds to beats, and the tempo falls out of any two of them. See the Warp tab.</div>
+    </div>
+
+    <!-- ===================== OBJECTS ===================== -->
+    <div class="panel" data-panel="objects">
+      <div class="pfacts"><span>names<b>u32 + UTF-16LE</b></span><span>distinct<b>69</b></span><span>layout<b>interleaved</b></span><span>version<b>per object</b></span></div>
+      <p class="plede">After the grid comes a serialised object tree that <b>writes its own field names inline</b>. They are length-prefixed <b>UTF-16</b>, so every second byte is zero and an ASCII string scan returns nothing &mdash; which is most of why this format has a reputation for being opaque. The names are not gathered in a header; they are <b>interleaved with their data</b> across the whole file, so a parser can seek a field by name instead of by a version-specific offset.</p>
+      <div class="sec">a field name on disk (26 bytes)</div>
+      <p class="note">Note the 0x00 after every character.</p>
+      <div id="asd-name" data-build></div>
+      <div class="sec">what the names reveal</div>
+      <table class="tbl">
+        <thead><tr><th>group</th><th>fields</th></tr></thead>
+        <tbody>
+        <tr><td>warp</td><td><code>WarpMarkers</code> <code>IsWarped</code> <code>WarpMode</code> <code>TransientResolution</code></td></tr>
+        <tr><td>clip / loop</td><td><code>LoopStart</code> <code>LoopEnd</code> <code>HiddenLoopStart</code> <code>SampleOffset</code></td></tr>
+        <tr><td>metre</td><td><code>Numerator</code> <code>Denominator</code> <code>AufTaktData</code> (anacrusis)</td></tr>
+        <tr><td>onsets</td><td><code>OnSets</code> <code>UserOnsets</code> <code>HasUserOnsets</code> <code>PitchMarks</code></td></tr>
+        <tr><td>staleness</td><td><code>OriginalFileSize</code></td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><b>Optional sections, not generations.</b> It is tempting to read the field set as a format version. It is not one: over 1,473 sidecars <b>62% declare BOTH</b> the beat-tracking set (<code>InitialBPM</code>, <code>Bpms</code>, <code>BeatTrackState</code>, <code>Tonalities</code>) and the overview set (<code>OverViewLevels</code>, <code>UnbiasedTempoEstimate</code>), so they cannot be generations of one another. Versioning is carried <i>per object</i> as individual <code>Version</code> ints, and there is no global version byte.</div>
+      <div class="callout"><b>OriginalFileSize is the staleness check.</b> Live records the source audio's byte size and re-analyses on mismatch &mdash; the same mechanism REAPER uses (mtime + size), arrived at independently. Of 1,200 sidecars sitting beside their real audio, <b>96% reference its current size</b>; one that does not is describing a version of the file that no longer exists. It detects an edit but cannot re-find the file after a rename: the binding is by filename alone, so moving the audio orphans it silently.</div>
+      <div class="callout"><b>Declared is not stored.</b> This schema is shared with the Live Set, so it names things the sidecar never carries. <code>LoopStart</code>, <code>LoopEnd</code>, <code>IsWarped</code>, <code>WarpMode</code>, <code>Numerator</code> and <code>Denominator</code> are all declared here &mdash; and <code>LoopEnd</code> is <b>absent from 91%</b> of files whose Set states a real one. Loop points belong to a CLIP, and one audio file can back many clips with different loops. What the sidecar holds is per-file ANALYSIS.</div>
+    </div>
+
+    <!-- ===================== WARP + TEMPO ===================== -->
+    <div class="panel" data-panel="warp">
+      <div class="pfacts"><span>record<b>31 bytes</b></span><span>SecTime<b>f64 seconds</b></span><span>BeatTime<b>f64 beats</b></span><span>tempo<b>derived</b></span></div>
+      <p class="plede">A warp marker pins one instant of the recording to one position in the bar. Each record carries its own class name inline, u8-length-prefixed, so the markers are <b>self-locating</b> &mdash; there is no count to find and no offset to derive.</p>
+      <div class="sec">one warp marker (31 bytes)</div>
+      <p class="note">Marker id 1 from a real project sidecar. The Live Set that wrote it states exactly these values.</p>
+      <div id="asd-warp" data-build></div>
+      <div class="callout"><b>The tempo is the mapping, not a number.</b> Nothing in a <code>.asd</code> stores a BPM, at any byte offset, as neither f32 nor f64, and in no derived form. But two markers give it directly: <code>(beats / seconds) x 60</code>. Here 0.03125 beats in 0.011029411764705883 s is <b>170 BPM</b>, and the Live Set declares 170. Across 40 clips the derivation matched the declared tempo every time, and over a 2,000-file sample it yields only clean musical values: 140, 170, 138, 120, 150, 145, 70, 172.</div>
+      <div class="callout"><b>Most files have none, and that is not a gap.</b> A one-shot nobody warped has nothing to pin, so most sidecars carry no markers at all. A clip the Live Set marks unwarped never has them. The presence of this section is not a format version: it appears under Live 9.7 through 12, and one project written by a single version contains sidecars both with and without it &mdash; a <code>.asd</code> is written when the audio is analysed, and outlives the projects that use it.</div>
+    </div>
+
+    <!-- ===================== ONSETS ===================== -->
+    <div class="panel" data-panel="onsets">
+      <div class="pfacts"><span>shape<b>two arrays</b></span><span>positions<b>u32 frames</b></span><span>energies<b>f32</b></span><span>count<b>repeated</b></span></div>
+      <p class="plede">Live's transient detection, stored as two length-prefixed arrays back to back: the count, the frame positions, the count <i>again</i>, then one energy per onset. That repeated count is what identifies the structure in a file with no other landmark.</p>
+      <div class="sec">onset array head (16 bytes)</div>
+      <p class="note">A 13-transient loop. Positions are absolute frame offsets, checkable against the frame count the grid already gave us.</p>
+      <div id="asd-onsets" data-build></div>
+      <div class="sec">warp-engine parameters (32 bytes)</div>
+      <p class="note">Sitting just above the onsets, in the order the Live Set declares them.</p>
+      <div id="asd-clip" data-build></div>
+      <div class="callout"><b>Two traps, both paid for.</b> The arrays are <b>not</b> word-aligned to the end of the frame grid, so a 4-stepped scan walks straight past them. And a count of 1 must be refused: with a single position "strictly increasing" constrains nothing, so any stray pair of equal u32 satisfies the test &mdash; accepting it gave 7 of 14 files a confidently wrong answer. A genuine one-shot is reported as unknown rather than guessed at.</div>
+      <div class="callout"><b>Onsets are not warp markers.</b> Live snaps markers to detected transients, so a marker frequently lands exactly on an onset &mdash; 12 of 57 across five files. The counts are what separate them: one file carries 14 onsets and 9 markers. Reading one as the other looks convincing and is wrong.</div>
+    </div>
+
+    <!-- ===================== LIVE SET FAMILY ===================== -->
+    <div class="panel" data-panel="liveset">
+      <div class="pfacts"><span>container<b>gzip</b></span><span>payload<b>UTF-8 XML</b></span><span>expansion<b>~20x</b></span><span>root<b>&lt;Ableton&gt;</b></span></div>
+      <p class="plede">Sets, clips, racks and device presets are all the same thing: a gzip stream wrapping one XML document whose root is <code>&lt;Ableton&gt;</code>. The root carries the Live build that wrote it, which makes these the easiest provenance evidence in the whole ecosystem &mdash; an exact version string, not an inference.</p>
+      <div class="sec">the root element</div>
+      <pre class="code">&lt;Ableton MajorVersion="5" MinorVersion="12.0_12120"
+         SchemaChangeCount="2" Creator="Ableton Live 12.1.5"
+         Revision="18e155016678da1939bdc3938f981adf84ebc96d"&gt;</pre>
+      <div class="sec">telling them apart</div>
+      <table class="tbl">
+        <thead><tr><th>ext</th><th>root's first child</th><th>note</th></tr></thead>
+        <tbody>
+        <tr><td><code>.als</code></td><td><code>&lt;LiveSet&gt;</code></td><td>a project</td></tr>
+        <tr><td><code>.alc</code></td><td><code>&lt;LiveSet&gt;</code></td><td>identical to a Set in content</td></tr>
+        <tr><td><code>.adg</code></td><td><code>&lt;GroupDevicePreset&gt;</code></td><td>rack</td></tr>
+        <tr><td><code>.adv</code></td><td>the device's own class</td><td><code>&lt;Operator&gt;</code>, <code>&lt;Wavetable&gt;</code>, ...</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><b>A Set and a Clip are indistinguishable by content.</b> Both open <code>&lt;LiveSet&gt;</code>. Only the extension separates them. There is no content rule that tells them apart, so any reader has to go by the name and say that it is doing so.</div>
+      <div class="callout"><b>The expansion ratio is the hazard.</b> A 336 KB Set becomes about 6.9 MB of XML, roughly 20x. The compressed size therefore says nothing about how much memory the document needs, so a reader must impose its own ceiling and say when a file reaches it.</div>
+    </div>
+
+    <!-- ===================== MAX FOR LIVE ===================== -->
+    <div class="panel" data-panel="m4l">
+      <div class="pfacts"><span>magic<b>"ampf"</b></span><span>header<b>12 bytes</b></span><span>chain<b>id + u32 length</b></span><span>payload<b>Max patcher JSON</b></span></div>
+      <p class="plede">A Max for Live device is an <b>Ableton Max Patch Format</b> container: the ASCII magic <code>ampf</code>, a version word, and then &mdash; before the chunk chain begins &mdash; a <b>four-byte marker</b>, <code>aaaa</code>. Only at offset 12 does the chain start: four-byte id, little-endian length, payload. The <code>ptch</code> chunk carries the Max patcher, a short binary preamble followed by JSON.</p>
+      <div class="sec">layout</div>
+      <pre class="code">0x00  "ampf"  u32:version  "aaaa"      &lt;- 12-byte header
+0x0C  "meta"  u32:len      ...
+0x18  "ptch"  u32:len      mx@c ... { patcher JSON }</pre>
+      <div class="callout"><b>The marker is not a chunk, and mistaking it for one is loud.</b> Reading <code>aaaa</code> as an id makes the following four bytes &mdash; the ASCII <code>meta</code> &mdash; decode as a length of 1,635,018,093 bytes, and the whole chain collapses to one impossible chunk. The chain starts at <b>12</b>, not 8.</div>
+      <div class="callout"><b>The length field cannot be trusted.</b> A chunk claiming more bytes than remain must stop the walk rather than read past the end. The <code>ptch</code> chunk ends exactly on the last byte of the file, so a chain that stops short means something is missing.</div>
+    </div>
+
+    <!-- ===================== IMPOSTORS ===================== -->
+    <div class="panel" data-panel="impostors">
+      <div class="pfacts"><span>AppleDouble<b>._name stubs</b></span><span>.alp<b>gzip, not XML</b></span></div>
+      <p class="plede">Two things in a real library wear Ableton clothing and are not Ableton documents. Both matter because the honest answer is more useful than a forced one.</p>
+      <div class="sec">macOS AppleDouble stubs</div>
+      <p class="plede"><b>Not every file with a <code>.asd</code> extension is a sidecar.</b> <code>._name.wav.asd</code> resource-fork stubs are left behind when a Mac writes to a non-HFS volume, and they are common enough to matter. They open with <code>00 05 16 07</code> and the string <code>Mac OS X</code>.</p>
+      <div class="callout"><b>Named, not swallowed.</b> They belong to AppleDouble, not to Ableton, and identifying them as such is what keeps them from being counted as damaged sidecars.</div>
+      <div class="sec">Live Packs</div>
+      <p class="plede">A <code>.alp</code> is gzip like the Set family, but it is an <b>archive</b>, not a document: there is no <code>&lt;Ableton&gt;</code> element inside. The gzip magic alone therefore cannot tell a Pack from a Set; only the root element can.</p>
+      <div class="callout"><b>Declining is a result.</b> A gzip file either contains an <code>&lt;Ableton&gt;</code> root or it does not. The extension is not evidence either way.</div>
+    </div>
+
+  </div>
+
+  <footer>
+    <span>acidcat / ableton anatomy</span>
+    <span>asd . als / alc / adg / adv / agr . amxd</span>
+    <span><a href="https://hed0rah.github.io">hed0rah</a> &middot; <a href="https://x.com/r3l0z">r3l0z</a></span>
+  </footer>
+</div>
+<script>
+(function(){
+  var KINDS={sync:"structural",enum:"value",flag:"flag",rsv:"reserved"};
+  function hx(b){return b.toString(16).toUpperCase().padStart(2,"0");}
+
+  function build(mountId, unit, bytes, fields){
+    var mount=document.getElementById(mountId);
+    var N = unit==="bit" ? bytes.length*8 : bytes.length;
+    var owner=new Array(N);
+    fields.forEach(function(f,fi){ for(var i=f.r[0];i<=f.r[1];i++) owner[i]=fi; });
+    var diagram=document.createElement("div");
+    if(unit==="bit"){
+      diagram.className="diagram";
+      for(var bi=0; bi<bytes.length; bi++){
+        var grp=document.createElement("div"); grp.className="bytegrp";
+        var ticks=document.createElement("div"); ticks.className="ticks";
+        var row=document.createElement("div"); row.className="brow";
+        for(var k=0;k<8;k++){
+          var idx=bi*8+k, f=fields[owner[idx]];
+          var t=document.createElement("span"); t.textContent=idx; ticks.appendChild(t);
+          var cell=document.createElement("span"); cell.className="bit k-"+f.k; cell.dataset.idx=idx;
+          if(idx===f.r[0]) cell.classList.add("fstart");
+          cell.textContent=(bytes[bi]>>(7-k))&1; row.appendChild(cell);
+        }
+        var hex=document.createElement("div"); hex.className="hex"; hex.textContent="0x"+hx(bytes[bi]);
+        grp.appendChild(ticks); grp.appendChild(row); grp.appendChild(hex); diagram.appendChild(grp);
+      }
+    } else {
+      diagram.className="dbytes";
+      bytes.forEach(function(b,i){
+        var f=fields[owner[i]];
+        var col=document.createElement("div"); col.className="bcol";
+        var off=document.createElement("div"); off.className="off"; off.textContent="0x"+hx(i); col.appendChild(off);
+        var cell=document.createElement("div"); cell.className="bcell k-"+f.k; cell.dataset.idx=i;
+        if(i===f.r[0]) cell.classList.add("fstart");
+        cell.textContent=hx(b); col.appendChild(cell); diagram.appendChild(col);
+      });
+    }
+    var list=document.createElement("div"); list.className="fields";
+    var aside=document.createElement("aside"); aside.className="detail";
+    aside.innerHTML="<div class='dl'><span>field detail</span><span class='kind'></span></div>"+
+      "<h3>Hover a field or byte</h3><div class='dc'>"+(unit==="bit"?N+" bits":bytes.length+" bytes")+"</div>"+
+      "<p>Hover any field row or byte to light it and read the decode. Click to pin it; a field marked + opens its table.</p><div class='dn'></div>";
+    var det={t:aside.querySelector("h3"),c:aside.querySelector(".dc"),b:aside.querySelector("p"),n:aside.querySelector(".dn"),kind:aside.querySelector(".kind")};
+    var cells=[].slice.call(diagram.querySelectorAll("[data-idx]"));
+    var rows=[];
+    function light(a,b){cells.forEach(function(c){var i=+c.dataset.idx;c.classList.toggle("hi",i>=a&&i<=b);});}
+    function clearHi(){cells.forEach(function(c){c.classList.remove("hi");});}
+    function rl(f){ return unit==="bit"
+      ? "bits "+f.r[0]+(f.r[1]>f.r[0]?"-"+f.r[1]:"")
+      : "bytes 0x"+hx(f.r[0])+(f.r[1]>f.r[0]?"-0x"+hx(f.r[1]):""); }
+    function show(f){det.t.textContent=f.label;det.c.textContent=rl(f)+"  =  "+f.val;
+      det.b.textContent=f.body;det.n.textContent=f.note||"";det.kind.textContent=KINDS[f.k];}
+    function activeRow(){return list.querySelector(".field.active");}
+    function cue(fi){rows.forEach(function(r){r.classList.remove("cued");});rows[fi].classList.add("cued");light(fields[fi].r[0],fields[fi].r[1]);show(fields[fi]);}
+    function restore(){rows.forEach(function(r){r.classList.remove("cued");});var a=activeRow();if(a){var fi=+a.dataset.fi;light(fields[fi].r[0],fields[fi].r[1]);show(fields[fi]);}else clearHi();}
+    function pin(fi){var was=rows[fi].classList.contains("active");rows.forEach(function(r){r.classList.remove("active");});if(was){clearHi();return;}rows[fi].classList.add("active");light(fields[fi].r[0],fields[fi].r[1]);show(fields[fi]);}
+    fields.forEach(function(f,fi){
+      var row=document.createElement("div"); row.className="field"; row.dataset.fi=fi; if(f.branch) row.dataset.branch="1";
+      var lab = unit==="bit" ? ("b"+f.r[0]+(f.r[1]>f.r[0]?"-"+f.r[1]:"")) : ("0x"+hx(f.r[0])+(f.r[1]>f.r[0]?"-"+hx(f.r[1]):""));
+      row.innerHTML="<span class='fb'>"+lab+"</span><span class='fn'>"+f.label+"</span><span class='fv k-"+f.k+"'>"+f.val+"</span>";
+      if(f.branch){
+        var bw=document.createElement("div"); bw.className="branch";
+        bw.innerHTML="<table>"+f.branch.map(function(p,i){return "<tr class='"+(i===f.sel?"sel":"")+"'><td class='k'>"+p[0]+"</td><td>"+p[1]+"</td></tr>";}).join("")+"</table>";
+        row.appendChild(bw);
+      }
+      row.addEventListener("mouseenter",function(){cue(fi);});
+      row.addEventListener("click",function(){pin(fi);});
+      rows.push(row); list.appendChild(row);
+    });
+    // bidirectional: hovering or clicking a byte/bit drives the same field
+    cells.forEach(function(c){
+      var fi=owner[+c.dataset.idx];
+      c.addEventListener("mouseenter",function(){cue(fi);});
+      c.addEventListener("click",function(){pin(fi);});
+    });
+    // inspector layout: [ left: diagram + fields ] [ detail, flush + fixed footprint ]
+    var left=document.createElement("div"); left.className="left";
+    left.appendChild(diagram); left.appendChild(list);
+    var dcol=document.createElement("div"); dcol.className="detailcol"; dcol.appendChild(aside);
+    var block=document.createElement("div"); block.className="block";
+    block.appendChild(left); block.appendChild(dcol);
+    block.addEventListener("mouseleave",restore);
+    mount.appendChild(block);
+    // size the pane to the tallest card so nothing ever scrolls; short
+    // sections just leave a little space under the fields (the lesser evil)
+    var maxH=aside.scrollHeight;
+    fields.forEach(function(f){ show(f); if(aside.scrollHeight>maxH) maxH=aside.scrollHeight; });
+    det.t.textContent="Hover a field or byte";
+    det.c.textContent=(unit==="bit"?N+" bits":bytes.length+" bytes");
+    det.b.textContent="Hover any field row or byte to light it and read the decode. Click to pin it; a field marked + opens its table.";
+    det.n.textContent="";
+    dcol.style.minHeight=(maxH+6)+"px";
+  }
+
+  // byte-map specs, built lazily the first time a tab is shown (a hidden panel
+  // reports zero height, so the detail pane would size wrong if built up front).
+  // every byte value below is copied verbatim from a real file:
+  // a 44.1 kHz stereo sidecar, 7.774 s of source audio, written by Live 12.
+  var SPECS={
+    "asd-hdr":["byte",
+      [0x06,0x49,0x49,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0xAB,0x00,0x00,0x00,0xAE,0x03,0x00,0x00],
+      [
+        {label:"marker",k:"sync",r:[0,0],val:"0x06",
+          body:"Constant 0x06. Byte 0 never varies; it is byte 1 that carries the variation.",
+          note:"On its own this is far too weak to identify a file: a safe check also requires the reserved word at offset 6 to be zero."},
+        {label:"byte_order",k:"sync",r:[1,1],val:"0x49 = 'I'",sel:0,
+          branch:[["'I' (0x49)","little-endian -- Intel. The common case."],["'M' (0x4D)","big-endian -- Motorola, written by PowerPC-era Macs."]],
+          body:"The TIFF convention: 'I' for Intel, 'M' for Motorola. Every multi-byte field in the file follows it. The big-endian files parse ONLY big-endian -- this is a real byte-order switch, not a version number.",
+          note:"A reader that ignores it decodes every big-endian file as corrupt."},
+        {label:"count",k:"enum",r:[2,5],val:"329",
+          body:"Number of grid entries plus one. The grid that follows holds count-1 positions.",
+          note:"0x00000149 little-endian = 329, so 328 positions follow."},
+        {label:"reserved",k:"rsv",r:[6,9],val:"0",
+          body:"Zero in every known file. Because two magic bytes carry so little information, this word is what makes identification safe -- a random binary passing 0x06, a byte-order mark AND a zero word here is vanishingly unlikely.",
+          note:"A non-zero value is a sign the file is not what it claims, not proof of it."},
+        {label:"grid[0]",k:"flag",r:[10,13],val:"171",
+          body:"First frame position. The grid is absolute sample offsets into the source audio, strictly increasing.",
+          note:"Not necessarily 0 -- the first entry is the end of the first analysis block."},
+        {label:"grid[1]",k:"flag",r:[14,17],val:"942",
+          body:"Second position. The step from 171 to 942 is 771 frames = 17.5 ms at 44.1 kHz, comfortably under the 30 ms ceiling.",
+          note:"Steps shorten around transients and never exceed the cap."}
+      ]
+    ],
+    "asd-warp":["byte",
+      [0x0A,0x57,0x61,0x72,0x70,0x4D,0x61,0x72,0x6B,0x65,0x72,0x01,0x00,0x00,0x00,
+       0x97,0x96,0x96,0x96,0x96,0x96,0x86,0x3F,0x00,0x00,0x00,0x00,0x00,0x00,0xA0,0x3F],
+      [
+        {label:"name length",k:"sync",r:[0,0],val:"10",
+          body:"A u8 length, then the class name in ASCII -- the same convention the type dictionary uses. It is what makes a marker self-locating: no count to find and no offset to derive.",
+          note:"the class DECLARATION carries this literal too, and the bytes after it are denormals. Requiring sane times and a run starting at id 0 separates them."},
+        {label:"class name",k:"sync",r:[1,10],val:"WarpMarker",
+          body:"The class name, inline. Live's serialiser writes it before every instance."},
+        {label:"Id",k:"enum",r:[11,14],val:"1",
+          body:"u32. Matches the Id attribute the Live Set shows for this marker. Markers form a run starting at 0.",
+          note:"0x00000001 little-endian."},
+        {label:"SecTime",k:"flag",r:[15,22],val:"0.011029411764705883",
+          body:"f64: WHERE in the recording, in seconds.",
+          note:"a 17-significant-digit double, stored exactly."},
+        {label:"BeatTime",k:"flag",r:[23,30],val:"0.03125",
+          body:"f64: WHAT MUSICAL POSITION that instant sits at, in beats. The pair is the whole idea -- Live stores a mapping from time to musical position, and everything else follows from it.",
+          note:"0.03125 beats in 0.011029... s is 170 BPM, which is exactly the tempo the Live Set declares."}
+      ]
+    ],
+    "asd-onsets":["byte",
+      [0x0D,0x00,0x00,0x00,0xD3,0x05,0x00,0x00,0xA2,0x1F,0x00,0x00,0xF8,0x3B,0x00,0x00],
+      [
+        {label:"count",k:"sync",r:[0,3],val:"13",
+          body:"u32: how many transients Live detected. The same count is repeated after the positions, before the energies -- which is what identifies the structure.",
+          note:"a count of 1 is refused: with a single position, strictly-increasing constrains nothing."},
+        {label:"positions[0]",k:"enum",r:[4,7],val:"1,491",
+          body:"u32 frame offset of the first transient. 1,491 frames is 0.031 s at 48 kHz.",
+          note:"bounded by the frame count the grid declares."},
+        {label:"positions[1]",k:"enum",r:[8,11],val:"8,098"},
+        {label:"positions[2]",k:"enum",r:[12,15],val:"15,352",
+          body:"Roughly 7,000 frames apart, about 0.15 s -- the pulse of a loop. A one-shot carries a single transient within a few frames of zero."}
+      ]
+    ],
+    "asd-clip":["byte",
+      [0x06,0x00,0x00,0x00,0x00,0x00,0xF0,0x41,0x00,0x00,0x82,0x42,0x00,0x00,0xC8,0x41,
+       0x02,0x00,0x00,0x00,0x00,0x00,0xC8,0x42,0x00,0x00,0xC8,0x42,0x00,0x00,0x00,0x43],
+      [
+        {label:"TransientResolution",k:"enum",r:[0,3],val:"6",
+          body:"u32. An INTEGER among floats, which is why searching for eight consecutive float32 finds nothing here."},
+        {label:"GranularityTones",k:"flag",r:[4,7],val:"30"},
+        {label:"GranularityTexture",k:"flag",r:[8,11],val:"65"},
+        {label:"FluctuationTexture",k:"flag",r:[12,15],val:"25",
+          body:"f32 warp-engine parameters, in the same order the Live Set XML declares them."},
+        {label:"TransientLoopMode",k:"enum",r:[16,19],val:"2",
+          body:"u32, the second integer in the block."},
+        {label:"TransientEnvelope",k:"flag",r:[20,23],val:"100"},
+        {label:"ComplexProFormants",k:"flag",r:[24,27],val:"100"},
+        {label:"ComplexProEnvelope",k:"flag",r:[28,31],val:"128",
+          body:"f32, default 128. This value appears five times per file and was twice mistaken for something else here -- first for the project tempo, then written off as a meaningless constant. It is a warp-engine parameter with a default.",
+          note:"the Live Set XML names it, which is how it was finally identified."}
+      ]
+    ],
+    "asd-name":["byte",
+      [0x0B,0x00,0x00,0x00,0x57,0x00,0x61,0x00,0x72,0x00,0x70,0x00,0x4D,0x00,0x61,0x00,0x72,0x00,0x6B,0x00,0x65,0x00,0x72,0x00,0x73,0x00],
+      [
+        {label:"char_count",k:"sync",r:[0,3],val:"11",
+          body:"Little-endian u32: the length of the name in CHARACTERS, not bytes. The name occupies twice this many bytes.",
+          note:"This prefix is what separates a real field name from an accidental run of ASCII-range UTF-16, and it is the whole basis of the name scan."},
+        {label:"name (UTF-16LE)",k:"enum",r:[4,25],val:"\"WarpMarkers\"",
+          body:"The field name, UTF-16 little-endian. Every other byte is 0x00, which is exactly why an ASCII string scan finds nothing here and the format reads as opaque.",
+          note:"69 distinct field names are known. Together they map everything Live records about the audio."}
+      ]
+    ]
+  };
+
+  // tab switching -- build a panel's byte-maps the first time it is shown
+  var built={};
+  function buildPanel(name){
+    var panel=document.querySelector('[data-panel="'+name+'"]'); if(!panel) return;
+    panel.querySelectorAll("[data-build]").forEach(function(m){
+      if(built[m.id]) return; built[m.id]=1;
+      var spec=SPECS[m.id]; if(spec) build(m.id, spec[0], spec[1], spec[2]);
+    });
+  }
+  var tabs=[].slice.call(document.querySelectorAll(".tab"));
+  var panels=[].slice.call(document.querySelectorAll(".panel"));
+  function activate(name){
+    tabs.forEach(function(t){t.classList.toggle("on",t.dataset.p===name);});
+    panels.forEach(function(p){p.classList.toggle("on",p.dataset.panel===name);});
+    buildPanel(name);
+  }
+  tabs.forEach(function(t){t.addEventListener("click",function(){
+    activate(t.dataset.p);
+    if(history.replaceState) history.replaceState(null,"","#"+t.dataset.p);
+  });});
+  var initial=(location.hash||"").replace("#","");
+  if(initial && document.querySelector('[data-panel="'+initial+'"]')) activate(initial);
+  else buildPanel("overview");   // overview has no byte-map, but keep the hook uniform
+  buildPanel(document.querySelector(".panel.on").dataset.panel);
+})();
+</script>
+<script>
+(function () {
+  if (customElements.get('acidcat-toggle')) return;
+
+  const EARL = "M823.78,436.653c-245,84 -360,215 -393.78,263.95c-34,70 -33,-135 25,-340.6c37,-135 118,-300 151.78,-359.35c60,-55 60,30 217,436.05Z";
+  const EARR = "M1334.16,436.653c245,84 360,215 393.78,263.95c34,70 33,-135 -25,-340.6c-37,-135 -118,-300 -151.78,-359.35c-60,-55 -60,30 -217,436.05Z";
+  const WHISK = [
+    "M538.204,1196.91c-92.765,-0 -91.589,-12.14 -183.656,-3.551c-17.861,1.667 -61.995,-13.903 -268.815,-19.883",
+    "M483.602,1285.68c-37.939,14.794 -397.736,49.87 -432.494,53.259",
+    "M538.204,1363.79c-26.557,37.99 -398.31,150.862 -407.023,163.327",
+    "M1660.6,1189.14c22.236,-12.966 144.035,-0.154 363.552,-15.668",
+    "M1660.6,1264.76c202.29,42.443 388.678,51.655 421.623,53.385",
+    "M1603.35,1338.36c184.004,78.804 145.528,54.451 228.58,88.766c112.208,46.36 176.212,72.644 192.215,78.111"
+  ];
+  const MOUTH = "M520.116,1505.24c350.331,414.744 722.039,421.968 1117.72,0";
+  const CURLL = "M553.633,1478.51c-30.725,26.041 -67.034,30.722 -67.034,30.722";
+  const CURLR = "M1608.86,1478.51c30.725,26.041 67.034,30.722 67.034,30.722";
+
+  const stroke = (w) => `fill:none;stroke:currentColor;stroke-width:${w}px;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5`;
+  const whiskers = WHISK.map((d) => `<path d="${d}" style="${stroke(10.27)}"/>`).join('');
+
+  const spiral = (cx, cy) => {
+    const TURNS = 2.75, MAX = 150, steps = Math.round(TURNS * 2 * Math.PI / 0.32);
+    let d = 'M' + cx.toFixed(1) + ',' + cy.toFixed(1);
+    for (let i = 1; i <= steps; i++) {
+      const th = (i / steps) * TURNS * 2 * Math.PI, r = MAX * i / steps;
+      d += ' L' + (cx + r * Math.cos(th)).toFixed(1) + ',' + (cy + r * Math.sin(th)).toFixed(1);
+    }
+    return d;
+  };
+
+  const svg = `
+  <svg viewBox="-45 -70 2250 2250" style="display:block;width:100%;height:100%;overflow:visible">
+    <circle cx="1078.97" cy="1246.41" r="847.958" style="${stroke(21.53)}"/>
+    <path class="ear" d="${EARL}" style="${stroke(21.5)}"/>
+    <path class="ear" d="${EARR}" style="${stroke(21.5)}"/>
+    ${whiskers}
+    <ellipse class="eye" cx="772" cy="975" rx="78" ry="140" fill="currentColor"/>
+    <ellipse class="eye" cx="1394" cy="975" rx="78" ry="140" fill="currentColor"/>
+    <path class="swirl" d="${spiral(772, 975)}"/>
+    <path class="swirl" d="${spiral(1394, 975)}"/>
+    <path class="eye-shut" d="M688,966 q84,90 168,0"/>
+    <path class="eye-shut" d="M1310,966 q84,90 168,0"/>
+    <text class="zzz z1" x="1712" y="612">z</text>
+    <text class="zzz z2" x="1846" y="452">z</text>
+    <text class="zzz z3" x="1992" y="286">Z</text>
+    <path class="tongue" d="M1004,1735 h150 v215 a75,75 0 0 1 -150,0 z" fill="currentColor"/>
+    <path d="${MOUTH}" style="${stroke(28.33)}"/>
+    <path d="${CURLR}" style="${stroke(25.96)}"/>
+    <path d="${CURLL}" style="${stroke(25.96)}"/>
+  </svg>`;
+
+  const css = `
+    :host{display:inline-block;line-height:0}
+    button{
+      -webkit-appearance:none;appearance:none;background:none;border:0;padding:6px;margin:0;
+      cursor:pointer;color:inherit;border-radius:999px;line-height:0;display:inline-flex;
+    }
+    button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+    .box{width:var(--acidcat-size,40px);height:var(--acidcat-size,40px)}
+    /* cat holds still: the eyes, Zzz, swirl and tongue carry the three moods */
+    .eye{transition:opacity .28s ease}
+    .eye-shut{fill:none;stroke:currentColor;stroke-width:52;stroke-linecap:round;opacity:0;transition:opacity .28s ease}
+    .zzz{fill:currentColor;font-family:var(--ff,monospace);font-weight:600;opacity:0}
+    .zzz.z1{font-size:150px}.zzz.z2{font-size:205px}.zzz.z3{font-size:270px}
+    .swirl{fill:none;stroke:currentColor;stroke-width:70;stroke-linecap:round;opacity:0;transition:opacity .32s ease;transform-box:fill-box;transform-origin:center}
+    .tongue{transform-box:fill-box;transform-origin:center top;transform:scaleY(0);transition:transform .4s cubic-bezier(.34,1.45,.5,1) .05s}
+    /* dark = asleep: eyes shut, Zzz drifting up */
+    :host([data-state="dark"]) .eye{opacity:0}
+    :host([data-state="dark"]) .eye-shut{opacity:1}
+    :host([data-state="dark"]) .zzz{animation:zfloat 3.2s ease-in-out infinite}
+    :host([data-state="dark"]) .zzz.z2{animation-delay:.5s}
+    :host([data-state="dark"]) .zzz.z3{animation-delay:1s}
+    /* acid = rave: spiral eyes in neon, tongue out */
+    :host([data-state="acid"]) .eye{opacity:0}
+    :host([data-state="acid"]) .swirl{opacity:1;animation:acid-spin 2.6s linear infinite}
+    :host([data-state="acid"]) .swirl:first-of-type{stroke:var(--enum)}
+    :host([data-state="acid"]) .swirl:last-of-type{stroke:var(--flag);animation-direction:reverse}
+    :host([data-state="acid"]) .tongue{transform:scaleY(1)}
+    /* house modes: awake + composed; eyes take the opposite accent from the face (cool/warm inversion) */
+    :host([data-state="house-light"]) .eye{fill:var(--enum)}
+    :host([data-state="house-dark"]) .eye{fill:var(--flag)}
+    @keyframes acid-spin{to{transform:rotate(1turn)}}
+    @keyframes zfloat{0%{opacity:0;transform:translateY(40px)}25%{opacity:.9}60%{opacity:.9}100%{opacity:0;transform:translateY(-90px)}}
+    @media (prefers-reduced-motion:reduce){
+      .eye,.tongue,.swirl,.eye-shut{transition:none}.swirl{animation:none}
+      :host([data-state="dark"]) .zzz{animation:none;opacity:.85}
+    }
+  `;
+
+  const STATES = ['light', 'dark', 'acid', 'house-light', 'house-dark'];
+  class AcidcatToggle extends HTMLElement {
+    connectedCallback() {
+      const root = this.attachShadow({ mode: 'open' });
+      root.innerHTML = `<style>${css}</style><button type="button" aria-label="Cycle theme: light, dark, acid, house light, house dark" title="Theme (click to cycle)"><span class="box">${svg}</span></button>`;
+      this._btn = root.querySelector('button');
+      this._btn.addEventListener('click', () => this.cycle());
+      // keep multiple toggles on one page visually in sync
+      this._sync = (e) => { if (e.target !== this && e.detail && e.detail.state) this.apply(e.detail.state, false, false); };
+      document.addEventListener('acidcat-theme', this._sync);
+
+      let saved = null;
+      try { saved = localStorage.getItem('acidcat-theme'); } catch (e) {}
+      const initial = STATES.indexOf(saved) >= 0 ? saved
+        : (this.hasAttribute('default-dark') || window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      this.apply(initial, false, true);
+    }
+    disconnectedCallback() { if (this._sync) document.removeEventListener('acidcat-theme', this._sync); }
+    get state() { return this.getAttribute('data-state') || 'light'; }
+    cycle() { this.apply(STATES[(STATES.indexOf(this.state) + 1) % STATES.length], true, true); }
+    apply(state, persist, emit) {
+      if (STATES.indexOf(state) < 0) state = 'light';
+      this.setAttribute('data-state', state);
+      document.documentElement.setAttribute('data-theme', state);
+      if (this._btn) {
+        this._btn.setAttribute('aria-pressed', String(state !== 'light'));
+        this._btn.title = 'Theme: ' + state + ' (click to cycle)';
+      }
+      if (persist) { try { localStorage.setItem('acidcat-theme', state); } catch (e) {} }
+      if (emit !== false) this.dispatchEvent(new CustomEvent('acidcat-theme', { bubbles: true, composed: true, detail: { state } }));
+    }
+  }
+  customElements.define('acidcat-toggle', AcidcatToggle);
+})();
+
+</script>
+</body>
+</html>

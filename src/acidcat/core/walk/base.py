@@ -14,7 +14,7 @@ import struct
 
 # single source for the per-chunk payload read cap: the walkers and the grammar
 # strategy share riff.PAYLOAD_CAP so a bump cannot diverge their payload lengths.
-from acidcat.core.riff import PAYLOAD_CAP as _PAYLOAD_CAP
+from acidcat.core.formats.riff import PAYLOAD_CAP as _PAYLOAD_CAP
 
 
 class Unsupported(Exception):

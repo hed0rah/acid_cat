@@ -21,7 +21,7 @@ import struct
 import pytest
 
 from acidcat.core import walk as walkmod
-from acidcat.core.vocab import CTX_KEYS
+from acidcat.core.infra.vocab import CTX_KEYS
 
 WALK_DIR = os.path.dirname(walkmod.__file__)
 

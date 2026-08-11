@@ -4,11 +4,11 @@ The embedded 'ID3 ' chunk reuses the MP3 walker's ID3v2 frame decoder."""
 import os
 import struct
 
-from acidcat.core import mp3 as mp3mod
-from acidcat.core.aiff import (_AES_EMPHASIS, _AES_RATES,
+from acidcat.core.formats import mp3 as mp3mod
+from acidcat.core.formats.aiff import (_AES_EMPHASIS, _AES_RATES,
                                _AIFC_KNOWN_COMPRESSION, _LOOP_MODES,
                                _parse_ieee_extended)
-from acidcat.core.aiff import iter_chunks as iter_aiff_chunks
+from acidcat.core.formats.aiff import iter_chunks as iter_aiff_chunks
 from acidcat.core.walk.base import _PAYLOAD_CAP, _bu16, _bu32, _dtext, _f
 from acidcat.core.walk.mp3 import _id3v2_frames
 from acidcat.util.midi import midi_note_to_name

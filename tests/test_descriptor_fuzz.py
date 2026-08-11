@@ -32,8 +32,8 @@ import pytest
 from acidcat.core.grammar import interpret
 from acidcat.core.grammar.formats.wav import WAVE
 from acidcat.core.grammar.model import Field, Switch
-from acidcat.core import structure
-from acidcat.core.structure import StructError
+from acidcat.core.write import structure
+from acidcat.core.write.structure import StructError
 from acidcat.core.walk import walk_file
 from acidcat.core.walk.base import Unsupported
 

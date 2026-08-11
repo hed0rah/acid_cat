@@ -4,20 +4,28 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "acidcat"
-version = "0.90.0"
+version = "1.0.0"
 description = "Binary analysis and reverse-engineering for audio file formats and music-production hardware"
 readme = {file = "README.md", content-type = "text/markdown"}
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "hed0rah", email = "18272116+hed0rah@users.noreply.github.com"},
 ]
+# These describe what the tool IS, not only what it started as. The original
+# set was a metadata reader's vocabulary and never mentioned the forensics,
+# carving or reverse-engineering half that is now most of the project.
 keywords = [
-    "audio", "wav", "aiff", "midi", "metadata", "riff",
-    "acid", "bpm", "key", "camelot", "harmonic-mixing",
-    "librosa", "music", "samples", "mcp",
+    "audio", "wav", "aiff", "midi", "riff", "flac", "mp3",
+    "forensics", "reverse-engineering", "binary-analysis", "hex",
+    "file-carving", "data-recovery", "metadata",
+    "sampler", "soundfont", "tracker", "synthesizer-presets",
+    "bpm", "key", "camelot", "harmonic-mixing", "samples", "mcp",
 ]
 classifiers = [
+    # correct while the version carries a b/rc suffix. Bump to
+    # "5 - Production/Stable" in the same commit that tags 1.0.0 final,
+    # or the PyPI page and the version number disagree.
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
@@ -27,7 +35,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -44,15 +51,35 @@ dependencies = [
 Homepage = "https://github.com/hed0rah/acidcat"
 Repository = "https://github.com/hed0rah/acidcat"
 Issues = "https://github.com/hed0rah/acidcat/issues"
+Documentation = "https://github.com/hed0rah/acidcat/blob/main/README.md"
+Changelog = "https://github.com/hed0rah/acidcat/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+# Major-version ceilings, not tight pins. The lesson is one directory over:
+# `mcp` was unbounded, 2.0 removed the decorators the server is built on, and
+# every fresh install got a dead server. A `<N+1` guard costs nothing today and
+# stops a major release breaking installs with no code change here.
+#
+# librosa specifically: `core/analysis/detect.py` documents that
+# `librosa.beat.tempo` is a deprecated alias slated for removal in librosa 1.0,
+# and `core/analysis/features.py` calls `librosa.feature.tempo` -- so a 1.0 bump
+# is a known-unknown for the two hottest call sites. The extractor now reports
+# such a break loudly rather than silently returning no features, but detecting
+# a break is not the same as surviving it. Raise this after testing against 1.0,
+# deliberately.
 analysis = [
-    "librosa>=0.10.1",
-    "numpy>=1.26",
-    "scipy>=1.13",
-    "soundfile>=0.12",
+    "librosa>=0.10.1,<1",
+    "numpy>=1.26,<3",
+    "scipy>=1.13,<2",
+    "soundfile>=0.12,<1",
 ]
-mcp = ["mcp>=1.0"]
+# Upper bound is load-bearing, not caution. mcp 2.0 removed the low-level
+# `Server.list_tools` / `call_tool` decorators this server is built on, so with
+# an unbounded pin `pip install acidcat[mcp]` resolved 2.0 and `acidcat-mcp`
+# died on startup with AttributeError -- every new install got a dead server and
+# the documented Claude Desktop config was inert. 1.29 handshakes correctly.
+# Supporting the 2.x API is a port, not a version bump.
+mcp = ["mcp>=1.0,<2"]
 mcp-http = ["acidcat[mcp]", "starlette>=0.37", "uvicorn>=0.30"]
 tui = ["textual>=0.60"]
 # encrypted-disc support (Wii): AES for partition decryption. Kept optional so
@@ -69,3 +96,18 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "acidcat.core" = ["data/*.json"]
+
+[tool.pytest.ini_options]
+# There was no pytest configuration at all before 1.0, so every invocation
+# depended on the caller's flags and the developer's working directory.
+testpaths = ["tests"]
+# -rs so skipped tests explain themselves. A bare `pytest -q` reported "114
+# skipped" with no way to learn what went uncovered, which is the same silent
+# gap this project spent a week removing from its own output.
+addopts = "-rs"
+markers = [
+    "corpus: needs a local specimen corpus that is not in the repository",
+]
+filterwarnings = [
+    "error::DeprecationWarning:acidcat.*",
+]

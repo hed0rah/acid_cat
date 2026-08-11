@@ -8,16 +8,17 @@ Supports WAV, AIFF, MIDI, Serum, MP3, FLAC, OGG, and M4A files.
 import os
 import sys
 
-from acidcat.core.riff import (
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
-from acidcat.core.aiff import is_aiff
-from acidcat.core.midi import is_midi
-from acidcat.core.serum import is_serum_preset
+from acidcat.core.formats.aiff import is_aiff
+from acidcat.core.formats.midi import is_midi
+from acidcat.core.formats.serum import is_serum_preset
 from acidcat.core.tagged import is_tagged_format
-from acidcat.core.detect import estimate_librosa_metadata
-from acidcat.core.features import extract_audio_features
-from acidcat.core.formats import output
+from acidcat.core.analysis.detect import estimate_librosa_metadata
+from acidcat.core.analysis.features import extract_audio_features
+from acidcat.core.infra.render import output
 from acidcat.util.midi import midi_note_to_name, midi_note_to_pitch_class
 from acidcat.util.stdin import is_stdin_target, stdin_to_tempfile
 
@@ -25,7 +26,7 @@ from acidcat.util.stdin import is_stdin_target, stdin_to_tempfile
 def _vlog(args, msg):
     """Emit a diagnostic line to stderr when -v is set and -q is not.
 
-    Keeps stdout clean so `acidcat info ... -f json | jq` stays pipe-friendly.
+    Keeps stdout clean so `acidcat info ... --json | jq` stays pipe-friendly.
     """
     if getattr(args, "verbose", False) and not getattr(args, "quiet", False):
         print(msg, file=sys.stderr)
@@ -33,9 +34,9 @@ def _vlog(args, msg):
 
 def register(subparsers):
     p = subparsers.add_parser("info", help="Show metadata for a single audio file.")
-    p.add_argument("target", help="Path to an audio file (WAV, AIFF, MIDI, Serum preset).")
-    p.add_argument("-f", "--format", default="table", choices=["table", "json", "csv"],
-                   help="Output format (default: table).")
+    p.add_argument("target", nargs="+", metavar="FILE",
+                   help="Audio file(s) or directory(ies) (WAV, AIFF, MIDI, presets).")
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("--deep", action="store_true",
                    help="Include librosa deep analysis (BPM/key detection + spectral features).")
     p.add_argument("-q", "--quiet", action="store_true", help="Suppress progress messages.")
@@ -69,7 +70,7 @@ def _detect_format(filepath):
         return "tagged"
     # any other structural format the walkers recognize gets a walker-backed
     # summary instead of a mis-parse; rf64 too (its walker is not the WAV one)
-    from acidcat.core import sniff as sniffmod
+    from acidcat.core.infra import sniff as sniffmod
     if sniffmod.sniff(filepath) not in (None, "wav"):
         return "walker"
     if _is_preset(filepath, ext):        # ext-only presets sniff may not catch
@@ -456,6 +457,12 @@ def _add_deep_analysis(filepath, rec, args):
 
 
 def run(args):
+    """Per-file report, so it takes as many as you hand it."""
+    from acidcat.util import targets
+    return targets.each(args, "target", _run_one, verb="info")
+
+
+def _run_one(args):
     filepath = args.target
     tmp_path = None
 
@@ -469,7 +476,7 @@ def run(args):
 
     if not os.path.isfile(filepath):
         print(f"acidcat: {filepath}: No such file", file=sys.stderr)
-        return 1
+        return 2
 
     try:
         fmt_type = _detect_format(filepath)
@@ -487,6 +494,22 @@ def run(args):
         else:
             rec = _info_wav(filepath, args)
 
+        # Nothing identified it. Every path that recognises a file sets
+        # "Format"; its absence means the catch-all WAV reader ran and found no
+        # RIFF structure, so what came back was a card of dashes -- File, BPM -,
+        # Key -, Chunks (none) -- and exit 0. A .txt or a mistyped path looked
+        # exactly like a valid, empty audio file.
+        #
+        # Same rule this project already applies twice: `validate` on a format
+        # it does not model exits 2, and `chunks` on a non-RIFF exits 2 naming
+        # `inspect`. The friendly front door should not be friendly enough to
+        # give a confident wrong answer.
+        if "Format" not in rec:
+            name = "<stdin>" if tmp_path else os.path.basename(filepath)
+            print(f"acidcat: {name}: not a format acidcat recognizes "
+                  f"(try: acidcat classify {name})", file=sys.stderr)
+            return 2
+
         # when reading from stdin, show <stdin> instead of tempfile name
         if tmp_path:
             rec["File"] = "<stdin>"
@@ -496,7 +519,7 @@ def run(args):
         if getattr(args, 'output', None):
             stream = open(args.output, 'w', encoding='utf-8')
 
-        fmt_name = getattr(args, 'format', 'table')
+        fmt_name = getattr(args, 'output_format', 'table')
         output(rec, fmt=fmt_name, stream=stream)
 
         if stream is not sys.stdout:

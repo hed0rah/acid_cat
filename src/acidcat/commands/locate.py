@@ -1,6 +1,6 @@
 """acidcat locate -- find the regions of a blob that are audio.
 
-The low-level primitive behind "PhotoRec for audio": scan an unknown blob (a disk
+The low-level primitive behind audio recovery: scan an unknown blob (a disk
 image, a chip dump, a proprietary file that embeds samples) with two engines --
 a signature sweep for known containers, and a statistical detector for
 signatureless raw PCM (core/locate.py) -- and REPORT the regions it finds. It
@@ -8,7 +8,7 @@ never writes: locate reports, `carve` extracts.
 
     acidcat locate disk.img                         # a table of regions
     acidcat locate disk.img --analyze               # + inferred PCM geometry per blob
-    acidcat locate doom.cdi -f json | acidcat carve doom.cdi --batch -   # the pipeline
+    acidcat locate doom.cdi --json | acidcat carve doom.cdi --batch -   # the pipeline
     dd if=/dev/sdcard | acidcat locate - --mode aggressive
 
 A record's offset/length is exactly a `carve` range; the records go to stdout,
@@ -17,11 +17,12 @@ inferred width / channels / endianness of each raw blob (sample rate is not in
 the bytes -- reported null, with common candidates).
 """
 
-import json
 import sys
 
-from acidcat.core import audioscan
-from acidcat.core import locate as locatemod
+from acidcat.core.forensics import audioscan
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.forensics import locate as locatemod
+from acidcat.core.infra.render import format_json
 from acidcat.util.stdin import is_stdin_target
 
 _PUBLIC_KEYS = ("kind", "format", "offset", "end", "length", "confidence",
@@ -32,7 +33,7 @@ _PUBLIC_KEYS = ("kind", "format", "offset", "end", "length", "confidence",
 def register(subparsers):
     p = subparsers.add_parser(
         "locate",
-        help='Find audio regions in a blob or disk image ("PhotoRec for audio").')
+        help="Find audio regions in a blob or disk image (containers + raw PCM).")
     p.add_argument("input", help="File to scan, or '-' to read the blob from stdin.")
     p.add_argument("--mode", choices=locatemod.MODES, default="normal",
                    help="Forensics level: strict (validated containers only), "
@@ -46,8 +47,14 @@ def register(subparsers):
                         "(XOR-byte / bit-rotate / nibble-swap) -- the CTF "
                         "obfuscation lens. The reported key is a candidate "
                         "(polarity/low-bits are ambiguous). Reads at most 16 MB.")
-    p.add_argument("-f", "--format", choices=("table", "json", "tsv"),
-                   default="table", help="Output shape (default: table).")
+    add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
+    p.add_argument("--min-confidence", type=float, default=0.0, metavar="C",
+                   help="Only report regions at or above this confidence (0..1). "
+                        "A signature-matched container is 0.90; a headerless "
+                        "blob is inferred statistically and never exceeds 0.89, "
+                        "so --min-confidence 0.90 means 'validated containers "
+                        "only'. Filtering here keeps `locate | carve --batch` a "
+                        "one-liner instead of needing jq in the middle.")
     p.add_argument("-v", "--verbose", action="store_true",
                    help="Show the evidence behind each region (entropy, "
                         "autocorrelation, distribution) and any debug tells "
@@ -130,24 +137,60 @@ def run(args):
         data = _read(args.input)
     except OSError as e:
         print(f"acidcat locate: {args.input}: {e}", file=sys.stderr)
-        return 1
+        return 2
     if not data:
         print("acidcat locate: no input bytes", file=sys.stderr)
-        return 1
+        return 2
+
+    # Only the signature sweep is unbounded. The statistical pass and the frame
+    # scan each cap out, so on a large image they cover a prefix while containers
+    # are found everywhere -- and nothing on screen would distinguish "no raw
+    # audio there" from "never looked". Name the engines that stopped short
+    # rather than making a blanket claim about coverage.
+    from acidcat.core.forensics.audioscan import DEFAULT_READ_CAP
+    from acidcat.core.forensics.framescan import _READ_CAP as FRAME_CAP
+    from acidcat.core.forensics.transforms import _READ_CAP as XFORM_CAP
+    limited = []
+    if args.mode != "strict" and len(data) > DEFAULT_READ_CAP:
+        limited.append(("raw-audio scan", DEFAULT_READ_CAP))
+    if len(data) > FRAME_CAP:
+        limited.append(("stream scan", FRAME_CAP))
+    # the transform hunt caps at 16 MB -- much lower than the others -- and used
+    # to report "0 transformed" for a whole image with no note at all
+    if args.transforms and len(data) > XFORM_CAP:
+        limited.append(("transform scan", XFORM_CAP))
+    for label, cap in limited:
+        print(f"acidcat locate: {label} covers the first "
+              f"{cap // (1024 * 1024)} MB of "
+              f"{len(data) / (1024 * 1024):.0f} MB; container signatures are "
+              f"found throughout", file=sys.stderr)
 
     recs = locatemod.locate(data, mode=args.mode)
     if args.transforms:
-        from acidcat.core import transforms
+        from acidcat.core.forensics import transforms
         recs = sorted(recs + transforms.find_transformed_audio(data),
                       key=lambda r: r["offset"])
     if args.analyze:
         _analyze(data, recs)
 
-    if args.format == "json":
-        json.dump([_public(r, args.verbose) for r in recs], sys.stdout, indent=2)
-        sys.stdout.write("\n")
-    elif args.format == "tsv":
-        _print_tsv(recs)
+    floor = getattr(args, "min_confidence", 0.0) or 0.0
+    if floor > 0:
+        kept = [r for r in recs if r["confidence"] >= floor]
+        dropped = len(recs) - len(kept)
+        recs = kept
+        # say what was withheld: a filtered "nothing found" and a genuine one
+        # must not look the same
+        if dropped and not args.quiet:
+            print(f"acidcat locate: {dropped} region(s) below confidence "
+                  f"{floor:g} not reported", file=sys.stderr)
+
+    if args.output_format == "json":
+        format_json([_public(r, args.verbose) for r in recs], sys.stdout)
+    elif args.output_format == "tsv":
+        _print_tsv(recs)                     # historical layout, no header
+    elif args.output_format == "csv":
+        from acidcat.core.infra.render import output as _render
+        _render([_public(r, args.verbose) for r in recs], fmt="csv")
     else:
         _print_table(recs, args.verbose)
 
@@ -158,4 +201,9 @@ def run(args):
         tail = f", {nt} transformed" if nt else ""
         print(f"located {len(recs)} region(s): {nc} container(s), {ns} stream(s), "
               f"{len(recs) - nc - ns - nt} blob(s){tail} [{args.mode}]", file=sys.stderr)
-    return 0
+    # `locate | carve` on a blob with no audio in it exited 0 all the way
+    # through, so a recovery script branching on $? believed it had succeeded
+    # and carried on with an empty output directory. 1 is the grep convention
+    # for ran-fine-nothing-matched, and `probe scan`, `probe find`, `dump` and
+    # `extract` in this same tool already use it.
+    return 0 if recs else 1

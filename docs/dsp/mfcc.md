@@ -295,7 +295,7 @@ MFCC datasets use HTK. If comparing against external datasets, set
 
 ## acidcat implementation
 
-In `core/features.py`:
+In `core/analysis/features.py`:
 
 ```python
 mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)

@@ -6,10 +6,11 @@ import csv
 import os
 import sys
 
-from acidcat.core.riff import (
+from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
-from acidcat.core.aiff import is_aiff
+from acidcat.commands._output import add_output_format_arg
+from acidcat.core.formats.aiff import is_aiff
 from acidcat.core.tagged import is_tagged_format
 from acidcat.util.midi import midi_note_to_name
 from acidcat.util.csv_helpers import safe_basename_for_csv
@@ -29,8 +30,7 @@ def register(subparsers):
     p.add_argument("-n", "--num", type=int, default=500, help="Max files to scan (default: 500).")
     p.add_argument("-q", "--quiet", action="store_true", help="Suppress console output.")
     p.add_argument("-v", "--verbose", action="store_true", help="Verbose output.")
-    p.add_argument("-f", "--format", default="csv", choices=["table", "json", "csv"],
-                   help="Output format (default: csv).")
+    add_output_format_arg(p, default="csv", only=("table", "json", "csv", "tsv"))
     p.add_argument("--has", help="Filter: only WAV files containing these chunk IDs (comma-separated).")
     p.add_argument("--fallback", action="store_true",
                    help="Estimate BPM/key with librosa if no metadata found.")
@@ -133,7 +133,7 @@ def run(args):
     directory = args.target
     if not os.path.isdir(directory):
         print(f"acidcat scan: {directory}: Not a directory", file=sys.stderr)
-        return 1
+        return 2
 
     default_base = os.path.basename(os.path.normpath(directory))
     output_csv = safe_basename_for_csv(
@@ -186,15 +186,21 @@ def run(args):
                     print(f"  [skip] {file}: {e}", file=sys.stderr)
                 continue
 
-            # chunk filter (only applies to chunk-based formats)
-            if wanted and seen:
+            # Chunk filter. `and seen` made this a no-op for any format with no
+            # chunks -- a tagged MP3 or an AppleDouble stub returns seen == [],
+            # so the filter was skipped and the row kept. `--has acid` returned
+            # 95 rows where two independent counts (survey, and the index's own
+            # `chunks` column) both say 80: 13 MP3s, an MP4 and a resource-fork
+            # stub passed a RIFF-chunk filter. A file with no chunks cannot
+            # contain the one you asked for.
+            if wanted:
                 upper_seen = {s.upper() for s in seen}
                 if not (upper_seen & wanted):
                     continue
 
             # optional ML features
             if do_features:
-                from acidcat.core.features import extract_audio_features
+                from acidcat.core.analysis.features import extract_audio_features
                 if not quiet:
                     print(f"  [features] {os.path.basename(filepath)}...", file=sys.stderr)
                 feats = extract_audio_features(filepath)
@@ -203,7 +209,7 @@ def run(args):
 
             # fallback BPM/key via librosa
             if do_fallback and not row.get("bpm"):
-                from acidcat.core.detect import estimate_librosa_metadata
+                from acidcat.core.analysis.detect import estimate_librosa_metadata
                 estimates = estimate_librosa_metadata(filepath)
                 if estimates.get("estimated_bpm") is not None:
                     row["bpm"] = estimates["estimated_bpm"]
@@ -247,13 +253,40 @@ def run(args):
     else:
         fieldnames = base_fieldnames
 
+    # An explicitly requested rendering goes to stdout. `add_output_format_arg`
+    # registered --json/--csv/--output-format here and run() then ignored them
+    # entirely, always writing CSV to a file -- so `scan DIR --json` accepted
+    # the flag and produced CSV, and `scan DIR | anything` piped nothing at all.
+    # The default is unchanged (a CSV file) because scripts depend on it.
+    fmt = getattr(args, "output_format", None)
+    if fmt in ("json", "table"):
+        from acidcat.core.infra.render import output as _render
+        shaped = [{k: r.get(k) for k in fieldnames} for r in rows]
+        stream = sys.stdout
+        if getattr(args, "output", None):
+            stream = open(args.output, "w", encoding="utf-8", newline="")
+        try:
+            _render(shaped, fmt=fmt, stream=stream)
+        finally:
+            if stream is not sys.stdout:
+                stream.close()
+        return 0
+
     # output
     with open(output_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
     if not quiet:
-        print(f"\n[INFO] Wrote metadata for {len(rows)} files to {output_csv}",
-              file=sys.stderr)
+        # a truncated run and a complete one must not print the same sentence:
+        # "500 files" reads as the library's size, not as where we stopped
+        cap_note = (f" (stopped at the -n {num} cap; more files remain)"
+                    if count >= num else "")
+        # the ABSOLUTE path. This printed a bare filename, so `scan` dropped a
+        # CSV into whatever directory you happened to be standing in and gave
+        # you no way to find it -- a first-time user running scan "just to look"
+        # had to go hunting with `find`.
+        print(f"\n[INFO] Wrote metadata for {len(rows)} files to "
+              f"{os.path.abspath(output_csv)}{cap_note}", file=sys.stderr)
 
     return 0
