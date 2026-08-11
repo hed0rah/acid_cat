@@ -355,19 +355,30 @@ def warp_markers(raw, order="<", limit=400):
     return [m for i, m in enumerate(out) if m["id"] == i]
 
 
-def derived_tempo(markers):
-    """BPM implied by consecutive warp markers, or None.
+def derived_tempos(markers):
+    """BPM over each consecutive warp-marker span, in order.
 
     Live stores no tempo number; it stores this mapping. Between two markers,
-    (beats / seconds) * 60 is the tempo over that span. Returns None when the
-    markers do not span real time, which is the ordinary case for an unwarped
-    one-shot.
+    (beats / seconds) * 60 is the tempo over that span. Spans that do not cover
+    real time are skipped, which is the ordinary case for an unwarped one-shot.
+
+    A list, because warp markers exist precisely to encode tempo that MOVES. A
+    clip warped 120 / 60 / 200 has three answers and reporting the first as
+    "the" tempo is a confident wrong one.
     """
+    out = []
     for a, b in zip(markers, markers[1:]):
         dt, db = b["sec"] - a["sec"], b["beat"] - a["beat"]
         if dt > 1e-9 and db > 1e-9:
-            return round(db / dt * 60.0, 4)
-    return None
+            out.append(round(db / dt * 60.0, 4))
+    return out
+
+
+def derived_tempo(markers):
+    """The first span's BPM, or None. Kept for callers wanting a single number;
+    prefer derived_tempos() and say so when the spans disagree."""
+    spans = derived_tempos(markers)
+    return spans[0] if spans else None
 
 
 def references_size(raw, size, order="<"):

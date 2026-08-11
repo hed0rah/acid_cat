@@ -1024,8 +1024,8 @@ def test_pending_changes_lists_regions(tmp_path):
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
             # no edits yet -> empty pending set
-            regions, sl, wl = app._pending_changes()
-            assert regions == [] and sl == wl
+            regions, sl, wl, total = app._pending_changes()
+            assert regions == [] and sl == wl and total == 0
             for fn in app.query_one("#tree", Tree).root.children:
                 for f in fn.children:
                     lbl = f.label.plain if hasattr(f.label, "plain") else str(f.label)
@@ -1036,8 +1036,8 @@ def test_pending_changes_lists_regions(tmp_path):
             app.query_one("#editbar", Input).value = "48000"
             await pilot.press("enter")
             await pilot.pause()
-            regions, sl, wl = app._pending_changes()
-            assert len(regions) == 1 and sl == wl        # one 4-byte region
+            regions, sl, wl, total = app._pending_changes()
+            assert len(regions) == 1 and sl == wl and total == 1  # one 4-byte region
             off, old, new = regions[0]
             assert old != new
             app.action_diff()                            # opens the modal, no crash

@@ -244,8 +244,12 @@ class HelpScreen(ModalScreen):
 
 
 class DiffScreen(ModalScreen):
-    """Review all pending byte changes (working copy vs the original) before a
-    save. Any of esc / d closes it."""
+    """Review pending byte changes (working copy vs the original) before a save.
+    Any of esc / d closes it.
+
+    The count is of every region that exists; the LIST below it stops at
+    _DIFF_CAP. Those were the same number until 1,000 changes reported as 201,
+    on the one screen a person consults before overwriting their file."""
 
     CSS = """
     DiffScreen { align: center middle; }
@@ -254,11 +258,14 @@ class DiffScreen(ModalScreen):
     """
     BINDINGS = [("escape", "close", "close"), ("d", "close", "close")]
 
-    def __init__(self, regions, src_len, work_len):
+    def __init__(self, regions, src_len, work_len, total=None):
         super().__init__()
         self.regions = regions
         self.src_len = src_len
         self.work_len = work_len
+        # how many regions EXIST, versus the prefix held in `regions`. Defaults
+        # to len(regions) so an older two-arg caller still reads correctly.
+        self.total = len(regions) if total is None else total
 
     def compose(self) -> ComposeResult:
         t = Text()
@@ -269,7 +276,10 @@ class DiffScreen(ModalScreen):
         elif not self.regions:
             t.append("none -- working copy matches the original\n", style=SOFT)
         else:
-            t.append(f"{len(self.regions)} region(s) vs the original\n", style=SOFT)
+            shown = ("" if self.total <= len(self.regions)
+                     else f"; listing the first {len(self.regions):,}")
+            t.append(f"{self.total:,} region(s) vs the original{shown}\n",
+                     style=SOFT)
         for off, old, new in self.regions[:_DIFF_CAP]:
             t.append(f"\n0x{off:08x}  ", style=f"bold {PEND}")
             t.append(f"{len(old)}B\n", style=DIM)
@@ -279,8 +289,9 @@ class DiffScreen(ModalScreen):
             t.append(new[:24].hex(" ") + (" .." if len(new) > 24 else ""),
                      style=PEND)
             t.append("\n")
-        if len(self.regions) > _DIFF_CAP:
-            t.append(f"\n.. {len(self.regions) - _DIFF_CAP} more regions\n", style=DIM)
+        if self.total > len(self.regions):
+            t.append(f"\n.. {self.total - len(self.regions):,} more regions\n",
+                     style=DIM)
         t.append("\nctrl+s to save, esc to keep editing.", style=DIM)
         with Vertical(id="diffbox"):
             yield Static(t)
