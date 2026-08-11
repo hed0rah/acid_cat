@@ -312,3 +312,82 @@ def test_the_prefilter_does_not_depend_on_insertion_order(tmp_path):
     got = search.find_compatible(libs, key="Am", bpm=128.0, kind="loop",
                                  limit=20, exclude_path="/x/ref.wav")
     assert len(got) == 5, f"order-dependent result: {len(got)}"
+
+
+# ── a library that drops out must not do so quietly ─────────────────
+
+@pytest.fixture(scope="module")
+def two_libs(tmp_path_factory):
+    base = tmp_path_factory.mktemp("fan")
+    home = base / "home"
+    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
+        "gs-16b-2c-44100hz.wav"
+    if not src.exists():
+        pytest.skip("no wav specimen")
+    env = dict(os.environ, ACIDCAT_HOME=str(home))
+    for label in ("liba", "libb"):
+        d = base / label
+        d.mkdir()
+        (d / f"{label}.wav").write_bytes(src.read_bytes())
+        r = subprocess.run([sys.executable, "-m", "acidcat", "index", str(d),
+                            "--label", label, "-q"],
+                           capture_output=True, text=True, env=env)
+        if r.returncode != 0:
+            pytest.skip(f"could not index: {r.stderr[-200:]}")
+    return env, home
+
+
+def _paths(env):
+    r = subprocess.run([sys.executable, "-m", "acidcat", "query", "--format",
+                        "wav", "--paths-only"], capture_output=True, text=True,
+                       env=env)
+    return r
+
+
+def test_a_missing_library_db_is_named_not_dropped(two_libs):
+    """An unmounted drive and an empty result are different answers.
+
+    A registered library whose DB is gone was filtered out in silence, so a
+    query that should have searched two searched one and exited 0. "(no
+    matches)" is then indistinguishable from "half your collection is offline".
+    """
+    import glob
+    env, home = two_libs
+    assert len(_paths(env).stdout.strip().splitlines()) == 2
+    db = sorted(glob.glob(str(home / "libraries" / "*.db")))[0]
+    os.rename(db, db + ".hidden")
+    try:
+        r = _paths(env)
+        assert len(r.stdout.strip().splitlines()) == 1
+        assert "not searched" in r.stderr and "DB missing" in r.stderr, r.stderr
+    finally:
+        os.rename(db + ".hidden", db)
+
+
+def test_an_unreadable_library_is_named_not_dropped(two_libs):
+    """Corrupt, truncated, or written by a newer acidcat -- all previously
+    visible only under -v, which nobody passes when they do not yet know
+    anything is wrong."""
+    import glob
+    import shutil
+    env, home = two_libs
+    db = sorted(glob.glob(str(home / "libraries" / "*.db")))[0]
+    shutil.copyfile(db, db + ".bak")
+    try:
+        with open(db, "wb") as f:
+            f.write(b"GARBAGE")
+        r = _paths(env)
+        assert len(r.stdout.strip().splitlines()) == 1
+        assert "could not be searched" in r.stderr, r.stderr
+    finally:
+        shutil.move(db + ".bak", db)
+
+
+def test_a_healthy_fanout_says_nothing(two_libs):
+    """The hedge must not fire when everything worked, or it stops being read
+    and takes the real warning with it."""
+    env, _home = two_libs
+    r = _paths(env)
+    assert len(r.stdout.strip().splitlines()) == 2
+    assert "not searched" not in r.stderr
+    assert "could not be searched" not in r.stderr

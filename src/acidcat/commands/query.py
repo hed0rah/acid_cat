@@ -108,8 +108,18 @@ def _run(args):
     rconn = reg.open_registry(registry_path)
     try:
         libs = reg.list_libraries(rconn, only_existing=True)
+        # A registered library whose DB is gone -- unmounted drive, file
+        # deleted by hand -- was dropped in silence, so a query that should
+        # have searched five libraries searched four and said nothing. "(no
+        # matches)" and "the drive is not plugged in" are different answers and
+        # the user has to be able to tell them apart.
+        missing = [r["label"] for r in reg.find_orphans(rconn)]
     finally:
         rconn.close()
+    if missing:
+        print(f"acidcat query: {len(missing)} registered librar"
+              f"{'y' if len(missing) == 1 else 'ies'} not searched, DB missing: "
+              f"{', '.join(sorted(missing))}", file=sys.stderr)
 
     if not libs:
         # 2: there is nothing to search, so the query could not run at all --
@@ -279,10 +289,15 @@ def _fan_out(libs, args):
     seen_paths = set()
     total_matched = 0
     counted_all = True
+    skipped_libs = []
     for lib in libs:
         try:
             conn = idx.open_db(lib["db_path"])
         except Exception as e:
+            # unreadable, corrupt, or written by a newer acidcat. Named on
+            # stderr, not just under -v: a library that silently drops out
+            # turns a partial search into one that looks complete.
+            skipped_libs.append((lib["label"], str(e)))
             _vlog(args, f"[query] {lib['label']} skipped: {e}")
             continue
         try:
@@ -324,6 +339,9 @@ def _fan_out(libs, args):
                 continue
             seen_paths.add(p)
             accumulated.append(_shape_row(d))
+    for label, why in skipped_libs:
+        print(f"acidcat query: library {label!r} could not be searched: {why}",
+              file=sys.stderr)
     return accumulated, (total_matched if counted_all else None)
 
 
