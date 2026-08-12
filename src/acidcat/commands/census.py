@@ -126,9 +126,17 @@ def _write_table(w, res):
         w.write("\n")
 
     if res["flags"]:
-        w.write("Flags (examples capped)\n")
+        # The count is of every hit; the example list stops at 25. Printing
+        # len() of the examples made a flag seen 900 times display as "25" --
+        # the header disclaimed the EXAMPLES while the integer beside the name
+        # read as a file count and was not one.
+        counts = res.get("flag_counts") or {}
+        w.write("Flags (counts are of every hit; examples capped)\n")
         for name, paths in sorted(res["flags"].items()):
-            w.write(f"  {name:22s} {len(paths)}  e.g. {paths[0] if paths else ''}\n")
+            n = counts.get(name, len(paths))
+            more = f"  (+{n - len(paths):,} not shown)" if n > len(paths) else ""
+            w.write(f"  {name:22s} {n:,}  e.g. "
+                    f"{paths[0] if paths else ''}{more}\n")
         w.write("\n")
 
     if res["rare_chunks"]:

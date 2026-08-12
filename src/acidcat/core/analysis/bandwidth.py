@@ -147,8 +147,21 @@ def analyze(channels, rate):
         detail = (f"no codec-like cliff; 99% of the energy is below "
                   f"{top / 1000:.1f} kHz of a possible {nyquist / 1000:.1f} kHz")
 
+    # Name the window the verdict actually covers, the way channels.analyze
+    # does. pcm.load caps the decode, so on a long file "content stops dead at
+    # 16 kHz" is a statement about a prefix, and it reads as absolute unless the
+    # scope travels with it. Conditional, so a file that fit says nothing extra.
+    #
+    # len(y) is the decoded PCM length; `frames` below is the FFT frame count,
+    # a different number, which is why it cannot be reused for this.
+    from acidcat.core.analysis.pcm import _MAX_FRAMES
+    if len(y) >= _MAX_FRAMES:
+        detail += (f" (measured over the first {len(y):,} frames, the decode "
+                   f"limit -- a file that changes character later would not be "
+                   f"seen)")
+
     return {"check": "bandwidth", "verdict": verdict, "detail": detail,
             "rolloff_hz": round(top, 1), "nyquist_hz": round(nyquist, 1),
             "wall_db": round(step, 1),
             "wall_hz": round(step_f, 1) if step >= _WALL_DB else None,
-            "frames_analyzed": frames}
+            "frames_analyzed": frames, "pcm_frames": int(len(y))}

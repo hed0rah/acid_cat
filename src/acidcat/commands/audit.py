@@ -125,8 +125,16 @@ def _signal_findings(path):
     from acidcat.core.analysis import bandwidth, channels, pcm
     try:
         chans, rate = pcm.load(path)
-    except Exception:
-        return []
+    except Exception as e:
+        # `--signal` on a file we cannot decode used to be byte-identical to a
+        # file that passed both checks: the caller asked for the signal checks
+        # and got silence that read as "clean". Say which checks did not run.
+        # not-applicable, so it does not become a finding about the file -- the
+        # decode failing is our limitation, not the file's fault.
+        return [{"check": "signal", "verdict": "not-applicable",
+                 "detail": f"could not decode the audio ({type(e).__name__}); "
+                           f"bandwidth, channel and concealment checks were NOT "
+                           f"run on this file"}]
     # only surface verdicts that say something is off. INTEGRITY counts what it
     # lists as mismatches, so reporting a healthy "stereo" or "no-wall" here
     # would turn every ordinary file into a finding.

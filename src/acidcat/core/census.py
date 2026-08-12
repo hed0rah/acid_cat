@@ -199,15 +199,23 @@ class Census:
         self.fact_sizes = {}
         self.bext_versions = {}
         self.flags = {}
+        self.flag_counts = {}
 
     @staticmethod
     def _bump(d, k):
         d[k] = d.get(k, 0) + 1
 
     def _flag(self, name, path, cap=25):
+        """Record an example path, and always count the hit.
+
+        The example list is capped at 25 and the renderer printed len() of it
+        as the number of files, so a flag hit 900 times displayed as "25". The
+        count and the examples are different facts and are kept apart now.
+        """
         lst = self.flags.setdefault(name, [])
         if len(lst) < cap:
             lst.append(json_safe_path(path))
+        self.flag_counts[name] = self.flag_counts.get(name, 0) + 1
 
     def merge(self, other):
         self.files += other.files
@@ -216,7 +224,7 @@ class Census:
         self.truncated = self.truncated or other.truncated
         self.limit = self.limit if self.limit is not None else other.limit
         for attr in ("by_container", "chunk_counts", "fmt_tags", "list_types",
-                     "fact_sizes", "bext_versions"):
+                     "fact_sizes", "bext_versions", "flag_counts"):
             dst, src = getattr(self, attr), getattr(other, attr)
             for k, v in src.items():
                 dst[k] = dst.get(k, 0) + v
@@ -407,6 +415,7 @@ class Census:
             "fact_sizes": {str(k): v for k, v in self.fact_sizes.items()},
             "bext_versions": {str(k): v for k, v in self.bext_versions.items()},
             "flags": self.flags,
+            "flag_counts": self.flag_counts,
             # A truncated census makes the same claims as a complete one. The
             # table disclosed "20 files opened" but --json had no limit or
             # truncation field at all, so a consumer could not tell a prefix
