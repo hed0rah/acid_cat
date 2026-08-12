@@ -104,10 +104,15 @@ def read_typed(data, offset, fmt, count, byteorder):
 
 
 def find_bytes(data, pattern, limit=512):
-    """Every offset of a byte pattern."""
+    """Every offset of a byte pattern. ``limit=None`` returns all of them.
+
+    The docstring said "every offset" while stopping at 512, so a caller
+    printing len() of the result reported the cap as the hit count. The default
+    is unchanged; a caller that needs the true total asks for it.
+    """
     offs = []
     i = data.find(pattern)
-    while i != -1 and len(offs) < limit:
+    while i != -1 and (limit is None or len(offs) < limit):
         offs.append(i)
         i = data.find(pattern, i + 1)
     return offs
@@ -115,7 +120,10 @@ def find_bytes(data, pattern, limit=512):
 
 def scan_value(data, value, fmt, limit=512):
     """Cheat-Engine value scan: every offset where ``value`` appears as ``fmt``,
-    in both byte orders. Returns a list of (offset, 'le'|'be')."""
+    in both byte orders. Returns a list of (offset, 'le'|'be').
+
+    ``limit=None`` returns every hit rather than the first 512.
+    """
     hits = []
     for order, e in (("le", "<"), ("be", ">")):
         if fmt == "u24":
@@ -132,7 +140,7 @@ def scan_value(data, value, fmt, limit=512):
         for off in find_bytes(data, needle, limit):
             hits.append((off, order))
     hits.sort()
-    return hits[:limit]
+    return hits if limit is None else hits[:limit]
 
 
 # A run of ascending in-file u32s is a table; one in-file u32 is a coincidence.
@@ -223,7 +231,7 @@ def annotate(window, *, base_off=0, file_size=None, marks=True):
 
 
 def strings(data, minlen=4, limit=1000):
-    """Printable ASCII runs, as (offset, text)."""
+    """Printable ASCII runs, as (offset, text). ``limit=None`` returns all."""
     out = []
     cur = bytearray()
     start = 0
@@ -235,10 +243,10 @@ def strings(data, minlen=4, limit=1000):
         else:
             if len(cur) >= minlen:
                 out.append((start, cur.decode("latin-1")))
-                if len(out) >= limit:
+                if limit is not None and len(out) >= limit:
                     return out
             cur = bytearray()
-    if len(cur) >= minlen and len(out) < limit:
+    if len(cur) >= minlen and (limit is None or len(out) < limit):
         out.append((start, cur.decode("latin-1")))
     return out
 
@@ -257,11 +265,15 @@ def hexdump(data, offset, length):
 
 def diff(a, b, limit=256):
     """Changed byte ranges between two byte strings: (ranges, len_a, len_b),
-    ranges = [(start, end)] over the common prefix."""
+    ranges = [(start, end)] over the common prefix.
+
+    ``limit=None`` walks the whole common prefix. With a limit the loop EXITS,
+    so trailing differences are never examined and the count is the cap.
+    """
     n = min(len(a), len(b))
     ranges = []
     i = 0
-    while i < n and len(ranges) < limit:
+    while i < n and (limit is None or len(ranges) < limit):
         if a[i] != b[i]:
             s = i
             while i < n and a[i] != b[i]:
