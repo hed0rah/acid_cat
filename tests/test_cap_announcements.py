@@ -138,6 +138,12 @@ EXEMPT = {
                                   "thousands. If this is ever lowered below ~10x "
                                   "the largest real observation it leaves this "
                                   "category and must be swept"),
+    ("acidcat.core.forensics.resync", "_MAX_RECORDS"):
+        (Reason.RUNAWAY_BACKSTOP, "announced, but through `inspect --resync` "
+                                  "rather than walk_file, so the generic sweep "
+                                  "cannot reach it; covered by "
+                                  "test_resync_marks_coverage_as_a_lower_bound "
+                                  "in this file"),
     ("acidcat.core.forensics.framescan", "_MAX_STREAMS"):
         (Reason.RUNAWAY_BACKSTOP, "4,096 distinct headerless streams in one image "
                                   "is not a real file"),
@@ -447,3 +453,79 @@ def test_the_cap_note_never_lands_on_stdout(tmp_path):
     doc = _json.loads(r.stdout)              # must parse despite the note
     assert len(doc["hits"]) == 512
     assert "listing the first" in r.stderr
+
+
+# ── caps that deflate a NUMBER rather than shorten a list ───────────
+
+def test_resync_marks_coverage_as_a_lower_bound(tmp_path):
+    """The coverage percentage is the evidence a recovery is real.
+
+    `recover` built its chain from a scan that stopped at 4,096 records, so on
+    a larger file the percentage was an underestimate printed as a measurement.
+    The docstring calls high coverage "a strong sign the recovery is real",
+    which makes a deflated one manufacture doubt about a chain that may be
+    complete -- the same shape as the FLAC read cap manufacturing damage.
+    """
+    p = tmp_path / "many.bin"
+    p.write_bytes(b"".join(b"data" + struct.pack("<I", 8) + bytes(8)
+                           for _ in range(6000)))
+    r = _probe_cli("inspect", str(p), "--resync")
+    assert "at least" in r.stdout, r.stdout
+    assert "record cap" in r.stderr, r.stderr
+
+
+def test_resync_states_coverage_plainly_when_it_fits(tmp_path):
+    p = tmp_path / "few.bin"
+    p.write_bytes(b"".join(b"data" + struct.pack("<I", 8) + bytes(8)
+                           for _ in range(50)))
+    r = _probe_cli("inspect", str(p), "--resync")
+    assert "at least" not in r.stdout, r.stdout
+    assert "record cap" not in r.stderr
+
+
+def test_census_counts_every_flag_hit_not_every_example(tmp_path):
+    """The example list stops at 25 and the renderer printed len() of it, so a
+    flag seen 900 times displayed as "25". The header disclaimed the EXAMPLES
+    while the integer beside the name read as a file count and was not one."""
+    body = (b"WAVEfmt " + struct.pack(">IHHIIHH", 16, 1, 1, 44100, 88200, 2, 16)
+            + b"data" + struct.pack(">I", 4) + bytes(4))
+    for i in range(60):
+        (tmp_path / f"f{i:03d}.wav").write_bytes(
+            b"RIFX" + struct.pack(">I", len(body)) + body)
+    for extra in ([], ["--jobs", "4"]):
+        r = _probe_cli("census", str(tmp_path), "-q", *extra)
+        assert "rifx_big_endian" in r.stdout
+        line = [x for x in r.stdout.splitlines() if "rifx_big_endian" in x][0]
+        assert " 60 " in line or " 60\t" in line or "60  e.g." in line, (
+            f"with {extra or 'no flags'}: {line}")
+
+
+def test_inspect_force_says_how_many_walkers_it_tried(tmp_path):
+    """Ten rows read as the whole field of candidates. The footer says none
+    verified a magic number, which needs a denominator to mean anything."""
+    p = tmp_path / "blob.bin"
+    p.write_bytes(bytes(range(256)) * 8)
+    r = _probe_cli("inspect", str(p), "--force")
+    assert "tried" in r.stdout, r.stdout
+
+
+def test_audit_signal_says_which_checks_did_not_run(tmp_path):
+    """`--signal` on a file it cannot decode was byte-identical to a file that
+    passed both checks: the caller asked for the signal checks and got silence
+    that read as clean."""
+    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
+        "gs-16b-2c-44100hz.mp3"
+    if not src.exists():
+        pytest.skip("no mp3 specimen")
+    p = tmp_path / "u.mp3"
+    p.write_bytes(src.read_bytes())
+    r = _probe_cli("audit", str(p), "--signal")
+    assert "NOT" in r.stdout and "run" in r.stdout, r.stdout
+    assert r.returncode == 0, "our decode limitation must not condemn the file"
+
+
+def _probe_cli(*args):
+    import subprocess
+    import sys as _sys
+    return subprocess.run([_sys.executable, "-m", "acidcat", *args],
+                          capture_output=True, text=True, timeout=600)

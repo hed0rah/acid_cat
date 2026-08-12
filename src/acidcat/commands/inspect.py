@@ -383,8 +383,16 @@ def _run_resync(filepath, paint, source_path=None, as_json=False):
                     "  structure to rebuild. If the payload is still in there,\n"
                     "  `acidcat locate` finds it statistically instead."))
         return 1
+    # A capped scan builds its chain from a prefix, so the coverage percentage
+    # is a floor rather than a measurement -- and coverage is the evidence the
+    # recovery is real, so a deflated one manufactures doubt about a chain that
+    # may be complete.
+    bound = " at least" if res.get("capped") else ""
     print(f"{name}: recovered {len(chain)} chunk(s) by resync "
-          f"[{res['endian']}-endian, {res['coverage']:.0%} of the file]")
+          f"[{res['endian']}-endian,{bound} {res['coverage']:.0%} of the file]")
+    if res.get("capped"):
+        print(f"  the record scan stopped at its {_resync_cap():,}-record cap; "
+              f"more structure may follow", file=sys.stderr)
     print(paint("dim", f"  {'offset':>10}  {'id':6} {'size':>12}  conf  evidence"))
     for r in chain:
         ev = []
@@ -483,11 +491,21 @@ def _forced_json(filepath, rows):
     }) + "\n")
 
 
+def _resync_cap():
+    from acidcat.core.forensics.resync import _MAX_RECORDS
+    return _MAX_RECORDS
+
+
 def _print_forced_candidates(filepath, rows, paint):
     base = os.path.basename(filepath)
     arg = f'"{base}"' if any(c in base for c in ' \t&()+;') else base
+    # How many walkers were tried is the denominator for "none verified a magic
+    # number" below. Without it, ten rows read as the whole field of candidates
+    # rather than the top of a longer list.
+    tried = (f"{len(rows)} tried, showing the top 10"
+             if len(rows) > 10 else f"{len(rows)} tried")
     print(f"no walker claims {base}. forced-parse candidates "
-          f"(hypotheses, not identifications):\n")
+          f"(hypotheses, not identifications; {tried}):\n")
     print(paint("dim", f"  {'format':12} {'chunks':>6} {'fields':>6} {'ids':>4}"
                        f" {'sane':>5}  walker's own complaint"))
     for r in rows[:10]:
