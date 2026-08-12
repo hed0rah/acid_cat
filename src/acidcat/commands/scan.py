@@ -275,7 +275,11 @@ def run(args):
         # face was the one that could not tell a complete run from a truncated
         # one. stderr, so the records on stdout stay parseable.
         if not quiet and count >= num:
-            print(f"[INFO] stopped at the -n {num} cap; more files remain",
+            # "may remain": the loop breaks AT the cap without peeking, so a
+            # directory holding exactly -n files is indistinguishable from one
+            # holding more. Claiming more remain would be a confident guess in
+            # a release about not making those.
+            print(f"[INFO] stopped at the -n {num} cap; more files may remain",
                   file=sys.stderr)
         return 0
 
@@ -287,7 +291,7 @@ def run(args):
     if not quiet:
         # a truncated run and a complete one must not print the same sentence:
         # "500 files" reads as the library's size, not as where we stopped
-        cap_note = (f" (stopped at the -n {num} cap; more files remain)"
+        cap_note = (f" (stopped at the -n {num} cap; more files may remain)"
                     if count >= num else "")
         # the ABSOLUTE path. This printed a bare filename, so `scan` dropped a
         # CSV into whatever directory you happened to be standing in and gave

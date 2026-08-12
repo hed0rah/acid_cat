@@ -367,6 +367,13 @@ def _run_resync(filepath, paint, source_path=None, as_json=False):
             "mode": "resync",
             "endian": res["endian"],
             "coverage": res["coverage"],
+            # When the record scan hit its cap, coverage is a floor rather than
+            # a measurement, and this document is the machine's only face. The
+            # text path said "at least N%" while the JSON said N -- the same
+            # defect this release fixed in `scan --json`, recreated on the very
+            # function that gained the flag.
+            "coverage_is_lower_bound": bool(res.get("capped")),
+            "capped": bool(res.get("capped")),
             "isolated_records": len(recs),
             "chunks": [{"id": r["id"], "offset": r["offset"], "size": r["size"],
                         "payload_offset": r["offset"] + 8,
