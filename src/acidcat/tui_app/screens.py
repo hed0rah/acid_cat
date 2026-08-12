@@ -200,7 +200,10 @@ class HelpScreen(ModalScreen):
             ("f", "jump to the next forensics finding"),
             ("x", "follow a pointer field to where it points (flags dangling)"),
             ("m", "byte map: where the file's bytes go, biggest regions first"),
-            ("b", "byte view: cycle hex / entropy / hilbert / histogram of the file"),
+            ("b", "byte view: cycle hex / entropy / hilbert / histogram"),
+            ("r", "byte view: whole file or just the selected region"),
+            ("S", "byte view: vertical scale (entropy 0-8 or auto; "
+                  "histogram linear, log, clipped)"),
             ("p", "play the selected region as raw PCM (. stops); needs ffplay"),
             ("v", "validate structure: constraint violations, r to repair them"),
             ("y", "yank the selected bytes as hex to the clipboard"),

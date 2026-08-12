@@ -6,6 +6,7 @@ modal screens live in screens.py; byte/field rendering and the edit profiles in
 render.py.
 """
 import os
+import re
 import shutil
 import struct
 import tempfile
@@ -46,6 +47,7 @@ from acidcat.core.infra.fieldcodec import (
 # acidcat/tui_theme.py, imported by the playground TUI too so they cannot drift.
 from acidcat.tui_theme import (
     PALETTE, ACCENT, FG, SOFT, DIM, GUTTER, PEND, AMBER, SEV, TEAL, byte_color,
+    ramp_color,
 )
 
 from acidcat.tui_app.render import (
@@ -118,6 +120,8 @@ class AcidcatTUI(App):
         Binding("d", "diff", "pending changes", show=False),
         ("m", "map", "byte map"),
         Binding("b", "cycle_view", "byte view", show=False),
+        Binding("r", "viz_scope", "viz: file/region", show=False),
+        Binding("S", "viz_scale", "viz: scale", show=False),
         ("p", "play", "play"),
         ("full_stop", "stop_play", "stop"),
         Binding("v", "validate", "validate", show=False),
@@ -196,6 +200,8 @@ class AcidcatTUI(App):
         self._finding_idx = -1    # cursor into self.findings for jump-to-finding
         self._xref = {}           # id(field node) -> absolute target offset (pointer)
         self._view = "hex"        # byte-view mode: hex | entropy | hilbert | histogram
+        self._viz_scope = "file"  # what the byte views cover: file | region (r)
+        self._viz_scale = {}      # view mode -> index into _VIZ_SCALES (S)
         self._zoom = None         # which pane owns the screen, cycled by z
         self._cur_region = (None, None, ACCENT)  # last shown (off, length, accent)
         self._cur_spans = None    # field spans for per-field hex tint (chunk view)
@@ -1183,8 +1189,7 @@ class AcidcatTUI(App):
             panel.update(t)
             return
         # severity legend so the colors are readable, then every finding
-        # numbered (press f to jump the tree/hex to the next one). The panel
-        # lives in a VerticalScroll, so findings past the fold stay reachable.
+        # numbered (press f to jump the tree/hex to the next one).
         t.append(f"{len(self.findings)} finding(s)   ", style=SOFT)
         t.append("alert", style=f"bold {SEV['alert']}")
         t.append(" / ", style=DIM)
@@ -1201,6 +1206,30 @@ class AcidcatTUI(App):
             t.append(f"0x{f.get('offset', 0):08x} ", style=DIM)
             t.append(f"{f.get('message', '')}\n", style=FG)
         panel.update(t)
+        self._scroll_finding_into_view()
+
+    def _scroll_finding_into_view(self):
+        """Keep the finding `f` just selected on screen.
+
+        The box is six rows and holds one line per finding, so past the fourth
+        one the `>` marker moved somewhere nobody could see: pressing f again
+        and again showed an unchanging panel while the tree and hex pane jumped
+        around, which reads as f being broken rather than as the list being
+        longer than the box.
+
+        Best-effort. It is a cosmetic scroll, and the jump itself, the marker,
+        and the notification have all already happened.
+        """
+        if self._finding_idx < 0:
+            return
+        try:
+            box = self.query_one("#idbox")
+            # inside #idbox: #title, then #anom, whose first line is the legend
+            head = self.query_one("#title").size.height or 1
+            box.scroll_to(y=max(0, head + 1 + self._finding_idx - 1),
+                          animate=False)
+        except Exception:
+            pass
 
     @staticmethod
     def _node_name(node):
@@ -1236,9 +1265,13 @@ class AcidcatTUI(App):
                          self._hex_width()))
         # in a viz mode the pane shows a whole-file view; a node highlight leaves it
 
-    # pane id -> the class that gives it the screen
+    # pane id -> the class that gives it the screen. Not every pane has one:
+    # #idbox is six rows by design, so filling the screen with it would be a
+    # worse view of the same list, not a better one.
     _ZOOM_FOR = {"tree": "zoom-tree", "hexwrap": "zoom-hex"}
-    _PANES = ("tree", "hexwrap")
+    # tab order, in the order they appear on screen: top-left, bottom-left,
+    # right. #idbox is here because it scrolls -- see _move_pane.
+    _PANES = ("idbox", "tree", "hexwrap")
 
     def _focused_pane(self):
         """Which pane owns focus, walking up from whatever widget has it.
@@ -1248,7 +1281,7 @@ class AcidcatTUI(App):
         """
         node = self.focused
         while node is not None:
-            if getattr(node, "id", None) in self._ZOOM_FOR:
+            if getattr(node, "id", None) in self._PANES:
                 return node.id
             node = node.parent
         return "hexwrap" if self._view == "hex" else "tree"
@@ -1287,6 +1320,12 @@ class AcidcatTUI(App):
         tab used to hand focus to the tree, which is hidden -- so the arrow
         keys drove a cursor nobody could see and the hex pane jumped to a field
         you had not chosen. Navigating blind reads as "I cannot change fields".
+
+        #idbox joined this cycle for the same reason the hex pane did. It is a
+        fixed six rows holding a legend plus one line per finding, so a file
+        with five findings puts the rest below the fold, and it was reachable
+        only with a mouse. A forensics tool whose forensics panel needs a mouse
+        to read is not one you can drive over ssh.
         """
         order = [p for p in self._PANES if self._pane_visible(p)]
         if len(order) < 2:
@@ -1308,7 +1347,13 @@ class AcidcatTUI(App):
         terminal, so below about 154 columns the dump folds without this.
         """
         target = self._focused_pane()
-        want = self._ZOOM_FOR[target]
+        want = self._ZOOM_FOR.get(target)
+        if want is None:
+            # a pane with no zoom class (#idbox). Say so rather than raising or
+            # silently zooming something the user was not looking at.
+            self.notify(f"{target} does not zoom -- tab to the tree or hex pane",
+                        severity="warning")
+            return
         for cls in set(self._ZOOM_FOR.values()):
             self.screen.remove_class(cls)
         if self._zoom == want:
@@ -1326,7 +1371,7 @@ class AcidcatTUI(App):
         self.notify(f"zoom: {target}")
 
     def action_cycle_view(self):
-        """Cycle the hex pane: hex -> entropy -> hilbert -> histogram (whole file)."""
+        """Cycle the hex pane: hex -> entropy -> hilbert -> histogram."""
         order = ["hex", "entropy", "hilbert", "histogram"]
         if self._hexedit:
             self._exit_hexedit()
@@ -1335,6 +1380,89 @@ class AcidcatTUI(App):
         self._view = order[(order.index(self._view) + 1) % len(order)]
         self._paint_bytes()
         self.notify(f"byte view: {self._view}")
+
+    # Vertical axes offered per view. The hex dump and the Hilbert map have no
+    # magnitude axis to rescale, so they are absent rather than given a mode
+    # that would do nothing -- S says so instead of appearing to work.
+    _VIZ_SCALES = {
+        "entropy": ("absolute", "auto"),
+        "histogram": ("absolute", "log", "clip"),
+    }
+
+    def _scale_for(self, mode):
+        opts = self._VIZ_SCALES.get(mode)
+        if not opts:
+            return None
+        return opts[self._viz_scale.get(mode, 0) % len(opts)]
+
+    def action_viz_scale(self):
+        """Cycle the vertical axis of the current byte view (S).
+
+        Reported: the entropy chart is pinned to the ceiling on most real
+        files, because audio data sits at 7.9 of 8 and the axis is the full
+        theoretical range. Everything interesting happens in the last two
+        percent of the plot, where it cannot be seen. `auto` rescales to the
+        data actually present; the caption always names the axis in use, since
+        a rescaled chart and an absolute one look identical.
+        """
+        opts = self._VIZ_SCALES.get(self._view)
+        if not opts:
+            self.notify(f"{self._view} has no scale to change "
+                        f"(b cycles to entropy or histogram)",
+                        severity="warning")
+            return
+        i = (self._viz_scale.get(self._view, 0) + 1) % len(opts)
+        self._viz_scale[self._view] = i
+        self._paint_bytes()
+        self.notify(f"{self._view} scale: {opts[i]}")
+
+    def action_viz_scope(self):
+        """Toggle the byte views between the whole file and the selected node (r).
+
+        The views answered one question -- what does this FILE look like -- and
+        the tree next to them is a list of regions you might want that same
+        picture of. A 40-byte fmt chunk inside a 60 MB WAV occupies a single
+        column of a whole-file entropy plot.
+        """
+        if self._view == "hex":
+            self.notify("the hex view already follows the selected node "
+                        "(b cycles to a graph)", severity="warning")
+            return
+        self._viz_scope = "region" if self._viz_scope == "file" else "file"
+        self._paint_bytes()
+        lo, hi, label = self._viz_range()
+        self.notify(f"viz scope: {label} ({hi - lo:,} bytes)")
+
+    def _viz_range(self):
+        """(start, end, label) the graph views should cover.
+
+        Falls back to the whole file when scope is `region` but the selected
+        node has no byte range of its own -- a derived field, or nothing
+        selected yet. The label carries that fallback rather than hiding it,
+        because a picture captioned "region" that is really the whole file is
+        worse than no scoping at all.
+        """
+        if self._viz_scope == "region":
+            node = self._cur_node
+            meta = self._nodemeta.get(id(node)) if node else None
+            if meta and meta[0] is not None and meta[1]:
+                off, length, _ = meta
+                lo = max(0, min(int(off), self.fsize))
+                hi = max(lo, min(lo + int(length), self.fsize))
+                if hi > lo:
+                    return lo, hi, f"{self._short_name(node)} @ 0x{lo:08x}"
+            return 0, self.fsize, "whole file (selection has no bytes)"
+        return 0, self.fsize, "whole file"
+
+    def _short_name(self, node):
+        """The head of a tree row, for a caption.
+
+        A row is "~ data  0x00000024  240,000b  audio payload, 1.361 s
+        [playable]" -- correct in the tree and far too long above a chart that
+        already prints its own offset and size.
+        """
+        name = (self._node_name(node) or "region").lstrip("~ ").strip()
+        return re.split(r"\s{2,}", name)[0][:24] or "region"
 
     def _paint_bytes(self):
         """Draw the byte pane at the size it has right now.
@@ -1437,36 +1565,65 @@ class AcidcatTUI(App):
             return self._viz_entropy()
         if mode == "hilbert":
             return self._viz_hilbert()
-        return self._viz_histogram(
-            _read(self.work, 0, min(self.fsize, _VIZ_READ)))
+        lo, hi, scope = self._viz_range()
+        want = hi - lo
+        return self._viz_histogram(_read(self.work, lo, min(want, _VIZ_READ)),
+                                   scope=scope, capped=want > _VIZ_READ)
+
+    def _viz_caption(self, t, scope, sampled, scale_label, transformed=False):
+        """The line under every graph: what it covers, how exact it is, and
+        which axis it used. All three change what the picture means, so none of
+        them is optional decoration.
+
+        `transformed` is passed in rather than sniffed out of `scale_label`.
+        Deciding a colour by reading the wording of a string is the defect this
+        codebase has now fixed twice (the anomaly checks dispatching on a
+        display label, the walker warnings), and it starts exactly like this.
+        """
+        t.append(scope, style=SOFT)
+        t.append("  (sampled)" if sampled else "", style=PEND)
+        if scale_label:
+            t.append(f"  scale {scale_label}", style=PEND if transformed else SOFT)
+        t.append("\n")
 
     def _viz_entropy(self):
-        ent, size, sampled = viz.file_entropy(self.work, self._viz_width())
+        lo, hi, scope = self._viz_range()
+        ent, size, sampled = viz.file_entropy(
+            self.work, self._viz_width(), start=lo, end=hi)
         if not ent:
             return Text("  (no bytes to visualize)", style=DIM)
+        mode = self._scale_for("entropy")
+        norm, _vlo, _vhi, label = viz.scale_values(
+            ent, mode, floor=0.0, ceiling=8.0)
         t = Text()
         t.append("entropy  ", style=f"bold {ACCENT}")
-        t.append(f"min {min(ent):.1f}  mean {sum(ent) / len(ent):.1f}  "
-                 f"max {max(ent):.1f} bits/byte  ", style=SOFT)
-        t.append("(sampled)\n" if sampled else "(whole file)\n",
-                 style=PEND if sampled else SOFT)
-        t.append("0-8 bits/byte; flat 8 = compressed\n\n", style=DIM)
+        t.append(f"min {min(ent):.2f}  mean {sum(ent) / len(ent):.2f}  "
+                 f"max {max(ent):.2f} bits/byte  ", style=SOFT)
+        self._viz_caption(t, scope, sampled, label,
+                          transformed=mode != "absolute")
+        t.append("0-8 bits/byte; flat 8 = compressed   "
+                 "(r = region, S = scale)\n\n", style=DIM)
         # A column chart rather than a one-row sparkline. Eight bits squeezed
         # into a single cell gives eight distinguishable levels; over the rows
         # the pane actually has it is eight per row, and the difference
         # between 7.6 and 7.9 bits -- compressed versus encrypted -- becomes
         # something you can see instead of something you have to measure.
+        #
+        # Colour tracks the DRAWN height, not the raw value, so it rescales
+        # with the axis. Under `auto` a bar at the top of a 7.90-7.95 window is
+        # the hottest thing on screen, which is the correct reading of a chart
+        # whose caption says that is the window.
         rows = self._viz_chart_height()
         blocks = " ▁▂▃▄▅▆▇█"
-        levels = [max(0.0, min(1.0, e / 8)) * rows for e in ent]
+        levels = [n * rows for n in norm]
         for r in range(rows - 1, -1, -1):
             for col, filled in enumerate(levels):
                 frac = max(0.0, min(1.0, filled - r))
-                style = PALETTE[min(len(PALETTE) - 1,
-                                    int((ent[col] / 8) * len(PALETTE)))]
-                t.append(blocks[int(frac * (len(blocks) - 1))], style=style)
+                t.append(blocks[int(frac * (len(blocks) - 1))],
+                         style=ramp_color(norm[col]))
             t.append("\n")
-        self._viz_mark_container_end(t, len(ent), size)
+        if self._viz_scope != "region":
+            self._viz_mark_container_end(t, len(ent), size)
         return t
 
     def _viz_mark_container_end(self, t, columns, size):
@@ -1499,13 +1656,14 @@ class AcidcatTUI(App):
         return best
 
     def _viz_hilbert(self):
+        lo, hi, scope = self._viz_range()
         grid, side, sampled = viz.hilbert_from_file(
-            self.work, order=self._hilbert_order())
+            self.work, order=self._hilbert_order(), start=lo, end=hi)
         t = Text()
         t.append("hilbert  ", style=f"bold {ACCENT}")
         t.append(f"{side}x{side}; adjacent cells are adjacent bytes  ", style=SOFT)
-        t.append("(sampled)\n\n" if sampled else "(whole file)\n\n",
-                 style=PEND if sampled else SOFT)
+        self._viz_caption(t, scope, sampled, None)
+        t.append("\n")
         for y in range(0, side, 2):
             for x in range(side):
                 top = grid[y][x]
@@ -1519,16 +1677,33 @@ class AcidcatTUI(App):
         t.append("\n")
         return t
 
-    def _viz_histogram(self, data):
+    def _viz_histogram(self, data, scope="whole file", capped=False):
+        from acidcat.core.primitives.signal import byte_counts
+
+        w = self._viz_width()
+        counts = byte_counts(data)
+        mode = self._scale_for("histogram")
+        norm, _lo, _hi, label = viz.scale_values(counts, mode, floor=0.0)
         t = Text()
         t.append("byte histogram  ", style=f"bold {ACCENT}")
-        capped = len(data) < self.fsize
-        t.append(f"(0x00 .. 0xff frequency over {len(data):,} bytes"
-                 + (", capped)" if capped else ")") + "\n\n",
-                 style=PEND if capped else SOFT)
-        for row in viz.byte_histogram(data, width=self._viz_width(),
-                                      height=self._viz_chart_height()):
-            t.append(row + "\n", style=ACCENT)
+        t.append(f"0x00 .. 0xff over {len(data):,} bytes  ", style=SOFT)
+        self._viz_caption(t, scope + (", read capped" if capped else ""),
+                          False, label, transformed=mode != "absolute")
+        t.append(f"peak {max(counts):,} at 0x{counts.index(max(counts)):02x}"
+                 if any(counts) else "no bytes", style=DIM)
+        t.append("   (r = region, S = scale)\n\n", style=DIM)
+        # Drawn from the SCALED values, and coloured from the same array by the
+        # per-cell peak, so the bar you see and the colour it is drawn in came
+        # out of one dataset. Under `log` or `clip` a file that is 90% zero
+        # padding stops flattening its own histogram into a single spike and a
+        # flat line, which was every padded sampler bank in the corpus.
+        rows = viz.braille_line(norm, width=w, height=self._viz_chart_height(),
+                                vmin=0.0, vmax=1.0, fill=True)
+        peaks = viz.column_peaks(norm, w)
+        for row in rows:
+            for x, ch in enumerate(row):
+                t.append(ch, style=ramp_color(peaks[x] if x < len(peaks) else 0.0))
+            t.append("\n")
         return t
 
     def _audio_span(self):

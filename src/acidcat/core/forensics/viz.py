@@ -41,6 +41,38 @@ def _dot_rows(dots, width, height):
     return rows
 
 
+def _sample_columns(values, dot_w):
+    """`dot_w` values representing `values`, peak-preserving.
+
+    Point-sampling here dropped data outright: a 256-bin byte histogram drawn
+    across 69 cells has 138 dot columns, so 118 of the 256 bins were never
+    looked at. A lone tall bar -- the 0x00 spike of a padded bank, the one
+    hot window in a large file, exactly what these views exist to surface --
+    could land on a skipped index and simply not be drawn, with a full-looking
+    chart giving no sign anything was missing.
+
+    So when there is more data than room, each output column reports the
+    MAXIMUM over the range it covers. Nothing that would have been visible
+    disappears; a peak may be one column wide instead of sub-pixel. When the
+    data fits, the old interpolating index is kept, since a line plot of a few
+    values should stay smooth rather than turn into steps.
+    """
+    n = len(values)
+    if n == 0 or dot_w < 1:
+        return []
+    if n <= dot_w:
+        return [values[min(n - 1,
+                           int(round(x * (n - 1) / (dot_w - 1)))
+                           if dot_w > 1 and n > 1 else 0)]
+                for x in range(dot_w)]
+    out = []
+    for x in range(dot_w):
+        lo = x * n // dot_w
+        hi = max(lo + 1, (x + 1) * n // dot_w)
+        out.append(max(values[lo:hi]))
+    return out
+
+
 def braille_line(values, width=72, height=8, vmin=None, vmax=None, fill=False):
     """Braille line (or filled area) plot, `height` strings top-first."""
     if not values or width < 1 or height < 1:
@@ -49,12 +81,11 @@ def braille_line(values, width=72, height=8, vmin=None, vmax=None, fill=False):
     vmin = min(values) if vmin is None else vmin
     vmax = max(values) if vmax is None else vmax
     span = (vmax - vmin) or 1.0
-    n = len(values)
+    cols = _sample_columns(values, dot_w)
     dots = set()
     prev = None
     for x in range(dot_w):
-        idx = int(round(x * (n - 1) / (dot_w - 1))) if dot_w > 1 and n > 1 else 0
-        v = values[min(n - 1, idx)]
+        v = cols[x]
         from_bottom = int(round((v - vmin) / span * (dot_h - 1)))
         from_bottom = max(0, min(dot_h - 1, from_bottom))
         top = (dot_h - 1) - from_bottom
@@ -77,6 +108,72 @@ def byte_histogram(data, width=128, height=6):
     return braille_line(counts, width=width, height=height, vmin=0, fill=True)
 
 
+def column_peaks(values, width):
+    """The value each output CELL stands for -- the taller of its two dot
+    columns, taken from the same sampling braille_line draws from.
+
+    Exists so a caller can colour a chart by bar height without guessing at
+    the sampling. Deriving it independently is how the picture and its colours
+    end up describing two different datasets.
+    """
+    if not values or width < 1:
+        return []
+    cols = _sample_columns(values, width * 2)
+    return [max(cols[cx * 2], cols[cx * 2 + 1]) for cx in range(width)]
+
+
+# vertical-axis mappings. A chart is only readable when its axis suits the
+# data, and only honest when it says which axis it used -- an autoscaled
+# entropy plot where 7.90 sits on the floor and 7.95 on the ceiling looks
+# exactly like 0 versus 8 unless the caption gives the range away.
+SCALES = ("absolute", "auto", "log", "clip")
+
+
+def scale_values(values, mode="absolute", floor=0.0, ceiling=None, clip=0.99):
+    """Map `values` onto 0..1 for drawing.
+
+    Returns ``(norm, lo, hi, label)``. `label` names the axis actually used and
+    is meant to be printed; callers should not invent their own wording.
+
+      absolute  floor..ceiling as given (an axis that does not move)
+      auto      min..max of the data (small differences become visible)
+      log       log1p, floor..max (a dominant bin stops flattening the rest)
+      clip      floor..the `clip` quantile, taller bars clipped and counted
+
+    `auto` on flat data collapses to a zero span; it is reported as such rather
+    than drawn as a full-height block, since "everything is identical" and
+    "everything is at maximum" are different findings.
+    """
+    if not values:
+        return [], 0.0, 0.0, mode
+    lo = float(floor if floor is not None else min(values))
+    hi = float(ceiling) if ceiling is not None else float(max(values))
+
+    if mode == "auto":
+        lo, hi = float(min(values)), float(max(values))
+        if hi - lo < 1e-9:
+            return [0.0] * len(values), lo, hi, f"auto (flat at {lo:.4g})"
+        label = f"auto {lo:.4g}-{hi:.4g}"
+    elif mode == "log":
+        import math
+        vals = [math.log1p(max(0.0, v - lo)) for v in values]
+        top = max(vals) or 1.0
+        return ([v / top for v in vals], lo, hi, "log")
+    elif mode == "clip":
+        ordered = sorted(values)
+        idx = min(len(ordered) - 1, int(clip * (len(ordered) - 1)))
+        hi = float(ordered[idx]) or float(max(values))
+        over = sum(1 for v in values if v > hi)
+        label = (f"clipped at {hi:.4g}"
+                 + (f" ({over} above)" if over else ""))
+    else:
+        label = f"{lo:.4g}-{hi:.4g}"
+
+    span = (hi - lo) or 1.0
+    return ([max(0.0, min(1.0, (v - lo) / span)) for v in values],
+            lo, hi, label)
+
+
 def windowed_entropy(data, windows=72):
     """Shannon entropy (bits/byte, 0..8) over ``windows`` equal slices. A flat
     line near 8 is an encrypted or compressed span; structure varies."""
@@ -97,13 +194,30 @@ _ENTROPY_SAMPLE = 8192          # bytes read per window before sampling kicks in
 _ENTROPY_PROBES = 4             # sub-reads a sampled window is spread across
 
 
-def file_entropy(path, windows=72, sample=_ENTROPY_SAMPLE):
+def _span(path, start, end):
+    """Clamp a caller's (start, end) to the file. Returns (start, end, length).
+
+    One place, because an off-by-one here silently shifts every window in the
+    picture and nothing raises.
+    """
+    size = os.path.getsize(path)
+    start = max(0, min(int(start or 0), size))
+    end = size if end is None else max(start, min(int(end), size))
+    return start, end, end - start
+
+
+def file_entropy(path, windows=72, sample=_ENTROPY_SAMPLE, start=0, end=None):
     """Per-window entropy across a FILE, without reading it all in.
 
-    Returns ``(values, size, sampled)`` -- bits/byte per window, the file size,
-    and whether any window was sampled rather than read whole. That third value
-    is not decoration: a sampled curve is an estimate, and a viewer that draws
-    it identically to an exact one is stating a measurement it did not make.
+    Returns ``(values, size, sampled)`` -- bits/byte per window, the number of
+    bytes covered, and whether any window was sampled rather than read whole.
+    That third value is not decoration: a sampled curve is an estimate, and a
+    viewer that draws it identically to an exact one is stating a measurement
+    it did not make.
+
+    `start`/`end` narrow it to one byte range, which is what lets a caller plot
+    a single chunk instead of the file it sits in. `size` is then the length of
+    that range, so the return stays "how much this picture covers".
 
     ``windowed_entropy`` stays for bytes you already hold. This exists because
     the entropy view is most wanted on the files least suited to being read
@@ -114,34 +228,34 @@ def file_entropy(path, windows=72, sample=_ENTROPY_SAMPLE):
     case the view exists to catch: a container followed by an appended payload
     puts the interesting bytes at the END of a window.
     """
-    size = os.path.getsize(path)
+    base, stop, size = _span(path, start, end)
     if size == 0 or windows <= 0:
         return [], size, False
     # Deliberately the SAME boundaries windowed_entropy uses, so an unsampled
     # run of this function is byte-identical to it. Two functions answering one
     # question is fine; two functions answering it differently is the drift
     # this codebase keeps finding.
-    bounds = [(i * size // windows, max(i * size // windows + 1,
-                                        (i + 1) * size // windows))
+    bounds = [(base + i * size // windows,
+               base + max(i * size // windows + 1, (i + 1) * size // windows))
               for i in range(windows)]
     sampled = max(hi - lo for lo, hi in bounds) > sample
     out = []
     with open(path, "rb") as fh:
-        for start, end in bounds:
-            if start >= size:
+        for w_lo, w_hi in bounds:
+            if w_lo >= stop:
                 break
-            end = min(end, size)
+            w_hi = min(w_hi, stop)
             if not sampled:
-                fh.seek(start)
-                seg = fh.read(end - start)
+                fh.seek(w_lo)
+                seg = fh.read(w_hi - w_lo)
             else:
                 per = max(1, sample // _ENTROPY_PROBES)
-                stride = max(1, (end - start - per) // max(1, _ENTROPY_PROBES - 1))
+                stride = max(1, (w_hi - w_lo - per) // max(1, _ENTROPY_PROBES - 1))
                 chunks = []
                 for p in range(_ENTROPY_PROBES):
-                    at = min(start + p * stride, max(start, end - per))
+                    at = min(w_lo + p * stride, max(w_lo, w_hi - per))
                     fh.seek(at)
-                    chunks.append(fh.read(min(per, end - at)))
+                    chunks.append(fh.read(min(per, w_hi - at)))
                 seg = b"".join(chunks)
             if not seg:
                 break
@@ -172,7 +286,8 @@ def _d2xy(side, d):
 _HILBERT_PER_CELL = 64          # bytes sampled per cell when a file is too big
 
 
-def hilbert_from_file(path, order=6, per_cell=_HILBERT_PER_CELL):
+def hilbert_from_file(path, order=6, per_cell=_HILBERT_PER_CELL,
+                      start=0, end=None):
     """``hilbert_grid`` over a FILE, bounded, covering the whole of it.
 
     Returns ``(grid, side, sampled)``.
@@ -185,19 +300,20 @@ def hilbert_from_file(path, order=6, per_cell=_HILBERT_PER_CELL):
     256 KB at order 6.
 
     Exact when the file is small enough that each cell's range fits in
-    ``per_cell``; ``sampled`` says which happened.
+    ``per_cell``; ``sampled`` says which happened. `start`/`end` map one byte
+    range instead of the whole file.
     """
     side = 1 << order
     cells = side * side
     grid = [[None] * side for _ in range(side)]
-    n = os.path.getsize(path)
+    base, _stop, n = _span(path, start, end)
     if n == 0:
         return grid, side, False
     sampled = False
     with open(path, "rb") as fh:
         for i in range(cells):
-            lo = i * n // cells
-            hi = max(lo + 1, (i + 1) * n // cells)
+            lo = base + i * n // cells
+            hi = base + max(i * n // cells + 1, (i + 1) * n // cells)
             want = min(per_cell, hi - lo)
             if hi - lo > want:
                 sampled = True

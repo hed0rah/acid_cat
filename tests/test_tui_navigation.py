@@ -256,18 +256,28 @@ def test_tab_does_not_focus_a_pane_hidden_by_zoom(wav):
 
 
 def test_tab_still_cycles_once_the_zoom_is_off(wav):
-    """The skip must not break the ordinary case."""
+    """The skip must not break the ordinary case.
+
+    Asserted as a full lap rather than a fixed sequence: the cycle gained the
+    forensics panel (see test_tui_findings_panel.py) and will gain more, and a
+    test that pins the exact next pane fails on every such addition while
+    proving nothing about the property that matters -- that len(_PANES)
+    presses return you to where you started, having visited each pane once.
+    """
     async def scenario():
         app = AcidcatTUI(wav)
         async with app.run_test(size=(160, 44)) as pilot:
             await pilot.pause()
-            assert app._focused_pane() == "tree"
-            await pilot.press("tab")
-            await pilot.pause()
-            assert app._focused_pane() == "hexwrap"
-            await pilot.press("tab")
-            await pilot.pause()
-            assert app._focused_pane() == "tree"
+            start = app._focused_pane()
+            assert start == "tree"
+            seen = []
+            for _ in range(len(app._PANES)):
+                await pilot.press("tab")
+                await pilot.pause()
+                seen.append(app._focused_pane())
+            assert seen[-1] == start, f"tab did not come back around: {seen}"
+            assert sorted(seen) == sorted(app._PANES), (
+                f"a lap missed or repeated a pane: {seen}")
     _run(scenario)
 
 

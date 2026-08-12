@@ -57,6 +57,25 @@ shape being fixed while it is still free to fix.
 
 ### Added
 
+- **The TUI's graph views take a scale and a scope (`S` and `r`).** The entropy
+  plot was pinned to its ceiling on nearly every real file: audio sits around
+  7.9 of a theoretical 8, so the axis spent 99% of its height on a range no
+  audio file occupies and the differences worth seeing were compressed into the
+  top two percent. `S` switches the entropy axis to the range actually present,
+  and gives the byte histogram linear, log and clipped axes so one dominant bin
+  -- 0x00 in any padded bank -- stops flattening the other 255. `r` points any
+  graph at the selected chunk instead of the whole file, which is the only way
+  to see a 40-byte header that occupies one column of a whole-file plot.
+
+  A rescaled chart looks exactly like an absolute one, so the caption always
+  names the axis and the span it chose. That is the point of the feature and
+  the risk it carries, in the same sentence.
+
+- **Colour carries magnitude in the byte views.** Bars were drawn from the
+  eight-stop brand ramp, or in the histogram's case one flat colour, so the
+  hue said nothing a length was not already saying. The ramp is interpolated
+  now and tracks the drawn height.
+
 - **A ledger of every bound in the tree, and a conservation law over directory
   verbs.** Nine instances of one defect were fixed by hand this cycle: a cap
   applied, and the shortened result presented as the whole answer. These are the
@@ -93,6 +112,32 @@ shape being fixed while it is still free to fix.
   detecting it would mean a false positive on roughly six files in ten.
 
 ### Fixed
+
+- **A byte histogram could omit its tallest bar.** The braille plotter
+  point-sampled its input, so drawing 256 bins across a 69-column pane looked
+  at 138 of them and never read the other 118. A distribution spiking at one of
+  the unread values -- a fill byte, a single-byte XOR key -- rendered as a flat
+  chart with nothing to indicate a bar had been skipped, in the view whose
+  whole job is showing the outlier. Columns now report the maximum over the
+  range they cover, so nothing that would have been visible disappears.
+
+- **The forensics panel could not be read without a mouse.** `#idbox` is six
+  rows holding a legend plus one line per finding, and `tab` cycled only the
+  tree and the hex dump, so on a file with more than about four findings the
+  rest were unreachable from the keyboard -- over ssh, which is where this gets
+  used, that is the rest of the list. It joined the tab cycle, and `f` now
+  scrolls the panel so the finding it just jumped to is on screen rather than
+  marking one nobody can see.
+
+- **A library's schema version came from a cached copy, and a migration that
+  rebuilt the index said nothing while it ran.** The cached number was only
+  rewritten by a full indexing run, so a library migrated by being *opened* --
+  what a query or an MCP call does -- reported its old version forever. With
+  the migration itself silent, the visible result was a client that paused and
+  a registry insisting nothing had happened, which is a bug report for a
+  deadlock that does not exist. `index --refresh-stats`, the command whose job
+  is repairing exactly this, carried a drifted duplicate of the read that never
+  touched the field; it delegates now.
 
 - **Four places a cap, or a first answer, was reported as the answer.** The TUI
   byte search stopped at an undisclosed 4,096 and printed that as the match

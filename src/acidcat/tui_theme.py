@@ -79,6 +79,27 @@ def chunk_color(i):
     return PALETTE[i % len(PALETTE)]
 
 
+def ramp_color(t):
+    """The PALETTE ramp sampled continuously at `t` in 0..1 -> '#rrggbb'.
+
+    PALETTE is eight stops, which is enough to tell categories apart and not
+    enough to read a magnitude off: an entropy chart quantised to eight colours
+    shows a broad teal-to-orange sweep and nothing about the differences within
+    it. Interpolating between the same stops keeps the brand ramp exactly as it
+    is and gives a bar's colour back its resolution.
+    """
+    t = 0.0 if t != t else max(0.0, min(1.0, float(t)))   # t != t catches NaN
+    pos = t * (len(PALETTE) - 1)
+    i = min(len(PALETTE) - 2, int(pos))
+    f = pos - i
+    a, b = PALETTE[i].lstrip("#"), PALETTE[i + 1].lstrip("#")
+    out = []
+    for c in (0, 2, 4):
+        lo, hi = int(a[c:c + 2], 16), int(b[c:c + 2], 16)
+        out.append(round(lo + (hi - lo) * f))
+    return "#%02x%02x%02x" % tuple(out)
+
+
 def sev_color(level):
     """Color for a severity level; falls back to FG."""
     return SEV.get(level, FG)

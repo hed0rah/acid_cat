@@ -34,6 +34,14 @@ class _VizProbe:
     _viz_chart_height = AcidcatTUI._viz_chart_height
     _hilbert_order = AcidcatTUI._hilbert_order
     _VIZ_CHROME_ROWS = AcidcatTUI._VIZ_CHROME_ROWS
+    # scope and scale, added when the views learned to cover one region and to
+    # rescale. Real methods, not stubs, for the reason in the class docstring.
+    _viz_range = AcidcatTUI._viz_range
+    _short_name = AcidcatTUI._short_name
+    _node_name = AcidcatTUI._node_name
+    _viz_caption = AcidcatTUI._viz_caption
+    _scale_for = AcidcatTUI._scale_for
+    _VIZ_SCALES = AcidcatTUI._VIZ_SCALES
 
     def __init__(self, path, chunks=(), width=72, rows=39):
         self.work = path
@@ -41,6 +49,10 @@ class _VizProbe:
         self.chunks = list(chunks)
         self._w = width
         self._rows = rows
+        self._viz_scope = "file"
+        self._viz_scale = {}
+        self._cur_node = None
+        self._nodemeta = {}
 
     def _viz_width(self):
         return self._w
@@ -59,21 +71,32 @@ def _wav_plus(path, trailing=b""):
 
 def test_entropy_says_whole_file_when_it_read_the_whole_file(tmp_path):
     p = _VizProbe(_wav_plus(tmp_path / "a.wav"))
-    assert "(whole file)" in p._viz_entropy().plain
+    out = p._viz_entropy().plain
+    assert "whole file" in out
+    assert "(sampled)" not in out, "an exact curve must not hedge"
 
 
 def test_entropy_says_sampled_when_it_sampled(tmp_path):
+    """Coverage and exactness are separate claims and are now stated separately.
+
+    The caption used to print one OR the other, which conflated them: a sampled
+    run said "(sampled)" and stopped, leaving how much of the file it spanned
+    unstated. Both functions anchor every window to the offset range it stands
+    for, so a sampled curve does span the whole file -- it is estimated, not
+    truncated. "whole file (sampled)" says both; the old wording said neither
+    clearly.
+    """
     big = tmp_path / "big.bin"
     big.write_bytes(os.urandom(3_000_000))
-    p = _VizProbe(str(big), width=8)
-    out = p._viz_entropy().plain
+    out = _VizProbe(str(big), width=8)._viz_entropy().plain
     assert "(sampled)" in out, "estimated the curve and captioned it as measured"
-    assert "(whole file)" not in out
+    assert "whole file" in out, "spans the file; say so alongside the hedge"
 
 
 def test_hilbert_covers_the_file_and_says_how(tmp_path):
     small = _VizProbe(_wav_plus(tmp_path / "s.wav"))
-    assert "(whole file)" in small._viz_hilbert().plain
+    out = small._viz_hilbert().plain
+    assert "whole file" in out and "(sampled)" not in out
     big = tmp_path / "b.bin"
     big.write_bytes(os.urandom(2_000_000))
     assert "(sampled)" in _VizProbe(str(big))._viz_hilbert().plain
