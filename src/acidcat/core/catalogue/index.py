@@ -15,6 +15,7 @@ import json
 import os
 import sqlite3
 import struct
+import sys
 import time
 
 
@@ -192,6 +193,20 @@ def _migrate(conn, cur, on_disk):
     guarded against a pre-existing column, so a migration killed midway cannot
     wedge the DB with 'duplicate column name' on the next open (the columns from a
     rolled-back attempt are gone, and the guard covers a legacy partial state)."""
+    # Say it is happening. This rebuilds the samples table and repopulates the
+    # FTS index, so its cost scales with the library: about a second for 32,000
+    # rows, and it printed nothing at all while it ran. Inside a single-threaded
+    # server that is a stall with no explanation, and it sent a real bug hunt
+    # after a phantom deadlock. stderr, so it cannot corrupt machine output.
+    try:
+        rows = cur.execute("SELECT COUNT(*) FROM samples").fetchone()[0]
+    except Exception:
+        rows = None
+    print(f"acidcat: migrating library index from schema v{on_disk} to "
+          f"v{SCHEMA_VERSION}"
+          + (f" ({rows:,} rows)" if rows else "")
+          + "; this happens once and may take a moment", file=sys.stderr)
+
     try:
         cur.execute("BEGIN")
         if on_disk < 2:

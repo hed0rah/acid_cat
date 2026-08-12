@@ -251,6 +251,12 @@ def _refresh_stats_from_db(conn, root, db_path):
     """Open `db_path`, read sample/feature counts and last_indexed_at, then
     push those values into the registry row for `root`. Best-effort: silently
     skips if the DB cannot be opened or doesn't have the expected schema.
+
+    Returns the dict that was written, or None if it skipped. `acidcat index
+    --refresh-stats` used to carry its own copy of these queries, and the copy
+    was missing schema_version, so the one command whose entire job is fixing a
+    stale registry could not fix that field. Callers that want to report what
+    changed read the return value instead of re-implementing the read.
     """
     import sqlite3
 
@@ -260,7 +266,7 @@ def _refresh_stats_from_db(conn, root, db_path):
         sub = sqlite3.connect(db_path)
         sub.row_factory = sqlite3.Row
     except sqlite3.DatabaseError:
-        return
+        return None
 
     try:
         try:
@@ -272,7 +278,7 @@ def _refresh_stats_from_db(conn, root, db_path):
             ).fetchone()["c"]
         except sqlite3.OperationalError:
             # DB exists but schema isn't an acidcat sample DB; skip
-            return
+            return None
 
         last_indexed_at = None
         try:
@@ -283,15 +289,32 @@ def _refresh_stats_from_db(conn, root, db_path):
                 last_indexed_at = row["t"]
         except sqlite3.OperationalError:
             pass
+
+        # Read the version the DB actually carries, not the one we last wrote
+        # down. The cached copy was only ever refreshed by a full indexing run,
+        # so a library migrated by being OPENED -- which is what a query or an
+        # MCP call does -- stayed at its old version in the registry forever.
+        # A real one read 1 here while the file said 3, which sent a bug hunt
+        # after a migration that had already happened.
+        schema_version = None
+        try:
+            row = sub.execute(
+                "SELECT v FROM meta WHERE k = 'schema_version'").fetchone()
+            if row is not None:
+                schema_version = int(row["v"])
+        except (sqlite3.OperationalError, TypeError, ValueError):
+            pass
     finally:
         sub.close()
 
-    update_stats(
-        conn, root,
-        sample_count=sample_count,
-        feature_count=feature_count,
-        last_indexed_at=last_indexed_at,
-    )
+    stats = {
+        "sample_count": sample_count,
+        "feature_count": feature_count,
+        "last_indexed_at": last_indexed_at,
+        "schema_version": schema_version,
+    }
+    update_stats(conn, root, **stats)
+    return stats
 
 
 def update_stats(conn, root, sample_count=None, feature_count=None,

@@ -454,52 +454,48 @@ def _cmd_refresh_stats(target, registry_path, quiet=False):
                 print(f"[refresh-stats] skipped {lib['label']}: "
                       f"DB missing at {lib['db_path']}", file=sys.stderr)
             continue
+        # Open through open_db first, on purpose: that is what applies a
+        # pending schema migration, and a DB walked from outside acidcat is
+        # exactly the case this command exists for. Then hand the reading to
+        # the registry's own refresher rather than repeating its queries here.
+        # The duplicate that used to live in this loop had drifted -- it never
+        # touched schema_version, so `--refresh-stats` left the one field most
+        # likely to be stale exactly as stale as it found it.
         try:
-            conn = idx.open_db(lib["db_path"])
+            idx.open_db(lib["db_path"]).close()
         except Exception as e:
             skipped_missing += 1
             if not quiet:
                 print(f"[refresh-stats] skipped {lib['label']}: {e}",
                       file=sys.stderr)
             continue
-        try:
-            sample_count = conn.execute(
-                "SELECT COUNT(*) AS c FROM samples"
-            ).fetchone()["c"]
-            feature_count = conn.execute(
-                "SELECT COUNT(*) AS c FROM features"
-            ).fetchone()["c"]
-            last_indexed_at = None
-            try:
-                row = conn.execute(
-                    "SELECT MAX(last_indexed_at) AS t FROM scan_roots"
-                ).fetchone()
-                if row is not None:
-                    last_indexed_at = row["t"]
-            except Exception:
-                pass
-        finally:
-            conn.close()
 
         rconn = reg.open_registry(registry_path)
         try:
-            reg.update_stats(
-                rconn, lib["root_path"],
-                sample_count=sample_count,
-                feature_count=feature_count,
-                last_indexed_at=last_indexed_at,
-            )
+            stats = reg._refresh_stats_from_db(
+                rconn, lib["root_path"], lib["db_path"])
         finally:
             rconn.close()
+
+        if stats is None:
+            skipped_missing += 1
+            if not quiet:
+                print(f"[refresh-stats] skipped {lib['label']}: "
+                      f"not an acidcat sample DB", file=sys.stderr)
+            continue
+
         refreshed += 1
         if not quiet:
             print(f"[refresh-stats] {lib['label']:<32s} "
-                  f"samples={sample_count} features={feature_count}",
+                  f"samples={stats['sample_count']} "
+                  f"features={stats['feature_count']}",
                   file=sys.stderr)
 
     if not quiet:
+        # not "(missing DB)": a skip is also an unopenable file or a DB that
+        # is not ours, and each one already printed its own reason above.
         print(f"[refresh-stats] {refreshed} refreshed, "
-              f"{skipped_missing} skipped (missing DB).", file=sys.stderr)
+              f"{skipped_missing} skipped.", file=sys.stderr)
     return 0
 
 
