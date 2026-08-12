@@ -382,3 +382,68 @@ def test_every_exemption_gives_a_reason():
         reason, prose = value
         assert isinstance(reason, Reason), f"{mod}.{const} has no Reason"
         assert len(prose) > 20, f"{mod}.{const}: reason is too thin to audit"
+
+
+# ── probe: the RE surface the workflow leans on hardest ─────────────
+
+def _repeated(tmp_path, name, unit, times):
+    p = tmp_path / name
+    p.write_bytes(unit * times)
+    return str(p)
+
+
+def _probe(*args):
+    import subprocess
+    import sys as _sys
+    return subprocess.run([_sys.executable, "-m", "acidcat", "probe", *args],
+                          capture_output=True, text=True, timeout=600)
+
+
+def test_probe_find_reports_the_true_hit_count(tmp_path):
+    """`find_bytes` stopped at 512 and its own docstring said "every offset",
+    so the command printed the cap as the number of hits. On a file with 3,000
+    occurrences it said "512 hit(s)"."""
+    p = _repeated(tmp_path, "many.bin", b"AB", 3000)
+    r = _probe("find", "41", p)
+    assert "3,000 hit(s)" in r.stderr, r.stderr
+    assert "listing the first 512" in r.stderr, r.stderr
+
+
+def test_probe_says_nothing_when_everything_fits(tmp_path):
+    """Silence is the claim of completeness. A caveat on a result that was not
+    truncated is noise, and noise is how the real ones stop being read."""
+    p = _repeated(tmp_path, "few.bin", b"AB", 10)
+    r = _probe("find", "41", p)
+    assert "10 hit(s)" in r.stderr
+    assert "listing the first" not in r.stderr, r.stderr
+
+
+def test_probe_diff_counts_every_changed_range(tmp_path):
+    """The loop EXITED at 256, so trailing differences were never examined and
+    the printed count was the cap."""
+    a = tmp_path / "a.bin"
+    b = tmp_path / "b.bin"
+    a.write_bytes(bytes(4000))
+    b.write_bytes(bytes([(i % 2) * 255 for i in range(4000)]))
+    r = _probe("diff", str(a), str(b))
+    assert "2,000 changed range(s)" in r.stdout, r.stdout
+    assert "listing the first 256" in r.stderr, r.stderr
+
+
+def test_probe_strings_reports_how_many_it_found(tmp_path):
+    p = tmp_path / "s.bin"
+    p.write_bytes(b"".join(b"HELLO%04d\x00" % i for i in range(1500)))
+    r = _probe("strings", str(p))
+    assert "1,500 string(s)" in r.stderr, r.stderr
+    assert "listing the first 1,000" in r.stderr
+
+
+def test_the_cap_note_never_lands_on_stdout(tmp_path):
+    """stdout carries records. A note there would break `probe --json ... | jq`
+    the same way a trailing summary once made validate's JSON unparseable."""
+    import json as _json
+    p = _repeated(tmp_path, "many.bin", b"AB", 3000)
+    r = _probe("--json", "find", "41", p)
+    doc = _json.loads(r.stdout)              # must parse despite the note
+    assert len(doc["hits"]) == 512
+    assert "listing the first" in r.stderr

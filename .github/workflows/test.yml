@@ -54,15 +54,38 @@ jobs:
         # silently skipped whole suites while every run reported success. The
         # conftest guard makes absence graceful for a contributor's laptop; it
         # is not a licence for CI to stop checking.
+        #
+        # Retried, because the package feeds go down and a release should not
+        # be blocked by someone else's outage: the Windows job failed once on a
+        # Chocolatey 503. Three attempts with backoff, then fail loudly rather
+        # than continuing without it -- letting the job pass with ffmpeg absent
+        # would put the deep-checksum tests back to skipping in silence, which
+        # is the state this step exists to end.
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            sudo apt-get update && sudo apt-get install -y ffmpeg
-          elif [ "$RUNNER_OS" = "macOS" ]; then
-            brew install ffmpeg
-          else
-            choco install ffmpeg -y --no-progress
-          fi
+          install_ffmpeg() {
+            if [ "$RUNNER_OS" = "Linux" ]; then
+              sudo apt-get update && sudo apt-get install -y ffmpeg
+            elif [ "$RUNNER_OS" = "macOS" ]; then
+              brew install ffmpeg
+            else
+              choco install ffmpeg -y --no-progress
+            fi
+          }
+          for attempt in 1 2 3; do
+            if install_ffmpeg && command -v ffmpeg >/dev/null 2>&1; then
+              break
+            fi
+            echo "ffmpeg install attempt $attempt failed; retrying in $((attempt * 20))s"
+            sleep $((attempt * 20))
+          done
+          command -v ffmpeg >/dev/null 2>&1 || {
+            echo "::error::ffmpeg could not be installed after 3 attempts. The"
+            echo "::error::deep-checksum and concealment tests would SKIP, so this"
+            echo "::error::job fails rather than reporting a green run that"
+            echo "::error::verified none of validate --deep."
+            exit 1
+          }
           ffmpeg -version | head -1
       - name: Install
         # `ml` was requested here and is not a defined extra -- pip warns and
