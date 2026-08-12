@@ -138,6 +138,19 @@ EXEMPT = {
                                   "thousands. If this is ever lowered below ~10x "
                                   "the largest real observation it leaves this "
                                   "category and must be swept"),
+    ("acidcat.commands.probe", "_SHOWN_CAP"):
+        (Reason.VIEWPORT, "how many hits probe LISTS; the count printed is the "
+                          "true total. Covered by "
+                          "test_probe_find_reports_the_true_hit_count and its "
+                          "quiet-when-it-fits control in this file"),
+    ("acidcat.commands.probe", "_STRINGS_CAP"):
+        (Reason.VIEWPORT, "runs listed by `probe strings`; the count is the true "
+                          "total. Covered by "
+                          "test_probe_strings_reports_how_many_it_found"),
+    ("acidcat.commands.probe", "_DIFF_SHOWN_CAP"):
+        (Reason.VIEWPORT, "ranges listed by `probe diff`; the count is the true "
+                          "total. Covered by "
+                          "test_probe_diff_counts_every_changed_range"),
     ("acidcat.core.forensics.resync", "_MAX_RECORDS"):
         (Reason.RUNAWAY_BACKSTOP, "announced, but through `inspect --resync` "
                                   "rather than walk_file, so the generic sweep "
@@ -529,3 +542,73 @@ def _probe_cli(*args):
     import sys as _sys
     return subprocess.run([_sys.executable, "-m", "acidcat", *args],
                           capture_output=True, text=True, timeout=600)
+
+
+def test_counting_hits_does_not_materialise_them():
+    """The obvious way to report a true total is to fetch everything and take
+    len(). That is what shipped first, and it cost 720 MB of Python list on a
+    40 MB input -- over an mmap that exists precisely so a large file does not
+    cost its size in RAM. `probe strings` over a multi-GB image would have
+    built a list of every printable run in it.
+
+    Counting past the cap while storing up to it is the same shape the TUI
+    search already uses. Memory must not scale with the match count.
+    """
+    import tracemalloc
+    from acidcat.core import probe as pr
+
+    data = b"AB" * 500_000                       # 1 MB, 500k matches
+    tracemalloc.start()
+    offs, total = pr.find_bytes_counted(data, b"A", 512)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+
+    assert total == 500_000, "the count must still be the truth"
+    assert len(offs) == 512, "the stored list must still be capped"
+    # 500k ints would be ~16 MB; the bound is what this asserts, not a number
+    assert peak < 1_000_000, (
+        f"peak {peak:,} bytes for 500,000 matches -- memory is scaling with the "
+        f"match count again")
+
+
+def test_the_counted_variants_agree_with_the_plain_ones():
+    """Two code paths for one question, so they are pinned together."""
+    from acidcat.core import probe as pr
+
+    data = bytes(range(256)) * 40
+    offs, total = pr.find_bytes_counted(data, b"\x07", None)
+    assert offs == pr.find_bytes(data, b"\x07", None)
+    assert total == len(offs)
+
+    a, b = bytes(200), bytes([(i % 3 == 0) * 9 for i in range(200)])
+    ranges, n, la, lb = pr.diff_counted(a, b, None)
+    plain, la2, lb2 = pr.diff(a, b, limit=None)
+    assert ranges == plain and n == len(plain) and (la, lb) == (la2, lb2)
+
+    runs, rtotal = pr.strings_counted(b"HELLO\x00WORLD\x00hi\x00", 4, None)
+    assert runs == pr.strings(b"HELLO\x00WORLD\x00hi\x00", 4, limit=None)
+    assert rtotal == len(runs)
+
+
+def test_resync_json_carries_the_cap_flag(tmp_path):
+    """The text path said "at least 68%" while the JSON said 68.
+
+    That is the machine face unable to tell a capped run from a complete one --
+    the same defect fixed in `scan --json` this release, recreated on the very
+    function that gained the flag. The JSON is the only face a script sees.
+    """
+    import json as _json
+    p = tmp_path / "many.bin"
+    p.write_bytes(b"".join(b"data" + struct.pack("<I", 8) + bytes(8)
+                           for _ in range(6000)))
+    r = _probe_cli("inspect", str(p), "--resync", "--json")
+    doc = _json.loads(r.stdout)
+    assert doc["capped"] is True, doc
+    assert doc["coverage_is_lower_bound"] is True
+
+    q = tmp_path / "few.bin"
+    q.write_bytes(b"".join(b"data" + struct.pack("<I", 8) + bytes(8)
+                           for _ in range(50)))
+    doc = _json.loads(_probe_cli("inspect", str(q), "--resync", "--json").stdout)
+    assert doc["capped"] is False, doc
+    assert doc["coverage_is_lower_bound"] is False

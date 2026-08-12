@@ -123,6 +123,11 @@ NOT_ACCOUNTING = {
     "index", "inspect", "scan", "shape", "similar", "survey",
 }
 
+# Directory verbs that DO account. `validate` was filed under
+# NOT_A_DIRECTORY_VERB, which is where the union logic wanted it but which
+# misdescribes a verb whose whole job includes walking a tree.
+ACCOUNTING = {"validate"}
+
 # Verbs that never take a directory, so conservation does not apply. A reason
 # each, because "not applicable" without one is indistinguishable from "not
 # looked at".
@@ -141,7 +146,6 @@ NOT_A_DIRECTORY_VERB = {
     "query": "reads the index, not the filesystem",
     "repair": "rewrites one file",
     "tui": "interactive, one file or a browser",
-    "validate": "accounted for, asserted above",
     "wrap": "gives one raw stream a header",
     "write": "edits metadata of named files",
 }
@@ -156,7 +160,7 @@ def test_every_verb_is_classified():
     """
     parser = cli._build_parser()
     verbs = set(parser._sub.choices)
-    classified = NOT_ACCOUNTING | set(NOT_A_DIRECTORY_VERB)
+    classified = NOT_ACCOUNTING | ACCOUNTING | set(NOT_A_DIRECTORY_VERB)
     missing = verbs - classified
     assert not missing, (
         f"new verb(s) {sorted(missing)}: say whether they take a directory. "

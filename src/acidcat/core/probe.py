@@ -118,6 +118,69 @@ def find_bytes(data, pattern, limit=512):
     return offs
 
 
+def find_bytes_counted(data, pattern, limit=512):
+    """(first `limit` offsets, total count) in one pass, bounded memory.
+
+    The counting variant exists because the obvious way to report a true total
+    -- ask for every offset and take len() -- materializes one int per match
+    over an mmap that was mmapped precisely so a huge input would not cost its
+    size in RAM. `probe strings` over a multi-GB image would build a list of
+    every printable run in it. Count past the cap; store up to it.
+    """
+    offs = []
+    total = 0
+    i = data.find(pattern)
+    while i != -1:
+        total += 1
+        if limit is None or len(offs) < limit:
+            offs.append(i)
+        i = data.find(pattern, i + 1)
+    return offs, total
+
+
+def strings_counted(data, minlen=4, limit=1000):
+    """(first `limit` runs, total count), single pass, bounded memory."""
+    out = []
+    total = 0
+    cur = bytearray()
+    start = 0
+    for i, b in enumerate(data):
+        if 32 <= b < 127:
+            if not cur:
+                start = i
+            cur.append(b)
+        else:
+            if len(cur) >= minlen:
+                total += 1
+                if limit is None or len(out) < limit:
+                    out.append((start, cur.decode("latin-1")))
+            cur = bytearray()
+    if len(cur) >= minlen:
+        total += 1
+        if limit is None or len(out) < limit:
+            out.append((start, cur.decode("latin-1")))
+    return out, total
+
+
+def diff_counted(a, b, limit=256):
+    """(first `limit` changed ranges, total count, len_a, len_b), one pass."""
+    n = min(len(a), len(b))
+    ranges = []
+    total = 0
+    i = 0
+    while i < n:
+        if a[i] != b[i]:
+            st = i
+            while i < n and a[i] != b[i]:
+                i += 1
+            total += 1
+            if limit is None or len(ranges) < limit:
+                ranges.append((st, i))
+        else:
+            i += 1
+    return ranges, total, len(a), len(b)
+
+
 def scan_value(data, value, fmt, limit=512):
     """Cheat-Engine value scan: every offset where ``value`` appears as ``fmt``,
     in both byte orders. Returns a list of (offset, 'le'|'be').
@@ -141,6 +204,30 @@ def scan_value(data, value, fmt, limit=512):
             hits.append((off, order))
     hits.sort()
     return hits if limit is None else hits[:limit]
+
+
+def scan_value_counted(data, value, fmt, limit=512):
+    """(first `limit` hits, total count), bounded memory. See
+    find_bytes_counted for why the count is not len(everything)."""
+    hits = []
+    total = 0
+    for order, e in (("le", "<"), ("be", ">")):
+        if fmt == "u24":
+            try:
+                needle = int(value).to_bytes(3, "little" if order == "le" else "big")
+            except (OverflowError, ValueError):
+                continue
+        else:
+            code, _ = FMT_STRUCT[fmt]
+            try:
+                needle = struct.pack(e + code, value)
+            except struct.error:
+                continue
+        offs, n = find_bytes_counted(data, needle, limit)
+        total += n
+        hits.extend((off, order) for off in offs)
+    hits.sort()
+    return hits[:limit] if limit is not None else hits, total
 
 
 # A run of ascending in-file u32s is a table; one in-file u32 is a coincidence.
