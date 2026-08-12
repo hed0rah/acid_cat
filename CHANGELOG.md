@@ -6,6 +6,28 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+### Planned for 1.0.1
+
+- **Walker cap warnings will stop counting as findings.** A walker that stops at
+  an internal limit appends a warning, `anomalies.scan` turns every walker
+  warning into a `structure` finding, and findings drive `audit`'s exit code --
+  so a structurally perfect file that merely crossed one of our own caps exits
+  1, and `audit f || quarantine f` quarantines it. This is recorded here before
+  1.0.0 ships because the README already promises the correct behaviour
+  ("a bounded run is not a failed one -- it says so on stderr and exits by what
+  it actually found"), which makes the change conformance to the published
+  contract rather than a surprise reversal.
+
+  It was not done for 1.0.0 because distinguishing a coverage note from a real
+  defect needs walker warnings to carry a kind. Doing it by matching the text of
+  the message would reintroduce exactly the prose-dispatch bug fixed in this
+  release, where the wording of a display string was load-bearing across a
+  module boundary. That is a walker-contract change and deserves its own
+  release.
+
+  Fourteen further cap sites are held behind the same change, and the cap ledger
+  in `tests/test_cap_announcements.py` lists every one so none is forgotten.
+
 ## [1.0.0] - 2026-08-10
 
 The 1.0 release. Everything below landed after the 1.0.0b2 beta, and the theme
