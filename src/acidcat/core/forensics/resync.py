@@ -56,7 +56,10 @@ def _read_size(data, at, endian):
         return None
 
 
-def scan(data, *, endian="<", known_only=False, max_records=4096,
+_MAX_RECORDS = 4096          # records kept by one scan pass
+
+
+def scan(data, *, endian="<", known_only=False, max_records=_MAX_RECORDS,
          min_size=0, require_corroboration=True):
     """Find plausible ``[id][u32 size]`` records anywhere in ``data``.
 
@@ -170,9 +173,18 @@ def recover(data, *, endian=None, known_only=False):
     best = None
     for e in tries:
         recs = scan(data, endian=e, known_only=known_only)
+        # the scan stops AT max_records, so a full list means it stopped
+        capped = len(recs) >= _MAX_RECORDS
         chain = chain_from(recs)
         covered = sum(r["size"] + 8 for r in chain)
         cand = {"records": recs, "chain": chain, "endian": e,
+                # When the record scan stopped at its cap, the chain is built
+                # from a prefix, so coverage is a LOWER BOUND, not a
+                # measurement. The docstring calls high coverage "a strong sign
+                # the recovery is real", which means a deflated percentage
+                # manufactures doubt -- the same shape as the FLAC read cap
+                # manufacturing damage.
+                "capped": capped,
                 "coverage": round(covered / len(data), 3) if data else 0.0}
         if best is None or (len(chain), cand["coverage"]) > (len(best["chain"]),
                                                              best["coverage"]):

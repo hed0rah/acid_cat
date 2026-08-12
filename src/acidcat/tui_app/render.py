@@ -30,7 +30,12 @@ _HEXEDIT_CAP = 512     # refuse editing a byte region bigger than this (pick a f
 _VIZ_READ = 8 * 1024 * 1024   # bytes the histogram reads; the other views stream
 _UNDO_CAP = 50         # most undo deltas to keep
 _UNDO_BYTES_CAP = 64 * 1024 * 1024   # total delta bytes kept (latest always kept)
-_DIFF_CAP = 200        # most changed regions to list in the pending-changes view
+_DIFF_CAP = 200        # most changed regions to LIST; the count reported is the true one
+# Byte-search hits kept for n/N cycling. This was a bare literal in the search
+# loop and the only cap in the app that was neither named nor disclosed: the
+# notify printed len(hits), so 100,000 matches reported as "4096 match(es)" and
+# n/N wrapped at 4096 with the rest of the file unreachable.
+_SEARCH_CAP = 4096
 _LARGE_FILE = 64 * 1024 * 1024       # above this, browse in place (no working copy)
 _SCAN_SEG = 16 * 1024 * 1024         # scan a blob in segments: live progress + cancel
 

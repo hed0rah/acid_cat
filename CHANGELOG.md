@@ -6,6 +6,28 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+### Planned for 1.0.1
+
+- **Walker cap warnings will stop counting as findings.** A walker that stops at
+  an internal limit appends a warning, `anomalies.scan` turns every walker
+  warning into a `structure` finding, and findings drive `audit`'s exit code --
+  so a structurally perfect file that merely crossed one of our own caps exits
+  1, and `audit f || quarantine f` quarantines it. This is recorded here before
+  1.0.0 ships because the README already promises the correct behaviour
+  ("a bounded run is not a failed one -- it says so on stderr and exits by what
+  it actually found"), which makes the change conformance to the published
+  contract rather than a surprise reversal.
+
+  It was not done for 1.0.0 because distinguishing a coverage note from a real
+  defect needs walker warnings to carry a kind. Doing it by matching the text of
+  the message would reintroduce exactly the prose-dispatch bug fixed in this
+  release, where the wording of a display string was load-bearing across a
+  module boundary. That is a walker-contract change and deserves its own
+  release.
+
+  Fourteen further cap sites are held behind the same change, and the cap ledger
+  in `tests/test_cap_announcements.py` lists every one so none is forgotten.
+
 ## [1.0.0] - 2026-08-10
 
 The 1.0 release. Everything below landed after the 1.0.0b2 beta, and the theme
@@ -35,6 +57,18 @@ shape being fixed while it is still free to fix.
 
 ### Added
 
+- **A ledger of every bound in the tree, and a conservation law over directory
+  verbs.** Nine instances of one defect were fixed by hand this cycle: a cap
+  applied, and the shortened result presented as the whole answer. These are the
+  mechanism for the tenth. Every module-level constant whose name claims it
+  bounds something must sit in exactly one bucket -- swept by a test, exempt
+  with a reason from a closed set, or recorded as debt that may only shrink --
+  so a new cap cannot be added without someone deciding which. Separately, every
+  file handed to a directory verb must land in a named bucket and be counted:
+  `validate` is asserted to account for all of them, and the twelve verbs that
+  do not yet are listed rather than forgotten. The ledger found two constants on
+  its first run that had been missed while building its own list by hand.
+
 - **`validate --deep` verifies the checksums a format carries about itself.**
   FLAC frame CRC-8 and CRC-16, and MP3 frame validity. Neither needs a decoder.
   A failure is proof rather than inference. acidcat previously parsed FLAC's
@@ -59,6 +93,18 @@ shape being fixed while it is still free to fix.
   detecting it would mean a false positive on roughly six files in ten.
 
 ### Fixed
+
+- **Four places a cap, or a first answer, was reported as the answer.** The TUI
+  byte search stopped at an undisclosed 4,096 and printed that as the match
+  count, so 100,000 matches read as 4,096 with the rest of the file unreachable
+  and unmentioned. The pending-changes screen -- the one consulted before a save
+  -- stopped its scan at 201 so it could print ".. 1 more regions", making 201
+  the largest number it could ever report: 1,000 changed regions rendered as
+  201. Ableton's `derived_tempo` returned the first warp span, so a clip warped
+  120 / 60 / 200 reported 120 with nothing saying the tempo moved, in a format
+  whose warp markers exist precisely to encode tempo that moves. And `m` in the
+  TUI did nothing and said nothing on an unrecognised file, which is
+  indistinguishable from a broken build on exactly the files the tool is for.
 
 - **Anomaly checks dispatched on the display label, so renaming a string could
   turn a check off.** Seven checks branched on the walker's human-readable

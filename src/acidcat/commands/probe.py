@@ -172,6 +172,25 @@ def _emit(args, payload):
     return True
 
 
+# House rule: say that a bound BIT, never that one exists. The note is on
+# stderr so the records on stdout stay pipeable, and it is conditional, so a
+# result that fits says nothing extra -- silence is the claim of completeness.
+# Named so the cap ledger's enumerator can see them: it matches
+# CAP/MAX/LIMIT/FINDINGS/CANDS, and a bare `_SHOWN = 512` was invisible to the
+# very harness this release ships to catch unannounced bounds.
+_SHOWN_CAP = 512
+_STRINGS_CAP = 1000
+_DIFF_SHOWN_CAP = 256
+
+
+def _cap_note(total, shown, unit):
+    if total <= shown:
+        return
+    print(f"acidcat probe: {total:,} {unit} found; listing the first "
+          f"{shown:,} (the rest are not shown)", file=sys.stderr)
+
+
+
 def run(args):
     """Dispatch each operand through the sub-verb, like strings(1) or file(1).
 
@@ -343,12 +362,14 @@ def _dispatch(args, verb, path, data):
         except ValueError:
             print(f"acidcat probe: bad value {args.value!r}", file=sys.stderr)
             return 2
-        hits = pr.scan_value(data, value, args.type)
+        hits, total_hits = pr.scan_value_counted(data, value, args.type, _SHOWN_CAP)
         if _emit(args, {"verb": "scan", "value": args.value, "type": args.type,
                         "hits": [{"offset": o, "endian": e} for o, e in hits]}):
+            _cap_note(total_hits, len(hits), "hit(s)")
             return 0 if hits else 1
-        print(f"{len(hits)} hit(s) for {args.value} as {args.type}",
+        print(f"{total_hits:,} hit(s) for {args.value} as {args.type}",
               file=sys.stderr)
+        _cap_note(total_hits, len(hits), "hit(s)")
         for off, order in hits:
             print(f"  0x{off:08x}  ({order})")
         return 0 if hits else 1
@@ -363,12 +384,14 @@ def _dispatch(args, verb, path, data):
             except ValueError:
                 print(f"acidcat probe: bad hex {pat!r} (use s: for text)", file=sys.stderr)
                 return 2
-        offs = pr.find_bytes(data, needle)
+        offs, total_offs = pr.find_bytes_counted(data, needle, _SHOWN_CAP)
         if _emit(args, {"verb": "find", "pattern": pat,
                         "length": len(needle),
                         "hits": [{"offset": o} for o in offs]}):
+            _cap_note(total_offs, len(offs), "hit(s)")
             return 0 if offs else 1
-        print(f"{len(offs)} hit(s) for {pat}", file=sys.stderr)
+        print(f"{total_offs:,} hit(s) for {pat}", file=sys.stderr)
+        _cap_note(total_offs, len(offs), "hit(s)")
         for off in offs:
             print(f"  0x{off:08x}")
         return 0 if offs else 1
@@ -377,11 +400,13 @@ def _dispatch(args, verb, path, data):
         # memoryview: byte-wise iteration must yield ints as bytes does
         # (iterating the mmap itself yields 1-byte bytes objects)
         with memoryview(data) as view:
-            found = pr.strings(view, args.min)
+            found, total_found = pr.strings_counted(view, args.min, _STRINGS_CAP)
         if _emit(args, {"verb": "strings", "min_length": args.min,
                         "strings": [{"offset": o, "text": t}
                                     for o, t in found]}):
+            _cap_note(total_found, len(found), "string(s)")
             return 0 if found else 1
+        _cap_note(total_found, len(found), "string(s)")
         for off, text in found:
             print(f"0x{off:08x}  {text}")
         return 0 if found else 1
@@ -403,7 +428,8 @@ def _dispatch(args, verb, path, data):
             print(f"acidcat probe: {args.other}: {e}", file=sys.stderr)
             return 2
         try:
-            ranges, la, lb = pr.diff(data, other)
+            ranges, total_ranges, la, lb = pr.diff_counted(data, other,
+                                                            _DIFF_SHOWN_CAP)
         finally:
             oclose()
         if _emit(args, {"verb": "diff", "a": display_name(path),
@@ -412,12 +438,14 @@ def _dispatch(args, verb, path, data):
                         "identical": not ranges and la == lb,
                         "ranges": [{"offset": st, "end": en, "length": en - st}
                                    for st, en in ranges]}):
+            _cap_note(total_ranges, len(ranges), "changed range(s)")
             return 0 if (not ranges and la == lb) else 1
         if not ranges and la == lb:
             print("identical")
             return 0
         print(f"{display_name(path)} ({la:,}) vs {os.path.basename(args.other)} "
-              f"({lb:,}): {len(ranges)} changed range(s)")
+              f"({lb:,}): {total_ranges:,} changed range(s)")
+        _cap_note(total_ranges, len(ranges), "changed range(s)")
         for s, e in ranges:
             print(f"  0x{s:08x}..0x{e:08x}  ({e - s} bytes)")
         if la != lb:
