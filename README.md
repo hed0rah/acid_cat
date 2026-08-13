@@ -452,9 +452,17 @@ steps reports `sample_count: null` and answers nothing.
 `skills/acidcat/` is a Claude skill that teaches a model the above: which tool to
 reach for, what each cost tier means, the register-then-reindex sequence, and
 which results are lower bounds rather than totals. Install it alongside the
-server:
+server, from a checkout of this repository:
 
     cp -r skills/acidcat ~/.claude/skills/
+
+It is not part of the pip package -- a skill is instructions for a model, not
+importable code, and shipping it inside site-packages would put it somewhere no
+skill loader looks. Installing from PyPI, take it from the repository:
+
+    mkdir -p ~/.claude/skills/acidcat
+    curl -o ~/.claude/skills/acidcat/SKILL.md \
+      https://raw.githubusercontent.com/hed0rah/acidcat/main/skills/acidcat/SKILL.md
 
 Without it a model has only the tool descriptions, which cover each call in
 isolation but not the order they go in. The gap is not hypothetical: an agent
