@@ -443,26 +443,50 @@ class TestArrowsOnAFocusedGraph:
                 assert app._scale_for("histogram") == "clip"
         _run(scenario)
 
-    def test_right_narrows_and_left_widens(self, wav):
+    def test_left_and_right_move_the_selection(self, wav):
+        """Up and down are spent on the scale, so without this, focusing a
+        graph freezes what you are looking at."""
         async def scenario():
             app = AcidcatTUI(wav)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                await pilot.press("down")            # a node with bytes
+                await self._on_graph(pilot, app)
+                tree = app.query_one("#tree")
+                start = tree.cursor_line
+                await pilot.press("right")
+                await pilot.pause()
+                assert tree.cursor_line == start + 1
+                await pilot.press("left")
+                await pilot.pause()
+                assert tree.cursor_line == start
+        _run(scenario)
+
+    def test_it_moves_the_same_cursor_the_tree_moves(self, wav):
+        """One cursor, so the two panes cannot disagree about the selection."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
                 await self._on_graph(pilot, app)
                 await pilot.press("right")
                 await pilot.pause()
-                assert app._viz_scope == "region"
-                await pilot.press("right")           # idempotent, not a toggle
+                tree = app.query_one("#tree")
+                assert app._cur_node is tree.cursor_node
+        _run(scenario)
+
+    def test_the_end_of_the_tree_says_so(self, wav):
+        """A key that stops working without a word reads as a broken build."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                assert app._viz_scope == "region"
-                await pilot.press("left")
+                await self._on_graph(pilot, app)
+                notes = []
+                app.notify = lambda m, **kw: notes.append(str(m))
+                for _ in range(80):
+                    await pilot.press("left")
                 await pilot.pause()
-                assert app._viz_scope == "file"
-                await pilot.press("left")
-                await pilot.pause()
-                assert app._viz_scope == "file"
+                assert any("start of the tree" in n for n in notes), notes
         _run(scenario)
 
     def test_the_tree_keeps_its_arrows(self, wav):
@@ -539,4 +563,243 @@ class TestArrowsOnAFocusedGraph:
                 for view in ("entropy", "histogram"):
                     app._view = view
                     assert "arrows" in app._viz_render(view).plain, view
+        _run(scenario)
+
+
+class TestRegionGraphFollowsTheSelection:
+    """A region-scoped graph tracks the cursor as it moves.
+
+    Without this, `r` took a snapshot: the caption named a chunk, you moved off
+    it, and the picture stayed. A stale chart under a live caption is worse than
+    either an honest whole-file view or no scoping at all, because nothing on
+    screen says the two disagree.
+    """
+
+    def _ranges(self, app):
+        return app._viz_range()[:2]
+
+    def test_moving_the_tree_redraws_a_region_graph(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._view = "entropy"
+                await pilot.press("down")
+                await pilot.press("r")
+                await pilot.pause()
+                first = app._viz_drawn
+                assert first is not None
+                await pilot.press("down")
+                await pilot.pause()
+                assert app._viz_drawn != first, (
+                    "the chart did not follow the cursor off the old chunk")
+                assert app._viz_drawn == self._ranges(app), (
+                    "what is drawn and what the caption describes disagree")
+        _run(scenario)
+
+    def test_the_caption_follows_too(self, wav):
+        """The picture and its label move together or the label is a lie."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._view = "entropy"
+                await pilot.press("down")
+                await pilot.press("r")
+                await pilot.pause()
+                before = app._viz_render("entropy").plain.splitlines()[0]
+                await pilot.press("down")
+                await pilot.pause()
+                after = app._viz_render("entropy").plain.splitlines()[0]
+                assert before != after
+                lo, _hi, _l = app._viz_range()
+                assert f"0x{lo:08x}" in after
+        _run(scenario)
+
+    def test_a_whole_file_graph_does_not_redraw_on_every_keystroke(self, wav):
+        """Scoped to the file, the selection cannot change the picture, so
+        following it would be pure cost on the largest files."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._view = "entropy"
+                app._paint_bytes()
+                await pilot.pause()
+                calls = []
+                real = app._paint_bytes
+                app._paint_bytes = lambda: (calls.append(1), real())[1]
+                # cleared so the scope check is the only thing standing between
+                # a keystroke and a repaint; otherwise the range guard alone
+                # would carry this test and the scope check could be deleted
+                # without anything noticing.
+                app._viz_drawn = None
+                for _ in range(4):
+                    await pilot.press("down")
+                await pilot.pause()
+                assert not calls, f"repainted {len(calls)} times for nothing"
+        _run(scenario)
+
+    def test_the_hex_view_is_untouched_by_all_this(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                assert app._view == "hex"
+                app._viz_scope = "region"
+                await pilot.press("down")
+                await pilot.pause()
+                assert app._viz_drawn is None
+        _run(scenario)
+
+    def test_moving_onto_a_node_with_no_bytes_still_redraws(self, wav):
+        """The case that put this on the highlight event rather than in _show.
+
+        _show returns early for a node with no range of its own, so a follow
+        living there would leave the chart on the previous chunk while the
+        selection had moved off it.
+
+        The state is built rather than hunted: a WAV's tree happens to give
+        every node a range, so a version of this that walked the tree hoping to
+        find one passed without ever reaching the branch -- which is how it
+        first shipped. Dropping the entry is the same condition the code reads.
+        """
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._view = "entropy"
+                await pilot.press("down")
+                await pilot.press("r")
+                await pilot.pause()
+                assert app._viz_scope == "region"
+                scoped = app._viz_drawn
+                assert scoped is not None and scoped != (0, app.fsize)
+
+                await pilot.press("down")          # learn the next node
+                await pilot.pause()
+                target = app._cur_node
+                await pilot.press("up")
+                await pilot.pause()
+                assert app._nodemeta.pop(id(target), "absent") != "absent", (
+                    "precondition: the node needs a range to remove")
+
+                await pilot.press("down")          # onto it, now range-less
+                await pilot.pause()
+                assert app._viz_drawn == (0, app.fsize), (
+                    "the chart stayed on the old chunk after the selection "
+                    "left it")
+                assert "no bytes" in app._viz_range()[2]
+        _run(scenario)
+
+    def test_the_repaint_is_skipped_when_the_range_is_unchanged(self, wav):
+        """Holding an arrow through fields that share a parent's range should
+        not redraw the same picture over and over."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._view = "entropy"
+                await pilot.press("down")
+                await pilot.press("r")
+                await pilot.pause()
+                calls = []
+                real = app._paint_bytes
+                app._paint_bytes = lambda: (calls.append(1), real())[1]
+                app._follow_selection()
+                app._follow_selection()
+                assert not calls, "redrew a range already on screen"
+        _run(scenario)
+
+
+class TestSmallRegionsDoNotLie:
+    """Entropy over few bytes is a depressed number, and must not be shown as
+    a plain one.
+
+    Shannon entropy over n bytes cannot exceed log2(n): with 256 symbols and
+    fewer than 256 draws, most values cannot appear at all. Two ways that bit
+    when the graphs learned to scope:
+
+      A 16-byte fmt chunk got one window per byte. Entropy of a single byte is
+      0 by definition, so the header printed "min 0.00 mean 0.00 max 0.00",
+      which reads as a region of one repeated byte.
+
+      A 900-byte region drawn at 16 bytes per window tops out at 4.0 bits, so
+      uniformly random data reported "max 4.09" against an axis labelled 0-8
+      and read as structured.
+
+    Neither is a wrong calculation. Both are correct numbers presented without
+    the one fact that makes them interpretable.
+    """
+
+    def _head(self, app, n=3):
+        return "\n".join(app._viz_render("entropy").plain.splitlines()[:n])
+
+    async def _scoped(self, pilot, app, span):
+        """Point the graph at a region of exactly `span` bytes."""
+        app._view = "entropy"
+        await pilot.press("down")
+        await pilot.pause()
+        app._nodemeta[id(app._cur_node)] = (36, span, "#08F9DF")
+        app._viz_scope = "region"
+
+    def test_a_region_too_small_to_plot_says_so_instead_of_plotting_zero(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await self._scoped(pilot, app, 16)
+                out = self._head(app)
+                assert "too few" in out
+                assert "0.00" not in out, (
+                    "a flat line at zero reads as one repeated byte")
+        _run(scenario)
+
+    def test_a_coarse_region_states_the_ceiling_it_cannot_pass(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await self._scoped(pilot, app, 900)
+                out = self._head(app)
+                assert "cannot exceed" in out, out
+                assert "4.0 bits" in out, out
+        _run(scenario)
+
+    def test_it_says_which_limit_you_are_looking_at(self, wav):
+        """Pane-limited and data-limited are different situations: one is fixed
+        by a wider terminal, the other cannot be fixed at all."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await self._scoped(pilot, app, 400)
+                assert "set by the region not the pane" in self._head(app)
+                app._nodemeta[id(app._cur_node)] = (36, 40000, "#08F9DF")
+                assert "set by the region not the pane" not in self._head(app)
+        _run(scenario)
+
+    def test_a_region_with_room_to_measure_stays_quiet(self, wav):
+        """The hedge must not fire when the measurement is sound, or it stops
+        being read."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await self._scoped(pilot, app, 40000)
+                out = self._head(app)
+                assert "cannot exceed" not in out and "too few" not in out, out
+                assert "bits/byte" in out
+        _run(scenario)
+
+    def test_the_window_count_never_exceeds_what_the_bytes_support(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                for span in (32, 100, 900, 5000, 100000):
+                    windows, _bound = app._entropy_windows(span)
+                    assert windows >= 1
+                    assert span // windows >= app._ENTROPY_MIN_WINDOW, (
+                        f"{span} bytes split into {windows} windows")
         _run(scenario)

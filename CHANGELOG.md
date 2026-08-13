@@ -71,13 +71,29 @@ shape being fixed while it is still free to fix.
   names the axis and the span it chose. That is the point of the feature and
   the risk it carries, in the same sentence.
 
+  A region-scoped graph follows the selection as it moves, so walking the tree
+  redraws the chart per chunk. Without that, `r` took a snapshot: the caption
+  named a chunk, you moved off it, and the picture stayed -- a stale chart
+  under a live caption, with nothing on screen saying the two disagreed.
+
   With a graph focused, the arrow keys drive it, mapped to the axis they move
-  along: up and down are the vertical axis, so they are the scale; left and
-  right are the horizontal extent, so they widen to the file and narrow to the
-  region. Directional rather than a toggle, because two opposed keys flipping
-  one switch means neither tells you which way you are about to go. They are
-  live only while the byte pane holds focus and is showing a graph, so the tree
-  keeps its arrows and the hex dump keeps its scrolling.
+  along: up and down are the vertical axis, so they change the scale; left and
+  right are the horizontal one, so they move the selection along the file,
+  which a region-scoped graph then follows. They are live only while the byte
+  pane holds focus and is showing a graph, so the tree keeps its arrows and the
+  hex dump keeps its scrolling.
+
+- **Entropy over a small region states the ceiling it cannot pass.** Shannon
+  entropy over n bytes cannot exceed log2(n), and scoping a graph made small
+  regions reachable for the first time. A 16-byte `fmt` chunk got one window
+  per byte, and entropy of a single byte is 0 by definition, so the header read
+  `min 0.00 mean 0.00 max 0.00` -- indistinguishable from a region of one
+  repeated byte. A 900-byte region at 16 bytes per window tops out at 4.0 bits,
+  so uniformly random data reported `max 4.09` against an axis labelled 0-8 and
+  read as structured. Neither was a wrong calculation; both were correct
+  numbers printed without the one fact that makes them interpretable. A region
+  too small to plot says so instead of drawing a flat line at zero, and a
+  coarse one names its ceiling and whether the region or the pane set it.
 
 - **Colour carries magnitude in the byte views.** Bars were drawn from the
   eight-stop brand ramp, or in the histogram's case one flat colour, so the

@@ -42,6 +42,9 @@ class _VizProbe:
     _viz_caption = AcidcatTUI._viz_caption
     _scale_for = AcidcatTUI._scale_for
     _VIZ_SCALES = AcidcatTUI._VIZ_SCALES
+    # the window-size floor and the ceiling note that came with region scoping
+    _ENTROPY_MIN_WINDOW = AcidcatTUI._ENTROPY_MIN_WINDOW
+    _entropy_windows = AcidcatTUI._entropy_windows
 
     def __init__(self, path, chunks=(), width=72, rows=39):
         self.work = path

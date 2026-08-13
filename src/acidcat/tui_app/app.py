@@ -66,7 +66,7 @@ from acidcat.tui_app.screens import (
 
 # One wording for the graph keys, so the two charts cannot come to describe
 # them differently. Arrows first: they are what a hand reaches for on a chart.
-_VIZ_HINT = "(arrows: up/down scale, left/right file/region; or S and r)"
+_VIZ_HINT = "(arrows: up/down scale, left/right move selection; r = region)"
 
 
 class AcidcatTUI(App):
@@ -135,8 +135,8 @@ class AcidcatTUI(App):
         # graph, so arrows still scroll the hex dump and still drive the tree.
         Binding("up", "viz_scale_next", show=False, priority=True),
         Binding("down", "viz_scale_prev", show=False, priority=True),
-        Binding("left", "viz_widen", show=False, priority=True),
-        Binding("right", "viz_narrow", show=False, priority=True),
+        Binding("left", "viz_prev_node", show=False, priority=True),
+        Binding("right", "viz_next_node", show=False, priority=True),
         ("p", "play", "play"),
         ("full_stop", "stop_play", "stop"),
         Binding("v", "validate", "validate", show=False),
@@ -173,7 +173,8 @@ class AcidcatTUI(App):
         Binding("enter", "keep_scan", "keep scan", priority=True, show=False),
     ]
 
-    _VIZ_ARROWS = ("viz_scale_next", "viz_scale_prev", "viz_widen", "viz_narrow")
+    _VIZ_ARROWS = ("viz_scale_next", "viz_scale_prev",
+                   "viz_prev_node", "viz_next_node")
 
     def check_action(self, action, parameters):
         if action in ("pause_scan", "keep_scan"):
@@ -224,6 +225,7 @@ class AcidcatTUI(App):
         self._view = "hex"        # byte-view mode: hex | entropy | hilbert | histogram
         self._viz_scope = "file"  # what the byte views cover: file | region (r)
         self._viz_scale = {}      # view mode -> index into _VIZ_SCALES (S)
+        self._viz_drawn = None    # (lo, hi) the graph pane currently shows
         self._zoom = None         # which pane owns the screen, cycled by z
         self._cur_region = (None, None, ACCENT)  # last shown (off, length, accent)
         self._cur_spans = None    # field spans for per-field hex tint (chunk view)
@@ -1285,7 +1287,8 @@ class AcidcatTUI(App):
             self.query_one("#hex", Static).update(
                 hex_text(self.work, off, length, accent, spans,
                          self._hex_width()))
-        # in a viz mode the pane shows a whole-file view; a node highlight leaves it
+        # a graph scoped to the file is unaffected by which node is selected;
+        # one scoped to the region follows it, from on_tree_node_highlighted
 
     # pane id -> the class that gives it the screen. Not every pane has one:
     # #idbox is six rows by design, so filling the screen with it would be a
@@ -1450,18 +1453,37 @@ class AcidcatTUI(App):
         self._paint_bytes()
         self.notify(f"{self._view} scale: {opts[i]}")
 
-    def action_viz_widen(self):
-        """left: back out to the whole file.
+    def action_viz_prev_node(self):
+        """left: move the selection to the previous node."""
+        self._step_node(-1)
 
-        Directional rather than a toggle. left and right both flipping the same
-        switch means neither key tells you which way you are about to go, and
-        you cannot press left twice to be sure of where you are.
+    def action_viz_next_node(self):
+        """right: the next one."""
+        self._step_node(1)
+
+    def _step_node(self, step):
+        """Walk the tree cursor without leaving the graph pane.
+
+        Up and down are spent on the scale here, so without this, focusing a
+        graph freezes which region you are looking at -- and comparing the
+        entropy of one chunk against the next is most of the reason to scope a
+        graph at all. It moves the same cursor the tree moves, so the two panes
+        cannot disagree about what is selected, and a region-scoped graph
+        follows it through the ordinary highlight path.
+
+        Horizontal keys move along the file; vertical keys change how it is
+        drawn. In whole-file scope the graph is unchanged by design and the
+        detail pane is what visibly moves.
         """
-        self._set_scope("file")
-
-    def action_viz_narrow(self):
-        """right: down into the selected region."""
-        self._set_scope("region")
+        try:
+            tree = self.query_one("#tree", Tree)
+        except Exception:
+            return
+        before = tree.cursor_line
+        tree.action_cursor_down() if step > 0 else tree.action_cursor_up()
+        if tree.cursor_line == before:
+            self.notify("at the " + ("end" if step > 0 else "start")
+                        + " of the tree", severity="warning")
 
     def _set_scope(self, scope):
         if self._viz_scope == scope:
@@ -1486,6 +1508,27 @@ class AcidcatTUI(App):
                         "(b cycles to a graph)", severity="warning")
             return
         self._set_scope("region" if self._viz_scope == "file" else "file")
+
+    def _follow_selection(self):
+        """Redraw a region-scoped graph for the node just selected.
+
+        Placed on the highlight event rather than in `_show`, because `_show`
+        is skipped for a node with no byte range of its own -- and that is
+        precisely the case that must repaint, or the chart keeps showing the
+        previous chunk while the selection has moved off it. A stale picture
+        under a live caption is the worst of the three states.
+
+        Cheap by construction: a region-scoped draw reads the region, so the
+        smaller the selection the less it costs. The guard is for holding an
+        arrow down through sibling fields that share one parent's range.
+        """
+        if self._view == "hex" or self._viz_scope != "region":
+            return
+        lo, hi, _label = self._viz_range()
+        if (lo, hi) == self._viz_drawn:
+            return
+        self._viz_drawn = (lo, hi)
+        self._paint_bytes()
 
     def _viz_range(self):
         """(start, end, label) the graph views should cover.
@@ -1532,8 +1575,13 @@ class AcidcatTUI(App):
             off, length, accent = self._cur_region
             pane.update(hex_text(self.work, off, length, accent,
                                  self._cur_spans, self._hex_width()))
+            self._viz_drawn = None
         else:
             pane.update(self._viz_render(self._view))
+            # what the pane is actually showing, recorded HERE rather than at
+            # the one call site that skips work, so the record cannot drift
+            # from the drawing it claims to describe.
+            self._viz_drawn = self._viz_range()[:2]
 
     def on_resize(self, event=None):
         """Repaint on a terminal resize, for the same reason zoom does."""
@@ -1640,10 +1688,35 @@ class AcidcatTUI(App):
             t.append(f"  scale {scale_label}", style=PEND if transformed else SOFT)
         t.append("\n")
 
+    # Fewest bytes a window may hold. Shannon entropy over one byte is 0 by
+    # definition -- one symbol, no uncertainty -- so asking for more windows
+    # than the region has bytes returns a flat line at zero and prints
+    # "min 0.00 mean 0.00 max 0.00", which reads as "this region is one
+    # repeated byte". Scoping to a 16-byte fmt chunk did exactly that. The
+    # number is not the answer to anything; below it the curve is noise.
+    _ENTROPY_MIN_WINDOW = 16
+
+    def _entropy_windows(self, size):
+        """How many windows this many bytes can actually support, and whether
+        the data, rather than the pane, is what limited it."""
+        room = self._viz_width()
+        fits = max(1, size // self._ENTROPY_MIN_WINDOW)
+        return min(room, fits), fits < room
+
     def _viz_entropy(self):
         lo, hi, scope = self._viz_range()
+        span = hi - lo
+        if span < self._ENTROPY_MIN_WINDOW * 2:
+            t = Text()
+            t.append("entropy  ", style=f"bold {ACCENT}")
+            t.append(f"{scope}\n", style=SOFT)
+            t.append(f"  {span:,} bytes is too few to plot a curve over "
+                     f"(a window needs {self._ENTROPY_MIN_WINDOW}); "
+                     f"the hex view shows them all\n", style=AMBER)
+            return t
+        windows, data_bound = self._entropy_windows(span)
         ent, size, sampled = viz.file_entropy(
-            self.work, self._viz_width(), start=lo, end=hi)
+            self.work, windows, start=lo, end=hi)
         if not ent:
             return Text("  (no bytes to visualize)", style=DIM)
         mode = self._scale_for("entropy")
@@ -1655,6 +1728,20 @@ class AcidcatTUI(App):
                  f"max {max(ent):.2f} bits/byte  ", style=SOFT)
         self._viz_caption(t, scope, sampled, label,
                           transformed=mode != "absolute")
+        per = max(1, span // max(1, windows))
+        if per < 256:
+            # Shannon entropy over n bytes cannot exceed log2(n): with 256
+            # distinct symbols and fewer than 256 draws, most values simply
+            # cannot appear. A 900-byte region drawn at 16 bytes per window
+            # tops out at 4.0 bits, so random data reported "max 4.09" against
+            # a 0-8 axis and read as structured. The ceiling is the fact that
+            # makes the number interpretable, so it goes on screen with it.
+            import math
+            ceiling = math.log2(per) if per > 1 else 0.0
+            t.append(f"{windows} windows of ~{per:,} bytes"
+                     + (", set by the region not the pane" if data_bound else "")
+                     + f"; entropy here cannot exceed {ceiling:.1f} bits\n",
+                     style=AMBER)
         t.append("0-8 bits/byte; flat 8 = compressed   "
                  + _VIZ_HINT + "\n\n", style=DIM)
         # A column chart rather than a one-row sparkline. Eight bits squeezed
@@ -2237,6 +2324,7 @@ class AcidcatTUI(App):
         if self._edit_target:            # moving off the field cancels an edit
             self.action_cancel_edit()
         self._hexedit = None             # ditto an abandoned in-pane hex edit
+        self._follow_selection()
         data = self._nodemeta.get(id(event.node))
         if not data:
             return
