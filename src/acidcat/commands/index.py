@@ -540,10 +540,18 @@ def _cmd_discover(root, registry_path, min_samples, max_depth, label_prefix,
 
     # report
     if not quiet:
+        from acidcat.core.catalogue.indexing import _count_audio_deep
+        truncated_any = False
         for c in candidates:
-            count = _count_audio_in_subtree(c, max_depth=max_depth)
+            count, truncated = _count_audio_deep(c, max_depth=max_depth)
+            truncated_any = truncated_any or truncated
             print(f"[discover] candidate: {os.path.basename(c):<40s} "
-                  f"({count} samples)", file=sys.stderr)
+                  f"({count}{'+' if truncated else ''} samples)",
+                  file=sys.stderr)
+        if truncated_any:
+            print(f"[discover] counts marked + are floors: audio sits below "
+                  f"--max-depth {max_depth} and was not counted",
+                  file=sys.stderr)
 
     if dry_run:
         print(f"[discover] dry-run: {len(candidates)} libraries would be "

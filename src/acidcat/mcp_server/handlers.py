@@ -977,22 +977,37 @@ def discover_libraries(args):
         norm_root, registered_roots, min_samples, max_depth,
     )
 
+    from acidcat.core.catalogue.indexing import _count_audio_deep
+
     candidate_summaries = []
+    any_truncated = False
     for c in candidates:
-        count = index_cmd._count_audio_in_subtree(c, max_depth=max_depth)
-        candidate_summaries.append({
+        count, truncated = _count_audio_deep(c, max_depth=max_depth)
+        any_truncated = any_truncated or truncated
+        summary = {
             "root": c,
             "label": (label_prefix or "") + os.path.basename(c),
             "audio_count": count,
-        })
+        }
+        # only on the candidates it actually bit, so the field means something
+        if truncated:
+            summary["audio_count_is_a_floor"] = True
+        candidate_summaries.append(summary)
 
     if dry_run:
-        return {
+        out = {
             "dry_run": True,
             "root": norm_root,
             "candidate_count": len(candidates),
+            "max_depth": max_depth,
             "candidates": candidate_summaries,
         }
+        if any_truncated:
+            out["note"] = (
+                f"one or more counts are floors, not totals: audio exists "
+                f"below max_depth={max_depth} and was not counted. Re-run with "
+                f"a larger max_depth for true counts.")
+        return out
 
     registered = []
     skipped = []

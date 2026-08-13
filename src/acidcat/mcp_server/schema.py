@@ -266,9 +266,12 @@ def _register_all():
     # index management
     _tool(
         "reindex",
-        "SLOW. Re-walk a registered library and refresh its DB. Identify "
-        "the library by label or root path. Only call when the user "
-        "explicitly asks to refresh.",
+        "SLOW. Walk a registered library and populate or refresh its DB. "
+        "Identify the library by label or root path. This is the step that "
+        "actually fills a library: one that has been registered but never "
+        "reindexed holds no samples and answers no queries. Call it without "
+        "asking again when completing a registration the user requested; "
+        "ask first before re-walking a library that is already populated.",
         {
             "type": "object",
             "properties": {
@@ -361,7 +364,11 @@ def _register_all():
         "Recurses into folders that don't qualify on their own to find "
         "qualifying grandchildren. Always call once with dry_run=true "
         "first to preview the candidates, then again with dry_run=false "
-        "after the user confirms.",
+        "after the user confirms. Like register_library, this creates the "
+        "libraries but does NOT populate them: call reindex on each one "
+        "afterwards, or they stay empty and answer no queries. Reported "
+        "audio_count is bounded by max_depth; a candidate carrying "
+        "audio_count_is_a_floor has more files below that depth.",
         {
             "type": "object",
             "properties": {

@@ -16,8 +16,9 @@ and synth/DAW presets. It reads from byte-level facts only and treats every file
 as hostile input (bounded parsers designed to degrade to a clean warning rather than crash).
 
 Install: `pip install acidcat` (core). Extras: `[mcp]` (stdio MCP server),
-`[mcp-http]` (streamable-HTTP MCP server), `[ml]`/`[viz]` (librosa analysis),
-`[all]`.
+`[mcp-http]` (streamable-HTTP MCP server), `[analysis]` (librosa: `detect`,
+`features`, `similar`, and the MCP tools that need feature vectors), `[tui]`
+(the interactive inspector), `[crypto]` (encrypted disc images), `[all]`.
 
 ## Which command
 
@@ -30,6 +31,12 @@ Install: `pip install acidcat` (core). Extras: `[mcp]` (stdio MCP server),
 - **Clip to MIDI**: `acidcat convert clip.bwclip -o out.mid`.
 - **Search a library**: `acidcat index` then `acidcat query`.
 - **HTML byte-explorer**: `acidcat explore FILE -o out.html`.
+- **Drive it by hand**: `acidcat tui FILE` (needs `[tui]`).
+- **Is this file sound?**: `acidcat audit FILE` (exit 1 on findings, so it works
+  as a CI gate), `acidcat validate` for structural checks, `acidcat repair` to
+  fix what is witnessed.
+- **Where is the audio in this blob?**: `acidcat locate`, then `acidcat carve`
+  or `acidcat extract` to pull it out.
 
 ## inspect
 
@@ -112,11 +119,112 @@ acidcat-mcp                              # stdio (default; for local MCP clients
 acidcat-mcp --transport http --port 8765 # streamable HTTP at http://host:8765/mcp
 ```
 
-Tools: `search_samples`, `get_sample`, `locate_sample`, `list_libraries`,
-`list_tags`, `list_keys`, `list_formats`, `index_stats`, `find_compatible`,
-`find_similar`, `analyze_sample`, `detect_bpm_key`, `reindex`, `reindex_features`,
-`register_library`, `forget_library`, `discover_libraries`, `tag_sample`,
-`set_sample_description`.
+The HTTP transport has **no authentication**. Bind it to localhost. `--host`
+beyond 127.0.0.1 exposes every tool, including the destructive ones, to anyone
+who can reach the port.
+
+### Read the cost prefix before calling
+
+Every tool description opens with `Fast.`, `SLOW.`, `VERY SLOW.`, or
+`Destructive.` The same information is on the wire as MCP annotations
+(`readOnlyHint` / `destructiveHint` / `idempotentHint`), but most clients do not
+surface annotations to the model, so the prefix is what you will actually see.
+Treat it as the budget.
+
+- **Fast** -- call freely. `search_samples`, `get_sample`, `locate_sample`,
+  `list_libraries`, `list_tags`, `list_keys`, `list_formats`, `index_stats`,
+  `find_compatible`
+- **SLOW** -- one call is fine, a loop is not. `find_similar` (fast once
+  features are cached), `analyze_sample` (~1-10s, first call 30-60s while
+  librosa imports), `detect_bpm_key` (~0.5-2s), `reindex`, `discover_libraries`
+- **VERY SLOW** -- `reindex_features`. Use `limit` and expect minutes.
+- **Destructive** -- writes to the registry, the index, or a file's annotations:
+  `register_library`, `discover_libraries`, `forget_library`, `tag_sample`,
+  `set_sample_description`. Confirm before calling.
+
+### Answer from metadata first
+
+`search_samples` is the primary tool and covers most questions: bpm range, key,
+duration, format, tags, and a full-text field spanning title/artist/album/genre/
+comment/description/tags/preset/device/creator/path. Preset metadata is indexed
+as a first-class dimension, so `device`, `product`, `creator` and `category`
+filter Serum/Vital/Massive/Absynth/FM8/Kontakt patches the same way bpm filters
+loops.
+
+Reach past it only when metadata genuinely cannot answer:
+
+- `find_compatible` -- key/BPM compatibility, still metadata, still Fast
+- `find_similar` -- timbral nearest-neighbour over librosa vectors, needs
+  `[analysis]` and an indexed feature pass. Results carry `percentile_rank` and
+  `similarity_above_mean` because same-pack variations cluster around 0.99
+  cosine and the raw score cannot separate them; read the rank, not the score.
+- `analyze_sample` / `detect_bpm_key` -- read the audio itself. Last resort.
+
+### Registering a library: register does not populate
+
+The most common mistake, and the one the tool names do not warn you about.
+`register_library` and `discover_libraries` create the row and point it at a
+path. **They do not walk any files.** A library in that state reports
+`sample_count: null` and `available: false` in `list_libraries`, and answers no
+queries. `reindex` is the step that fills it.
+
+The whole sequence:
+
+1. `list_libraries` -- check it is not already registered
+2. `discover_libraries(root, dry_run=true)` -- preview the candidates
+3. show the user the candidates, get confirmation
+4. `discover_libraries(root, dry_run=false)` -- or `register_library` per folder
+   when you want to control the labels
+5. **`reindex` each new library** -- otherwise steps 1-4 bought nothing
+6. `reindex_features` only if the user wants `find_similar` (VERY SLOW, opt-in)
+
+Verify with `list_libraries` at the end: a populated library has a real
+`sample_count`.
+
+### max_depth undercounts, and says when it did
+
+`discover_libraries` defaults to `max_depth=3`, and `audio_count` counts only
+within that depth. A pack nesting one level deeper reports fewer files than it
+holds -- 520 against a true 657, in one measured case.
+
+A candidate whose count was cut this way carries `audio_count_is_a_floor: true`,
+and the result carries a `note`. When you see either, the counts are lower
+bounds: re-run with a larger `max_depth` before reporting a number to the user
+or deciding a folder failed `min_samples`. Absence of the flag means the count
+is complete.
+
+`min_samples` (default 20) is the other silent filter: a folder holding fewer
+audio files than that is not offered as a candidate at all.
+
+### Reporting results
+
+Say what was not looked at. If a scan was `dry_run`, say nothing was written.
+If a count is a floor, say so rather than quoting it as a total. If libraries
+are registered but not reindexed, say they are empty -- do not present a
+successful registration as a finished import.
+
+## tui (interactive inspector)
+
+```
+acidcat tui FILE        # or bare `acidcat tui` for a file browser
+```
+
+A two-pane inspector: the parsed tree on the left, bytes on the right, with a
+forensics panel above the tree. `?` lists every key. The ones worth knowing:
+`tab` cycles panes, `z` zooms one, `b` cycles the byte pane through hex,
+entropy, hilbert map and byte histogram, `f` jumps to the next forensic finding,
+`e` edits a field, `ctrl+s` saves (leaving a `_original` backup).
+
+On a graph, `r` scopes it to the selected chunk instead of the whole file and it
+then follows the selection as you move; `S` changes the vertical scale. With the
+graph focused the arrows drive it: up/down rescale, left/right walk the
+selection. Entropy defaults to an absolute 0-8 axis; `auto` is what makes sense
+of audio, which sits near 7.9 and pins the absolute chart to its ceiling.
+
+Read the caption. It states what the picture covers, whether values were
+sampled, and which axis is in use -- a rescaled chart looks identical to an
+absolute one. On a small region it also states the ceiling entropy cannot pass,
+because entropy over n bytes cannot exceed log2(n).
 
 ## Gotchas
 

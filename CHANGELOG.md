@@ -57,6 +57,26 @@ shape being fixed while it is still free to fix.
 
 ### Added
 
+- **A skill ships with the MCP server, and the README says so.** `skills/acidcat/`
+  has been in the repo since before 1.0 and nothing pointed at it, so nobody
+  found it -- a skill nobody is told about is a file, not a feature. Its MCP
+  half was also a bare list of nineteen tool names, which teaches a model what
+  can be called but not the order calls go in. It now carries the cost tiers,
+  the preference order (metadata before analysis), the security note on the
+  HTTP transport, and the register-then-reindex sequence. A test keeps its
+  factual claims tied to the code: every extra, console script, CLI verb and
+  MCP tool name it mentions must exist. Three claims were already wrong,
+  including an install line naming two extras that have never existed.
+
+- **`discover_libraries` says when a count is a floor.** Its `audio_count` is
+  bounded by `max_depth` (default 3) and was reported as the pack's file count.
+  A pack nesting one level deeper came back as 520 against a true 657 with
+  nothing suggesting the walk had stopped early, so an agent quoted the short
+  number as fact. A candidate whose count was cut now carries
+  `audio_count_is_a_floor`, the result carries a note, and the CLI marks the
+  same counts with `+`. The flag fires only where audio genuinely sits below
+  the cap, so a deep folder of artwork does not raise it.
+
 - **The TUI's graph views take a scale and a scope (`S` and `r`).** The entropy
   plot was pinned to its ceiling on nearly every real file: audio sits around
   7.9 of a theoretical 8, so the axis spent 99% of its height on a range no
@@ -136,6 +156,17 @@ shape being fixed while it is still free to fix.
   detecting it would mean a false positive on roughly six files in ten.
 
 ### Fixed
+
+- **`register_library` and `discover_libraries` said nothing about the step
+  that fills a library.** Both create the registry row and stop; `reindex`
+  walks the files. `register_library` documented that, `discover_libraries`
+  never mentioned it, and `reindex` said "only call when the user explicitly
+  asks to refresh" -- which told a model not to finish the job it had just
+  started. An agent following those descriptions registered four libraries,
+  reported success, and left four empty shells. The batch tool now says it does
+  not populate and names the step that does, and `reindex` distinguishes
+  completing a registration the user asked for from re-walking a library that
+  is already full.
 
 - **A byte histogram could omit its tallest bar.** The braille plotter
   point-sampled its input, so drawing 256 bins across a 69-column pane looked

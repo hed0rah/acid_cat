@@ -437,6 +437,30 @@ Tool tiers (each tool description starts with `Fast.`, `SLOW.`, or
 - **Write** (marked destructive): `register_library`, `forget_library`,
   `tag_sample`, `set_sample_description`
 
+The same tiers are on the wire as MCP annotations (`readOnlyHint`,
+`destructiveHint`, `idempotentHint`) for clients that branch on them
+programmatically. Most clients do not show annotations to the model, which is
+why the prefix is in the prose too.
+
+One thing worth knowing before you point an agent at it: **registering a library
+does not populate it.** `register_library` and `discover_libraries` create the
+row and stop; `reindex` is what walks the files. A library between those two
+steps reports `sample_count: null` and answers nothing.
+
+### The skill
+
+`skills/acidcat/` is a Claude skill that teaches a model the above: which tool to
+reach for, what each cost tier means, the register-then-reindex sequence, and
+which results are lower bounds rather than totals. Install it alongside the
+server:
+
+    cp -r skills/acidcat ~/.claude/skills/
+
+Without it a model has only the tool descriptions, which cover each call in
+isolation but not the order they go in. The gap is not hypothetical: an agent
+given the server and no skill registered four libraries, reported success, and
+left four empty shells.
+
 ## License
 
 MIT

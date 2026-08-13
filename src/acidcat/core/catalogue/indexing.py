@@ -637,23 +637,56 @@ def _count_audio_in_subtree(directory, max_depth=99):
     """Count files matching INDEXABLE_EXTENSIONS in `directory` up to
     max_depth levels deep. Skips junk files (._*, .DS_Store, etc.) and
     hidden directories (basename starting with '.').
+
+    See `_count_audio_deep` for the same walk with the truncation flag; this
+    wrapper stays because the count alone is what the qualification test wants.
     """
+    return _count_audio_deep(directory, max_depth)[0]
+
+
+def _count_audio_deep(directory, max_depth=99):
+    """(count, truncated) -- the count, and whether the walk stopped above
+    audio it could see.
+
+    `truncated` is the difference between "this pack holds 520 files" and
+    "this pack holds at least 520 files". A depth-3 discovery over a sample
+    pack that nests one level further reported 520 where the real number was
+    657, and nothing in the answer suggested the walk had stopped early. The
+    flag is set only when a pruned directory ACTUALLY held indexable audio, so
+    an ordinary deep-but-empty folder tree does not raise a false alarm --
+    announce that a bound bit, not that one exists.
+    """
+    def _audio(names):
+        return any(not _is_junk(n)
+                   and os.path.splitext(n)[1].lower() in INDEXABLE_EXTENSIONS
+                   for n in names)
+
     count = 0
+    truncated = False
     base_depth = directory.rstrip(os.sep).count(os.sep)
     for root, dirs, files in os.walk(directory, followlinks=False):
         depth = root.rstrip(os.sep).count(os.sep) - base_depth
-        if depth > max_depth:
-            dirs[:] = []
-            continue
-        # prune hidden dirs in-place so os.walk skips them
         dirs[:] = [d for d in dirs if not d.startswith(".")]
+        if depth > max_depth:
+            # Past the cap nothing is counted. Keep descending only until the
+            # first buried audio file is found, then stop: checking just the
+            # first pruned directory reported "nothing below" whenever the
+            # files sat one level deeper still, which is the same false
+            # all-clear this flag exists to prevent. Once it is set there is
+            # nothing left to learn, so the walk prunes and costs nothing more.
+            if truncated:
+                dirs[:] = []
+            elif _audio(files):
+                truncated = True
+                dirs[:] = []
+            continue
         for name in files:
             if _is_junk(name):
                 continue
             ext = os.path.splitext(name)[1].lower()
             if ext in INDEXABLE_EXTENSIONS:
                 count += 1
-    return count
+    return count, truncated
 
 
 def _discover_candidates(root, registered_roots, min_samples, max_depth,
