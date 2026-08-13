@@ -64,6 +64,11 @@ from acidcat.tui_app.screens import (
 )
 
 
+# One wording for the graph keys, so the two charts cannot come to describe
+# them differently. Arrows first: they are what a hand reaches for on a chart.
+_VIZ_HINT = "(arrows: up/down scale, left/right file/region; or S and r)"
+
+
 class AcidcatTUI(App):
     CSS = """
     Screen { background: #16181C; }
@@ -122,6 +127,16 @@ class AcidcatTUI(App):
         Binding("b", "cycle_view", "byte view", show=False),
         Binding("r", "viz_scope", "viz: file/region", show=False),
         Binding("S", "viz_scale", "viz: scale", show=False),
+        # Arrows drive the graph they are pointed at, mapped to the axis they
+        # move along: up/down is the vertical axis (the scale), left/right is
+        # the horizontal extent (how much of the file). Priority, because the
+        # byte pane is a VerticalScroll and would eat them first; check_action
+        # keeps them dormant unless that pane holds focus AND it is showing a
+        # graph, so arrows still scroll the hex dump and still drive the tree.
+        Binding("up", "viz_scale_next", show=False, priority=True),
+        Binding("down", "viz_scale_prev", show=False, priority=True),
+        Binding("left", "viz_widen", show=False, priority=True),
+        Binding("right", "viz_narrow", show=False, priority=True),
         ("p", "play", "play"),
         ("full_stop", "stop_play", "stop"),
         Binding("v", "validate", "validate", show=False),
@@ -158,9 +173,16 @@ class AcidcatTUI(App):
         Binding("enter", "keep_scan", "keep scan", priority=True, show=False),
     ]
 
+    _VIZ_ARROWS = ("viz_scale_next", "viz_scale_prev", "viz_widen", "viz_narrow")
+
     def check_action(self, action, parameters):
         if action in ("pause_scan", "keep_scan"):
             return self._scanning        # only live during a scan
+        if action in self._VIZ_ARROWS:
+            # `_view != "hex"` is checked first and on purpose: it is a plain
+            # attribute, so this stays cheap and cannot touch the DOM before
+            # mount, which is when check_action first runs.
+            return self._view != "hex" and self._focused_pane() == "hexwrap"
         # while a modal (edit form / file browser / help / diff / map / confirm)
         # is open, the app-global single-letter bindings must not fire under it
         # -- so typing in the browser or a form does not trigger edit/strip/etc.
@@ -1405,16 +1427,51 @@ class AcidcatTUI(App):
         data actually present; the caption always names the axis in use, since
         a rescaled chart and an absolute one look identical.
         """
+        self._step_scale(1)
+
+    def action_viz_scale_next(self):
+        """up, with the byte pane focused on a graph."""
+        self._step_scale(1)
+
+    def action_viz_scale_prev(self):
+        """down. The reverse of up, not another forward step -- an axis you can
+        only cycle one way makes you walk the whole list to undo a keypress."""
+        self._step_scale(-1)
+
+    def _step_scale(self, step):
         opts = self._VIZ_SCALES.get(self._view)
         if not opts:
             self.notify(f"{self._view} has no scale to change "
                         f"(b cycles to entropy or histogram)",
                         severity="warning")
             return
-        i = (self._viz_scale.get(self._view, 0) + 1) % len(opts)
+        i = (self._viz_scale.get(self._view, 0) + step) % len(opts)
         self._viz_scale[self._view] = i
         self._paint_bytes()
         self.notify(f"{self._view} scale: {opts[i]}")
+
+    def action_viz_widen(self):
+        """left: back out to the whole file.
+
+        Directional rather than a toggle. left and right both flipping the same
+        switch means neither key tells you which way you are about to go, and
+        you cannot press left twice to be sure of where you are.
+        """
+        self._set_scope("file")
+
+    def action_viz_narrow(self):
+        """right: down into the selected region."""
+        self._set_scope("region")
+
+    def _set_scope(self, scope):
+        if self._viz_scope == scope:
+            lo, hi, label = self._viz_range()
+            self.notify(f"already showing {label}")
+            return
+        self._viz_scope = scope
+        self._paint_bytes()
+        lo, hi, label = self._viz_range()
+        self.notify(f"viz scope: {label} ({hi - lo:,} bytes)")
 
     def action_viz_scope(self):
         """Toggle the byte views between the whole file and the selected node (r).
@@ -1428,10 +1485,7 @@ class AcidcatTUI(App):
             self.notify("the hex view already follows the selected node "
                         "(b cycles to a graph)", severity="warning")
             return
-        self._viz_scope = "region" if self._viz_scope == "file" else "file"
-        self._paint_bytes()
-        lo, hi, label = self._viz_range()
-        self.notify(f"viz scope: {label} ({hi - lo:,} bytes)")
+        self._set_scope("region" if self._viz_scope == "file" else "file")
 
     def _viz_range(self):
         """(start, end, label) the graph views should cover.
@@ -1602,7 +1656,7 @@ class AcidcatTUI(App):
         self._viz_caption(t, scope, sampled, label,
                           transformed=mode != "absolute")
         t.append("0-8 bits/byte; flat 8 = compressed   "
-                 "(r = region, S = scale)\n\n", style=DIM)
+                 + _VIZ_HINT + "\n\n", style=DIM)
         # A column chart rather than a one-row sparkline. Eight bits squeezed
         # into a single cell gives eight distinguishable levels; over the rows
         # the pane actually has it is eight per row, and the difference
@@ -1691,7 +1745,7 @@ class AcidcatTUI(App):
                           False, label, transformed=mode != "absolute")
         t.append(f"peak {max(counts):,} at 0x{counts.index(max(counts)):02x}"
                  if any(counts) else "no bytes", style=DIM)
-        t.append("   (r = region, S = scale)\n\n", style=DIM)
+        t.append("   " + _VIZ_HINT + "\n\n", style=DIM)
         # Drawn from the SCALED values, and coloured from the same array by the
         # per-cell peak, so the bar you see and the colour it is drawn in came
         # out of one dataset. Under `log` or `clip` a file that is 90% zero

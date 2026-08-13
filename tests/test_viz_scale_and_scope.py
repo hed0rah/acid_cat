@@ -344,6 +344,23 @@ class TestScopeKey:
                 assert app._viz_scope == "file"
         _run(scenario)
 
+    def test_r_is_still_a_toggle(self, wav):
+        """The arrows are directional; the letter key stays a toggle, because
+        that is what it already was for anyone who learned it."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._view = "entropy"
+                await pilot.press("down")           # a node with bytes
+                await pilot.press("r")
+                await pilot.pause()
+                assert app._viz_scope == "region"
+                await pilot.press("r")
+                await pilot.pause()
+                assert app._viz_scope == "file"
+        _run(scenario)
+
     def test_the_container_marker_is_dropped_when_scoped(self, wav):
         """It answers "where does the FILE end", which is meaningless once the
         x axis is one chunk -- and it would be drawn at a wrong column."""
@@ -357,4 +374,169 @@ class TestScopeKey:
                 await pilot.press("r")
                 await pilot.pause()
                 assert "container ends at" not in app._viz_render("entropy").plain
+        _run(scenario)
+
+
+class TestArrowsOnAFocusedGraph:
+    """Arrows drive the graph they are pointed at.
+
+    Mapped to the axis they move along: up/down is the vertical axis, so it is
+    the scale; left/right is the horizontal extent, so it is how much of the
+    file. Left widens and right narrows rather than both toggling -- a toggle
+    on two opposed keys means neither one tells you which way you are going.
+
+    The whole risk of this is theft. These keys belong to the tree and to the
+    hex dump's scrolling, and both must keep them.
+    """
+
+    async def _on_graph(self, pilot, app, view="entropy"):
+        """Focus the byte pane with a graph in it, the only state that arms
+        the arrows."""
+        app._view = view
+        while app._focused_pane() != "hexwrap":
+            await pilot.press("tab")
+            await pilot.pause()
+        app._paint_bytes()
+        await pilot.pause()
+
+    def test_up_and_down_change_the_scale(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await self._on_graph(pilot, app)
+                assert app._scale_for("entropy") == "absolute"
+                await pilot.press("up")
+                await pilot.pause()
+                assert app._scale_for("entropy") == "auto"
+        _run(scenario)
+
+    def test_down_reverses_up(self, wav):
+        """Not another forward step: an axis you can only cycle one way makes
+        you walk the whole list to undo a keypress."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await self._on_graph(pilot, app, view="histogram")
+                assert len(app._VIZ_SCALES["histogram"]) == 3
+                await pilot.press("up")
+                await pilot.press("up")
+                await pilot.pause()
+                two_up = app._scale_for("histogram")
+                await pilot.press("down")
+                await pilot.pause()
+                assert app._scale_for("histogram") != two_up
+                await pilot.press("down")
+                await pilot.pause()
+                assert app._scale_for("histogram") == "absolute"
+        _run(scenario)
+
+    def test_down_from_the_first_scale_wraps_to_the_last(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await self._on_graph(pilot, app, view="histogram")
+                await pilot.press("down")
+                await pilot.pause()
+                assert app._scale_for("histogram") == "clip"
+        _run(scenario)
+
+    def test_right_narrows_and_left_widens(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await pilot.press("down")            # a node with bytes
+                await pilot.pause()
+                await self._on_graph(pilot, app)
+                await pilot.press("right")
+                await pilot.pause()
+                assert app._viz_scope == "region"
+                await pilot.press("right")           # idempotent, not a toggle
+                await pilot.pause()
+                assert app._viz_scope == "region"
+                await pilot.press("left")
+                await pilot.pause()
+                assert app._viz_scope == "file"
+                await pilot.press("left")
+                await pilot.pause()
+                assert app._viz_scope == "file"
+        _run(scenario)
+
+    def test_the_tree_keeps_its_arrows(self, wav):
+        """The graph is on screen; focus is not on it. Arrows must move the
+        cursor, or the tree becomes undrivable whenever a chart is shown."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._view = "entropy"
+                app._paint_bytes()
+                await pilot.pause()
+                assert app._focused_pane() == "tree"
+                tree = app.query_one("#tree")
+                before = tree.cursor_line
+                await pilot.press("down")
+                await pilot.pause()
+                assert tree.cursor_line != before, "the tree lost its arrows"
+                assert app._scale_for("entropy") == "absolute", (
+                    "the graph stole a keypress meant for the tree")
+        _run(scenario)
+
+    def test_the_hex_dump_keeps_its_arrows(self, wav):
+        """The byte pane holds far more than a screen in hex mode, and
+        scrolling it is the only way to read it."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                assert app._view == "hex"
+                await pilot.press("tab")
+                await pilot.pause()
+                assert app._focused_pane() == "hexwrap"
+                hw = app.query_one("#hexwrap")
+                assert hw.max_scroll_y > 0, "precondition: it should overflow"
+                for _ in range(6):
+                    await pilot.press("down")
+                await pilot.pause()
+                assert hw.scroll_offset.y > 0, "arrows stopped scrolling the dump"
+        _run(scenario)
+
+    def test_arrows_are_dormant_until_the_graph_has_focus(self, wav):
+        """check_action is the gate; assert on it directly so a failure names
+        the cause rather than a downstream symptom."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                for action in app._VIZ_ARROWS:
+                    assert app.check_action(action, ()) is False, action
+                await self._on_graph(pilot, app)
+                for action in app._VIZ_ARROWS:
+                    assert app.check_action(action, ()) is True, action
+        _run(scenario)
+
+    def test_up_on_the_hilbert_map_declines(self, wav):
+        """It has no magnitude axis. Silently doing nothing is the defect."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await self._on_graph(pilot, app, view="hilbert")
+                await pilot.press("up")
+                await pilot.pause()
+                assert app._viz_scale == {}
+        _run(scenario)
+
+    def test_the_chart_says_the_arrows_exist(self, wav):
+        """A key nobody can discover is a key nobody has."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                for view in ("entropy", "histogram"):
+                    app._view = view
+                    assert "arrows" in app._viz_render(view).plain, view
         _run(scenario)

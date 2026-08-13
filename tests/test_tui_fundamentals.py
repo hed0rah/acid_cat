@@ -45,12 +45,29 @@ def wav(tmp_path):
 # keys that only make sense mid-scan, or that end the session
 _EXEMPT = {"q", "escape", "space", "enter"}
 
+# Keys held dormant by check_action until a particular pane has focus. The
+# sweep below presses every key from ONE state -- tree focused, hex view -- so
+# a key that is deliberately asleep there reads as inert, which is what this
+# file is built to flag.
+#
+# Exempting them is only legitimate because two things are checked instead, and
+# both are asserted below rather than asserted here in prose:
+# test_the_gated_keys_are_actually_gated proves they are asleep in the swept
+# state on purpose, and tests/test_viz_scale_and_scope.py's
+# TestArrowsOnAFocusedGraph presses each one in the state that arms it. An
+# exemption pointing at another test is a redirect; one pointing at nothing is
+# a hole.
+#
+# up/down are NOT here. They are gated for the graph too, but in the swept
+# state they fall through to the tree cursor, so the sweep still bites on them.
+_GATED = {"left", "right"}
+
 
 def _bound_keys():
     keys = []
     for b in AcidcatTUI.BINDINGS:
         k = b[0] if isinstance(b, tuple) else b.key
-        if k not in _EXEMPT:
+        if k not in _EXEMPT and k not in _GATED:
             keys.append(k)
     return keys
 
@@ -103,6 +120,44 @@ def test_no_bound_key_is_silently_inert(keysweep):
     directly, and pressing it did nothing at all."""
     inert = [k for k, r in keysweep.items() if not r["changed"] and not r["spoke"]]
     assert not inert, f"keys that did nothing and said nothing: {inert}"
+
+
+def test_the_gated_keys_are_actually_gated(wav):
+    """Justify _GATED from the code instead of from belief.
+
+    If a key in that set stops being conditional -- someone drops the
+    check_action clause, or rebinds it to something unconditional -- it silently
+    leaves the sweep above with nothing checking it. This fails at that moment
+    and says to shorten the set.
+    """
+    async def scenario():
+        app = AcidcatTUI(wav)
+        async with app.run_test(size=(140, 44)) as pilot:
+            await pilot.pause()
+            actions = {}
+            for b in AcidcatTUI.BINDINGS:
+                key = b[0] if isinstance(b, tuple) else b.key
+                if key in _GATED:
+                    actions[key] = b[1] if isinstance(b, tuple) else b.action
+            assert set(actions) == _GATED, (
+                f"_GATED names keys that are not bound: {_GATED - set(actions)}")
+            for key, action in actions.items():
+                assert app.check_action(action, ()) is False, (
+                    f"{key} is live in the swept state, so exempting it from "
+                    f"the inert sweep leaves it unchecked")
+    _run(scenario)
+
+
+def test_every_gated_key_is_exercised_somewhere_else(wav):
+    """The redirect half: the exemption names a file, so that file must press
+    them. Cheap to check, and it fails if those tests are ever deleted."""
+    import pathlib
+    other = pathlib.Path(__file__).parent / "test_viz_scale_and_scope.py"
+    assert other.is_file(), "the tests _GATED redirects to are gone"
+    text = other.read_text(encoding="utf-8")
+    for key in _GATED:
+        assert f'press("{key}")' in text, (
+            f"{key} is exempted here and pressed nowhere else")
 
 
 def _expanded(tree):

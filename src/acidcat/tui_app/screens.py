@@ -204,6 +204,8 @@ class HelpScreen(ModalScreen):
             ("r", "byte view: whole file or just the selected region"),
             ("S", "byte view: vertical scale (entropy 0-8 or auto; "
                   "histogram linear, log, clipped)"),
+            ("arrows", "on a focused graph: up/down change the scale, "
+                       "left/right widen to the file or narrow to the region"),
             ("p", "play the selected region as raw PCM (. stops); needs ffplay"),
             ("v", "validate structure: constraint violations, r to repair them"),
             ("y", "yank the selected bytes as hex to the clipboard"),

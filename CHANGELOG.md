@@ -71,6 +71,14 @@ shape being fixed while it is still free to fix.
   names the axis and the span it chose. That is the point of the feature and
   the risk it carries, in the same sentence.
 
+  With a graph focused, the arrow keys drive it, mapped to the axis they move
+  along: up and down are the vertical axis, so they are the scale; left and
+  right are the horizontal extent, so they widen to the file and narrow to the
+  region. Directional rather than a toggle, because two opposed keys flipping
+  one switch means neither tells you which way you are about to go. They are
+  live only while the byte pane holds focus and is showing a graph, so the tree
+  keeps its arrows and the hex dump keeps its scrolling.
+
 - **Colour carries magnitude in the byte views.** Bars were drawn from the
   eight-stop brand ramp, or in the histogram's case one flat colour, so the
   hue said nothing a length was not already saying. The ramp is interpolated
