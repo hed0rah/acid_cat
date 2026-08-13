@@ -264,7 +264,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">RIFF form + NISI chunk</span><span class="rspan">0x00 . little-endian sizes . drawn below</span></summary>
       <div class="rbody">
-        <p class="note">The opening bytes of New_Init_2.nksf: standard RIFF header, then NISI lands first with the whole browser card in one msgpack map.</p>
+        <p class="note">The opening bytes of an .nksf: standard RIFF header, then NISI lands first with the whole browser card in one msgpack map.</p>
         <div id="block-nksf"></div>
         <div class="kv">
           <div><span class="k">NISI map keys</span><span class="v">author . bankchain (array) . comment . deviceType . name . uuid . vendor</span></div>
@@ -276,7 +276,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">one msgpack entry</span><span class="rspan">inside NISI . drawn below</span></summary>
       <div class="rbody">
-        <p class="note">MessagePack packs its type and length into the lead byte, so short strings cost one byte of framing. The name entry from New_Init_2.nksf:</p>
+        <p class="note">MessagePack packs its type and length into the lead byte, so short strings cost one byte of framing. The name entry:</p>
         <div id="block-msgpack"></div>
       </div>
     </details>
@@ -507,7 +507,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
        note:"inflate with an output cap; NI_DOC_HEADER in the result confirms the stream."}
     ]);
 
-  // nksf opening: RIFF header + the NISI chunk head, New_Init_2.nksf
+  // nksf opening: RIFF header + the NISI chunk head
   build("block-nksf", 'byte',
     [0x52,0x49,0x46,0x46,
      0xF6,0x62,0x00,0x00,

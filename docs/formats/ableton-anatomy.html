@@ -304,7 +304,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">warp-engine parameters (32 bytes)</div>
       <p class="note">Sitting just above the onsets, in the order the Live Set declares them.</p>
       <div id="asd-clip" data-build></div>
-      <div class="callout"><b>Two traps, both paid for.</b> The arrays are <b>not</b> word-aligned to the end of the frame grid, so a 4-stepped scan walks straight past them. And a count of 1 must be refused: with a single position "strictly increasing" constrains nothing, so any stray pair of equal u32 satisfies the test &mdash; accepting it gave 7 of 14 files a confidently wrong answer. A genuine one-shot is reported as unknown rather than guessed at.</div>
+      <div class="callout"><b>Two traps.</b> The arrays are <b>not</b> word-aligned to the end of the frame grid, so a 4-stepped scan walks straight past them. And a count of 1 carries no evidence: with a single position "strictly increasing" constrains nothing, so any stray pair of equal u32 satisfies the test. A one-shot is therefore indistinguishable from an unrelated pair of values on this field alone.</div>
       <div class="callout"><b>Onsets are not warp markers.</b> Live snaps markers to detected transients, so a marker frequently lands exactly on an onset &mdash; 12 of 57 across five files. The counts are what separate them: one file carries 14 onsets and 9 markers. Reading one as the other looks convincing and is wrong.</div>
     </div>
 
