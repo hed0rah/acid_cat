@@ -16,6 +16,7 @@ type/id/name without guessing at their bodies.
 """
 
 import os
+from acidcat.core.primitives.notes import coverage
 import struct
 
 from acidcat.core.walk.base import _f
@@ -110,7 +111,7 @@ def inspect_krz(filepath):
         pos += block_len
         n += 1
     if n >= _OBJECT_CAP:
-        warns.append(f"object walk stopped at the {_OBJECT_CAP}-object cap")
+        warns.append(coverage(f"object walk stopped at the {_OBJECT_CAP}-object cap"))
 
     # the PCM sample region after the end marker
     if 0 < osize < len(b):

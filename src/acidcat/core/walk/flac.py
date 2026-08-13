@@ -2,6 +2,7 @@
 plus the audio-frame region. Block iteration lives in core/flac.py."""
 
 import os
+from acidcat.core.primitives.notes import coverage
 import struct
 
 from acidcat.core.formats import flac as flacmod
@@ -148,8 +149,8 @@ def _flac_seektable(b, block_length=None):
         fields.append(_f(None, 0, "...",
                          f"{avail - _SEEKPOINT_ROW_CAP} more points"))
     if n > avail:
-        warns.append(f"table declares {n} points; listing the {avail} within "
-                     "the read cap")
+        warns.append(coverage(f"table declares {n} points; listing the {avail} within "
+                     "the read cap"))
     note = f"{placeholders} placeholder" if placeholders else ""
     fields.insert(0, _f(None, 0, "num_points", n, note))
     return f"{n} seek point(s)", fields, warns

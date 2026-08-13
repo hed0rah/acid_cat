@@ -5,6 +5,7 @@ proprietary, so they are reported as regions, not decoded. Byte-level facts only
 """
 
 import os
+from acidcat.core.primitives.notes import coverage
 
 from acidcat.core.walk.base import _f, _bu32, _dtext
 
@@ -76,9 +77,9 @@ def inspect_rx2(filepath):
                            "summary": (f"{clen:,} bytes, beyond the "
                                        f"{_MAX // (1024 * 1024)} MB read window"),
                            "fields": [], "warnings": [], "payload_base": cbody})
-            warns.append(f"stopped at the {_MAX // (1024 * 1024)} MB read window; "
+            warns.append(coverage(f"stopped at the {_MAX // (1024 * 1024)} MB read window; "
                          f"chunks after {cid.decode('latin-1', 'replace')} "
-                         f"were not walked")
+                         f"were not walked"))
             break
         cid_s = cid.decode("latin-1", "replace")
         cfields = []

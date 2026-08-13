@@ -3,6 +3,7 @@ and structure chunks, and the named sample list. Sample carving lives in
 core/sf2.py; `acidcat convert font.sf2` extracts the samples to WAV."""
 
 import os
+from acidcat.core.primitives.notes import coverage
 
 from acidcat.core.formats import sf2 as sf2mod
 from acidcat.core.walk.base import Unsupported, _PAYLOAD_CAP, _f
@@ -62,8 +63,8 @@ def inspect_sf2(filepath):
 
     warns = []
     if file_size > _SF2_CAP:
-        warns.append(f"file exceeds {_SF2_CAP >> 20} MB; parsed the first "
-                     f"{_SF2_CAP >> 20} MB (samples near the end may be missing)")
+        warns.append(coverage(f"file exceeds {_SF2_CAP >> 20} MB; parsed the first "
+                     f"{_SF2_CAP >> 20} MB (samples near the end may be missing)"))
     for i, s in enumerate(info["samples"][:_SAMPLE_LIST_CAP]):
         looped = "looped" if s["loop_end"] > s["loop_start"] else "one-shot"
         stype = {1: "mono", 2: "right", 4: "left", 8: "linked"}.get(s["type"], f"type {s['type']}")
@@ -88,6 +89,6 @@ def inspect_sf2(filepath):
                                   _f(None, 0, "root_key", s["pitch"])],
                        "warnings": [], "payload_base": byte_off})
     if info["sample_count"] > _SAMPLE_LIST_CAP:
-        warns.append(f"listing the first {_SAMPLE_LIST_CAP} of "
-                     f"{info['sample_count']:,} samples")
+        warns.append(coverage(f"listing the first {_SAMPLE_LIST_CAP} of "
+                     f"{info['sample_count']:,} samples"))
     return chunks, warns

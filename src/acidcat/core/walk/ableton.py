@@ -34,6 +34,7 @@ sample library reports as one thing.
 """
 
 import os
+from acidcat.core.primitives.notes import coverage
 import struct
 
 from acidcat.core.formats import ableton as abmod
@@ -350,8 +351,8 @@ def inspect_ableton_xml(filepath, fmt_id="als"):
     except abmod.AbletonError as exc:
         return [], [str(exc)]
     if truncated:
-        warns.append(f"XML exceeded the {abmod.XML_DECOMPRESS_CAP // (1024 * 1024)} MB "
-                     f"decompression cap; counts below describe only the prefix read")
+        warns.append(coverage(f"XML exceeded the {abmod.XML_DECOMPRESS_CAP // (1024 * 1024)} MB "
+                     f"decompression cap; counts below describe only the prefix read"))
 
     attrs = abmod.header_attributes(xml[:4096])
     if attrs is None:
@@ -448,7 +449,7 @@ def inspect_amxd(filepath):
         off += 8 + length
         seen += 1
     if seen >= _AMXD_MAX_CHUNKS:
-        warns.append(f"stopped after {_AMXD_MAX_CHUNKS} chunks; the chain may continue")
+        warns.append(coverage(f"stopped after {_AMXD_MAX_CHUNKS} chunks; the chain may continue"))
     elif off != size:
         # An independent check, not an "else". Gating this on `not warns` meant
         # any unrelated warning -- a bad magic, an odd marker -- suppressed it,

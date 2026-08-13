@@ -18,6 +18,7 @@ malformed input and never raises.
 """
 
 import os
+from acidcat.core.primitives.notes import coverage
 
 from acidcat.core.walk.base import _bu16, _bu32, _dtext, _f
 
@@ -93,7 +94,7 @@ def inspect_bfdlac(filepath):
         pos += step
 
     if n >= _CHUNK_CAP:
-        warns.append(f"chunk walk stopped at the {_CHUNK_CAP}-chunk cap")
+        warns.append(coverage(f"chunk walk stopped at the {_CHUNK_CAP}-chunk cap"))
 
     # enrich the BFDC summary with the audio descriptor
     if fmt and fmt.get("rate"):

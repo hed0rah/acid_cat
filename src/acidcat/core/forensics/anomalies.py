@@ -14,6 +14,7 @@ import os
 import struct
 
 from acidcat.core.primitives.signal import byte_entropy
+from acidcat.core.primitives.notes import is_coverage
 
 # second-format magics worth flagging when appended after an audio container
 _MAGICS = [
@@ -27,7 +28,11 @@ _MAGICS = [
     (b"\xfd7zXZ\x00", "XZ"),
 ]
 
-_SEVERITY = {"alert": 3, "warn": 2, "notice": 1}
+# info ranks below notice on purpose: it carries the coverage notes, which say
+# what this run did not look at rather than anything about the file, so they
+# belong at the bottom of a findings list. Stated rather than left to the
+# .get(..., 0) default every sort site happens to use.
+_SEVERITY = {"alert": 3, "warn": 2, "notice": 1, "info": 0}
 
 # ID3 frames that legitimately repeat (so duplicates are not suspicious), plus
 # the synthetic header fields inspect emits for the tag itself.
@@ -316,13 +321,27 @@ def scan(filepath, fmt_label, chunks, warns):
         head = f.read(16)
 
     # 1. surface the walker's structural lint (size overruns, forged counts, ...)
+    #
+    # A warning saying our own walk stopped early is not lint. It is reported,
+    # because a partial answer presented as a whole one is the defect this
+    # release is named for -- but as `info`/`coverage`, so it does not read as
+    # the file having something to answer for and does not drive an exit code.
+    # The kind travels on the warning; matching the message text would make its
+    # wording load-bearing across a module boundary.
+    #
+    # Note the classification happens BEFORE the chunk id is prefixed below:
+    # string formatting returns a plain str and drops the kind.
     for w in warns or []:
-        findings.append({"severity": "warn", "offset": 0,
-                         "rule": "structure", "message": w})
+        cov = is_coverage(w)
+        findings.append({"severity": "info" if cov else "warn", "offset": 0,
+                         "rule": "coverage" if cov else "structure",
+                         "message": w})
     for c in chunks:
         for w in c.get("warnings") or []:
-            findings.append({"severity": "warn", "offset": c.get("offset", 0) or 0,
-                             "rule": "structure",
+            cov = is_coverage(w)
+            findings.append({"severity": "info" if cov else "warn",
+                             "offset": c.get("offset", 0) or 0,
+                             "rule": "coverage" if cov else "structure",
                              "message": f"{str(c.get('id', '?')).strip()}: {w}"})
 
     # 2. trailing data past the DECLARED container end, and a tail magic scan.
