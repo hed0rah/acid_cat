@@ -15,6 +15,7 @@ render a sequence or resolve sample paths on disk.
 """
 
 import gzip
+from acidcat.core.primitives.notes import coverage
 import json
 import os
 import re
@@ -189,7 +190,7 @@ def inspect_xpn(filepath):
                 with z.open("Expansion.xml") as zf:   # streamed: bomb-safe
                     raw = zf.read(_XPN_XML_CAP + 1)
                 if len(raw) > _XPN_XML_CAP:
-                    warns.append(f"Expansion.xml exceeds {_XPN_XML_CAP >> 20} MB; truncated")
+                    warns.append(coverage(f"Expansion.xml exceeds {_XPN_XML_CAP >> 20} MB; truncated"))
                     raw = raw[:_XPN_XML_CAP]
                 xml = raw.decode("utf-8", "replace")
                 for tag in _XPN_MANIFEST_KEYS + ("description", "img"):
@@ -272,8 +273,8 @@ def inspect_xtd(filepath):
         except (ValueError, RecursionError):
             warns.append("ACVS JSON payload did not parse")
     elif truncated:
-        warns.append(f"decompressed payload exceeds {_XTD_CAP // (1 << 20)} MB cap; "
-                     "metadata not parsed")
+        warns.append(coverage(f"decompressed payload exceeds {_XTD_CAP // (1 << 20)} MB cap; "
+                     "metadata not parsed"))
 
     samples = kit.get("samples") if isinstance(kit.get("samples"), list) else []
     prog = kit.get("program") if isinstance(kit.get("program"), dict) else {}

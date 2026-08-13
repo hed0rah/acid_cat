@@ -14,6 +14,7 @@ is a multi-gigabyte capture). No numpy: a bounded struct read is enough.
 """
 
 import hashlib
+from acidcat.core.primitives.notes import coverage
 import json
 import os
 import re
@@ -180,7 +181,7 @@ def inspect_sigmf(path, deep=False):
     warns = []
     g, captures, annotations, meta_ok = {}, [], [], False
     if os.path.isfile(meta_path) and os.path.getsize(meta_path) > _META_CAP:
-        warns.append(f"sidecar exceeds {_META_CAP >> 20} MB; not parsed")
+        warns.append(coverage(f"sidecar exceeds {_META_CAP >> 20} MB; not parsed"))
     elif os.path.isfile(meta_path):
         try:
             with open(meta_path, "r", encoding="utf-8", errors="replace") as f:
@@ -250,7 +251,7 @@ def inspect_sigmf(path, deep=False):
         for k in extra[:_EXT_KEY_CAP]:
             gfields.append(_f(None, 0, k, str(g[k])[:120]))
         if len(extra) > _EXT_KEY_CAP:
-            warns.append(f"listing the first {_EXT_KEY_CAP} of {len(extra)} global keys")
+            warns.append(coverage(f"listing the first {_EXT_KEY_CAP} of {len(extra)} global keys"))
         dur_s = f", {dur:.1f} s" if dur is not None else ""
         chunks.append({
             "id": "global", "offset": 0, "size": 0, "payload_base": 0,

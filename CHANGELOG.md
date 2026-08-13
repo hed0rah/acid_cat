@@ -6,9 +6,37 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A cap we crossed is no longer a defect the file committed.** A walker that
+  stopped at an internal limit appended a warning, `anomalies.scan` turned every
+  walker warning into a `structure` finding, and findings drive `audit`'s exit
+  code -- so a structurally perfect file exited 1 for being large, and a script
+  doing `audit f || quarantine f` quarantined it. This was live across fourteen
+  walker sites that already announced their caps, which is why the other forty
+  were held back rather than added.
+
+  Warnings now carry a kind. `coverage` says our walk stopped early; anything
+  else says the file has something to answer for, and a plain string stays a
+  defect so nothing silently drops out of the findings a user relies on. The
+  kind travels on the warning rather than being read out of its text: matching
+  prose would make the wording of a human-readable string load-bearing across a
+  module boundary, which is the defect fixed in 1.0.0 where the anomaly checks
+  dispatched on a display label.
+
+  Coverage notes are still reported -- as `info`/`coverage`, sorted below every
+  real finding. A bounded run that says nothing is the thing this project is
+  named for. It just no longer blames the file.
+
+  The mechanism is a `str` subclass, so all 427 existing warning sites and every
+  consumer keep working untouched; only the fourteen sites that needed
+  classifying were changed. This unblocks the forty deferred cap announcements
+  listed in `tests/test_cap_announcements.py`.
+
 ### Planned for 1.0.1
 
-- **Walker cap warnings will stop counting as findings.** A walker that stops at
+- ~~**Walker cap warnings will stop counting as findings.**~~ Done, above.
+  Original note kept for the reasoning: A walker that stops at
   an internal limit appends a warning, `anomalies.scan` turns every walker
   warning into a `structure` finding, and findings drive `audit`'s exit code --
   so a structurally perfect file that merely crossed one of our own caps exits

@@ -229,6 +229,19 @@ def _skipped_notes(integ):
     return [i for i in integ if i.get("verdict") in _NOT_A_FINDING]
 
 
+def _blaming_the_file(findings):
+    """The findings that say the FILE has something to answer for.
+
+    A `coverage` finding says our own walk stopped at an internal limit. It is
+    printed, because a partial answer presented as a whole one is the defect
+    this release is named for -- but it must not drive the exit code, or a
+    structurally perfect file exits 1 for being large and
+    `audit f || quarantine f` quarantines it. That was live across eighteen
+    walker sites.
+    """
+    return [f for f in findings if f.get("rule") != "coverage"]
+
+
 def _code(scanned, vios, findings, integ):
     """0 clean, 1 the file has something to answer for, 2 nothing was checked.
 
@@ -240,7 +253,8 @@ def _code(scanned, vios, findings, integ):
     """
     if not scanned and not vios:
         return 2
-    return 1 if (vios or findings or _real_findings(integ)) else 0
+    real = _blaming_the_file(findings)
+    return 1 if (vios or real or _real_findings(integ)) else 0
 
 
 def run(args):
