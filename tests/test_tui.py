@@ -1207,8 +1207,17 @@ def test_tui_regions_browse_descend_ascend_extract(tmp_path):
             assert app.fmt.startswith("RIFF")          # the region opened as a WAV
             assert "region 0" in app._display_name()
 
-            app.action_ascend()
+            # back restores the blob view itself; `l` then reopens its cached
+            # region list without rescanning
+            app.action_nav_back()
             await pilot.pause(0.3)
+            assert not [s for s in app.screen_stack if isinstance(s, RegionsScreen)]
+            assert app._region_view is None, "back should leave the region behind"
+            app.action_locate_regions()
+            for _ in range(50):
+                if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
+                    break
+                await pilot.pause(0.1)
             assert any(isinstance(s, RegionsScreen) for s in app.screen_stack)
 
             [s for s in app.screen_stack if isinstance(s, RegionsScreen)][0].dismiss(
@@ -1272,8 +1281,17 @@ def test_tui_regions_re_tools(tmp_path):
             assert app._region_view is not None and "manual carve" in app._display_name()
             assert app.fmt.startswith("RIFF")          # 0x400 is where the first WAV starts
 
-            app.action_ascend()
+            # `u` is back-to-the-parent-view now, not "re-open the region
+            # list"; `l` shows the list, instantly, from the cache on the view.
+            app.action_nav_back()
             await pilot.pause(0.3)
+            assert not browser(), "back should restore the view, not push a modal"
+            app.action_locate_regions()
+            for _ in range(50):
+                if browser():
+                    break
+                await pilot.pause(0.1)
+            assert browser(), "l did not reopen the cached region list"
             # raw-byte search for the RIFF magic -> lands on it
             browser()[0].dismiss({"action": "search"})
             await pilot.pause(0.2)

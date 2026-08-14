@@ -133,7 +133,10 @@ def test_zoom_focuses_what_it_zoomed(wav):
 
 @pytest.mark.parametrize("key,expect", [
     ("full_stop", "nothing is playing"),
-    ("u", "not inside a region"),
+    # `u` is navigation now, not "show the region list": it goes back to the
+    # view you descended from. At the top of the trail there is nowhere to go.
+    ("u", "nothing to go back to"),
+    ("U", "nothing to go forward to"),
     ("ctrl+t", "no field is being edited"),
 ])
 def test_a_key_that_declines_says_why(wav, key, expect):

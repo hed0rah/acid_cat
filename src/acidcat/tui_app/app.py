@@ -145,7 +145,9 @@ class AcidcatTUI(App):
         Binding("ctrl+r", "redo", "redo", show=False),
         Binding("o", "open", "open file", show=False),
         Binding("l", "locate_regions", "locate regions", show=False),
-        Binding("u", "ascend", "up to regions", show=False),
+        ("u", "nav_back", "back"),
+        # not shown: the footer has a hard readability cap and `u` implies it
+        Binding("U", "nav_forward", "forward", show=False),
         ("e", "edit_field", "edit field"),
         # ctrl+e, not tab: tab moves focus, and entering an edit mode should
         # take a modifier. Priority because Textual binds ctrl+e at the screen
@@ -232,6 +234,17 @@ class AcidcatTUI(App):
         self._play = None         # handle to a running audio-audition process
         self._regions = None      # locate regions of the blob being browsed, or None
         self._blob_src = None     # path of the blob those regions came from
+        # Navigation history. `_stack` holds the ANCESTORS of the current view,
+        # oldest first; the current view is the live attributes on self, and is
+        # snapshotted into a frame only when we move away from it. `_forward`
+        # holds frames left behind by `u`, so `U` can walk back into them.
+        #
+        # Before this the model was one blob and one region, and `l` inside a
+        # descended region repointed _blob_src at the carved temp and
+        # overwrote _regions -- destroying the way back with no warning.
+        self._stack = []
+        self._forward = []
+        self.carved = False   # this view's src is a temp we carved
         self._region_view = None  # (idx, region) when viewing a descended region
         self._region_tmps = []    # carved-region temp files, cleaned on exit
         self._disc_src = None     # path of an opened CD-XA disc image
@@ -282,11 +295,22 @@ class AcidcatTUI(App):
     def _open_path(self, path):
         """Open `path` fresh: drop any region context, make a working copy, load,
         and offer the region browser if it is a blob rather than a single file."""
+        # Free the outgoing view's temps BEFORE adopting the new path. Doing it
+        # after meant the snapshot carried the new file's name with the old
+        # view's `carved` flag, and cleanup deleted the file being opened.
+        # Opening abandons the whole trail, including the view being left, whose
+        # carved source is live on `self` rather than in a frame.
+        for fr in self._stack + self._forward + [self._snapshot()]:
+            self._drop_frame(fr)
+        self._stack, self._forward = [], []
+        self._discard_work()
+        self.carved = False
+        self._clean_region_tmps()
+
         self.src = path
         self._regions = None
         self._blob_src = None
         self._region_view = None
-        self._clean_region_tmps()
         self._make_work()
         self._load()
         # the hidden #editbar is still focusable, so without this every single-key
@@ -298,6 +322,114 @@ class AcidcatTUI(App):
         self._maybe_regions()
 
     # ── blob region browsing: locate -> browse -> descend -> extract ──────────
+
+    # ── navigation frames: a view you can come back to ───────────────────────
+
+    _FRAME_ATTRS = (
+        "src", "work", "carved", "_work_is_temp", "_readonly", "dirty",
+        "_backed_up",
+        "_undo", "_redo", "_src_stat", "_force_stale",
+        "_regions", "_blob_src", "_region_view", "_scan_partial",
+        "_locate_mode", "_locate_transforms",
+        "_view", "_viz_scope", "_viz_scale", "_viz_drawn",
+    )
+
+    def _snapshot(self):
+        """Everything needed to restore this view exactly, including its
+        working copy and its edits.
+
+        A frame OWNS its `work` temp. That is what stops the old leak, where
+        every descend added a temp to `_region_tmps` that lived until quit, and
+        what lets you come back to a half-finished edit instead of a reset one.
+        """
+        fr = {a: getattr(self, a, None) for a in self._FRAME_ATTRS}
+        fr["_undo"] = list(fr["_undo"] or [])
+        fr["_redo"] = list(fr["_redo"] or [])
+        fr["_viz_scale"] = dict(fr["_viz_scale"] or {})
+        try:
+            fr["cursor_line"] = self.query_one("#tree", Tree).cursor_line
+        except Exception:
+            fr["cursor_line"] = 0
+        return fr
+
+    def _restore(self, fr):
+        """Put a frame back on screen. The inverse of _snapshot."""
+        for a in self._FRAME_ATTRS:
+            setattr(self, a, fr.get(a))
+        self._load()
+        line = fr.get("cursor_line") or 0
+        if line:
+            try:
+                tree = self.query_one("#tree", Tree)
+                tree.cursor_line = min(line, tree.last_line)
+            except Exception:
+                pass
+        self._paint_bytes()
+
+    def _drop_frame(self, fr):
+        """Delete a frame's temps once it is unreachable by back or forward."""
+        for key, owned in (("work", fr.get("_work_is_temp")), ("src", fr.get("carved"))):
+            p = fr.get(key)
+            if p and owned and os.path.isfile(p):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
+    def _push_frame(self):
+        """Descend: the current view becomes an ancestor.
+
+        Anything sitting in `_forward` is now unreachable -- taking a new branch
+        abandons the old one, the way a browser does -- so its temps go with it.
+        """
+        self._stack.append(self._snapshot())
+        # Detach the working copy from `self`: the frame owns it now. Without
+        # this the very next _make_work() calls _discard_work() and deletes the
+        # temp the parent frame is holding, so going back finds nothing there.
+        self.work = None
+        self._work_is_temp = False
+        self.carved = False
+        for fr in self._forward:
+            self._drop_frame(fr)
+        self._forward = []
+
+    def action_nav_back(self):
+        """u: back to the view you descended from, exactly as you left it."""
+        if not self._stack:
+            self.notify("nothing to go back to; you are at the file you opened",
+                        severity="warning")
+            return
+        self._forward.append(self._snapshot())
+        self._restore(self._stack.pop())
+        self.notify(f"back: {self._breadcrumb()}")
+
+    def action_nav_forward(self):
+        """U: forward again into the view u left."""
+        if not self._forward:
+            self.notify("nothing to go forward to", severity="warning")
+            return
+        self._stack.append(self._snapshot())
+        self._restore(self._forward.pop())
+        self.notify(f"forward: {self._breadcrumb()}")
+
+    def _breadcrumb(self):
+        """The trail, oldest first, e.g. `mod.tmod > ogg @ 0x0000bb31`."""
+        parts = [os.path.basename(fr.get("src") or "?") if i == 0
+                 else self._frame_label(fr)
+                 for i, fr in enumerate(self._stack)]
+        parts.append(self._frame_label(None))
+        return " > ".join(p for p in parts if p)
+
+    def _frame_label(self, fr):
+        """One breadcrumb piece for a frame (None means the current view)."""
+        rv = fr.get("_region_view") if fr else self._region_view
+        src = (fr.get("src") if fr else self.src) or "?"
+        if not rv:
+            return os.path.basename(src)
+        label, region = rv
+        where = f"region {label}" if isinstance(label, int) else str(label)
+        fmt = region.get("format") or region.get("kind") or "region"
+        return f"{where} ({fmt} @ 0x{region.get('offset', 0):08x})"
 
     def _clean_region_tmps(self):
         for p in getattr(self, "_region_tmps", []):
@@ -428,11 +560,19 @@ class AcidcatTUI(App):
         except Exception as e:
             self.call_from_thread(self.notify, f"extract failed: {e}", severity="error")
 
-    def action_locate_regions(self, reset_blob=True):
-        """Run `locate` over the blob and open the region browser. Works on demand
-        (the `l` key on any file) and automatically for a blob; reset_blob=False
-        keeps the current blob when re-scanning with a new mode / the lens."""
+    def action_locate_regions(self, reset_blob=True, rescan=False):
+        """Open the region browser for this view, scanning only if it must.
+
+        Results are cached on the view, so `l` after coming back from a region
+        is instant rather than a second full-file scan -- the complaint that
+        started this work was scanning a 187 MB file again just to see a list
+        that had already been computed. `m` and `t` inside the browser still
+        force a fresh scan, which is what changing the mode or the lens means.
+        """
         if len(self.screen_stack) > 1 or self._scanning:
+            return
+        if not rescan and self._regions is not None and self._blob_src:
+            self._show_regions(self._regions)
             return
         if reset_blob:
             self._blob_src = self.src
@@ -687,7 +827,7 @@ class AcidcatTUI(App):
         elif act == "rescan":
             self._locate_mode = result["mode"]
             self._locate_transforms = result["transforms"]
-            self.action_locate_regions(reset_blob=False)
+            self.action_locate_regions(reset_blob=False, rescan=True)
         elif act == "carve":
             self._carve_prompt()
         elif act == "search":
@@ -702,23 +842,37 @@ class AcidcatTUI(App):
         self._descend_region(self._regions[idx], idx)
 
     def _descend_region(self, region, label):
-        """Carve `region` to a temp file and open it as if it were a standalone
-        file; the parent blob's regions stay set so `u` ascends."""
+        """Carve `region` to a temp file and open it as a view of its own.
+
+        The parent view is pushed first, so `u` restores it whole -- its tree,
+        its cursor, its cached regions and its unsaved edits -- rather than
+        re-showing a modal over whatever is loaded. Because the parent's state
+        travels with the frame instead of living in one global slot, this now
+        nests: a region inside a region inside a region, each with its own
+        locate results.
+        """
         ext = _CARVE_EXT.get(region.get("format")) or "bin"
         fd, tmp = tempfile.mkstemp(suffix=f".{ext}", prefix="acidcat_region_")
         os.close(fd)
         with open(tmp, "wb") as f:
             f.write(self._region_bytes(region))
-        self._region_tmps.append(tmp)
-        blob, regions = self._blob_src, self._regions   # preserve across _make_work
+        self._push_frame()
         self.src = tmp
+        self.carved = True            # this frame owns the carved file too
         self._region_view = (label, region)
+        # a fresh view: its own regions, scanned on demand from itself
+        self._regions = None
+        self._blob_src = None
+        self._scan_partial = False
         self._make_work()
         self._load()
-        self._blob_src, self._regions = blob, regions
+        self.notify(f"in: {self._breadcrumb()}")
 
     def action_ascend(self):
-        """From a descended region, go back up to the blob's region browser."""
+        """Kept as an alias so `u` means one thing: go back."""
+        self.action_nav_back()
+
+    def _action_ascend_legacy(self):
         if self._regions is None or self._blob_src is None:
             self.notify("not inside a region -- u returns from a region opened "
                         "with l or from a blob")
@@ -836,15 +990,13 @@ class AcidcatTUI(App):
                 Text(f" extract failed: {e}", style=f"bold {SEV['alert']}"))
 
     def _display_name(self):
-        """The name shown in the title/tree: a breadcrumb when inside a region,
-        the plain basename otherwise."""
-        if self._region_view is not None:
-            label, r = self._region_view
-            fmt = r.get("transform") or r.get("format") or r["kind"]
-            where = f"region {label}" if isinstance(label, int) else str(label)
-            return (f"{os.path.basename(self._blob_src)} > "
-                    f"{where} ({fmt} @ 0x{r['offset']:08x})")
-        return os.path.basename(self.src)
+        """The name shown in the title/tree: the whole trail when nested.
+
+        This used to render one level -- blob > region -- because that was all
+        the state could express. With a frame stack it shows every step, so a
+        region inside a region inside a region says where you actually are.
+        """
+        return self._breadcrumb()
 
     def _make_work(self):
         self._discard_work()
@@ -1103,8 +1255,11 @@ class AcidcatTUI(App):
         head.append(f" {self._display_name()} ", style=f"bold {ACCENT}")
         head.append(f" {self.fmt}  {self.fsize:,} bytes  "
                     f"{len(self.chunks)} chunks", style=SOFT)
-        if self._region_view is not None:
-            head.append("   [u back to regions]", style=DIM)
+        if self._stack or self._forward:
+            back = f"u back ({len(self._stack)})" if self._stack else ""
+            fwd = f"U forward ({len(self._forward)})" if self._forward else ""
+            head.append("   [" + "  ".join(x for x in (back, fwd) if x) + "]",
+                        style=DIM)
         if self.dirty:
             head.append("   ● UNSAVED", style=f"bold {SEV['alert']}")
         self.query_one("#title", Static).update(head)
