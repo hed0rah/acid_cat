@@ -148,24 +148,119 @@ _HEADER_SLACK = 4096              # audio may start this far past a container he
 _AUDIO_GAP_TOL = 4096            # bridge small non-audio gaps between audio sub-regions
 
 
+def _ogg_page(data, off):
+    """(page_length, header_type, serial) for the Ogg page at `off`, or None.
+
+    Lengths come from the segment table, which is the only way to find the next
+    page without searching for the next magic -- and searching is what made
+    every page look like its own file.
+    """
+    if off + 27 > len(data) or bytes(data[off:off + 4]) != b"OggS":
+        return None
+    nsegs = data[off + 26]
+    if off + 27 + nsegs > len(data):
+        return None
+    body = sum(data[off + 27:off + 27 + nsegs])
+    if off + 27 + nsegs + body > len(data):
+        return None
+    return (27 + nsegs + body, data[off + 5],
+            int.from_bytes(bytes(data[off + 14:off + 18]), "little"))
+
+
+def _ogg_streams(data, first):
+    """[(start, end, serials, complete)] for the physical streams from `first`.
+
+    Ogg stamps `OggS` on EVERY page, so treating each hit as a container made a
+    single song report as hundreds of regions, and `carve --batch` wrote
+    hundreds of unplayable fragments. The file itself says where a stream ends:
+    header_type bit 2 (0x04) is end-of-stream, and the serial at +14 says which
+    logical stream a page belongs to.
+
+    Grouping is by PHYSICAL stream, not by serial, because a multiplexed file
+    (video plus audio) interleaves several serials over the same bytes -- their
+    ranges overlap, so carving one serial out by byte range is not a thing you
+    can do. A physical stream opens at a BOS page and closes when every serial
+    it opened has seen its EOS. Chained files (this is what a concatenation of
+    songs is, and it is spec-legal) then fall out as consecutive groups.
+
+    `complete` is False when the pages ran out before EOS -- a truncated file,
+    or a scan segment that ended mid-stream. The caller needs to know, because
+    an end it inferred is weaker evidence than an end the format declared.
+    """
+    out = []
+    pos, n = first, len(data)
+    start = None
+    opened, seen = set(), set()
+    while pos < n:
+        page = _ogg_page(data, pos)
+        if page is None:
+            # Not a page here. Streams are not necessarily butted together --
+            # in one real archive the songs sit 1,116 bytes apart -- so
+            # stopping at the first gap found the first stream and missed every
+            # one after it. Close whatever is open and resync to the next magic.
+            if start is not None:
+                out.append((start, pos, tuple(sorted(seen)), False))
+                start = None
+            nxt = data.find(b"OggS", pos + 1)
+            if nxt < 0:
+                break
+            pos = nxt
+            continue
+        length, htype, serial = page
+        if start is None:
+            start, opened, seen = pos, set(), set()
+        if htype & 0x02:                       # BOS: a logical stream begins
+            opened.add(serial)
+        seen.add(serial)
+        pos += length
+        if htype & 0x04:                       # EOS
+            opened.discard(serial)
+            if not opened:                     # every stream in the group closed
+                out.append((start, pos, tuple(sorted(seen)), True))
+                start = None
+    if start is not None:
+        out.append((start, pos, tuple(sorted(seen)), False))
+    return out
+
+
 def signature_sweep(data):
     """Find every validated audio container by magic (the signature engine).
     Returns container records sorted by offset, each with an ``extent`` (a
     trustworthy declared end, or None when the size is streaming/corrupt and must
     be resolved from the audio itself)."""
     hits = {}
+    ogg_spans = None
     for magic in _CONTAINER_MAGICS:
         idx = data.find(magic)
         while idx != -1:
             fmt = sniff_bytes(bytes(data[idx:idx + 20]))
             if fmt in _AUDIO_CONTAINER_FMTS and idx not in hits \
                     and _confirm_container(data, idx, fmt):
-                hits[idx] = {
-                    "kind": "container", "format": fmt, "offset": idx,
-                    "extent": _container_extent(data, idx, fmt),
-                    "confidence": _CONTAINER_CONF, "inspectable": True,
-                    "evidence": None,
-                }
+                if fmt == "ogg":
+                    # Page-per-region is the wrong unit: walk the segment tables
+                    # once and keep only the hits that open a physical stream.
+                    if ogg_spans is None:
+                        ogg_spans = {s: (e, ser, done)
+                                     for s, e, ser, done in _ogg_streams(data, idx)}
+                    span = ogg_spans.get(idx)
+                    if span is not None:
+                        end, serials, complete = span
+                        hits[idx] = {
+                            "kind": "container", "format": fmt, "offset": idx,
+                            "extent": end,
+                            "confidence": _CONTAINER_CONF, "inspectable": True,
+                            "evidence": None, "stream_serials": serials,
+                            # an inferred end is weaker than a declared one, and
+                            # the caller has to be able to tell them apart
+                            "streaming_extent": not complete,
+                        }
+                else:
+                    hits[idx] = {
+                        "kind": "container", "format": fmt, "offset": idx,
+                        "extent": _container_extent(data, idx, fmt),
+                        "confidence": _CONTAINER_CONF, "inspectable": True,
+                        "evidence": None,
+                    }
             idx = data.find(magic, idx + 1)
     return [hits[o] for o in sorted(hits)]
 
@@ -208,7 +303,12 @@ def _resolve_container_ends(data, containers, regions):
         extent = c.pop("extent")
         upper = offsets[i + 1] if i + 1 < len(offsets) else n
         if extent is not None:
-            c["end"], c["streaming_extent"] = extent, False
+            c["end"] = extent
+            # setdefault, not assignment: a sweep that already knows how solid
+            # its end is (Ogg resolves one from the stream's own EOS page, and
+            # says so when the pages ran out first) must not have that finding
+            # overwritten here.
+            c.setdefault("streaming_extent", False)
             continue
         chain = _audio_chain_end(c["offset"], upper, regions)
         if chain is not None:

@@ -562,6 +562,15 @@ class AcidcatTUI(App):
             prev = out[-1]
             same_kind = (r["kind"] == prev["kind"]
                          and r.get("format") == prev.get("format"))
+            # Two songs concatenated are exactly adjacent -- 48 of the 64 Ogg
+            # streams in one real 187 MB archive had a zero-byte gap -- so
+            # adjacency alone merged every song in a scan segment into one
+            # 16 MB region. When the format identifies its streams, the
+            # identity decides: same serials means one stream split across a
+            # segment boundary, different serials means the next song.
+            if same_kind and ("stream_serials" in r or "stream_serials" in prev):
+                same_kind = (r.get("stream_serials") == prev.get("stream_serials")
+                             and prev.get("streaming_extent"))
             # A container whose extent was clipped at a segment boundary carries
             # corrupt_extent, and the bytes that follow are its own payload --
             # which the statistical pass now reports as blobs. They are neither
@@ -898,9 +907,36 @@ class AcidcatTUI(App):
             suf += 1
         return start, old[start:len(old) - suf], new[start:len(new) - suf]
 
+    def _decline_readonly(self):
+        """Say why an edit is refused, once, in one wording. Returns True.
+
+        _apply_to_work is the enforcement point; these entry-point guards exist
+        so the refusal arrives before the user fills in an edit form, not after.
+        """
+        self.notify("read-only: too large for a working copy, so an edit would "
+                    "rewrite the original in place. Descend into a region (l) "
+                    "to edit it.", severity="warning")
+        return True
+
     def _apply_to_work(self, new_bytes):
         """Write edited bytes to the working copy (no disk write to the original
-        yet), recording a minimal-diff undo delta, and refresh."""
+        yet), recording a minimal-diff undo delta, and refresh.
+
+        Returns True if the bytes were applied.
+
+        The read-only guard lives HERE rather than at each entry point because
+        `self.work is self.src` above _LARGE_FILE -- there is no working copy to
+        be safe with. Only `action_save` was gated, so `e`, ctrl+e, `s` and
+        repair all reached this function and rewrote the user's ORIGINAL file in
+        place, with no _original backup, on a file the app was calling
+        read-only. One choke point means a future caller cannot reintroduce it.
+        """
+        if self._readonly:
+            self.notify("read-only: this file is too large for a working copy, "
+                        "so an edit would rewrite the original in place. "
+                        "Descend into a region (l) to edit it.",
+                        severity="warning")
+            return False
         with open(self.work, "rb") as f:
             old = f.read()
         start, old_seg, new_seg = self._minimal_delta(old, new_bytes)
@@ -918,6 +954,7 @@ class AcidcatTUI(App):
             f.write(new_bytes)
         self.dirty = True         # cheap: no whole-file compare on the hot path
         self._load()
+        return True
 
     def _recompute_dirty(self):
         """Dirty iff the working copy differs from the saved file. Only called on
@@ -2415,6 +2452,8 @@ class AcidcatTUI(App):
         self._render_preview()
 
     def action_edit_field(self):
+        if self._readonly and self._decline_readonly():
+            return
         self._view = "hex"
         node = self._cur_node
         data = self._nodemeta.get(id(node)) if node else None
@@ -2678,6 +2717,8 @@ class AcidcatTUI(App):
             return
         if self._hexedit:                    # already editing; Tab must not
             return                           # restart and drop typed nibbles
+        if self._readonly and self._decline_readonly():
+            return
         if self._edit_target:
             self.action_cancel_edit()
         node = self._cur_node
@@ -2793,6 +2834,8 @@ class AcidcatTUI(App):
         self.push_screen(BrowseScreen(start), after)
 
     def action_edit(self):
+        if self._readonly and self._decline_readonly():
+            return
         if not self.work:
             self.notify("open a file first (o)", severity="warning")
             return
