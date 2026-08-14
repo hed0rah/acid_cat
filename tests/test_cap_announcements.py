@@ -126,6 +126,14 @@ EXEMPT = {
     ("acidcat.core.write.structure", "_MAX_NESTING"):
         (Reason.DEPTH_GUARD, "a write refuses rather than emitting a partial tree"),
 
+    ("acidcat.core.forensics.toc", "_MAX_FIELDS"):
+        (Reason.SEARCH_WINDOW, "how many field layouts a table-of-contents "
+                               "hypothesis is tried against. A detector "
+                               "returning None never claimed the file has no "
+                               "table, only that this shape did not chain -- "
+                               "covered by tests/test_toc.py, which pins that "
+                               "the negative is a non-result, not a verdict"),
+
     ("acidcat.core.forensics.checksums", "_LOOKAHEAD_CANDS"):
         (Reason.SEARCH_WINDOW, "how many spurious CRC-8 hits to step over while "
                                "finding one frame end; changes which candidate "

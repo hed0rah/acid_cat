@@ -466,6 +466,8 @@ class AcidcatTUI(App):
             self.notify(f"{self.fmt} parsed this file; F forces a walker only "
                         f"when none claims it", severity="warning")
             return
+        if self._offer_toc():
+            return
         from acidcat.core.forensics.forced import _forced_candidates
         rows = _forced_candidates(self.work, True)
         if not rows:
@@ -474,6 +476,64 @@ class AcidcatTUI(App):
             return
         self.push_screen(ForcedScreen(rows, os.path.basename(self.src)),
                          self._on_forced)
+
+    def _offer_toc(self):
+        """Look for the container's own index before guessing at its bytes.
+
+        An archive that carries a table of contents is telling you where
+        everything is and what it is called. Reading that beats a signature
+        sweep on every axis -- names instead of offsets, exact extents instead
+        of inferred ones -- and it needs no knowledge of the format, only of
+        the shape almost every index is written in.
+
+        The entries become ordinary regions, so descend, extract and the whole
+        navigation stack work on them unchanged.
+        """
+        from acidcat.core.forensics import toc as tocmod
+        from acidcat.core.infra import sniff as sniffmod
+        try:
+            with open(self.work, "rb") as fh:
+                found = tocmod.find_toc(fh.read(2 << 20))
+                if not found:
+                    return False
+                entries, field, verified, checked = tocmod.place_entries(
+                    fh, found)
+        except OSError:
+            return False
+        if field is None:
+            # the table is real but its payloads are not laid out where this
+            # can follow them; the signature sweep is still the way in
+            self.notify(f"found a {len(found['entries'])}-entry table of "
+                        f"contents, but could not place its payloads",
+                        severity="warning")
+            return False
+
+        regions = []
+        for e in entries:
+            if e["length"] <= 0:
+                continue
+            fmt = None
+            try:
+                with open(self.work, "rb") as fh:
+                    fh.seek(e["offset"])
+                    fmt = sniffmod.sniff_bytes(fh.read(20))
+            except OSError:
+                pass
+            regions.append({
+                "kind": "container" if fmt else "entry", "format": fmt,
+                "offset": e["offset"], "end": e["offset"] + e["length"],
+                "length": e["length"], "confidence": found["confidence"],
+                "inspectable": bool(fmt), "evidence": None, "name": e["name"],
+            })
+        if not regions:
+            return False
+        self._regions = regions
+        self._blob_src = self.work
+        self.notify(f"table of contents: {len(regions)} named entries, "
+                    f"{verified}/{checked} verified against their own magic "
+                    f"(a hypothesis from the layout, not an identification)")
+        self._show_regions(regions)
+        return True
 
     def _unparsed(self):
         return self.fmt in ("unsupported", "walk failed") or not self.chunks

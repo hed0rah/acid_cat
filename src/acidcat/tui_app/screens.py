@@ -461,8 +461,11 @@ class RegionsScreen(ModalScreen):
             t = DataTable(id="regtable")
             t.cursor_type = "row"
             t.zebra_stripes = True
-            cols = ["#", "offset", "end", "kind", "format", "conf", "length",
-                    "geometry"]
+            # a name column only when there is one: a table of contents gives
+            # every entry a real name, and nothing else does
+            self._named = any(r.get("name") for r in self.regions)
+            cols = ["#", "offset", "end", "kind", "format", "conf", "length"]
+            cols.append("name" if self._named else "geometry")
             if self.show_shape:
                 cols.append("shape")
             t.add_columns(*cols)
@@ -477,7 +480,8 @@ class RegionsScreen(ModalScreen):
                        or (r.get("probe") or {}).get("top") or "raw-pcm")
                 row = [str(i), f"0x{r['offset']:08x}", f"0x{r['end']:08x}",
                        r["kind"], fmt,
-                       f"{r['confidence']:.2f}", f"{r['length']:,}", gs]
+                       f"{r['confidence']:.2f}", f"{r['length']:,}",
+                       (r.get("name") or "")[-46:] if self._named else gs]
                 if self.show_shape:
                     row.append(self._shape(r))
                 t.add_row(*row)
