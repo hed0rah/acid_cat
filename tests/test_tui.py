@@ -1207,18 +1207,15 @@ def test_tui_regions_browse_descend_ascend_extract(tmp_path):
             assert app.fmt.startswith("RIFF")          # the region opened as a WAV
             assert "region 0" in app._display_name()
 
-            # back restores the blob view itself; `l` then reopens its cached
-            # region list without rescanning
+            # Back restores the blob view AND reopens its cached region list,
+            # because coming out of a region almost always means "show me the
+            # others" -- making that a second keypress was the clunky part.
+            # The list comes from the cache, so nothing is rescanned.
             app.action_nav_back()
-            await pilot.pause(0.3)
-            assert not [s for s in app.screen_stack if isinstance(s, RegionsScreen)]
+            await pilot.pause(0.4)
             assert app._region_view is None, "back should leave the region behind"
-            app.action_locate_regions()
-            for _ in range(50):
-                if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
-                    break
-                await pilot.pause(0.1)
             assert any(isinstance(s, RegionsScreen) for s in app.screen_stack)
+            assert not app._scanning, "back rescanned instead of using the cache"
 
             [s for s in app.screen_stack if isinstance(s, RegionsScreen)][0].dismiss(
                 {"action": "extract_all", "index": -1})
@@ -1284,14 +1281,8 @@ def test_tui_regions_re_tools(tmp_path):
             # `u` is back-to-the-parent-view now, not "re-open the region
             # list"; `l` shows the list, instantly, from the cache on the view.
             app.action_nav_back()
-            await pilot.pause(0.3)
-            assert not browser(), "back should restore the view, not push a modal"
-            app.action_locate_regions()
-            for _ in range(50):
-                if browser():
-                    break
-                await pilot.pause(0.1)
-            assert browser(), "l did not reopen the cached region list"
+            await pilot.pause(0.4)
+            assert browser(), "back did not bring the region list back with it"
             # raw-byte search for the RIFF magic -> lands on it
             browser()[0].dismiss({"action": "search"})
             await pilot.pause(0.2)

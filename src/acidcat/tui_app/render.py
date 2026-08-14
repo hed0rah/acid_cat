@@ -79,22 +79,33 @@ def row_width_for(columns):
     return _ROW_WIDTHS[-1]
 
 
-def hex_text(path, off, length, accent, spans=None, width=16):
+def hex_text(path, off, length, accent, spans=None, width=16, start=0):
     """A colored hex dump (offset gutter + hex columns + ascii) of up to
-    _HEX_CAP bytes starting at off. Bytes render in `accent`; when `spans` (a
-    list of (abs_offset, len) field ranges) is given, each field's bytes take a
-    distinct palette color so a chunk's field structure shows in the hex.
-    Non-printable ascii dims out."""
+    _HEX_CAP bytes, beginning `start` bytes into the region at `off`.
+
+    Bytes render in `accent`; when `spans` (a list of (abs_offset, len) field
+    ranges) is given, each field's bytes take a distinct palette color so a
+    chunk's field structure shows in the hex. Non-printable ascii dims out.
+
+    `start` is what makes the rest of a big region reachable. The cap always
+    announced itself -- ".. N more bytes" -- but there was no way to go and look
+    at them, which on a multi-megabyte region meant the hex view could only ever
+    show the first kilobyte of it.
+    """
     t = Text()
     if off is None or length in (None, 0):
         t.append("  (no byte range for this node)", style=DIM)
         return t
-    shown = min(length, _HEX_CAP)
-    raw = _read(path, off, shown)
-    _hex_rows(t, off, raw, accent,
-              _spans_cmap(off, spans, shown) if spans else None, width)
+    start = max(0, min(int(start or 0), max(0, length - 1)))
+    shown = min(length - start, _HEX_CAP)
+    raw = _read(path, off + start, shown)
+    _hex_rows(t, off + start, raw, accent,
+              _spans_cmap(off + start, spans, shown) if spans else None, width)
     if length > shown:
-        t.append(f"  .. {length - shown:,} more bytes\n", style=DIM)
+        # Say which window this is, not just that one exists: "1,024 of 3 MB"
+        # leaves the reader working out where they are in it.
+        t.append(f"  bytes {start:,}..{start + shown - 1:,} of {length:,}"
+                 f"   [PgDn/PgUp to page, g to jump]\n", style=DIM)
     return t
 
 

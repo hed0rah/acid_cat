@@ -27,10 +27,18 @@ class _PlayProbe:
     _region_is_audio = AcidcatTUI._region_is_audio
     _chunk_name_at = AcidcatTUI._chunk_name_at
     action_play = AcidcatTUI.action_play
+    _decodable = AcidcatTUI._decodable
+    _DECODABLE = AcidcatTUI._DECODABLE
 
-    def __init__(self, chunks, fmt="MP3/MPEG audio", region=(0, 4096)):
+    # Default to a format the player CANNOT decode. These tests are about the
+    # guard that stops raw bytes being reinterpreted as PCM, and a decodable
+    # format now takes a different path entirely -- it is handed to the decoder,
+    # which produces music rather than the loud noise the guard exists to
+    # prevent. See test_a_decodable_format_is_played_not_reinterpreted.
+    def __init__(self, chunks, fmt="Serum preset", region=(0, 4096)):
         self.chunks = chunks
         self.fmt = fmt
+        self.work = "unused-by-these-tests"
         self._cur_region = (region[0], region[1], None)
         self.pushed = []
         self.played = []
@@ -165,3 +173,28 @@ def test_the_row_cap_is_reachable_not_just_counted():
     q.action_more_rows()
     assert q._rowbudget == {} and q.loaded == 0
     assert "more rows" in q.notes[-1]
+
+
+def test_a_decodable_format_is_played_not_reinterpreted():
+    """An Ogg or an MP3 has no raw PCM anywhere in it, so there is no `data`
+    node to point `p` at and hunting the tree for one cannot succeed. Warning
+    about noise was the best answer available while the only option was
+    reinterpreting bytes; handing the file to a decoder is a better one, and it
+    needs no selection at all."""
+    p = _PlayProbe(chunks=[{"id": "frames", "offset": 45, "size": 3761}],
+                   fmt="Ogg")
+    assert p._decodable() is True
+    p2 = _PlayProbe(chunks=[{"id": "frames", "offset": 45, "size": 3761}],
+                    fmt="MP3/MPEG audio")
+    assert p2._decodable() is True
+
+
+def test_a_pcm_format_is_not_treated_as_decodable():
+    """A WAV's bytes ARE the audio; reinterpreting them is the right path and
+    must not be diverted."""
+    pcm = bytes([0, 1]) * 2000
+    chunks = [{"id": "fmt ", "offset": 12, "size": 16},
+              {"id": "data", "offset": 44, "size": len(pcm),
+               "payload_base": 44}]
+    p = _PlayProbe(chunks=chunks, fmt="RIFF/WAVE", region=(44, len(pcm)))
+    assert p._decodable() is False

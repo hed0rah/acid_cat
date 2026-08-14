@@ -442,8 +442,8 @@ class RegionsScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="regbox"):
-            nc = sum(1 for r in self.regions if r["kind"] == "container")
-            nt = sum(1 for r in self.regions if r["kind"] == "transformed")
+            nc = sum(1 for r in self.regions if r.get("kind") == "container")
+            nt = sum(1 for r in self.regions if r.get("kind") == "transformed")
             nb = len(self.regions) - nc - nt
             lens = "  lens:ON" if self.transforms else ""
             yield Static(
@@ -478,9 +478,15 @@ class RegionsScreen(ModalScreen):
                           else f"{geo.get('endian') or '?'}-{geo.get('width')}bit") + f" {ch}"
                 fmt = (r.get("transform") or r.get("format")
                        or (r.get("probe") or {}).get("top") or "raw-pcm")
-                row = [str(i), f"0x{r['offset']:08x}", f"0x{r['end']:08x}",
-                       r["kind"], fmt,
-                       f"{r['confidence']:.2f}", f"{r['length']:,}",
+                # .get throughout: regions reach this screen from locate, from
+                # a manual carve, from a byte search and now from a table of
+                # contents, and a display must not crash on a producer that
+                # left a field out.
+                row = [str(i), f"0x{r.get('offset', 0):08x}",
+                       f"0x{r.get('end', 0):08x}",
+                       r.get("kind", "region"), fmt,
+                       f"{r.get('confidence') or 0:.2f}",
+                       f"{r.get('length', 0):,}",
                        (r.get("name") or "")[-46:] if self._named else gs]
                 if self.show_shape:
                     row.append(self._shape(r))

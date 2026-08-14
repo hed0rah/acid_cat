@@ -147,6 +147,10 @@ class AcidcatTUI(App):
         Binding("o", "open", "open file", show=False),
         Binding("l", "locate_regions", "locate regions", show=False),
         Binding("F", "force_parse", "force a walker", show=False),
+        Binding("pagedown", "hex_page_down", "hex: next page", show=False,
+                priority=True),
+        Binding("pageup", "hex_page_up", "hex: previous page", show=False,
+                priority=True),
         ("u", "nav_back", "back"),
         # not shown: the footer has a hard readability cap and `u` implies it
         Binding("U", "nav_forward", "forward", show=False),
@@ -250,6 +254,7 @@ class AcidcatTUI(App):
         self._fmt_override = None   # walker forced by the user (F)
         self._force_scan = False    # run forensics despite the size
         self._region_shape = False  # sparkline column in the region list
+        self._hex_from = 0    # byte offset into the selection the hex starts at
         self._region_view = None  # (idx, region) when viewing a descended region
         self._region_tmps = []    # carved-region temp files, cleaned on exit
         self._disc_src = None     # path of an opened CD-XA disc image
@@ -337,7 +342,7 @@ class AcidcatTUI(App):
         "_undo", "_redo", "_src_stat", "_force_stale",
         "_regions", "_blob_src", "_region_view", "_scan_partial",
         "_locate_mode", "_locate_transforms",
-        "_view", "_viz_scope", "_viz_scale", "_viz_drawn",
+        "_view", "_viz_scope", "_viz_scale", "_viz_drawn", "_hex_from",
     )
 
     def _snapshot(self):
@@ -405,9 +410,17 @@ class AcidcatTUI(App):
             self.notify("nothing to go back to; you are at the file you opened",
                         severity="warning")
             return
+        came_from_region = self._region_view is not None
         self._forward.append(self._snapshot())
         self._restore(self._stack.pop())
         self.notify(f"back: {self._breadcrumb()}")
+        # Coming back out of a region almost always means "show me the others".
+        # Making that a second keypress was the clunky part: `u` used to open
+        # the list directly, and splitting navigation from listing cost the
+        # common case a step. The list is cached, so this is instant, and Esc
+        # from it leaves you on the parent view rather than back in the child.
+        if came_from_region and self._regions and not self._scanning:
+            self._show_regions(self._regions)
 
     def action_nav_forward(self):
         """U: forward again into the view u left."""
@@ -1599,12 +1612,14 @@ class AcidcatTUI(App):
         d.no_wrap = True
         d.overflow = "ellipsis"
         detail.update(d)
+        if (off, length) != self._cur_region[:2]:
+            self._hex_from = 0        # a new selection starts at its own start
         self._cur_region = (off, length, accent)
         self._cur_spans = spans
         if self._view == "hex":
             self.query_one("#hex", Static).update(
                 hex_text(self.work, off, length, accent, spans,
-                         self._hex_width()))
+                         self._hex_width(), start=self._hex_from))
         # a graph scoped to the file is unaffected by which node is selected;
         # one scoped to the region follows it, from on_tree_node_highlighted
 
@@ -1900,7 +1915,8 @@ class AcidcatTUI(App):
         if self._view == "hex":
             off, length, accent = self._cur_region
             pane.update(hex_text(self.work, off, length, accent,
-                                 self._cur_spans, self._hex_width()))
+                                 self._cur_spans, self._hex_width(),
+                                 start=self._hex_from))
             self._viz_drawn = None
         else:
             pane.update(self._viz_render(self._view))
@@ -2210,12 +2226,64 @@ class AcidcatTUI(App):
         overlap = max(0, min(off + length, hi) - max(off, lo))
         return overlap >= 0.5 * max(1, length)
 
+    def action_hex_page_down(self):
+        """PgDn: the next _HEX_CAP bytes of this region."""
+        self._page_hex(1)
+
+    def action_hex_page_up(self):
+        self._page_hex(-1)
+
+    def _page_hex(self, step):
+        """Move the hex window through a region bigger than one screenful.
+
+        The dump has always been capped at _HEX_CAP bytes per node and has
+        always said so, but there was no way to reach the rest -- on a 3 MB
+        region the hex view could only ever show its first kilobyte.
+        """
+        if self._view != "hex":
+            self.notify("paging is for the hex view (b cycles back to it)",
+                        severity="warning")
+            return
+        off, length, _accent = self._cur_region
+        if off is None or not length:
+            self.notify("no byte range selected", severity="warning")
+            return
+        if length <= _HEX_CAP:
+            self.notify(f"all {length:,} bytes are already shown",
+                        severity="warning")
+            return
+        top = length - 1
+        want = self._hex_from + step * _HEX_CAP
+        if want < 0:
+            want = 0
+        elif want > top:
+            want = (top // _HEX_CAP) * _HEX_CAP
+        if want == self._hex_from:
+            self.notify("at the " + ("end" if step > 0 else "start")
+                        + " of this region", severity="warning")
+            return
+        self._hex_from = want
+        self._paint_bytes()
+        self.notify(f"hex: byte {want:,} of {length:,}")
+
     def action_play(self):
         """Audition the selected region's bytes as raw PCM (p); '.' stops."""
         if not play.have_audio():
             self.notify("no audio player found (install ffmpeg for ffplay)",
                         severity="warning")
             return
+        # A compressed container has no raw PCM anywhere in it, so the whole
+        # "which chunk is the audio" question does not apply -- there is no
+        # `data` node to find in an Ogg, and hunting for one is a wild goose
+        # chase the tree cannot end. Hand the FILE to the player instead, which
+        # decodes it, and every descended region already IS a standalone file.
+        if self._decodable():
+            self.action_stop_play(quiet=True)
+            self._play = play.play(self.work, block=False)
+            self.notify(f"playing the whole {self.fmt} through the decoder "
+                        f"-- . to stop")
+            return
+
         off, length, _ = self._cur_region
         if off is None or not length:
             self.notify("highlight a region with bytes to play", severity="warning")
@@ -2249,6 +2317,24 @@ class AcidcatTUI(App):
             if base <= off < base + (c.get("size") or 0) + 8:
                 return f"'{str(c.get('id', '?')).strip()}'"
         return "this region"
+
+    # Formats whose bytes are not PCM and which ffplay decodes on its own. The
+    # PCM-reinterpreting path is right for a WAV chunk or a raw blob and wrong
+    # for all of these: there is nothing in the file to point `p` at.
+    _DECODABLE = ("ogg", "opus", "mp3", "flac", "m4a", "mp4", "vorbis", "oga")
+
+    def _decodable(self):
+        """True when the open file is one the player can decode whole."""
+        off, length = self._cur_region[:2]
+        if not self.work:
+            return False
+        # _region_is_audio compares offsets, so it cannot be asked about a
+        # selection that has none -- and "nothing selected" is exactly when a
+        # decodable file should still be playable.
+        if off is not None and length and self._region_is_audio(off, length) is True:
+            return False
+        fmt = (self.fmt or "").lower()
+        return any(k in fmt for k in self._DECODABLE)
 
     def _do_play(self, off, length):
         data = _read(self.work, off, min(length, 4 * 1024 * 1024))
@@ -2366,6 +2452,19 @@ class AcidcatTUI(App):
         node = self._node_containing(offset)
         if node is not None:
             self._select_node(node)
+            meta = self._nodemeta.get(id(node))
+            # Land the hex WINDOW on the offset rather than showing a one-byte
+            # region. Selecting the chunk and paging to the byte inside it is
+            # what "jump there and look at it" means; a single highlighted byte
+            # with no surrounding bytes is not a hex view of anything.
+            if meta and meta[0] is not None and meta[1]:
+                within = offset - meta[0]
+                if 0 <= within < meta[1]:
+                    self._hex_from = max(0, (within // 16) * 16
+                                         - (_HEX_CAP // 4 if within > _HEX_CAP
+                                            else 0))
+                    self._paint_bytes()
+                    return
         acc = PEND
         name = label or (self._node_name(node) if node else f"offset 0x{offset:08x}")
         self._show(offset, hlen, acc, name,
