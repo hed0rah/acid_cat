@@ -61,7 +61,14 @@ def blob(tmp_path):
 
 
 async def _ready(app, pilot):
-    """Wait for the auto-locate to finish and dismiss the region browser."""
+    """Scan, the way a user now does: by expanding the file.
+
+    Opening no longer starts a locate scan on its own -- on a 187 MB archive
+    that was minutes of grinding before the UI answered, for a scan nobody
+    asked for. Expanding the root is the ask.
+    """
+    app.query_one("#tree").root.expand()
+    await pilot.pause(0.2)
     for _ in range(80):
         if app._regions is not None and not app._scanning:
             break

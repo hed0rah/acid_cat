@@ -1194,6 +1194,10 @@ def test_tui_regions_browse_descend_ascend_extract(tmp_path):
     async def scenario():
         app = AcidcatTUI(str(blob))
         async with app.run_test(size=(120, 40)) as pilot:
+            # opening no longer scans on its own; `l` is the ask, and it
+            # is what opens the list when the scan lands
+            app.action_locate_regions()
+            await pilot.pause(0.1)
             for _ in range(50):
                 if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
                     break
@@ -1246,6 +1250,10 @@ def test_tui_regions_re_tools(tmp_path):
         async with app.run_test(size=(140, 45)) as pilot:
             def browser():
                 return [s for s in app.screen_stack if isinstance(s, RegionsScreen)]
+            # opening no longer scans on its own; `l` is the ask, and it
+            # is what opens the list when the scan lands
+            app.action_locate_regions()
+            await pilot.pause(0.1)
             for _ in range(50):
                 if browser():
                     break
@@ -1310,6 +1318,10 @@ def test_tui_large_blob_browsed_in_place(tmp_path, monkeypatch):
     async def scenario():
         app = AcidcatTUI(str(blob))
         async with app.run_test(size=(120, 40)) as pilot:
+            # opening no longer scans on its own; `l` is the ask, and it
+            # is what opens the list when the scan lands
+            app.action_locate_regions()
+            await pilot.pause(0.1)
             for _ in range(50):
                 if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
                     break
@@ -1340,6 +1352,10 @@ def test_tui_scan_is_segmented(tmp_path, monkeypatch):
     async def full():
         app = AcidcatTUI(str(blob))
         async with app.run_test(size=(120, 40)) as pilot:
+            # opening no longer scans on its own; `l` is the ask, and it
+            # is what opens the list when the scan lands
+            app.action_locate_regions()
+            await pilot.pause(0.1)
             for _ in range(300):   # generous: the rescan can take ~10s, longer under load
                 if any(isinstance(s, RegionsScreen) for s in app.screen_stack):
                     break
@@ -1371,6 +1387,10 @@ def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
     async def keep():
         app = AcidcatTUI(str(blob))
         async with app.run_test(size=(160, 40)) as pilot:
+            # opening no longer scans on its own; `l` is the ask, and it
+            # is what opens the list when the scan lands
+            app.action_locate_regions()
+            await pilot.pause(0.1)
             await pilot.pause(0.25)
             assert app._scanning
             await pilot.press("enter")                 # stop and keep
@@ -1383,6 +1403,10 @@ def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
     async def discard():
         app = AcidcatTUI(str(blob))
         async with app.run_test(size=(160, 40)) as pilot:
+            # opening no longer scans on its own; `l` is the ask, and it
+            # is what opens the list when the scan lands
+            app.action_locate_regions()
+            await pilot.pause(0.1)
             await pilot.pause(0.25)
             assert app._scanning
             await pilot.press("escape")                # cancel and discard
@@ -1396,6 +1420,10 @@ def test_tui_scan_controls_pause_keep_discard(tmp_path, monkeypatch):
     async def pause_resume():
         app = AcidcatTUI(str(blob))
         async with app.run_test(size=(160, 40)) as pilot:
+            # opening no longer scans on its own; `l` is the ask, and it
+            # is what opens the list when the scan lands
+            app.action_locate_regions()
+            await pilot.pause(0.1)
             await pilot.pause(0.2)
             await pilot.press("space")                 # freeze
             assert app._scanning and app._scan_paused

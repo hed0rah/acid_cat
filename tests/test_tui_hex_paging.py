@@ -204,6 +204,8 @@ class TestBackReopensTheList:
         return str(p)
 
     async def _ready(self, app, pilot):
+        app.query_one("#tree").root.expand()      # the scan is asked for now
+        await pilot.pause(0.2)
         for _ in range(80):
             if app._regions is not None and not app._scanning:
                 break

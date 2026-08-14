@@ -415,7 +415,9 @@ class RegionsScreen(ModalScreen):
     DataTable { background: #16181C; }
     """
     BINDINGS = [
-        ("x", "extract", "extract one"),
+        ("space", "toggle_sel", "select"),
+        ("a", "select_all", "select all/none"),
+        ("x", "extract", "extract selected"),
         ("e", "extract_all", "extract all"),
         ("m", "mode", "cycle mode"),
         ("t", "transforms", "transform lens"),
@@ -431,7 +433,7 @@ class RegionsScreen(ModalScreen):
     show_shape = False
 
     def __init__(self, regions, blob_name, mode="normal", transforms=False,
-                 blob_src=None, show_shape=False):
+                 blob_src=None, show_shape=False, selected=None):
         super().__init__()
         self.regions = regions
         self.blob_name = blob_name
@@ -439,6 +441,10 @@ class RegionsScreen(ModalScreen):
         self.transforms = transforms
         self.blob_src = blob_src
         self.show_shape = show_shape
+        # Held by the app, not the screen: the list gets re-pushed whenever the
+        # shape column is toggled or a scan lands, and a selection that did not
+        # survive that would be worse than none at all.
+        self.selected = set(selected or ())
 
     def compose(self) -> ComposeResult:
         with Vertical(id="regbox"):
@@ -452,10 +458,13 @@ class RegionsScreen(ModalScreen):
                      + (f" / {nt} transformed" if nt else "")
                      + f"   [mode:{self.mode}{lens}]", style=f"bold {ACCENT}"),
                 id="reghint")
+            marked = (f"   {len(self.selected)} selected"
+                      if self.selected else "")
             yield Static(
-                Text("enter descend   x/e extract one/all   m mode   "
-                     "t transform-lens   c carve range   / byte-search   esc back",
-                     style=SOFT), id="regkeys")
+                Text("enter descend   space select   a all/none   "
+                     "x extract selected   e extract all   m mode   "
+                     "t lens   s shape   c carve   / search   esc back"
+                     + marked, style=SOFT), id="regkeys")
             # populate before yield so the table never depends on post-mount
             # query timing (which was flaky for a re-pushed screen)
             t = DataTable(id="regtable")
@@ -464,7 +473,8 @@ class RegionsScreen(ModalScreen):
             # a name column only when there is one: a table of contents gives
             # every entry a real name, and nothing else does
             self._named = any(r.get("name") for r in self.regions)
-            cols = ["#", "offset", "end", "kind", "format", "conf", "length"]
+            cols = ["", "#", "offset", "end", "kind", "format", "conf",
+                    "length"]
             cols.append("name" if self._named else "geometry")
             if self.show_shape:
                 cols.append("shape")
@@ -482,7 +492,8 @@ class RegionsScreen(ModalScreen):
                 # a manual carve, from a byte search and now from a table of
                 # contents, and a display must not crash on a producer that
                 # left a field out.
-                row = [str(i), f"0x{r.get('offset', 0):08x}",
+                mark = Text("[x]", style=f"bold {SEV['notice']}")                     if i in self.selected else Text("[ ]", style=DIM)
+                row = [mark, str(i), f"0x{r.get('offset', 0):08x}",
                        f"0x{r.get('end', 0):08x}",
                        r.get("kind", "region"), fmt,
                        f"{r.get('confidence') or 0:.2f}",
@@ -505,8 +516,32 @@ class RegionsScreen(ModalScreen):
     def _cursor(self):
         return self.query_one("#regtable", DataTable).cursor_row
 
+    def action_toggle_sel(self):
+        """space: mark the row under the cursor for extraction."""
+        i = self._cursor()
+        sel = set(self.selected)
+        sel.symmetric_difference_update({i})
+        self.dismiss({"action": "select", "selected": sel,
+                      "cursor": i + 1 if i + 1 < len(self.regions) else i})
+
+    def action_select_all(self):
+        """a: all or none, whichever you are not already at."""
+        sel = set() if len(self.selected) == len(self.regions) \
+            else set(range(len(self.regions)))
+        self.dismiss({"action": "select", "selected": sel,
+                      "cursor": self._cursor()})
+
     def action_extract(self):
-        self.dismiss({"action": "extract", "index": self._cursor()})
+        """x: the selected regions, or the one under the cursor if none are.
+
+        Falling back to the cursor keeps the single-region case a two-keystroke
+        job rather than making selection mandatory for it.
+        """
+        if self.selected:
+            self.dismiss({"action": "extract_selected",
+                          "indexes": sorted(self.selected)})
+        else:
+            self.dismiss({"action": "extract", "index": self._cursor()})
 
     def action_extract_all(self):
         self.dismiss({"action": "extract_all", "index": -1})

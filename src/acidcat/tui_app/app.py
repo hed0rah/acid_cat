@@ -213,6 +213,7 @@ class AcidcatTUI(App):
         self._rowbudget = {}      # chunk index -> how many of its rows to list
         self._morerows = {}       # id(node) -> chunk index, for the "more rows" node
         self._morechunks = set()  # id(node) for the "more chunks" node
+        self._regionnode = {}     # id(node) -> region index, for lazy walks
         self._nodemeta = {}       # id(node) -> (off, length, accent)  for the hex pane
         self._nodekey = {}        # id(node) -> stable key, to restore the cursor
                                   # and expansion across the post-edit tree rebuild
@@ -254,6 +255,8 @@ class AcidcatTUI(App):
         self._fmt_override = None   # walker forced by the user (F)
         self._force_scan = False    # run forensics despite the size
         self._region_shape = False  # sparkline column in the region list
+        self._want_list = False   # this scan was asked for by `l`
+        self._region_sel = set()  # region indexes marked for extraction
         self._hex_from = 0    # byte offset into the selection the hex starts at
         self._region_view = None  # (idx, region) when viewing a descended region
         self._region_tmps = []    # carved-region temp files, cleaned on exit
@@ -343,6 +346,7 @@ class AcidcatTUI(App):
         "_regions", "_blob_src", "_region_view", "_scan_partial",
         "_locate_mode", "_locate_transforms",
         "_view", "_viz_scope", "_viz_scale", "_viz_drawn", "_hex_from",
+        "_region_sel",
     )
 
     def _snapshot(self):
@@ -459,6 +463,124 @@ class AcidcatTUI(App):
                 pass
         self._region_tmps = []
 
+    def _scannable(self):
+        """Is `locate` the way into this file? True for a container no walker
+        claims, which is the case the region tree exists for."""
+        return (self.fmt in ("unsupported", "walk failed") or not self.chunks) \
+            and self.fsize >= 4096
+
+    def _add_region_nodes(self, tree, keyed):
+        """Put located regions in the tree, as children of the file.
+
+        They are the file's contents, so this is what a tree already means.
+        Before, they lived behind a modal -- a second grammar for the same
+        idea, with its own navigation, in a UI that already had one. As tree
+        nodes they get the hex pane, the graphs, `p` and the cursor for free,
+        because a node with a byte range is all any of those needed.
+        """
+        for i, r in enumerate(self._regions or []):
+            off = r.get("offset", 0)
+            length = r.get("length") or (r.get("end", 0) - off)
+            fmt = r.get("format") or r.get("transform")
+            lbl = Text()
+            playable = bool(fmt) or r.get("kind") == "container"
+            lbl.append("~ " if playable else "  ",
+                       style=f"bold {TEAL}" if playable else DIM)
+            lbl.append(f"{i:>3} ", style=DIM)
+            lbl.append(f"0x{off:08x}  ", style=DIM)
+            lbl.append(f"{length:,}b  ", style=SOFT)
+            lbl.append(f"{fmt or r.get('kind', 'region')}",
+                       style=f"bold {TEAL}" if fmt else SOFT)
+            name = r.get("name")
+            if name:
+                lbl.append(f"  {name}", style=FG)
+            node = tree.root.add(lbl)
+            node.data = (off, length, TEAL if playable else ACCENT)
+            self._nodemeta[id(node)] = node.data
+            self._nodekey[id(node)] = ("region", i)
+            keyed[("region", i)] = node
+            self._allnodes.append((node, off, length))
+            self._regionnode[id(node)] = i
+            # Expandable only when something claims to be in there. The walk
+            # itself waits until you ask, so this costs one sniff per region.
+            node.allow_expand = bool(fmt)
+
+    def on_tree_node_expanded(self, event):
+        """Lazy tree: the scan, and each region's walk, happen on demand."""
+        node = event.node
+        try:
+            tree = self.query_one("#tree", Tree)
+        except Exception:
+            # Expansion events are posted, not called, so one can land while
+            # the tree is being rebuilt or the app is going away -- `_load`
+            # expands the root itself, and quitting mid-scan does it too.
+            return
+        if node is tree.root and self._regions is None and self._scannable():
+            if not self._scanning:
+                self.notify("scanning for regions -- space pauses, "
+                            "enter keeps what it has, esc discards")
+                self.action_locate_regions(want_list=False)
+            return
+        idx = self._regionnode.get(id(node))
+        if idx is not None and not node.children:
+            self._expand_region_node(node, idx)
+
+    def _expand_region_node(self, node, idx):
+        """Walk one region and hang its chunks under it.
+
+        The walker needs a file, so the region is carved to a temp -- but the
+        chunk offsets that come back are relative to that temp, and every other
+        part of the UI reads the file that is open. Rebasing them onto the
+        parent is what lets the hex pane, the graphs and `p` keep working
+        without knowing any of this happened.
+        """
+        try:
+            region = self._regions[idx]
+        except (IndexError, TypeError):
+            return
+        base = region.get("offset", 0)
+        try:
+            tmp = self._carve_temp(region)
+            label, chunks, _warns = walk_file(tmp, deep=False)
+        except Unsupported as e:
+            node.add_leaf(Text(f"  no walker claims this region ({e})",
+                               style=AMBER))
+            return
+        except Exception as e:
+            node.add_leaf(Text(f"  walk failed: {e.__class__.__name__}: {e}",
+                               style=AMBER))
+            return
+        if not chunks:
+            node.add_leaf(Text("  walked, no chunks", style=DIM))
+            return
+        for c in chunks[:_CHUNK_CAP]:
+            off = base + (c.get("offset", 0) or 0)
+            size = c.get("size", 0) or 0
+            cid = str(c.get("id", "?")).strip()
+            lbl = Text()
+            lbl.append(f"  {cid:<8}", style=f"bold {ACCENT}")
+            lbl.append(f"0x{off:08x}  ", style=DIM)
+            lbl.append(f"{size:,}b  ", style=SOFT)
+            lbl.append(str(c.get("summary", ""))[:60], style=FG)
+            child = node.add_leaf(lbl)
+            child.data = (off, size, ACCENT)
+            self._nodemeta[id(child)] = child.data
+            self._allnodes.append((child, off, size))
+        if len(chunks) > _CHUNK_CAP:
+            node.add_leaf(Text(f"  ... {len(chunks) - _CHUNK_CAP:,} more chunks",
+                               style=DIM))
+        self.notify(f"region {idx}: {label}, {len(chunks)} chunks")
+
+    def _carve_temp(self, region):
+        """Carve a region to a temp this view owns."""
+        ext = _CARVE_EXT.get(region.get("format")) or "bin"
+        fd, tmp = tempfile.mkstemp(suffix=f".{ext}", prefix="acidcat_rgn_")
+        os.close(fd)
+        with open(tmp, "wb") as f:
+            f.write(self._region_bytes(region))
+        self._region_tmps.append(tmp)
+        return tmp
+
     def action_force_parse(self):
         """F: the two things a stuck view can still be asked to do.
 
@@ -562,11 +684,15 @@ class AcidcatTUI(App):
                     f"identification)")
 
     def _maybe_regions(self):
-        """Auto-offer the region browser when the opened file is not a single
-        recognized format (a disk image, a raw dump, an unknown blob)."""
-        if self.fmt not in ("unsupported", "walk failed") or self.fsize < 4096:
-            return
-        self.action_locate_regions()
+        """Nothing, deliberately.
+
+        Opening a container used to start a full-file locate scan immediately.
+        On a 187 MB archive that is minutes of grinding before the UI answers
+        at all, for a scan the user had not asked for. The root node is
+        expandable instead, and expanding it is the ask -- which is what
+        expanding a node has always meant everywhere else in this tree.
+        """
+        return
 
     # ── CD-XA disc audio: detect -> browse tracks/banks -> audition/extract ──
 
@@ -681,7 +807,8 @@ class AcidcatTUI(App):
         except Exception as e:
             self.call_from_thread(self.notify, f"extract failed: {e}", severity="error")
 
-    def action_locate_regions(self, reset_blob=True, rescan=False):
+    def action_locate_regions(self, reset_blob=True, rescan=False,
+                              want_list=True):
         """Open the region browser for this view, scanning only if it must.
 
         Results are cached on the view, so `l` after coming back from a region
@@ -692,6 +819,10 @@ class AcidcatTUI(App):
         """
         if len(self.screen_stack) > 1 or self._scanning:
             return
+        # A parameter, not shared state: setting it inside meant the expand
+        # handler's "just fill the tree" was overwritten by the very call it
+        # was making, and the modal opened anyway.
+        self._want_list = want_list
         if not rescan and self._regions is not None and self._blob_src:
             self._show_regions(self._regions)
             return
@@ -886,6 +1017,15 @@ class AcidcatTUI(App):
             self._cancel_scan = True
 
     def _finish_scan(self, regions, cancelled=False):
+        # The scan runs in a worker and lands here through call_from_thread, so
+        # it can arrive after the app has gone -- quitting mid-scan is the
+        # ordinary way to cause that, and a multi-minute sweep gives you plenty
+        # of chances. Everything below rebuilds the tree, so without this the
+        # landing raises into a screen that no longer has one.
+        try:
+            self.query_one("#tree", Tree)
+        except Exception:
+            return
         if self._scan_timer is not None:
             self._scan_timer.stop()
             self._scan_timer = None
@@ -900,12 +1040,26 @@ class AcidcatTUI(App):
             self._load()
             return
         self._scan_partial = cancelled    # enter mid-scan: results are partial
-        self._show_regions(regions)
+        self._show_regions(regions, open_list=self._want_list)
 
     def _classify_regions(self, regions):
         """Rank each blob region -- codec (SPU-ADPCM) vs linear PCM at a geometry
         -- so the browser shows the real interpretation, not a bare 'raw-pcm'."""
+        from acidcat.core.infra import sniff as sniffmod
         for r in regions:
+            # Sniff every region, not just the blobs. Twenty bytes each is what
+            # lets a tree node say `ogg` instead of `region`, and it decides
+            # which nodes are worth offering to expand -- the walk itself still
+            # waits until one is.
+            if not r.get("format"):
+                try:
+                    with open(self._blob_src, "rb") as f:
+                        f.seek(r.get("offset", 0))
+                        got = sniffmod.sniff_bytes(f.read(20))
+                    if got:
+                        r["format"] = got
+                except Exception:
+                    pass
             if r.get("kind") != "blob" or r.get("format"):
                 continue
             try:
@@ -916,10 +1070,18 @@ class AcidcatTUI(App):
             except Exception:
                 pass
 
-    def _show_regions(self, regions):
-        self._load()                                   # restore the title
+    def _show_regions(self, regions, open_list=True):
+        """Store the scan's result and put it in the tree.
+
+        `_regions` is set BEFORE the reload, because the tree is built from it
+        -- doing it the other way round rebuilt the tree from the previous
+        state and the regions never appeared. `open_list` is what separates the
+        two jobs the list used to do at once: the tree is how you browse now,
+        and the list opens only when `l` asked for it.
+        """
         self._classify_regions(regions)
         self._regions = regions
+        self._load()                                   # tree now holds them
         if not regions:
             self.query_one("#title", Static).update(
                 Text(f" {os.path.basename(self.src)}  --  no audio regions located "
@@ -928,13 +1090,18 @@ class AcidcatTUI(App):
                      "(m mode  t lens  c carve  / search  l rescan)",
                      style=f"bold {ACCENT}"))
             return
+        if not open_list:
+            self.notify(f"{len(regions)} region(s) -- expand the file to browse "
+                        f"them, l for the list")
+            return
         name = os.path.basename(self._blob_src)
         if self._scan_partial:
             name += " (partial -- scan stopped)"
         self.push_screen(
             RegionsScreen(regions, name, self._locate_mode,
                           self._locate_transforms, blob_src=self._blob_src,
-                          show_shape=self._region_shape),
+                          show_shape=self._region_shape,
+                          selected=self._region_sel),
             self._on_region_action)
 
     def _on_region_action(self, result):
@@ -955,6 +1122,13 @@ class AcidcatTUI(App):
             self._carve_prompt()
         elif act == "search":
             self._search_prompt()
+        elif act == "extract_selected":
+            self._extract([self._regions[i] for i in result["indexes"]])
+        elif act == "select":
+            # the screen cannot hold this: it is re-pushed on every toggle, so
+            # the app owns the set and hands it back each time
+            self._region_sel = result["selected"]
+            self._show_regions(self._regions)
         elif act == "shape":
             # re-open the same regions with the column on or off; no rescan
             self._region_shape = result["show"]
@@ -1418,6 +1592,7 @@ class AcidcatTUI(App):
         self._nodemeta = {}
         self._morerows = {}       # id(node) -> chunk index, for the "more rows" node
         self._morechunks = set()  # id(node) for the "more chunks" node
+        self._regionnode = {}     # rebuilt with the tree
         self._editval = {}
         self._textfield = {}
         self._nodekey = {}
@@ -1510,7 +1685,18 @@ class AcidcatTUI(App):
                      f"(+ to show more)", style=DIM))
             self._nodemeta[id(more)] = tree.root.data
             self._morechunks.add(id(more))
-        tree.root.expand()
+
+        self._add_region_nodes(tree, keyed)
+
+        # A container nobody has a walker for opens with one node and nothing
+        # under it. Leaving the root collapsed and expandable makes the scan
+        # something you ask for by opening the file, which is what expanding a
+        # node means -- rather than something that starts on its own and takes
+        # minutes before the UI answers.
+        if self._scannable() and self._regions is None:
+            tree.root.allow_expand = True
+        else:
+            tree.root.expand()
         for ek in expanded:
             n = keyed.get(ek)
             if n is not None:
