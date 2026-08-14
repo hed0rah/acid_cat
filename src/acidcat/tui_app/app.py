@@ -61,6 +61,7 @@ from acidcat.tui_app.screens import (
     BrowseScreen, ConfirmScreen, DiffScreen, DiscScreen, EditScreen, HelpScreen,
     YesNoScreen,
     HexPane, MapScreen, PromptScreen, RegionsScreen, ValidateScreen,
+    ForcedScreen,
 )
 
 
@@ -145,6 +146,7 @@ class AcidcatTUI(App):
         Binding("ctrl+r", "redo", "redo", show=False),
         Binding("o", "open", "open file", show=False),
         Binding("l", "locate_regions", "locate regions", show=False),
+        Binding("F", "force_parse", "force a walker", show=False),
         ("u", "nav_back", "back"),
         # not shown: the footer has a hard readability cap and `u` implies it
         Binding("U", "nav_forward", "forward", show=False),
@@ -245,6 +247,9 @@ class AcidcatTUI(App):
         self._stack = []
         self._forward = []
         self.carved = False   # this view's src is a temp we carved
+        self._fmt_override = None   # walker forced by the user (F)
+        self._force_scan = False    # run forensics despite the size
+        self._region_shape = False  # sparkline column in the region list
         self._region_view = None  # (idx, region) when viewing a descended region
         self._region_tmps = []    # carved-region temp files, cleaned on exit
         self._disc_src = None     # path of an opened CD-XA disc image
@@ -326,7 +331,8 @@ class AcidcatTUI(App):
     # ── navigation frames: a view you can come back to ───────────────────────
 
     _FRAME_ATTRS = (
-        "src", "work", "carved", "_work_is_temp", "_readonly", "dirty",
+        "src", "work", "carved", "_fmt_override", "_force_scan",
+        "_work_is_temp", "_readonly", "dirty",
         "_backed_up",
         "_undo", "_redo", "_src_stat", "_force_stale",
         "_regions", "_blob_src", "_region_view", "_scan_partial",
@@ -439,6 +445,48 @@ class AcidcatTUI(App):
             except OSError:
                 pass
         self._region_tmps = []
+
+    def action_force_parse(self):
+        """F: the two things a stuck view can still be asked to do.
+
+        On a file no walker claims, offer the forced-parse candidates -- the
+        tree is a single root node otherwise, and `--force` on the CLI was the
+        only way to see that anything parsed at all.
+
+        On a file too large to have been scanned, run forensics anyway. The
+        refusal is a resource decision, not a verdict, and the person looking at
+        the file is better placed to make it than a constant is.
+        """
+        if self._readonly and not self._force_scan and not self._unparsed():
+            self._force_scan = True
+            self.notify("scanning forensics anyway; this reads the whole file")
+            self._load()
+            return
+        if not self._unparsed():
+            self.notify(f"{self.fmt} parsed this file; F forces a walker only "
+                        f"when none claims it", severity="warning")
+            return
+        from acidcat.core.forensics.forced import _forced_candidates
+        rows = _forced_candidates(self.work, True)
+        if not rows:
+            self.notify("no walker produced anything from this file "
+                        "(l locates embedded audio instead)", severity="warning")
+            return
+        self.push_screen(ForcedScreen(rows, os.path.basename(self.src)),
+                         self._on_forced)
+
+    def _unparsed(self):
+        return self.fmt in ("unsupported", "walk failed") or not self.chunks
+
+    def _on_forced(self, fmt):
+        """Re-walk with the chosen walker forced. A hypothesis, not a verdict --
+        the title says which walker is being assumed."""
+        if not fmt:
+            return
+        self._fmt_override = fmt
+        self._load()
+        self.notify(f"forced: parsing as {fmt} (a hypothesis, not an "
+                    f"identification)")
 
     def _maybe_regions(self):
         """Auto-offer the region browser when the opened file is not a single
@@ -811,7 +859,9 @@ class AcidcatTUI(App):
         if self._scan_partial:
             name += " (partial -- scan stopped)"
         self.push_screen(
-            RegionsScreen(regions, name, self._locate_mode, self._locate_transforms),
+            RegionsScreen(regions, name, self._locate_mode,
+                          self._locate_transforms, blob_src=self._blob_src,
+                          show_shape=self._region_shape),
             self._on_region_action)
 
     def _on_region_action(self, result):
@@ -832,6 +882,10 @@ class AcidcatTUI(App):
             self._carve_prompt()
         elif act == "search":
             self._search_prompt()
+        elif act == "shape":
+            # re-open the same regions with the column on or off; no rescan
+            self._region_shape = result["show"]
+            self._show_regions(self._regions)
 
     def _region_bytes(self, region):
         with open(self._blob_src, "rb") as f:
@@ -860,10 +914,16 @@ class AcidcatTUI(App):
         self.src = tmp
         self.carved = True            # this frame owns the carved file too
         self._region_view = (label, region)
-        # a fresh view: its own regions, scanned on demand from itself
+        # A fresh view: its own regions, scanned on demand from itself, and
+        # none of the parent's assumptions. A walker forced onto the container
+        # says nothing about a region carved out of it, and a forensics
+        # override granted for a 187 MB blob should not silently apply to a
+        # 3 MB song -- that one will be scanned on its own merits anyway.
         self._regions = None
         self._blob_src = None
         self._scan_partial = False
+        self._fmt_override = None
+        self._force_scan = False
         self._make_work()
         self._load()
         self.notify(f"in: {self._breadcrumb()}")
@@ -1224,7 +1284,8 @@ class AcidcatTUI(App):
         after an edit or after opening a new file."""
         self.fsize = os.path.getsize(self.work)
         try:
-            self.fmt, self.chunks, self.warns = walk_file(self.work, deep=True)
+            self.fmt, self.chunks, self.warns = walk_file(
+                self.work, deep=True, fmt_override=self._fmt_override)
         except Unsupported as e:
             self.fmt, self.chunks, self.warns = "unsupported", [], [str(e)]
         except Exception as e:
@@ -1239,10 +1300,11 @@ class AcidcatTUI(App):
         # "clean: no findings" -- a check that did not run reading as a pass,
         # one panel over from the test file written to prevent exactly that.
         self.scan_note = None
-        if self._readonly:
+        if self._readonly and not self._force_scan:
             self.findings = []
             self.scan_note = ("not scanned: the file is too large to scan "
-                              "whole, so nothing here is a verdict")
+                              "whole, so nothing here is a verdict "
+                              "-- press F to scan it anyway")
         else:
             try:
                 self.findings = ac_anom.scan(self.work, self.fmt, self.chunks, self.warns)
@@ -1255,6 +1317,10 @@ class AcidcatTUI(App):
         head.append(f" {self._display_name()} ", style=f"bold {ACCENT}")
         head.append(f" {self.fmt}  {self.fsize:,} bytes  "
                     f"{len(self.chunks)} chunks", style=SOFT)
+        if self._fmt_override:
+            # a forced walker parses at fixed offsets whether or not the header
+            # is really its format, so the view must never read as an identity
+            head.append(f"   [forced as {self._fmt_override}]", style=PEND)
         if self._stack or self._forward:
             back = f"u back ({len(self._stack)})" if self._stack else ""
             fwd = f"U forward ({len(self._forward)})" if self._forward else ""
@@ -1594,7 +1660,15 @@ class AcidcatTUI(App):
             self._exit_hexedit()
         if self._edit_target:
             self.action_cancel_edit()
+        was_hex = self._view == "hex"
         self._view = order[(order.index(self._view) + 1) % len(order)]
+        # Leaving the hex dump for a graph scopes it to the selection. Hex is
+        # still what a file opens on -- bytes first -- but once you have asked
+        # for a shape, the shape of the chunk you are standing on is almost
+        # always the question, and a 40-byte header is one column of a
+        # whole-file plot. `r` and the arrows still move the scope either way.
+        if was_hex and self._view != "hex":
+            self._viz_scope = "region"
         self._paint_bytes()
         self.notify(f"byte view: {self._view}")
 

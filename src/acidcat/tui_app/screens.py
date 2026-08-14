@@ -204,6 +204,9 @@ class HelpScreen(ModalScreen):
             ("r", "byte view: whole file or just the selected region"),
             ("S", "byte view: vertical scale (entropy 0-8 or auto; "
                   "histogram linear, log, clipped)"),
+            ("u / U", "back and forward through the views you descended"),
+            ("F", "force a walker on an unrecognised file, or scan forensics "
+                  "on one too large to have been scanned"),
             ("arrows", "on a focused graph: up/down change the scale, "
                        "left/right move the selection (a region-scoped graph "
                        "follows it live)"),
@@ -418,15 +421,24 @@ class RegionsScreen(ModalScreen):
         ("t", "transforms", "transform lens"),
         ("c", "carve", "manual carve"),
         ("slash", "search", "byte search"),
+        ("s", "sparkline", "shape column"),
         ("escape", "cancel", "back"),
     ]
 
-    def __init__(self, regions, blob_name, mode="normal", transforms=False):
+    # Off by default. It costs one read per region, which is nothing on a
+    # 22-row list and real on a 4,000-row one, and the whole point of the
+    # region browser is that it appears instantly.
+    show_shape = False
+
+    def __init__(self, regions, blob_name, mode="normal", transforms=False,
+                 blob_src=None, show_shape=False):
         super().__init__()
         self.regions = regions
         self.blob_name = blob_name
         self.mode = mode
         self.transforms = transforms
+        self.blob_src = blob_src
+        self.show_shape = show_shape
 
     def compose(self) -> ComposeResult:
         with Vertical(id="regbox"):
@@ -449,7 +461,11 @@ class RegionsScreen(ModalScreen):
             t = DataTable(id="regtable")
             t.cursor_type = "row"
             t.zebra_stripes = True
-            t.add_columns("#", "offset", "end", "kind", "format", "conf", "length", "geometry")
+            cols = ["#", "offset", "end", "kind", "format", "conf", "length",
+                    "geometry"]
+            if self.show_shape:
+                cols.append("shape")
+            t.add_columns(*cols)
             for i, r in enumerate(self.regions):
                 geo = r.get("geometry") or {}
                 gs = ""
@@ -459,9 +475,12 @@ class RegionsScreen(ModalScreen):
                           else f"{geo.get('endian') or '?'}-{geo.get('width')}bit") + f" {ch}"
                 fmt = (r.get("transform") or r.get("format")
                        or (r.get("probe") or {}).get("top") or "raw-pcm")
-                t.add_row(str(i), f"0x{r['offset']:08x}", f"0x{r['end']:08x}",
-                          r["kind"], fmt,
-                          f"{r['confidence']:.2f}", f"{r['length']:,}", gs)
+                row = [str(i), f"0x{r['offset']:08x}", f"0x{r['end']:08x}",
+                       r["kind"], fmt,
+                       f"{r['confidence']:.2f}", f"{r['length']:,}", gs]
+                if self.show_shape:
+                    row.append(self._shape(r))
+                t.add_row(*row)
             yield t
 
     def on_mount(self):
@@ -496,6 +515,29 @@ class RegionsScreen(ModalScreen):
 
     def action_search(self):
         self.dismiss({"action": "search"})
+
+    def _shape(self, region):
+        """An entropy sparkline for one region: what it looks like, before you
+        spend a descend finding out. Flat and high is compressed or encrypted,
+        a varied middle is structure, flat and low is padding."""
+        if not self.blob_src:
+            return ""
+        try:
+            from acidcat.core.forensics import viz
+            ent, _size, _sampled = viz.file_entropy(
+                self.blob_src, 12, start=region["offset"], end=region["end"])
+        except Exception:
+            return ""
+        if not ent:
+            return ""
+        blocks = " .:-=+*#%@"
+        return "".join(blocks[min(len(blocks) - 1, int(e / 8 * len(blocks)))]
+                       for e in ent)
+
+    def action_sparkline(self):
+        """s: toggle the shape column. Re-reads a slice per row, nothing more --
+        it never rescans the file."""
+        self.dismiss({"action": "shape", "show": not self.show_shape})
 
     def action_cancel(self):
         self.dismiss(None)
@@ -654,3 +696,64 @@ class YesNoScreen(ModalScreen):
 
     def action_cancel(self):
         self.dismiss(False)
+
+
+class ForcedScreen(ModalScreen):
+    """What every walker made of a file none of them claims.
+
+    The TUI equivalent of `inspect --force`. On an unknown container the tree is
+    a single root node and there is nothing to explore, so this is the way in:
+    pick a candidate and the file is re-walked with that walker forced.
+
+    These are leads, not identifications. A walker assumes its magic rather than
+    verifying it, so a forced parse invents structure readily -- the `ids`
+    column is the one that resists it, counting chunk ids whose bytes are
+    actually at the offset claimed. dismiss()es with a format id, or None.
+    """
+
+    CSS = """
+    ForcedScreen { align: center middle; }
+    #forcedbox { width: 96; height: auto; max-height: 90%; border: round #08F9DF;
+                 background: #16181C; padding: 1 2; }
+    #forcedhint { color: #565B63; padding-bottom: 1; }
+    ForcedScreen DataTable { height: auto; max-height: 60%; }
+    """
+    BINDINGS = [("escape", "cancel", "cancel")]
+
+    def __init__(self, rows, title):
+        super().__init__()
+        self.rows = rows
+        # not `name`: Textual reserves that on every widget as a read-only
+        # property, and assigning it raises at construction time
+        self.title_text = title
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="forcedbox"):
+            t = Text()
+            t.append("forced parse  ", style=f"bold {ACCENT}")
+            t.append(f"{self.name}\n", style=SOFT)
+            t.append(f"{len(self.rows)} walker(s) produced something. ",
+                     style=SOFT)
+            t.append("None of them verified a magic number", style=SEV["warn"])
+            t.append(" -- a walker parses at fixed offsets whether or not the "
+                     "header is really its format.", style=SOFT)
+            yield Static(t)
+            yield Static("enter walks the file with that walker forced; "
+                         "esc cancels", id="forcedhint")
+            table = DataTable(cursor_type="row", zebra_stripes=True)
+            table.add_columns("format", "chunks", "fields", "ids", "sane",
+                              "complaint from walker")
+            for r in self.rows:
+                table.add_row(
+                    r["format"], str(r["chunks"]), str(r["fields"]),
+                    f"{r['anchored']}/{r['chunks']}",
+                    "yes" if (r["fits"] and r["ids_ok"]) else "NO",
+                    (r["complaint"] or "")[:46],
+                )
+            yield table
+
+    def on_data_table_row_selected(self, event):
+        self.dismiss(self.rows[event.cursor_row]["format"])
+
+    def action_cancel(self):
+        self.dismiss(None)

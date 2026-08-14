@@ -422,64 +422,7 @@ _MAGIC_COMPLAINT = ("magic", "not a zip", "does not parse", "unknown iq",
                     "no .sigmf-meta", "spec says")
 
 
-def _forced_candidates(filepath, deep):
-    """Try every walker on a file none of them claims, and report what each one
-    made of it -- ranked, with its own complaints attached.
-
-    Deliberately NOT a single answer. Walkers assume their magic rather than
-    verifying it, so a forced parse readily invents structure: pointed at an
-    arbitrary blob, the MIDI walker reports an MThd chunk larger than the file
-    and the FLAC walker reports a 'fLaC' magic that is not there. Picking a
-    "winner" out of that would manufacture a false identification, which is
-    worse than refusing. So this surfaces the candidates as leads for --format
-    and lets the person decide.
-
-    Each row carries: the chunk/field counts, whether the claimed sizes fit
-    inside the real file (a parse claiming more bytes than exist is
-    self-refuting), and the first thing the walker itself complained about.
-    """
-    from acidcat.core.walk import _WALKERS
-
-    size = os.path.getsize(filepath)
-    rows = []
-    for fmt in _WALKERS:
-        try:
-            label, chunks, warns = walk_file(filepath, deep, fmt_override=fmt)
-        except Exception:
-            continue
-        if not chunks:
-            continue
-        fits = all(c.get("offset", 0) + c.get("size", 0) <= size for c in chunks)
-        ids_ok = all(str(c.get("id", "")).isprintable() for c in chunks)
-        # the check a walker cannot talk its way past: if it reports a 4-byte id
-        # at an offset, are those bytes actually there? A walker that assumes
-        # its magic (FLAC reporting 'fLaC' over 03 13 a0 e0) fails this while
-        # warning about nothing, which is exactly the silent fabrication that
-        # would otherwise rank first.
-        anchored = 0
-        for c in chunks:
-            cid = str(c.get("id", ""))
-            if len(cid) == 4 and cid.isprintable():
-                with open(filepath, "rb") as fh:
-                    fh.seek(c.get("offset", 0))
-                    if fh.read(4) == cid.encode("latin-1", "replace"):
-                        anchored += 1
-        complaint = next((w for w in warns
-                          if any(k in w.lower() for k in _MAGIC_COMPLAINT)), "")
-        rows.append({
-            "format": fmt, "label": label,
-            "chunks": len(chunks),
-            "fields": sum(len(c.get("fields") or []) for c in chunks),
-            "fits": fits, "ids_ok": ids_ok, "anchored": anchored,
-            "complaint": complaint or (warns[0] if warns else ""),
-        })
-    # rank: a self-consistent parse that the walker did not complain about is
-    # the strongest lead; a parse claiming bytes the file does not have is last
-    # anchored ids first: bytes on disk beat a walker's silence. a parse that
-    # invents its magic ranks below one that admits a problem but reads real ids.
-    rows.sort(key=lambda r: (r["anchored"], r["fits"], r["ids_ok"],
-                             r["fields"], r["chunks"]), reverse=True)
-    return rows
+from acidcat.core.forensics.forced import _forced_candidates  # noqa: F401
 
 
 def _forced_json(filepath, rows):
@@ -514,7 +457,7 @@ def _print_forced_candidates(filepath, rows, paint):
     print(f"no walker claims {base}. forced-parse candidates "
           f"(hypotheses, not identifications; {tried}):\n")
     print(paint("dim", f"  {'format':12} {'chunks':>6} {'fields':>6} {'ids':>4}"
-                       f" {'sane':>5}  walker's own complaint"))
+                       f" {'sane':>5}  complaint from walker"))
     for r in rows[:10]:
         sane = "yes" if (r["fits"] and r["ids_ok"]) else "NO"
         ids = f"{r['anchored']}/{r['chunks']}"

@@ -803,3 +803,88 @@ class TestSmallRegionsDoNotLie:
                     assert span // windows >= app._ENTROPY_MIN_WINDOW, (
                         f"{span} bytes split into {windows} windows")
         _run(scenario)
+
+
+class TestEnteringAGraphScopesToTheSelection:
+    """Hex is still what a file opens on -- bytes first. But once you ask for a
+    shape, the shape of the chunk you are standing on is almost always the
+    question: a 40-byte header is one column of a whole-file plot."""
+
+    def test_leaving_hex_for_a_graph_scopes_to_the_region(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                assert app._view == "hex" and app._viz_scope == "file"
+                await pilot.press("b")
+                await pilot.pause()
+                assert app._view != "hex"
+                assert app._viz_scope == "region"
+        _run(scenario)
+
+    def test_it_only_applies_on_the_way_out_of_hex(self, wav):
+        """Cycling between graphs must not keep re-imposing the default and
+        undoing a scope the user chose."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await pilot.press("b")               # hex -> entropy, scopes
+                await pilot.press("r")               # user widens it
+                await pilot.pause()
+                assert app._viz_scope == "file"
+                await pilot.press("b")               # entropy -> hilbert
+                await pilot.pause()
+                assert app._viz_scope == "file", "the default overrode a choice"
+        _run(scenario)
+
+    def test_the_scope_is_still_togglable(self, wav):
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                await pilot.press("b")
+                await pilot.pause()
+                assert app._viz_scope == "region"
+                await pilot.press("r")
+                await pilot.pause()
+                assert app._viz_scope == "file"
+        _run(scenario)
+
+
+class TestTheRegionSparkline:
+    """A shape column in the region list, so you can tell compressed audio from
+    padding before spending a descend on it. Off by default: it costs a read per
+    row, which is nothing on 22 rows and real on 4,000."""
+
+    def _screen(self, src):
+        from acidcat.tui_app.screens import RegionsScreen
+        return RegionsScreen([], "x", blob_src=src)
+
+    def test_it_is_off_by_default(self):
+        from acidcat.tui_app.screens import RegionsScreen
+        assert RegionsScreen([], "x").show_shape is False
+
+    def test_high_entropy_and_low_entropy_look_different(self, tmp_path):
+        import random
+        random.seed(4)
+        p = tmp_path / "mixed.bin"
+        p.write_bytes(bytes(random.randrange(256) for _ in range(40000))
+                      + b"\x00" * 40000)
+        rs = self._screen(str(p))
+        hot = rs._shape({"offset": 0, "end": 40000})
+        cold = rs._shape({"offset": 40000, "end": 80000})
+        assert hot and cold and hot != cold
+        assert hot.strip("@") == "", f"random data should read as full: {hot!r}"
+        assert cold.strip() == "", f"zero padding should read as empty: {cold!r}"
+
+    def test_it_declines_quietly_without_a_source(self):
+        """The screen is constructible without one (older call sites, tests),
+        and a missing source must not raise inside compose."""
+        from acidcat.tui_app.screens import RegionsScreen
+        assert RegionsScreen([], "x")._shape({"offset": 0, "end": 10}) == ""
+
+    def test_an_unreadable_range_does_not_raise(self, tmp_path):
+        p = tmp_path / "tiny.bin"
+        p.write_bytes(b"\x00" * 8)
+        assert self._screen(str(p))._shape({"offset": 999, "end": 9999}) == ""
