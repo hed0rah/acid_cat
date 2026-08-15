@@ -387,6 +387,119 @@ class TestTheTreeGoesAllTheWayDown:
         _run(scenario)
 
 
+def _every(node):
+    yield node
+    for c in node.children:
+        yield from _every(c)
+
+
+class TestARebuildKeepsYourPlaceAtDepth:
+    """Editing, undoing or saving rebuilds the tree, and the rebuild puts back
+    what was open. It only ever looked one level down for what that was.
+
+    That limitation was invisible for a while, and measurably so: nothing below
+    the top level could be OPEN, because fields and rows are leaves and the
+    lazily walked chunks under a region carried no key to be recorded by. Both
+    halves are gone now -- a region's chunks expand, and they have paths -- so
+    the one-level walk finally has something to lose, and does not.
+
+    A path also has to survive being replayed through a level that does not
+    exist yet: the region's chunks are walked on demand, so reopening has to
+    rebuild that level before the path's next component can resolve.
+    """
+
+    def _open_to_depth(self, app, pilot):
+        tree = app.query_one("#tree")
+        region = [c for c in tree.root.children
+                  if app._info(c) is not None and app._info(c).region is not None][0]
+        region.expand()
+        return region
+
+    def test_a_chunk_inside_a_region_is_still_open_afterwards(self, blob):
+        async def scenario():
+            app = AcidcatTUI(blob)
+            async with app.run_test(size=(160, 50)) as pilot:
+                await pilot.pause(0.3)
+                await _scan(app, pilot)
+                region = self._open_to_depth(app, pilot)
+                await pilot.pause(0.5)
+                chunk = [c for c in region.children if c.allow_expand][0]
+                chunk.expand()
+                await pilot.pause(0.3)
+                want = app._info(chunk).path
+                assert want is not None, "a lazily walked chunk got no path"
+
+                app._load()
+                await pilot.pause(0.5)
+                again = [n for n in _every(app.query_one("#tree").root)
+                         if app._info(n) is not None
+                         and app._info(n).path == want]
+                assert again, "the chunk did not survive the rebuild at all"
+                assert again[0].is_expanded, "the rebuild collapsed it"
+                assert again[0].children, "reopened, but its fields are gone"
+        _run(scenario)
+
+    def test_the_region_under_it_was_re_walked_to_get_there(self, blob):
+        """The level in between is lazy, so replaying the path had to rebuild
+        it. If reopening only looked things up, the walk would stop at the
+        region and the chunk would never be found."""
+        async def scenario():
+            app = AcidcatTUI(blob)
+            async with app.run_test(size=(160, 50)) as pilot:
+                await pilot.pause(0.3)
+                await _scan(app, pilot)
+                region = self._open_to_depth(app, pilot)
+                await pilot.pause(0.5)
+                chunk = [c for c in region.children if c.allow_expand][0]
+                chunk.expand()
+                await pilot.pause(0.3)
+                app._load()
+                await pilot.pause(0.5)
+                root = app.query_one("#tree").root
+                rnodes = [c for c in root.children
+                          if app._info(c) is not None
+                          and app._info(c).region is not None]
+                assert rnodes and rnodes[0].children, (
+                    "the region came back empty, so nothing below it could be "
+                    "restored")
+        _run(scenario)
+
+    def test_a_path_that_no_longer_resolves_lands_on_its_deepest_ancestor(self, blob):
+        """An edit can change what is there. Dropping the user at the root
+        because the last component went missing is worse than stopping at the
+        level that still exists."""
+        async def scenario():
+            app = AcidcatTUI(blob)
+            async with app.run_test(size=(160, 50)) as pilot:
+                await pilot.pause(0.3)
+                await _scan(app, pilot)
+                region = self._open_to_depth(app, pilot)
+                await pilot.pause(0.5)
+                rpath = app._info(region).path
+                landed = app._reopen(rpath + (("chunk", "NOPE", 99),))
+                assert app._info(landed).path == rpath, (
+                    "a broken tail should stop at the last good level")
+        _run(scenario)
+
+    def test_the_open_set_is_gathered_from_the_whole_tree(self, blob):
+        async def scenario():
+            app = AcidcatTUI(blob)
+            async with app.run_test(size=(160, 50)) as pilot:
+                await pilot.pause(0.3)
+                await _scan(app, pilot)
+                region = self._open_to_depth(app, pilot)
+                await pilot.pause(0.5)
+                chunk = [c for c in region.children if c.allow_expand][0]
+                chunk.expand()
+                await pilot.pause(0.3)
+                paths = app._open_paths(app.query_one("#tree").root)
+                assert app._info(chunk).path in paths, (
+                    "an open node below the top level was not recorded")
+                assert paths == sorted(paths, key=len), (
+                    "parents must be replayed before their children")
+        _run(scenario)
+
+
 class TestTheHelpColumnsToo:
     """The same collision, found in the help screen while documenting the fix
     for it: the key column padded to 16 and `shift+left/right` is 16 wide.
