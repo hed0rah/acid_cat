@@ -424,8 +424,11 @@ class TestBigRangesAreTheUsersCall:
             app = AcidcatTUI(path)
             async with app.run_test(size=(170, 50)) as pilot:
                 tree = await _open_everything(app, pilot)
+                # "MB to read" and not "look inside": the latter is also a
+                # substring of "nothing to look inside", so the first version of
+                # this matched a refusal and called it an offer.
                 offers = [n for n in _walk(tree.root)
-                          if "look inside" in app._node_name(n)]
+                          if "MB to read" in app._node_name(n)]
                 assert not offers, (
                     f"asked permission for a small read: "
                     f"{[app._node_name(n) for n in offers]}")
@@ -448,9 +451,13 @@ class TestTheUiDoesNotBlockWhileItReads:
                 tree = app.query_one("#tree")
                 tree.root.expand()
                 await pilot.pause(0.3)
+                # An arrow is not the same as somewhere to go -- the header
+                # pseudo-chunk has fields and eight bytes of payload, so it has
+                # an arrow and nothing to walk. Ask for one that can actually
+                # be explored, which is what this test is about.
                 node = [c for c in tree.root.children
-                        if c.allow_expand and app._info(c)
-                        and app._info(c).kind == "chunk"][0]
+                        if app._info(c) and app._info(c).kind == "chunk"
+                        and app._info(c).can_explore][0]
                 app._explore_node(node)
                 # Synchronously after the call: something is on screen, and it
                 # is not the answer yet.
@@ -474,8 +481,8 @@ class TestTheUiDoesNotBlockWhileItReads:
                 tree.root.expand()
                 await pilot.pause(0.3)
                 node = [c for c in tree.root.children
-                        if c.allow_expand and app._info(c)
-                        and app._info(c).kind == "chunk"][0]
+                        if app._info(c) and app._info(c).kind == "chunk"
+                        and app._info(c).can_explore][0]
                 app._explore_node(node, background=False)
                 names = [app._node_name(c) for c in node.children]
                 assert names and not any("looking inside" in n for n in names), (
@@ -651,3 +658,57 @@ class TestAChunkThatCoversItsParentDoesNotRecurse:
                 assert any("codec" in x for x in names), names[:12]
                 assert any("bitstream_serial" in x for x in names), names[:12]
         _run(scenario)
+
+
+class TestTheTopLevelHasTheSameOpinion:
+    """The verdict is computed by the lazy builder, and `_load` builds the top
+    level. So the first fix covered a chunk found INSIDE a region and left the
+    identical shape untouched one level up.
+
+    An Ogg opened directly walks to a single OggS chunk covering the whole file.
+    With no opinion recorded, the top level defaulted to yes, and expanding that
+    chunk walked the file again and hung a copy of itself underneath. It stopped
+    after one level only because the copy was built by the lazy path, which does
+    compute the verdict -- so the bug was one duplicated level rather than an
+    endless one, which is a worse way to be wrong: quiet enough to keep.
+    """
+
+    def _paths(self):
+        import glob
+        out = []
+        for pat in ("*.ogg", "*.flac"):
+            hits = glob.glob(f"data/**/{pat}", recursive=True)
+            if hits:
+                out.append(hits[0])
+        if not out:
+            pytest.skip("no ogg or flac in the test corpus")
+        return out
+
+    def test_no_top_level_chunk_contains_a_copy_of_itself(self):
+        async def scenario(path):
+            app = AcidcatTUI(path)
+            async with app.run_test(size=(170, 50)) as pilot:
+                tree = await _open_everything(app, pilot, rounds=8)
+                seen = {}
+                for n in _walk(tree.root):
+                    info = app._info(n)
+                    if info is None or info.kind != "chunk" or info.off is None:
+                        continue
+                    key = (info.off, info.length)
+                    seen[key] = seen.get(key, 0) + 1
+                dupes = {k: v for k, v in seen.items() if v > 1}
+                assert not dupes, (
+                    f"{path}: chunk ranges built more than once: {dupes}")
+        for p in self._paths():
+            _run(lambda p=p: scenario(p))
+
+    def test_a_file_that_is_one_chunk_still_shows_its_fields(self):
+        """The whole reason the arrow was right: there IS something under it."""
+        async def scenario(path):
+            app = AcidcatTUI(path)
+            async with app.run_test(size=(170, 50)) as pilot:
+                tree = await _open_everything(app, pilot, rounds=8)
+                names = [app._node_name(n) for n in _walk(tree.root)]
+                assert any("=" in n for n in names), names[:10]
+        for p in self._paths():
+            _run(lambda p=p: scenario(p))

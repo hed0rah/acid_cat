@@ -882,7 +882,18 @@ class AcidcatTUI(App):
         poff, plen = info.payload_range()
         if poff is None or not plen or not info.can_explore:
             if not n:
-                node.add_leaf(Text("  nothing to look inside", style=DIM))
+                # Say WHICH refusal this is. "we did not look" and "we looked
+                # and found nothing" are different facts about the file, and
+                # they were two nearly identical sentences apart.
+                if poff is None or not plen:
+                    why = "no bytes inside this to look at"
+                elif plen < explore._MIN_EXPLORABLE:
+                    why = (f"{plen} bytes -- too small to hold anything with a "
+                           f"header")
+                else:
+                    why = ("covers the same bytes as the thing it was found in, "
+                           "so there is nothing further in to go")
+                node.add_leaf(Text(f"  {why}", style=DIM))
             return
         if plen > _EXPLORE_AUTO and info.kind != "ask":
             # Reading is the user's call above this size, and the arrow on this
@@ -2023,9 +2034,16 @@ class AcidcatTUI(App):
                                     accent)
             node = tree.root.add(lbl)
             eoff, elen = geometry.extent_of(c)
+            # The same verdict the lazy builder computes, against the file as
+            # the parent. Without it the top level had no opinion and defaulted
+            # to yes, so a format whose walker returns one chunk covering the
+            # whole file -- an Ogg does exactly that -- walked itself again and
+            # hung a copy of itself underneath.
             self._bind_node(node, eoff, elen, accent, kind="chunk", chunk=c,
-                           payload=geometry.payload_of(c),
-                           path=(("chunk", cid, i),))
+                            payload=geometry.payload_of(c),
+                            can_explore=explore.explorable(
+                                geometry.payload_of(c), (0, self.fsize), 0),
+                            path=(("chunk", cid, i),))
             cpath = (("chunk", cid, i),)
             for j, fl in enumerate(c.get("fields", [])):
                 abs_off = _field_abs(c, fl)
