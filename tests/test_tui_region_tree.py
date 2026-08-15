@@ -576,9 +576,12 @@ class TestTheLabelColumns:
         """There were two label builders, one padding to 6 and one to 8, and
         the collision was fixed in neither until they became one. Each of them
         has to go through the shared one, or the next fix lands in half the
-        tree again."""
+        tree again.
+
+        `_attach_children` is the second one now: every level below the top is
+        built by it, whatever engine found the children."""
         import inspect as _i
-        for fn in (AcidcatTUI._load, AcidcatTUI._expand_region_node):
+        for fn in (AcidcatTUI._load, AcidcatTUI._attach_children):
             src = _i.getsource(fn)
             assert "self._chunk_label(" in src, fn.__name__
             assert "lbl.append(f\"{cid" not in src, (
@@ -590,13 +593,32 @@ class TestSelectingForExtraction:
     those."""
 
     async def _list(self, app, pilot):
+        """Open the region list and wait for it to actually be there.
+
+        Waiting for the SCAN is not enough: pushing the screen and mounting its
+        table are separate steps, and a fixed pause that covers both on an idle
+        machine does not cover them under a full-suite load. This failed once in
+        2,689 tests, in the full run only, on a NoMatches for the table -- which
+        is a race dressed as a flake.
+        """
+        from textual.widgets import DataTable
         app.action_locate_regions()
         await pilot.pause(0.2)
         for _ in range(80):
             if app._regions is not None and not app._scanning:
                 break
             await pilot.pause(0.1)
-        return self._screen(app)
+        for _ in range(80):
+            screens = [x for x in app.screen_stack
+                       if isinstance(x, RegionsScreen)]
+            if screens:
+                try:
+                    screens[-1].query_one("#regtable", DataTable)
+                    return screens[-1]
+                except Exception:
+                    pass
+            await pilot.pause(0.05)
+        raise AssertionError("the region list never mounted its table")
 
     def _screen(self, app):
         # the LIVE one: toggling re-pushes, so the first in the stack is stale

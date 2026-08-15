@@ -125,6 +125,13 @@ EXEMPT = {
         (Reason.DEPTH_GUARD, "box nesting past 16 is malformed, not abridged"),
     ("acidcat.core.write.structure", "_MAX_NESTING"):
         (Reason.DEPTH_GUARD, "a write refuses rather than emitting a partial tree"),
+    ("acidcat.core.forensics.explore", "_MAX_DEPTH"):
+        (Reason.DEPTH_GUARD, "a container nested 32 deep has stopped describing "
+                             "itself; the tree renders the stop as a leaf rather "
+                             "than trimming a level off an otherwise complete "
+                             "answer -- covered by tests/test_explore.py, which "
+                             "pins that crossing it refuses to go deeper rather "
+                             "than returning fewer children"),
 
     ("acidcat.core.forensics.toc", "_MAX_FIELDS"):
         (Reason.SEARCH_WINDOW, "how many field layouts a table-of-contents "

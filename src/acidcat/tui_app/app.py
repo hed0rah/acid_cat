@@ -21,6 +21,7 @@ from textual.widgets import Footer, Input, Static, Tree
 from acidcat.core.infra import geometry
 from acidcat.core.walk import walk_file, Unsupported
 from acidcat.core.forensics import anomalies as ac_anom
+from acidcat.core.forensics import explore
 from acidcat.core.forensics import locate as locatemod
 from acidcat.core.forensics import transforms as transformsmod
 from acidcat.core.codecs import cdxa as cdxamod
@@ -68,6 +69,13 @@ from acidcat.tui_app.screens import (
 
 # One wording for the graph keys, so the two charts cannot come to describe
 # them differently. Arrows first: they are what a hand reaches for on a chart.
+# Above this, looking inside is the user's decision rather than a side effect
+# of pressing right-arrow: a 16 MB chunk is 16 MB read and walked, and on a
+# 187 MB archive a tree that explored eagerly would grind through the file one
+# expansion at a time. Below it the read is imperceptible and asking would be
+# ceremony. Announced at the node either way -- the refusal names the size.
+_EXPLORE_AUTO = 4 * 1024 * 1024
+
 _VIZ_HINT = "(arrows: up/down scale, left/right move selection; r = region)"
 
 
@@ -579,9 +587,11 @@ class AcidcatTUI(App):
             if not self._scanning:
                 self.action_locate_regions(want_list=False)
             return
-        idx = (self._info(node).region if self._info(node) else None)
-        if idx is not None and not node.children:
-            self._expand_region_node(node, idx)
+        # Every other node asks the same question: what is inside you? A region
+        # and a chunk and a chunk inside a chunk differ only in how they were
+        # found, not in what opening one means.
+        if not node.children:
+            self._explore_node(node)
 
     def _open_paths(self, node):
         """Every open node in the tree, shallowest first.
@@ -621,10 +631,8 @@ class AcidcatTUI(App):
         for i in range(1, len(path) + 1):
             child = self._pathnode.get(path[:i])
             if child is None:
-                idx = self._info(node)
-                if (idx is not None and idx.region is not None
-                        and not node.children):
-                    self._expand_region_node(node, idx.region)
+                if not node.children:
+                    self._explore_node(node)
                     child = self._pathnode.get(path[:i])
             if child is None:
                 return node          # this is as far as the tree still goes
@@ -728,81 +736,149 @@ class AcidcatTUI(App):
             flbl.append(f"  {fl['note']}", style=DIM)
         return flbl
 
-    def _attach_fields(self, node, chunk, base, accent, base_path=None):
+    def _attach_fields(self, node, chunk, accent, base_path=None):
         """Hang a chunk's fields under it, wherever that chunk came from.
 
-        This is what the lazy path was missing entirely: the walk returns the
-        fields either way -- eight of them for an Ogg, on a shallow walk -- and
-        rendering only the chunk threw a whole level away before anyone could
-        ask for it.
+        No `base` any more: everything that produces chunks now rebases them
+        onto the open file before they get here, so `_field_abs` already yields
+        an absolute offset. A second rebase at this layer was the kind of thing
+        that works until one caller forgets it.
         """
         n = 0
         for fl in chunk.get("fields") or []:
-            rel = _field_abs(chunk, fl)
-            abs_off = None if rel is None else base + rel
+            abs_off = _field_abs(chunk, fl)
             child = node.add_leaf(self._field_label(fl, accent))
             self._bind_node(child, abs_off, fl.get("len") or 0, accent,
-                           kind="field", chunk=chunk, xref=fl.get("xref"),
-                           path=(base_path + (("field", fl["name"], n),)
-                                 if base_path is not None else None))
+                            kind="field", chunk=chunk, xref=fl.get("xref"),
+                            path=(base_path + (("field", fl["name"], n),)
+                                  if base_path is not None else None))
             n += 1
         return n
 
-    def _expand_region_node(self, node, idx):
-        """Walk one region and hang its chunks under it.
+    @staticmethod
+    def _depth_of(node):
+        d, cur = 0, node
+        while cur.parent is not None:
+            d += 1
+            cur = cur.parent
+        return d
 
-        The walker needs a file, so the region is carved to a temp -- but the
-        chunk offsets that come back are relative to that temp, and every other
-        part of the UI reads the file that is open. Rebasing them onto the
-        parent is what lets the hex pane, the graphs and `p` keep working
-        without knowing any of this happened.
+    def _attach_children(self, node, res, parent, parent_path, depth):
+        """Hang whatever explore found under `node`. The one builder.
+
+        `_load` builds the top level, this builds every level below it, and
+        both go through `_chunk_label` and `_attach_fields`. When those were two
+        code paths they drifted: one padded ids to six and the other to eight,
+        one trimmed the summary and the other sliced it raw, and the same latent
+        column collision sat in both waiting for an id of exactly the pad width.
         """
-        try:
-            region = self._regions[idx]
-        except (IndexError, TypeError):
-            return
-        base = region.get("offset", 0)
-        try:
-            tmp = self._carve_temp(region)
-            label, chunks, _warns = walk_file(tmp, deep=False)
-        except Unsupported as e:
-            node.add_leaf(Text(f"  no walker claims this region ({e})",
-                               style=AMBER))
-            return
-        except Exception as e:
-            node.add_leaf(Text(f"  walk failed: {e.__class__.__name__}: {e}",
-                               style=AMBER))
-            return
-        if not chunks:
-            node.add_leaf(Text("  walked, no chunks", style=DIM))
-            return
-        idw = self._id_width(chunks[:_CHUNK_CAP])
-        pinfo = self._info(node)
-        parent_path = None if pinfo is None else pinfo.path
+        n = 0
+        chunks = res.get("chunks") or []
+        idw = self._id_width(chunks[:_CHUNK_CAP]) if chunks else 6
         for i, c in enumerate(chunks[:_CHUNK_CAP]):
-            # Same palette walk the top-level tree does: the accent is what ties
-            # a row to the stripe its bytes get in the hex pane, and a region's
-            # chunks were all one colour, so the pane could not tell them apart.
             accent = PALETTE[i % len(PALETTE)]
-            off = base + (c.get("offset", 0) or 0)
-            size = c.get("size", 0) or 0
-            # add, not add_leaf. add_leaf is add(allow_expand=False), so it was
-            # one argument -- not a widget limitation -- that dead-ended the
-            # tree two levels down and made a region's chunks unopenable.
-            pay_off, pay_len = geometry.payload_of(c)
+            eoff, elen = geometry.extent_of(c)
+            poff, plen = geometry.payload_of(c)
+            cid = str(c.get("id", "")).strip()
             cpath = (None if parent_path is None
-                     else parent_path + (("chunk", str(c.get("id", "")).strip(), i),))
-            child = node.add(self._chunk_label(c, off, idw, accent=accent))
-            self._bind_node(child, off, size, accent, kind="chunk", chunk=c,
-                           path=cpath, payload=(base + pay_off, pay_len))
-            # An arrow that opens onto nothing is worse than no arrow, so the
-            # fields decide whether there is one.
-            child.allow_expand = bool(
-                self._attach_fields(child, c, base, accent, cpath))
+                     else parent_path + (("chunk", cid, i),))
+            child = node.add(self._chunk_label(c, eoff, idw, accent=accent))
+            self._bind_node(child, eoff, elen, accent, kind="chunk", chunk=c,
+                            path=cpath, payload=(poff, plen))
+            # An arrow is offered when there is either something to read (the
+            # walker's own fields) or somewhere to go (a payload big enough to
+            # hold anything). Expanding decides which, and says so when neither
+            # turns out to be true.
+            child.allow_expand = bool(c.get("fields")) or explore.explorable(
+                (poff, plen), parent, depth)
+            if explore.overflows((eoff, elen), parent):
+                child.add_leaf(Text(
+                    f"  this chunk claims bytes outside the range it was found "
+                    f"in -- 0x{eoff:08x}+{elen:,} is not within "
+                    f"0x{parent[0]:08x}+{parent[1]:,}", style=AMBER))
+                child.allow_expand = True
+            n += 1
         if len(chunks) > _CHUNK_CAP:
-            node.add_leaf(Text(f"  ... {len(chunks) - _CHUNK_CAP:,} more chunks",
+            node.add_leaf(Text(
+                f"  ... {len(chunks) - _CHUNK_CAP:,} more chunks at this level "
+                f"(not listed)", style=DIM))
+
+        for i, r in enumerate(res.get("regions") or []):
+            roff = r.get("offset", 0)
+            rlen = r.get("length") or (r.get("end", 0) - roff)
+            fmt = r.get("format") or r.get("kind") or "region"
+            lbl = Text()
+            lbl.append("~ ", style=f"bold {TEAL}")
+            lbl.append(f"{fmt}", style=f"bold {TEAL}")
+            lbl.append(f"  0x{roff:08x}  {rlen:,}b", style=DIM)
+            child = node.add(lbl)
+            self._bind_node(child, roff, rlen, TEAL, kind="region",
+                            path=(None if parent_path is None
+                                  else parent_path + (("found", str(fmt), i),)))
+            child.allow_expand = explore.explorable((roff, rlen), parent, depth)
+            n += 1
+        return n
+
+    def _explore_node(self, node):
+        """What is inside this node? Asked the same way at every level.
+
+        Fields first, because a walker that named them is a better authority on
+        these bytes than anything re-derived from them, and then whatever the
+        payload turns out to contain.
+        """
+        info = self._info(node)
+        if info is None or node.children:
+            return
+        depth = self._depth_of(node)
+        n = 0
+        if info.chunk is not None:
+            n += self._attach_fields(node, info.chunk, info.accent, info.path)
+
+        poff, plen = info.payload_range()
+        if poff is None or not plen:
+            if not n:
+                node.add_leaf(Text("  nothing to look inside", style=DIM))
+            return
+        if plen > _EXPLORE_AUTO and info.kind != "ask":
+            # Reading is the user's call above this size, and the arrow on this
+            # line is how the call gets made -- no new key to discover, and the
+            # refusal names the number so it reads as a decision rather than as
+            # an absence.
+            ask = node.add(Text(
+                f"  look inside ({plen / (1024 * 1024):.1f} MB to read)",
+                style=AMBER))
+            self._bind_node(ask, poff, plen, AMBER, kind="ask", index=False,
+                            payload=(poff, plen),
+                            path=(info.path + (("ask", "", 0),)
+                                  if info.path is not None else None))
+            ask.allow_expand = True
+            return
+        self._explore_into(node, poff, plen, depth)
+
+    def _explore_into(self, node, poff, plen, depth):
+        res = explore.explore(self.work or self.src, poff, plen,
+                              mode=self._locate_mode)
+        n = self._attach_children(node, res, (poff, plen),
+                                  (self._info(node).path if self._info(node)
+                                   else None), depth)
+        if res.get("note"):
+            node.add_leaf(Text(f"  {res['note']}", style=AMBER))
+        for w in (res.get("warnings") or [])[:4]:
+            # The triage preamble says the same thing about every unknown
+            # container, so at depth it repeats once per level and buries the
+            # warnings that are about THIS file. The summary on the node
+            # already says "contents unknown".
+            if w.startswith("generic structural triage:"):
+                continue
+            node.add_leaf(Text(f"  {w}", style=AMBER))
+        if not n and not node.children:
+            # The honest end of a branch. An arrow that opens onto an empty
+            # branch reads as a bug in the tool rather than a fact about the
+            # file, so the fact gets said out loud.
+            node.add_leaf(Text("  nothing recognised inside these bytes",
                                style=DIM))
-        self.notify(f"region {idx}: {label}, {len(chunks)} chunks")
+        elif n:
+            self.notify(f"{res.get('label') or 'looked inside'}: {n} item(s)")
 
     def _carve_temp(self, region):
         """Carve a region to a temp this view owns."""
