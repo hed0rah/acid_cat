@@ -29,7 +29,8 @@ unchanged.
    `core/primitives/` (shared byte readers), `core/codecs/` (ADPCM, BRR, VADPCM
    and friends), `core/containers/` (disc images and archives),
    `core/infra/` (`sniff.py` -- 64 recognized formats, `fieldcodec.py` -- the
-   enc-language, `mapped.py`, `render.py`).
+   enc-language, `geometry.py` -- which bytes a chunk occupies, `mapped.py`,
+   `render.py`).
 2. **Walkers** -- `core/walk/*.py`: 34 walkers behind one dispatcher, serving 53
    registered format labels, each emitting the field model. **The correctness oracle and the
    default.** Dispatch: `core/walk/__init__.py::walk_file`.
@@ -76,7 +77,7 @@ unchanged.
 
 ```
 src/acidcat/
-  core/            146 modules
+  core/            147 modules
     formats/       per-format byte decoders (18)
     walk/          34 walker modules -> 53 format labels (35)
     primitives/    shared byte readers (6)
@@ -94,7 +95,7 @@ src/acidcat/
   mcp_server/      schema, handlers, transport (19 tools)
   tui_app/         Textual inspector/editor
   util/            small shared helpers
-  cli.py  explorer.py  tui_theme.py  __init__.py     (203 modules in total)
+  cli.py  explorer.py  tui_theme.py  __init__.py     (204 modules in total)
 tests/             ~0.59 test:source LOC
 docs/              architecture.md (detailed), format anatomy pages
 internal_docs/     design + review notes (gitignored, local-only)

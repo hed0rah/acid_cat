@@ -224,7 +224,16 @@ def inspect_flac(filepath):
             payload = f.read(min(length, _PAYLOAD_CAP))
         entry = {"id": name, "offset": off, "size": length,
                  "summary": "", "fields": [], "warnings": [],
-                 "payload_base": off + 4}  # FLAC block header is 4 bytes
+                 "payload_base": off + 4,  # FLAC block header is 4 bytes
+                 "payload_len": length, "extent_len": 4 + length}
+        # A block header states a length; the file either has those bytes or it
+        # does not. A truncated FLAC used to walk in complete silence -- a
+        # PADDING block claiming 8,192 bytes inside a 200-byte file said
+        # nothing, while RIFF reports the same damage in the file's own numbers.
+        if off + 4 + length > file_size:
+            file_warns.append(
+                f"block {name} at 0x{off:08x} claims {length:,} bytes but only "
+                f"{max(0, file_size - off - 4):,} remain (file is truncated)")
         try:
             if btype == 0:
                 entry["summary"], entry["fields"], entry["warnings"] = \
@@ -296,5 +305,11 @@ def inspect_flac(filepath):
     if audio_bytes > 0:
         chunks.append({"id": "frames", "offset": last_end, "size": audio_bytes,
                        "summary": f"audio frames, {audio_bytes:,} bytes (opaque)",
-                       "fields": [], "warnings": []})
+                       "fields": [], "warnings": [],
+                       # No header: this chunk is audio from the last metadata
+                       # block to EOF. Without saying so the default rule
+                       # assumed eight bytes of header and put the payload
+                       # eight bytes past the end of the file.
+                       "payload_base": last_end,
+                       "payload_len": audio_bytes, "extent_len": audio_bytes})
     return chunks, file_warns

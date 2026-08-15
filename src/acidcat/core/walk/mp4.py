@@ -81,7 +81,13 @@ def _entry_chunks(data, stsd_box):
                            f"{e.get('sample_size')}-bit")
         out.append({"id": codec[:8], "offset": e["offset"], "size": e["size"],
                     "summary": summary, "fields": fields, "warnings": [],
-                    "payload_base": e["offset"] + e["hdr"]})
+                    "payload_base": e["offset"] + e["hdr"],
+                    # An ISO box size counts the header, so `size` is the extent
+                    # and the payload is shorter by exactly that header. Saying
+                    # only one of them let every reader that paired payload_base
+                    # with size overshoot the box by 8.
+                    "payload_len": e["size"] - e["hdr"],
+                    "extent_len": e["size"]})
         for btype, boff, bhdr, bsize in e["children"]:
             out.append(_config_chunk(data, btype, boff, bhdr, bsize,
                                      e["depth"] + 1))
@@ -94,7 +100,8 @@ def _config_chunk(data, btype, boff, bhdr, bsize, depth):
     indent = ". " * depth
     entry = {"id": t[:8], "offset": boff, "size": bsize,
              "summary": indent + t, "fields": [], "warnings": [],
-             "payload_base": boff + bhdr}
+             "payload_base": boff + bhdr,
+             "payload_len": bsize - bhdr, "extent_len": bsize}
     payload = data[boff + bhdr:boff + bsize]
     flds = entry["fields"]
     if btype == b"esds":
@@ -302,7 +309,9 @@ def inspect_mp4(filepath):
             fields.extend(sfields)
         chunks.append({"id": t[:8], "offset": b["offset"], "size": b["size"],
                        "summary": summary, "fields": fields, "warnings": box_warns,
-                       "payload_base": b["offset"] + b["hdr"]})
+                       "payload_base": b["offset"] + b["hdr"],
+                       "payload_len": b["size"] - b["hdr"],
+                       "extent_len": b["size"]})
         if b["type"] == b"stsd" and not b["truncated"] \
                 and not b.get("beyond_cap"):
             chunks.extend(_entry_chunks(data, b))

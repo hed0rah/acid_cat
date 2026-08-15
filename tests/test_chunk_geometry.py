@@ -1,34 +1,36 @@
 """Every chunk has to say which bytes it occupies, in a way one rule can read.
 
-There is no such rule today. `_field_abs` documents the closest thing to one --
+There was no such rule. `_field_abs` documented the closest thing to one --
 field offsets are relative to `payload_base`, else `offset + 8`
-(core/infra/fieldcodec.py:39) -- and nine sites across six modules re-derive it
-independently, spelled four different ways, including two that compute an end as
-`base + size + 8`. Six consumers guessing at the same geometry is not a
-convention, it is a coincidence that has held so far.
+(core/infra/fieldcodec.py:39) -- and nine sites across six modules re-derived it
+independently, spelled four different ways, two of them computing an end as
+`base + size + 8` and one never consulting `payload_base` at all. Six consumers
+guessing at the same geometry is not a convention, it is a coincidence, and the
+coincidence had already broken.
 
-It has not entirely held. Measured over 47 walked files in data/:
+It broke because one key was answering two questions. RIFF's `size` is the
+PAYLOAD length; MP4's is the TOTAL box length, header included. Both are
+reasonable and no single reader serves both, so a normalized chunk now carries
+`extent` (every byte it occupies) and `payload` (the bytes inside), and says
+whether anyone actually declared them. core/infra/geometry.py is the one reader.
 
-    196 chunks declare a payload_base
-     72 rely on the +8 default
-     28 put their payload range past the end of the file
+Measured over 47 files and 275 chunks in data/, before and after:
 
-and that last 28 splits along a line worth keeping sharp:
+                     before   after
+    declared            196     200
+    defaulted            72      72
+    bytes past EOF       28       3
 
-  - A DECLARED extent running past EOF on a deliberately truncated fixture is a
-    finding about the FILE. RIFF/WAVE reports exactly that, in the file's own
-    numbers ("claims 176,400 bytes but only 79,922 remain"). Correct behaviour.
-  - MP4's `size` is the TOTAL box size including the 8-byte header, while its
-    `payload_base` is `offset + 8`. The pair is self-inconsistent, so every
-    container box overshoots by exactly 8. That is a walker DECLARATION defect,
-    not damage.
+The three that remain are the point of the distinction. A declared extent
+running past the end of a deliberately truncated fixture is a finding about the
+FILE, and all three are announced in the file's own numbers -- "claims 176,400
+bytes but only 79,922 remain". Under a single `size` key that case and MP4's
+systematic 8-byte overshoot looked identical from outside, which is how the
+second one survived as long as it did.
 
-The difference between those two is the whole reason this file exists: one is
-the tool doing its job and the other is the tool being wrong, and under a single
-`size` key they look identical from the outside.
-
-This is a ratchet, not a gate. The known set below is the measured state as of
-today; it may shrink and must never grow.
+A ratchet, not a gate: the known-defect set may shrink and must never grow. Its
+own reach is asserted rather than implied, because a test that quietly stops
+examining anything passes forever.
 """
 
 import glob
@@ -36,27 +38,22 @@ import os
 
 import pytest
 
+from acidcat.core.infra import geometry
 from acidcat.core.walk import walk_file
 
 _MAX = 8_000_000
 
 
 # (walker label, chunk id) -> why this one is known-wrong. Shrink only.
-KNOWN_DEFECTS = {
-    ("MP4/M4A", "moov"): "size is the total box size including the 8-byte "
-                         "header while payload_base is offset+8, so the pair "
-                         "overshoots by 8 on every container box",
-    ("MP4/M4A", "udta"): "as moov",
-    ("MP4/M4A", "meta"): "as moov",
-    ("MP4/M4A", "ilst"): "as moov",
-    ("MP4/M4A", "©too"): "as moov",
-    ("FLAC", "frames"): "the frames pseudo-chunk runs to EOF, so the +8 "
-                        "default puts its payload 8 bytes past the file",
-    ("FLAC", "PADDING"): "a truncated FLAC whose PADDING block claims 8,192 "
-                         "bytes inside a 200-byte file, and the walker emits "
-                         "no warning at all -- the damage is real, the silence "
-                         "about it is the defect",
-}
+#
+# Empty, and it got here by shrinking rather than by starting that way. MP4 now
+# states extent and payload separately, because an ISO box size counts its own
+# header and the two differ by exactly that much. FLAC's `frames` chunk declares
+# its own base rather than inheriting an eight-byte header it does not have. And
+# a truncated FLAC reports the damage in the file's own numbers, the way RIFF
+# always did -- the three chunks that still fail the arithmetic are damaged
+# files being described correctly, which is the tool working.
+KNOWN_DEFECTS = {}
 
 
 def _corpus():
@@ -74,17 +71,24 @@ def _corpus():
 
 
 def _overshoots(chunks, fsize):
-    """Chunks whose payload range, read by the documented rule, leaves the file."""
+    """Chunks whose bytes leave the file, read through the one accessor.
+
+    Through `geometry.payload_of` rather than by re-deriving the rule here: a
+    test that carries its own tenth copy of the thing it is policing would keep
+    passing after the copy it polices was fixed.
+    """
     out = []
     for c in chunks:
-        off, size = c.get("offset"), c.get("size")
-        if not isinstance(off, int) or not isinstance(size, int):
+        if c.get("geometry") == geometry.UNPOSITIONED:
             continue
-        pb = c.get("payload_base")
-        base = pb if pb is not None else off + 8
-        if base + size > fsize:
-            out.append((str(c.get("id")), base, size,
-                        "declared" if pb is not None else "defaulted"))
+        off = c.get("offset")
+        if not isinstance(off, int):
+            continue
+        base, n = geometry.payload_of(c)
+        eoff, elen = geometry.extent_of(c)
+        if base + n > fsize or eoff + elen > fsize:
+            out.append((str(c.get("id")), base, n,
+                        c.get("geometry") or "unnormalized"))
     return out
 
 
@@ -178,8 +182,7 @@ class TestFieldsLandInsideTheirChunk:
                 off, size = c.get("offset"), c.get("size")
                 if not isinstance(off, int) or not isinstance(size, int):
                     continue
-                pb = c.get("payload_base")
-                base = pb if pb is not None else off + 8
+                base, size = geometry.payload_of(c)
                 if base + size > fsize:        # already covered above
                     continue
                 for fl in c.get("fields") or []:

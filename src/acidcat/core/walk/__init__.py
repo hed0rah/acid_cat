@@ -11,6 +11,7 @@ in this package, and add one registry entry below.
 
 import os
 
+from acidcat.core.infra import geometry
 from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import (
     ableton, aiff, akai, albank, amiga, bfdlac, bitwig, gf1pat, emu, flac, fxp, krz, labx,
@@ -140,7 +141,7 @@ def walk_file(filepath, deep=False, fmt_override=None):
         except Exception:
             generic = None
         if generic is not None:
-            return generic
+            return _normalized(filepath, generic)
         raise Unsupported("not a recognized audio/preset file (WAV, RF64, AIFF, "
                           "MIDI, Serum, Bitwig, Vital, NCW, SF2, MP4/M4A, Ogg, "
                           "Native Instruments, MP3, FLAC, a MOD/S3M/XM/IT "
@@ -155,4 +156,21 @@ def walk_file(filepath, deep=False, fmt_override=None):
             raise
         return (label, [],
                 [f"walker error ({fmt}): {e.__class__.__name__}: {e}"])
-    return (label, chunks, file_warns)
+    return _normalized(filepath, (label, chunks, file_warns))
+
+
+def _normalized(filepath, walked):
+    """Give every chunk leaving this boundary the same geometry vocabulary.
+
+    Here rather than in each walker, and here rather than in each consumer,
+    because this is already the one place every consumer shares -- the same
+    reason the degrade-never-raise contract lives here. Walkers stay unchanged
+    until they have something better to say than the default.
+    """
+    label, chunks, warns = walked
+    try:
+        size = os.path.getsize(filepath)
+    except OSError:
+        return walked
+    geometry.normalize(chunks, size)
+    return (label, chunks, warns)
