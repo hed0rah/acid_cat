@@ -34,12 +34,9 @@ detection engine with a false-positive budget rather than a rung, and is not
 built. Such bytes render as unaccounted, which is what they are.
 """
 
-import os
-import tempfile
-
 from acidcat.core.forensics import locate as locatemod
 from acidcat.core.infra import geometry
-from acidcat.core.walk import walk_file
+from acidcat.core.walk import walk_bytes
 from acidcat.core.walk.base import Unsupported
 
 # Nesting past this is a verdict about the file rather than a shortened answer:
@@ -82,37 +79,23 @@ def explore(source, off, length, *, mode="normal", scratch_dir=None):
         out["note"] = (f"read {len(data):,} of the {length:,} bytes this range "
                        f"claims; the file ends first")
 
-    tmp = None
+    # Rung 1 needs a path -- every walker does -- so `walk_bytes` carries the
+    # carve-and-delete, in the one place that cost is measured and can later be
+    # removed. Rungs below take bytes and need no file at all.
     try:
-        # Both walk_file and generic triage take a path, so the slice is carved
-        # once and shared. The other rung takes bytes and needs no file.
-        fd, tmp = tempfile.mkstemp(prefix="acidcat_explore_", suffix=".bin",
-                                   dir=scratch_dir)
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-        try:
-            label, chunks, warns = walk_file(tmp, deep=False)
-        except Unsupported:
-            chunks = None
-        except Exception as e:                      # a walker bug is not fatal
-            chunks = None
-            out["warnings"].append(
-                f"walk failed: {e.__class__.__name__}: {e}")
-        if chunks:
-            geometry.normalize(chunks, len(data))
-            out.update(engine="walker", label=label,
-                       chunks=_rebase_chunks(chunks, off))
-            out["warnings"].extend(warns or [])
-            return out
-    finally:
-        if tmp:
-            # Deleted now rather than at exit. A deep exploration of a large
-            # image would otherwise leave one carved copy of every level it
-            # touched sitting on disk until the app closed.
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
+        label, chunks, warns = walk_bytes(data, deep=False,
+                                          scratch_dir=scratch_dir)
+    except Unsupported:
+        chunks = None
+    except Exception as e:                          # a walker bug is not fatal
+        chunks = None
+        out["warnings"].append(f"walk failed: {e.__class__.__name__}: {e}")
+    if chunks:
+        geometry.normalize(chunks, len(data))
+        out.update(engine="walker", label=label,
+                   chunks=_rebase_chunks(chunks, off))
+        out["warnings"].extend(warns or [])
+        return out
 
     try:
         regions = locatemod.locate(data, mode=mode)

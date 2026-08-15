@@ -102,7 +102,7 @@ class NodeInfo:
 
     __slots__ = ("off", "length", "accent", "path", "kind", "chunk",
                  "payload", "xref", "editval", "textfield", "region",
-                 "morerows", "morechunks")
+                 "morerows", "morechunks", "explored")
 
     def __init__(self, off, length, accent, *, path=None, kind="node",
                  chunk=None, payload=None, xref=None, editval=None,
@@ -121,6 +121,12 @@ class NodeInfo:
         self.region = region        # index into _regions, for a located region
         self.morerows = morerows    # chunk index behind a "... more rows" node
         self.morechunks = morechunks
+        # "Has children" is not "has been looked inside". A top-level chunk
+        # gets its fields when the tree is built, so a guard on children meant
+        # any chunk with fields could never be explored at all -- a WAV `data`
+        # chunk holding a nested container was permanently unopenable, and
+        # nothing about the tree showed it.
+        self.explored = False
 
     @property
     def range(self):
@@ -590,8 +596,7 @@ class AcidcatTUI(App):
         # Every other node asks the same question: what is inside you? A region
         # and a chunk and a chunk inside a chunk differ only in how they were
         # found, not in what opening one means.
-        if not node.children:
-            self._explore_node(node)
+        self._explore_node(node)
 
     def _open_paths(self, node):
         """Every open node in the tree, shallowest first.
@@ -631,9 +636,8 @@ class AcidcatTUI(App):
         for i in range(1, len(path) + 1):
             child = self._pathnode.get(path[:i])
             if child is None:
-                if not node.children:
-                    self._explore_node(node)
-                    child = self._pathnode.get(path[:i])
+                self._explore_node(node, background=False)
+                child = self._pathnode.get(path[:i])
             if child is None:
                 return node          # this is as far as the tree still goes
             child.expand()
@@ -652,9 +656,31 @@ class AcidcatTUI(App):
         return d if isinstance(d, NodeInfo) else None
 
     def _meta(self, node):
-        """(off, length, accent), the shape ten call sites already unpack."""
+        """(off, length, accent), the shape ten call sites already unpack.
+
+        This is the EXTENT: every byte the node covers, header included, which
+        is what you want to look at. See `_act_range` for what you want to act
+        on -- they are not the same bytes and conflating them is a live bug.
+        """
         info = self._info(node)
         return None if info is None else info.range
+
+    def _act_range(self):
+        """The bytes an ACTION should touch: play, yank, carve, decode.
+
+        The contents, not the container. A RIFF chunk's extent begins with the
+        four ASCII bytes of its tag and its 4-byte length, so playing the extent
+        of a `data` chunk feeds the tag and length bytes into the PCM stream as
+        though it were audio, and stops eight bytes short of the end. The hex
+        pane shows the whole chunk on purpose -- you are inspecting it -- but
+        nothing that CONSUMES the bytes should get the header.
+        """
+        info = self._info(self._cur_node) if self._cur_node is not None else None
+        if info is not None:
+            off, length = info.payload_range()
+            if off is not None and length:
+                return off, length
+        return self._cur_region[0], self._cur_region[1]
 
     def _bind_node(self, node, off, length, accent, *, index=True, **kw):
         """Attach a node's record, and index it for goto/search. One place.
@@ -819,7 +845,7 @@ class AcidcatTUI(App):
             n += 1
         return n
 
-    def _explore_node(self, node):
+    def _explore_node(self, node, background=True):
         """What is inside this node? Asked the same way at every level.
 
         Fields first, because a walker that named them is a better authority on
@@ -827,11 +853,16 @@ class AcidcatTUI(App):
         payload turns out to contain.
         """
         info = self._info(node)
-        if info is None or node.children:
+        if info is None or info.explored:
             return
+        info.explored = True
         depth = self._depth_of(node)
-        n = 0
-        if info.chunk is not None:
+        n = len(node.children)
+        # Fields only when the tree did not already put them there. `_load`
+        # attaches them eagerly for the top level, and they stay eager: they
+        # feed goto and search, and making them lazy would quietly narrow what
+        # those two can find to whatever happens to be expanded.
+        if info.chunk is not None and not node.children:
             n += self._attach_fields(node, info.chunk, info.accent, info.path)
 
         poff, plen = info.payload_range()
@@ -853,11 +884,49 @@ class AcidcatTUI(App):
                                   if info.path is not None else None))
             ask.allow_expand = True
             return
-        self._explore_into(node, poff, plen, depth)
+        self._explore_into(node, poff, plen, depth, background=background)
 
-    def _explore_into(self, node, poff, plen, depth):
+    def _explore_into(self, node, poff, plen, depth, background=True):
+        """Read and walk, then hang the answer under `node`.
+
+        Off the UI thread when there is a UI to block. The read is bounded by
+        the size gate, but the WALK is not: a walker resyncing through a few
+        megabytes of noise takes as long as it takes, and doing that inside the
+        expand handler freezes the app with no way to quit -- which is worse
+        than a slow answer, because it looks like a hang rather than like work.
+
+        `background=False` for the replay path. A tree rebuild reopens what was
+        open by walking each recorded path and materialising the lazy levels as
+        it goes, and it cannot wait for a worker: Textual POSTS expansion rather
+        than calling it, so there is no point in that walk where the next level
+        can be awaited. Replay only re-does work already paid for once.
+        """
+        if background and self.is_running:
+            placeholder = node.add_leaf(Text("  looking inside...", style=DIM))
+            self.run_worker(
+                lambda: self._explore_worker(node, placeholder, poff, plen,
+                                             depth),
+                thread=True, exclusive=False, group="explore")
+            return
+        self._explore_apply(node, explore.explore(
+            self.work or self.src, poff, plen, mode=self._locate_mode),
+            poff, plen, depth)
+
+    def _explore_worker(self, node, placeholder, poff, plen, depth):
+        """The blocking half, on a thread. Touches no widgets."""
         res = explore.explore(self.work or self.src, poff, plen,
                               mode=self._locate_mode)
+        self.call_from_thread(self._explore_landed, node, placeholder, res,
+                              poff, plen, depth)
+
+    def _explore_landed(self, node, placeholder, res, poff, plen, depth):
+        try:
+            placeholder.remove()
+        except Exception:
+            return          # the tree was rebuilt under us; the answer is stale
+        self._explore_apply(node, res, poff, plen, depth)
+
+    def _explore_apply(self, node, res, poff, plen, depth):
         n = self._attach_children(node, res, (poff, plen),
                                   (self._info(node).path if self._info(node)
                                    else None), depth)
@@ -1990,8 +2059,18 @@ class AcidcatTUI(App):
         # something you ask for by opening the file, which is what expanding a
         # node means -- rather than something that starts on its own and takes
         # minutes before the UI answers.
+        # The root's contents ARE what _load just built: walk_file's chunks, or
+        # the scan's regions. Saying so stops the explorer walking the whole
+        # file a second time and hanging a duplicate of every top-level chunk
+        # under the first -- which is what happened the moment the guard stopped
+        # being "has children".
+        root_info = self._info(tree.root)
+        if root_info is not None:
+            root_info.explored = True
         if self._scannable() and self._regions is None:
             tree.root.allow_expand = True
+            if root_info is not None:
+                root_info.explored = False    # the scan has not run yet
         else:
             tree.root.expand()
         for ek in expanded:
@@ -2781,7 +2860,7 @@ class AcidcatTUI(App):
                         f"-- . to stop")
             return
 
-        off, length, _ = self._cur_region
+        off, length = self._act_range()
         if off is None or not length:
             self.notify("highlight a region with bytes to play", severity="warning")
             return
@@ -3095,11 +3174,13 @@ class AcidcatTUI(App):
         """Copy the selected node's bytes (as hex) to the clipboard -- a common
         forensics move (paste an interesting region into another tool)."""
         node = self._cur_node
-        data = self._meta(node)
-        if not data or data[0] is None or not data[1]:
+        if self._meta(node) is None:
             self.notify("nothing to yank (highlight a field/chunk)", severity="warning")
             return
-        off, length, _ = data
+        off, length = self._act_range()
+        if off is None or not length:
+            self.notify("nothing to yank (highlight a field/chunk)", severity="warning")
+            return
         blob = _read(self.work, off, min(length, _HEX_CAP))
         hexs = blob.hex(" ")
         try:

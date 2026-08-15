@@ -29,6 +29,13 @@ class _PlayProbe:
     action_play = AcidcatTUI.action_play
     _decodable = AcidcatTUI._decodable
     _DECODABLE = AcidcatTUI._DECODABLE
+    # Play acts on the PAYLOAD now, which it asks the selected node for and
+    # falls back to _cur_region when there is no node. These tests drive it at
+    # the _cur_region level, so the fallback is the path under test -- borrow
+    # the real resolver rather than teaching the app to tolerate a fake.
+    _act_range = AcidcatTUI._act_range
+    _info = AcidcatTUI._info
+    _cur_node = None
 
     # Default to a format the player CANNOT decode. These tests are about the
     # guard that stops raw bytes being reinterpreted as PCM, and a decodable

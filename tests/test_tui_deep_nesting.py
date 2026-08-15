@@ -400,9 +400,19 @@ class TestBigRangesAreTheUsersCall:
                 ask = node.children[0]
                 assert ask.allow_expand, "the offer cannot be accepted"
                 app._explore_node(ask)
+                # The read happens on a worker, so the answer arrives later.
+                # Waiting for it is the point: a test that inspected straight
+                # away would be asserting that the UI had NOT been blocked.
+                for _ in range(200):
+                    ids = [app._node_name(c) for c in ask.children]
+                    if any("fmt" in x for x in ids):
+                        break
+                    await pilot.pause(0.05)
                 ids = [app._node_name(c) for c in ask.children]
                 assert any("fmt" in x for x in ids), ids
                 assert any("data" in x for x in ids), ids
+                assert not any("looking inside" in x for x in ids), (
+                    "the placeholder outlived the answer")
         _run(scenario)
 
     def test_a_small_payload_is_just_read(self, deep_blob):
@@ -419,4 +429,130 @@ class TestBigRangesAreTheUsersCall:
                 assert not offers, (
                     f"asked permission for a small read: "
                     f"{[app._node_name(n) for n in offers]}")
+        _run(scenario)
+
+
+class TestTheUiDoesNotBlockWhileItReads:
+    """A walker resyncing through a few megabytes takes as long as it takes.
+    Doing that inside the expand handler freezes the app with no way to quit,
+    which reads as a hang rather than as work.
+    """
+
+    def test_expanding_returns_before_the_answer_does(self, deep_blob):
+        path, _outer, _mid, _a = deep_blob
+
+        async def scenario():
+            app = AcidcatTUI(path)
+            async with app.run_test(size=(170, 50)) as pilot:
+                await pilot.pause(0.3)
+                tree = app.query_one("#tree")
+                tree.root.expand()
+                await pilot.pause(0.3)
+                node = [c for c in tree.root.children
+                        if c.allow_expand and app._info(c)
+                        and app._info(c).kind == "chunk"][0]
+                app._explore_node(node)
+                # Synchronously after the call: something is on screen, and it
+                # is not the answer yet.
+                names = [app._node_name(c) for c in node.children]
+                assert names, "expanding showed nothing at all"
+                assert any("looking inside" in n for n in names), names
+        _run(scenario)
+
+    def test_the_replay_path_stays_synchronous(self, deep_blob):
+        """A rebuild reopens what was open by walking each path and building
+        the lazy levels as it goes. It cannot wait for a worker -- Textual posts
+        expansion rather than calling it, so there is no point in that walk
+        where the next level could be awaited."""
+        path, _outer, _mid, _a = deep_blob
+
+        async def scenario():
+            app = AcidcatTUI(path)
+            async with app.run_test(size=(170, 50)) as pilot:
+                await pilot.pause(0.3)
+                tree = app.query_one("#tree")
+                tree.root.expand()
+                await pilot.pause(0.3)
+                node = [c for c in tree.root.children
+                        if c.allow_expand and app._info(c)
+                        and app._info(c).kind == "chunk"][0]
+                app._explore_node(node, background=False)
+                names = [app._node_name(c) for c in node.children]
+                assert names and not any("looking inside" in n for n in names), (
+                    f"the replay path deferred its answer: {names}")
+        _run(scenario)
+
+
+class TestAChunkWithFieldsCanStillBeOpened:
+    """"Has children" is not "has been looked inside", and confusing the two
+    made a whole class of chunk permanently unopenable.
+
+    The top level gets its fields when the tree is built, so a guard on children
+    returned immediately for every chunk that had any -- a WAV `data` chunk
+    holding a nested container could never be explored, and nothing in the tree
+    hinted that a question had been skipped. It answered by not asking.
+
+    The fix has its own hazard, which is why both live here: once the guard
+    stops being "has children", the ROOT qualifies too, and its contents are
+    exactly what the tree was just built from. Exploring it again walks the
+    whole file a second time and hangs a duplicate of every top-level chunk
+    under the first.
+    """
+
+    @pytest.fixture
+    def nested_in_data(self, tmp_path):
+        pcm = b"B" * 1000
+        inner = b"RIFF" + struct.pack("<I", 4 + 24 + 8 + len(pcm)) + (
+            b"WAVE" + b"fmt " + struct.pack("<I", 16)
+            + struct.pack("<HHIIHH", 1, 2, 22050, 88200, 4, 16)
+            + b"data" + struct.pack("<I", len(pcm)) + pcm)
+        body = (b"WAVE" + b"fmt " + struct.pack("<I", 16)
+                + struct.pack("<HHIIHH", 1, 1, 44100, 88200, 2, 16)
+                + b"data" + struct.pack("<I", len(inner)) + inner)
+        p = tmp_path / "nested_in_data.wav"
+        p.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+        return str(p)
+
+    def test_a_container_inside_a_data_chunk_is_found(self, nested_in_data):
+        async def scenario():
+            app = AcidcatTUI(nested_in_data)
+            async with app.run_test(size=(170, 50)) as pilot:
+                tree = await _open_everything(app, pilot)
+                names = [app._node_name(n) for n in _walk(tree.root)]
+                assert any("22050" in n for n in names), (
+                    "the WAV inside the data chunk was never opened: " +
+                    str(names))
+        _run(scenario)
+
+    def test_the_chunks_own_fields_survive_being_explored(self, nested_in_data):
+        """Exploring adds to what the walker said; it does not replace it."""
+        async def scenario():
+            app = AcidcatTUI(nested_in_data)
+            async with app.run_test(size=(170, 50)) as pilot:
+                tree = await _open_everything(app, pilot)
+                names = [app._node_name(n) for n in _walk(tree.root)]
+                assert any("frames" in n for n in names), names
+        _run(scenario)
+
+    def test_nothing_is_listed_twice(self, nested_in_data):
+        """The root's children are what the tree was built from. Walking the
+        file again to 'explore' it duplicates every one of them."""
+        async def scenario():
+            app = AcidcatTUI(nested_in_data)
+            async with app.run_test(size=(170, 50)) as pilot:
+                tree = await _open_everything(app, pilot)
+                top = [app._node_name(c) for c in tree.root.children]
+                assert len(top) == len(set(top)), (
+                    f"the top level was built twice: {top}")
+        _run(scenario)
+
+    def test_the_root_is_not_re_walked(self, nested_in_data):
+        async def scenario():
+            app = AcidcatTUI(nested_in_data)
+            async with app.run_test(size=(170, 50)) as pilot:
+                await pilot.pause(0.4)
+                root = app.query_one("#tree").root
+                assert app._info(root).explored is True, (
+                    "the root does not know its children are already its "
+                    "contents")
         _run(scenario)

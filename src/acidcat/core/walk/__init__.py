@@ -10,6 +10,7 @@ in this package, and add one registry entry below.
 """
 
 import os
+import tempfile
 
 from acidcat.core.infra import geometry
 from acidcat.core.infra import sniff as sniffmod
@@ -157,6 +158,39 @@ def walk_file(filepath, deep=False, fmt_override=None):
         return (label, [],
                 [f"walker error ({fmt}): {e.__class__.__name__}: {e}"])
     return _normalized(filepath, (label, chunks, file_warns))
+
+
+def walk_bytes(data, deep=False, fmt_override=None, suffix=".bin",
+               scratch_dir=None):
+    """Walk bytes rather than a path, by giving them a path.
+
+    Every walker takes a filepath -- they open it, stat it, and mmap it -- so
+    this writes a temp file and deletes it again. That is not free: measured at
+    3,000 iterations over a small WAV, the write is 84.8% of each one, 756
+    walks per second against 4,974 for the same walk on a file already on disk.
+
+    It exists anyway, for two reasons. It puts that cost in ONE place, so a
+    future bytes-capable walker path makes every caller faster at once instead
+    of one caller at a time. And it makes fuzzing a call rather than a chore:
+    the reason the differential fuzzer covered one format out of 52 was never
+    that anyone chose WAV, it was that each new target meant writing the
+    plumbing again.
+
+    `suffix` matters: a few walkers consult the extension when the magic is
+    ambiguous, so a fuzz harness should hand over the one its seed would really
+    have.
+    """
+    fd, tmp = tempfile.mkstemp(prefix="acidcat_walk_", suffix=suffix,
+                               dir=scratch_dir)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        return walk_file(tmp, deep=deep, fmt_override=fmt_override)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 
 def _normalized(filepath, walked):
