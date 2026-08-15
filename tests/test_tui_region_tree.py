@@ -175,7 +175,7 @@ class TestAScanAnnouncesItself:
 class TestRegionsAreTreeNodes:
     def _region_nodes(self, app):
         return [c for c in app.query_one("#tree").root.children
-                if id(c) in app._regionnode]
+                if (app._info(c) is not None and app._info(c).region is not None)]
 
     def test_the_scan_puts_them_under_the_file(self, blob):
         async def scenario():
@@ -220,7 +220,7 @@ class TestRegionsAreTreeNodes:
                 await pilot.pause(0.3)
                 await _scan(app, pilot)
                 for node, r in zip(self._region_nodes(app), app._regions):
-                    off, length, _accent = app._nodemeta[id(node)]
+                    off, length, _accent = app._meta(node)
                     assert off == r["offset"]
                     assert length == r["length"]
         _run(scenario)
@@ -246,7 +246,7 @@ class TestExpandingARegionWalksIt:
                 await pilot.pause(0.3)
                 await _scan(app, pilot)
                 node = [c for c in app.query_one("#tree").root.children
-                        if id(c) in app._regionnode][0]
+                        if (app._info(c) is not None and app._info(c).region is not None)][0]
                 assert node.allow_expand is True
                 assert not node.children, "walked before being asked"
                 node.expand()
@@ -265,15 +265,15 @@ class TestExpandingARegionWalksIt:
                 await pilot.pause(0.3)
                 await _scan(app, pilot)
                 node = [c for c in app.query_one("#tree").root.children
-                        if id(c) in app._regionnode][0]
-                base = app._regions[app._regionnode[id(node)]]["offset"]
+                        if (app._info(c) is not None and app._info(c).region is not None)][0]
+                base = app._regions[app._info(node).region]["offset"]
                 assert base > 0, "fixture must not put region 0 at offset 0"
                 node.expand()
                 await pilot.pause(0.5)
-                kids = [c for c in node.children if id(c) in app._nodemeta]
+                kids = [c for c in node.children if (app._meta(c) is not None)]
                 assert kids
                 for c in kids:
-                    off, _len, _a = app._nodemeta[id(c)]
+                    off, _len, _a = app._meta(c)
                     assert off >= base, (
                         f"child at 0x{off:08x} is below its region at "
                         f"0x{base:08x} -- offsets were not rebased")
@@ -286,7 +286,7 @@ class TestExpandingARegionWalksIt:
                 await pilot.pause(0.3)
                 await _scan(app, pilot)
                 node = [c for c in app.query_one("#tree").root.children
-                        if id(c) in app._regionnode][0]
+                        if (app._info(c) is not None and app._info(c).region is not None)][0]
                 node.expand()
                 await pilot.pause(0.5)
                 first = len(node.children)
@@ -310,7 +310,7 @@ class TestTheTreeGoesAllTheWayDown:
 
     def _chunks_of_a_region(self, app):
         node = [c for c in app.query_one("#tree").root.children
-                if id(c) in app._regionnode][0]
+                if (app._info(c) is not None and app._info(c).region is not None)][0]
         node.expand()
         return node
 
@@ -354,13 +354,13 @@ class TestTheTreeGoesAllTheWayDown:
                 await _scan(app, pilot)
                 region = self._chunks_of_a_region(app)
                 await pilot.pause(0.5)
-                base = app._regions[app._regionnode[id(region)]]["offset"]
+                base = app._regions[app._info(region).region]["offset"]
                 chunk = [c for c in region.children if c.allow_expand][0]
                 chunk.expand()
                 await pilot.pause(0.2)
-                located = [app._nodemeta[id(f)] for f in chunk.children
-                           if id(f) in app._nodemeta
-                           and app._nodemeta[id(f)][0] is not None]
+                located = [app._meta(f) for f in chunk.children
+                           if (app._meta(f) is not None)
+                           and app._meta(f)[0] is not None]
                 assert located, "no field node knew where it was"
                 for off, _ln, _a in located:
                     assert off >= base, (

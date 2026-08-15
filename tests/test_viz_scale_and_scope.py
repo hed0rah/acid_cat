@@ -681,8 +681,9 @@ class TestRegionGraphFollowsTheSelection:
                 target = app._cur_node
                 await pilot.press("up")
                 await pilot.pause()
-                assert app._nodemeta.pop(id(target), "absent") != "absent", (
+                assert app._meta(target) is not None, (
                     "precondition: the node needs a range to remove")
+                target.data = None                 # take its byte range away
 
                 await pilot.press("down")          # onto it, now range-less
                 await pilot.pause()
@@ -740,7 +741,7 @@ class TestSmallRegionsDoNotLie:
         app._view = "entropy"
         await pilot.press("down")
         await pilot.pause()
-        app._nodemeta[id(app._cur_node)] = (36, span, "#08F9DF")
+        app._bind_node(app._cur_node, 36, span, "#08F9DF", index=False)
         app._viz_scope = "region"
 
     def test_a_region_too_small_to_plot_says_so_instead_of_plotting_zero(self, wav):
@@ -775,7 +776,7 @@ class TestSmallRegionsDoNotLie:
                 await pilot.pause()
                 await self._scoped(pilot, app, 400)
                 assert "set by the region not the pane" in self._head(app)
-                app._nodemeta[id(app._cur_node)] = (36, 40000, "#08F9DF")
+                app._bind_node(app._cur_node, 36, 40000, "#08F9DF", index=False)
                 assert "set by the region not the pane" not in self._head(app)
         _run(scenario)
 

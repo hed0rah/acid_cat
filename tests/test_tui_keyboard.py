@@ -146,10 +146,15 @@ def test_the_row_cap_is_reachable_not_just_counted():
         def __init__(self):
             self.chunks = [{"id": "frames", "rows": [{"n": i} for i in range(609)]}]
             self._rowbudget = {}
-            self._morerows = {}
             self.notes = []
             self.loaded = 0
-            self._node = object()
+            # A node carries its own record now, so the "... more rows" marker
+            # lives on the node instead of in a dict keyed on its id.
+            self._node = type("N", (), {"data": None})()
+
+        @staticmethod
+        def _info(node):
+            return getattr(node, "data", None)
 
         def query_one(self, sel):
             probe = self
@@ -161,8 +166,9 @@ def test_the_row_cap_is_reachable_not_just_counted():
         def _load(self):
             self.loaded += 1
 
+    from acidcat.tui_app.app import NodeInfo
     p = _Probe()
-    p._morerows[id(p._node)] = 0
+    p._node.data = NodeInfo(0, 0, "#fff", kind="note", morerows=0)
     p.action_more_rows()
     assert p._rowbudget[0] == _ROW_CAP * 2
     assert p.loaded == 1

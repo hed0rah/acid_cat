@@ -55,7 +55,13 @@ class _VizProbe:
         self._viz_scope = "file"
         self._viz_scale = {}
         self._cur_node = None
-        self._nodemeta = {}
+
+    # The app reads a node's byte range through this now, not a dict keyed on
+    # id(node). A probe that still offered the dict would be testing an
+    # interface the app no longer calls.
+    @staticmethod
+    def _meta(node):
+        return getattr(node, "data", None)
 
     def _viz_width(self):
         return self._w

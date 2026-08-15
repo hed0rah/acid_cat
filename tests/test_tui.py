@@ -398,7 +398,7 @@ def test_undo_reverts_edit(tmp_path):
                     if lbl.startswith("sample_rate"):
                         node = fn
             app._cur_node = node
-            off, _l, _ = app._nodemeta[id(node)]
+            off, _l, _ = app._meta(node)
             app.action_edit_field()
             await pilot.pause()
             app.query_one("#editbar", Input).value = "69"
@@ -455,7 +455,7 @@ def test_mp3_channel_mode_enum_edit(tmp_path):
                     if lbl.startswith("channel_mode"):
                         node = fn
             app._cur_node = node
-            off, ln, _ = app._nodemeta[id(node)]
+            off, ln, _ = app._meta(node)
             # the hint must advertise the enum editor, not misreport hex-only
             assert app._edit_hint(node, off, ln).startswith("enum-editable")
             app.action_edit_field()
@@ -581,7 +581,7 @@ def test_flac_bitfield_edit_preserves_neighbours(tmp_path):
                     if lbl.startswith("channels"):
                         node = fn
             app._cur_node = node
-            off, ln, _ = app._nodemeta[id(node)]
+            off, ln, _ = app._meta(node)
             # the hint must advertise the packed-value editor, not hex-only
             assert "packed" in app._edit_hint(node, off, ln)
             app.action_edit_field()
@@ -624,7 +624,7 @@ def test_in_pane_hex_edit(tmp_path):
                     if lbl.startswith("sample_rate"):
                         node = fn
             app._cur_node = node
-            off, _length, _ = app._nodemeta[id(node)]
+            off, _length, _ = app._meta(node)
             app.action_hex_focus()
             await pilot.pause()
             assert app._hexedit is not None
@@ -739,7 +739,7 @@ def test_undo_capped_by_bytes(tmp_path, monkeypatch):
                             found = fn
                 return found
 
-            off, _l, _ = app._nodemeta[id(find_node())]
+            off, _l, _ = app._meta(find_node())
             for val in ("69", "70"):
                 # each edit rebuilds the tree, so re-find the field node
                 app._cur_node = find_node()
@@ -855,7 +855,7 @@ def test_goto_offset_selects_containing_node(tmp_path):
             app.query_one("#editbar", Input).value = "0x0e"   # inside fmt chunk
             await pilot.press("enter")
             await pilot.pause()
-            off, length, _ = app._nodemeta[id(app._cur_node)]
+            off, length, _ = app._meta(app._cur_node)
             assert off <= 0x0e < off + length     # landed on a covering node
             assert app._prompt is None             # prompt dismissed
 
@@ -925,7 +925,7 @@ def test_redo_restores_edit(tmp_path):
                         if lbl.startswith("sample_rate"):
                             return fn
             node = find()
-            off, _l, _ = app._nodemeta[id(node)]
+            off, _l, _ = app._meta(node)
             app._cur_node = node
             app.action_edit_field()
             await pilot.pause()
@@ -991,7 +991,7 @@ def test_delta_undo_redo_stack_is_small(tmp_path):
                         if lbl.startswith("sample_rate"):
                             return fn
             node = find()
-            off, _l, _ = app._nodemeta[id(node)]
+            off, _l, _ = app._meta(node)
             app._cur_node = node
             app.action_edit_field()
             await pilot.pause()
@@ -1103,9 +1103,10 @@ def test_follow_xref_jumps_and_flags_dangling(tmp_path):
                     lbl = f.label.plain if hasattr(f.label, "plain") else str(f.label)
                     if lbl.startswith("point[0]"):
                         node = f
-            assert node is not None and id(node) in app._xref
+            assert node is not None and app._info(node) is not None
+            assert app._info(node).xref is not None, "no pointer recorded"
             app._cur_node = node
-            target = app._xref[id(node)]
+            target = app._info(node).xref
             assert 0 <= target < app.fsize          # in-bounds
             app.action_follow_xref()                # jumps, no crash
             await pilot.pause()

@@ -205,7 +205,7 @@ def test_no_tree_row_states_its_size_twice(wav):
             for node in [tree.root] + list(tree.root.children):
                 lbl = node.label
                 text = lbl.plain if hasattr(lbl, "plain") else str(lbl)
-                meta = app._nodemeta.get(id(node))
+                meta = app._meta(node)
                 if not meta:
                     continue
                 size = meta[1]

@@ -18,6 +18,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Input, Static, Tree
 
+from acidcat.core.infra import geometry
 from acidcat.core.walk import walk_file, Unsupported
 from acidcat.core.forensics import anomalies as ac_anom
 from acidcat.core.forensics import locate as locatemod
@@ -68,6 +69,61 @@ from acidcat.tui_app.screens import (
 # One wording for the graph keys, so the two charts cannot come to describe
 # them differently. Arrows first: they are what a hand reaches for on a chart.
 _VIZ_HINT = "(arrows: up/down scale, left/right move selection; r = region)"
+
+
+class NodeInfo:
+    """Everything one tree node is, with the node's own lifetime.
+
+    This was eight dicts keyed on `id(node)`: _nodemeta, _nodekey, _xref,
+    _editval, _textfield, _morerows, _morechunks, _regionnode. That was safe
+    only by accident of when nodes died -- exactly once, in `tree.clear()`
+    inside `_load`, which reinitialised all eight in the same breath. CPython
+    reuses an id the moment the object behind it is collected, so the instant
+    anything removes a node at another time, a stale entry starts answering for
+    a different node: silently, and with a byte range plausible enough to act
+    on. Lazy exploration removes nodes at another time.
+
+    Living on `node.data` there is nothing to keep in step and nothing to clear.
+
+    `off/length` is the EXTENT -- every byte the node covers, header included --
+    because that is what the hex pane should show you. `payload` is what is
+    inside it, which is what play, carve and a recursive walk want. They differ
+    by a header, and conflating them is why `p` on a WAV `data` chunk used to
+    audition four ASCII bytes of the tag as audio.
+    """
+
+    __slots__ = ("off", "length", "accent", "path", "kind", "chunk",
+                 "payload", "xref", "editval", "textfield", "region",
+                 "morerows", "morechunks")
+
+    def __init__(self, off, length, accent, *, path=None, kind="node",
+                 chunk=None, payload=None, xref=None, editval=None,
+                 textfield=None, region=None, morerows=None,
+                 morechunks=False):
+        self.off = off
+        self.length = length
+        self.accent = accent
+        self.path = path            # stable key, to restore state across a rebuild
+        self.kind = kind            # root | chunk | field | row | region | note
+        self.chunk = chunk          # the chunk dict this came from, at any depth
+        self.payload = payload      # (off, len) of the contents, else the extent
+        self.xref = xref            # absolute target of a pointer field
+        self.editval = editval      # (value, enc, raw)
+        self.textfield = textfield  # engine field, for variable-length text
+        self.region = region        # index into _regions, for a located region
+        self.morerows = morerows    # chunk index behind a "... more rows" node
+        self.morechunks = morechunks
+
+    @property
+    def range(self):
+        """The extent, in the shape every caller already unpacks."""
+        return (self.off, self.length, self.accent)
+
+    def payload_range(self):
+        """What is INSIDE this node. Falls back to the extent for a node that
+        is all payload -- a field, a row, a located region."""
+        return self.payload if self.payload is not None else (self.off,
+                                                              self.length)
 
 
 class AcidcatTUI(App):
@@ -217,14 +273,11 @@ class AcidcatTUI(App):
         self.warns = []
         self.findings = []
         self._rowbudget = {}      # chunk index -> how many of its rows to list
-        self._morerows = {}       # id(node) -> chunk index, for the "more rows" node
-        self._morechunks = set()  # id(node) for the "more chunks" node
-        self._regionnode = {}     # id(node) -> region index, for lazy walks
-        self._nodemeta = {}       # id(node) -> (off, length, accent)  for the hex pane
-        self._nodekey = {}        # id(node) -> stable key, to restore the cursor
-                                  # and expansion across the post-edit tree rebuild
-        self._editval = {}        # id(node) -> (value, enc, raw)  for field nodes
-        self._textfield = {}      # id(node) -> engine field  for variable-length text
+        # Everything above used to be eight dicts keyed on id(node). It now
+        # lives on the node, as NodeInfo. What remains is the one index that
+        # genuinely maps the other way: path -> node, so a rebuild can find
+        # again what was open before it.
+        self._pathnode = {}       # stable path -> node, rebuilt with the tree
         self._profile = None      # edit profile of the current file (WAV/AIFF/...)
         self._prefer_be = False   # format is big-endian: bias infer_enc that way
         self._cur_node = None     # last highlighted tree node
@@ -236,7 +289,6 @@ class AcidcatTUI(App):
         self._allnodes = []       # (node, off, length) for offset/fuzzy navigation
         self._search = None       # active search: dict(desc, hits, idx)
         self._finding_idx = -1    # cursor into self.findings for jump-to-finding
-        self._xref = {}           # id(field node) -> absolute target offset (pointer)
         self._view = "hex"        # byte-view mode: hex | entropy | hilbert | histogram
         self._viz_scope = "file"  # what the byte views cover: file | region (r)
         self._viz_scale = {}      # view mode -> index into _VIZ_SCALES (S)
@@ -480,7 +532,7 @@ class AcidcatTUI(App):
         return (self.fmt in ("unsupported", "walk failed") or not self.chunks) \
             and self.fsize >= 4096
 
-    def _add_region_nodes(self, tree, keyed):
+    def _add_region_nodes(self, tree):
         """Put located regions in the tree, as children of the file.
 
         They are the file's contents, so this is what a tree already means.
@@ -506,12 +558,9 @@ class AcidcatTUI(App):
             if name:
                 lbl.append(f"  {name}", style=FG)
             node = tree.root.add(lbl)
-            node.data = (off, length, TEAL if playable else ACCENT)
-            self._nodemeta[id(node)] = node.data
-            self._nodekey[id(node)] = ("region", i)
-            keyed[("region", i)] = node
-            self._allnodes.append((node, off, length))
-            self._regionnode[id(node)] = i
+            self._bind_node(node, off, length, TEAL if playable else ACCENT,
+                           kind="region", region=i,
+                           path=(("region", str(fmt or r.get("kind") or ""), i),))
             # Expandable only when something claims to be in there. The walk
             # itself waits until you ask, so this costs one sniff per region.
             node.allow_expand = bool(fmt)
@@ -530,9 +579,99 @@ class AcidcatTUI(App):
             if not self._scanning:
                 self.action_locate_regions(want_list=False)
             return
-        idx = self._regionnode.get(id(node))
+        idx = (self._info(node).region if self._info(node) else None)
         if idx is not None and not node.children:
             self._expand_region_node(node, idx)
+
+    def _open_paths(self, node):
+        """Every open node in the tree, shallowest first.
+
+        The whole tree, not `root.children`. That one-level walk was correct
+        only while nothing below the top level could be opened, and it stayed
+        correct by accident right up until something could.
+
+        Shallowest first because reopening is a walk from the root: a child's
+        path cannot resolve before the parent that materialises it.
+        """
+        out = []
+        for c in node.children:
+            if not c.is_expanded:
+                continue
+            info = self._info(c)
+            if info is not None and info.path is not None:
+                out.append(info.path)
+            out.extend(self._open_paths(c))
+        return sorted(out, key=len)
+
+    def _reopen(self, path):
+        """Walk a recorded path back open, materialising levels as it goes.
+
+        Two things make this more than a dict lookup. Lazily walked levels do
+        not exist until something asks for them, so the walk has to build each
+        level before it can resolve the next. And `expand()` POSTS its event
+        rather than calling it, so the children it would create are not there
+        on the next line -- the builder is called directly instead, and the
+        posted event later finds the work already done and returns.
+
+        Prefix-tolerant on purpose: an edit can change what is there, and
+        landing on the deepest level that still resolves is a better answer
+        than dropping the user at the root.
+        """
+        node = self.query_one("#tree", Tree).root
+        for i in range(1, len(path) + 1):
+            child = self._pathnode.get(path[:i])
+            if child is None:
+                idx = self._info(node)
+                if (idx is not None and idx.region is not None
+                        and not node.children):
+                    self._expand_region_node(node, idx.region)
+                    child = self._pathnode.get(path[:i])
+            if child is None:
+                return node          # this is as far as the tree still goes
+            child.expand()
+            node = child
+        return node
+
+    @staticmethod
+    def _info(node):
+        """The record behind a node, or None if it has no byte identity.
+
+        Every lookup that used to be `some_dict[id(node)]` goes through here,
+        so the node itself is the key and there is no second structure to fall
+        out of step with the tree.
+        """
+        d = getattr(node, "data", None)
+        return d if isinstance(d, NodeInfo) else None
+
+    def _meta(self, node):
+        """(off, length, accent), the shape ten call sites already unpack."""
+        info = self._info(node)
+        return None if info is None else info.range
+
+    def _bind_node(self, node, off, length, accent, *, index=True, **kw):
+        """Attach a node's record, and index it for goto/search. One place.
+
+        NOT `_register`: Textual's App already has one (it mounts widgets), and
+        overriding it replaced the framework's own method with this signature.
+        Every screen push then failed on an argument count -- a name collision
+        that a pure refactor introduced and no amount of reading the diff would
+        have shown.
+
+        `index=False` for the nodes that deliberately stay out of `_allnodes`:
+        rows, which carry no offset of their own and would land the cursor on
+        their chunk's, and the "... more" lines, which are captions rather than
+        bytes. That selectivity was previously spelled out at each call site,
+        so it is a parameter rather than a rule inferred from the arguments --
+        quietly widening what goto can land on is a behaviour change wearing a
+        refactor's clothes.
+        """
+        info = NodeInfo(off, length, accent, **kw)
+        node.data = info
+        if index and off is not None:
+            self._allnodes.append((node, off, length or 0))
+        if info.path is not None:
+            self._pathnode[info.path] = node
+        return info
 
     @staticmethod
     def _id_width(chunks, floor=6, ceiling=12):
@@ -589,7 +728,7 @@ class AcidcatTUI(App):
             flbl.append(f"  {fl['note']}", style=DIM)
         return flbl
 
-    def _attach_fields(self, node, chunk, base, accent):
+    def _attach_fields(self, node, chunk, base, accent, base_path=None):
         """Hang a chunk's fields under it, wherever that chunk came from.
 
         This is what the lazy path was missing entirely: the walk returns the
@@ -602,10 +741,10 @@ class AcidcatTUI(App):
             rel = _field_abs(chunk, fl)
             abs_off = None if rel is None else base + rel
             child = node.add_leaf(self._field_label(fl, accent))
-            child.data = (abs_off, fl.get("len") or 0, accent)
-            self._nodemeta[id(child)] = child.data
-            if abs_off is not None:
-                self._allnodes.append((child, abs_off, fl.get("len") or 0))
+            self._bind_node(child, abs_off, fl.get("len") or 0, accent,
+                           kind="field", chunk=chunk, xref=fl.get("xref"),
+                           path=(base_path + (("field", fl["name"], n),)
+                                 if base_path is not None else None))
             n += 1
         return n
 
@@ -638,6 +777,8 @@ class AcidcatTUI(App):
             node.add_leaf(Text("  walked, no chunks", style=DIM))
             return
         idw = self._id_width(chunks[:_CHUNK_CAP])
+        pinfo = self._info(node)
+        parent_path = None if pinfo is None else pinfo.path
         for i, c in enumerate(chunks[:_CHUNK_CAP]):
             # Same palette walk the top-level tree does: the accent is what ties
             # a row to the stripe its bytes get in the hex pane, and a region's
@@ -648,13 +789,16 @@ class AcidcatTUI(App):
             # add, not add_leaf. add_leaf is add(allow_expand=False), so it was
             # one argument -- not a widget limitation -- that dead-ended the
             # tree two levels down and made a region's chunks unopenable.
+            pay_off, pay_len = geometry.payload_of(c)
+            cpath = (None if parent_path is None
+                     else parent_path + (("chunk", str(c.get("id", "")).strip(), i),))
             child = node.add(self._chunk_label(c, off, idw, accent=accent))
-            child.data = (off, size, accent)
-            self._nodemeta[id(child)] = child.data
-            self._allnodes.append((child, off, size))
+            self._bind_node(child, off, size, accent, kind="chunk", chunk=c,
+                           path=cpath, payload=(base + pay_off, pay_len))
             # An arrow that opens onto nothing is worse than no arrow, so the
             # fields decide whether there is one.
-            child.allow_expand = bool(self._attach_fields(child, c, base, accent))
+            child.allow_expand = bool(
+                self._attach_fields(child, c, base, accent, cpath))
         if len(chunks) > _CHUNK_CAP:
             node.add_leaf(Text(f"  ... {len(chunks) - _CHUNK_CAP:,} more chunks",
                                style=DIM))
@@ -1678,24 +1822,21 @@ class AcidcatTUI(App):
         # root with everything collapsed: remember the highlighted node and the
         # expanded chunks by stable key (chunk index / field ordinal), restore
         # them after the rebuild.
-        cur_key = (self._nodekey.get(id(self._cur_node))
-                   if self._cur_node is not None else None)
-        expanded = {self._nodekey[id(n)] for n in tree.root.children
-                    if n.is_expanded and id(n) in self._nodekey}
+        info = self._info(self._cur_node) if self._cur_node is not None else None
+        cur_key = None if info is None else info.path
+        expanded = self._open_paths(tree.root)
         tree.clear()
-        self._nodemeta = {}
-        self._morerows = {}       # id(node) -> chunk index, for the "more rows" node
-        self._morechunks = set()  # id(node) for the "more chunks" node
-        self._regionnode = {}     # rebuilt with the tree
-        self._editval = {}
-        self._textfield = {}
-        self._nodekey = {}
+        self._pathnode = {}       # rebuilt with the tree
         self._allnodes = []       # rebuilt each load, for goto/search/finding jumps
-        self._xref = {}
-        keyed = {}
         tree.root.set_label(Text(self._display_name(), style=f"bold {FG}"))
-        tree.root.data = (0, self.fsize, ACCENT)
-        self._nodemeta[id(tree.root)] = (0, self.fsize, ACCENT)
+        # The root deliberately has no path. `_reopen` walks from it rather than
+        # looking it up, so it needs none -- and giving it the empty tuple made
+        # it a resolvable cursor target. `_cur_node` can outlive its frame, and
+        # the node left over from a view you just came back OUT of is the root,
+        # so every ascent restored the cursor to line 0 instead of where you
+        # left it.
+        self._bind_node(tree.root, 0, self.fsize, ACCENT, kind="root",
+                        index=False)
         from acidcat.core.infra.sniff import AUDIO_SAMPLE_IDS
         cbudget = getattr(self, "_chunkbudget", _CHUNK_CAP)
         idw = self._id_width(self.chunks[:cbudget])
@@ -1714,28 +1855,23 @@ class AcidcatTUI(App):
             lbl = self._chunk_label(c, c.get("offset", 0) or 0, idw, is_audio,
                                     accent)
             node = tree.root.add(lbl)
-            node.data = (c.get("offset", 0), c.get("size", 0), accent)
-            self._nodemeta[id(node)] = node.data
-            self._nodekey[id(node)] = ("chunk", i)
-            keyed[("chunk", i)] = node
-            self._allnodes.append((node, c.get("offset", 0), c.get("size", 0)))
+            eoff, elen = geometry.extent_of(c)
+            self._bind_node(node, eoff, elen, accent, kind="chunk", chunk=c,
+                           payload=geometry.payload_of(c),
+                           path=(("chunk", cid, i),))
+            cpath = (("chunk", cid, i),)
             for j, fl in enumerate(c.get("fields", [])):
                 abs_off = _field_abs(c, fl)
                 fnode = node.add_leaf(self._field_label(fl, accent))
-                fnode.data = (abs_off, fl.get("len") or 0, accent)
-                self._nodemeta[id(fnode)] = fnode.data
-                self._nodekey[id(fnode)] = ("field", i, j)
-                keyed[("field", i, j)] = fnode
-                if fl.get("xref") is not None:
-                    self._xref[id(fnode)] = fl["xref"]
-                if abs_off is not None:
-                    self._allnodes.append((fnode, abs_off, fl.get("len") or 0))
-                if abs_off is not None:
-                    self._editval[id(fnode)] = (fl.get("value"), fl.get("enc"),
-                                                fl.get("raw"))
-                    mf = text_field_for(self._profile, fl["name"])
-                    if mf is not None:
-                        self._textfield[id(fnode)] = mf
+                mf = (text_field_for(self._profile, fl["name"])
+                      if abs_off is not None else None)
+                self._bind_node(
+                    fnode, abs_off, fl.get("len") or 0, accent, kind="field",
+                    chunk=c, path=cpath + (("field", fl["name"], j),),
+                    xref=fl.get("xref"),
+                    editval=((fl.get("value"), fl.get("enc"), fl.get("raw"))
+                             if abs_off is not None else None),
+                    textfield=mf)
             # per-element rows: MIDI events, MP3 frames, device params, etc. --
             # the deep detail inspect --frames/--verbose shows. Rows carry no
             # uniform byte offset, so a row node uses its own if present else the
@@ -1751,27 +1887,27 @@ class AcidcatTUI(App):
                 roff = row.get("offset") if isinstance(row.get("offset"), int) else None
                 rlen = row.get("size") if isinstance(row.get("size"), int) else 0
                 rnode = node.add_leaf(rlbl)
-                rnode.data = ((roff, rlen, accent) if roff is not None
-                              else node.data)
-                self._nodemeta[id(rnode)] = rnode.data
-                self._nodekey[id(rnode)] = ("row", i, k)
-                keyed[("row", i, k)] = rnode
+                r_off, r_len = ((roff, rlen) if roff is not None
+                                else (eoff, elen))
+                self._bind_node(rnode, r_off, r_len, accent, kind="row",
+                               chunk=c, index=False,
+                               path=cpath + (("row", "", k),))
             if len(rows) > budget:
                 more = node.add_leaf(
                     Text(f"... {len(rows) - budget:,} more rows  (+ to show more)",
                          style=DIM))
-                self._nodemeta[id(more)] = node.data
-                self._morerows[id(more)] = i
+                self._bind_node(more, eoff, elen, accent, kind="note",
+                               morerows=i, index=False)
         if len(self.chunks) > cbudget:
             # counted, named, and reachable -- the same treatment rows get. A
             # silently shortened tree would make a truncated file look complete.
             more = tree.root.add_leaf(
                 Text(f"... {len(self.chunks) - cbudget:,} more chunks  "
                      f"(+ to show more)", style=DIM))
-            self._nodemeta[id(more)] = tree.root.data
-            self._morechunks.add(id(more))
+            self._bind_node(more, 0, self.fsize, ACCENT, kind="note",
+                           morechunks=True, index=False)
 
-        self._add_region_nodes(tree, keyed)
+        self._add_region_nodes(tree)
 
         # A container nobody has a walker for opens with one node and nothing
         # under it. Leaving the root collapsed and expandable makes the scan
@@ -1783,18 +1919,16 @@ class AcidcatTUI(App):
         else:
             tree.root.expand()
         for ek in expanded:
-            n = keyed.get(ek)
-            if n is not None:
-                n.expand()
+            self._reopen(ek)
         self._render_anomalies()
-        target = keyed.get(cur_key)
+        target = self._pathnode.get(cur_key)
         if target is not None:
             if target.parent is not None and not target.parent.is_expanded:
                 target.parent.expand()
             self._cur_node = target
             # node lines are computed on the next refresh; moving now lands on -1
             self.call_after_refresh(tree.move_cursor, target)
-            off, length, accent = self._nodemeta[id(target)]
+            off, length, accent = self._meta(target)
             self._show(off, length, accent, self._node_name(target),
                        self._edit_hint(target, off, length))
         else:
@@ -2169,7 +2303,7 @@ class AcidcatTUI(App):
         """
         if self._viz_scope == "region":
             node = self._cur_node
-            meta = self._nodemeta.get(id(node)) if node else None
+            meta = self._meta(node)
             if meta and meta[0] is not None and meta[1]:
                 off, length, _ = meta
                 lo = max(0, min(int(off), self.fsize))
@@ -2684,13 +2818,14 @@ class AcidcatTUI(App):
         """
         tree = self.query_one("#tree")
         node = getattr(tree, "cursor_node", None)
-        if node is not None and id(node) in getattr(self, "_morechunks", ()):
+        info = self._info(node)
+        if info is not None and info.morechunks:
             self._chunkbudget = getattr(self, "_chunkbudget", _CHUNK_CAP) + _CHUNK_CAP
             total = len(self.chunks)
             self._load()
             self.notify(f"showing {min(self._chunkbudget, total):,} of {total:,} chunks")
             return
-        idx = self._morerows.get(id(node)) if node is not None else None
+        idx = (self._info(node).morerows if self._info(node) else None) if node is not None else None
         if idx is None:
             self.notify("select a '... more rows' or '... more chunks' line first",
                         severity="warning")
@@ -2717,7 +2852,7 @@ class AcidcatTUI(App):
             p = p.parent
         self._cur_node = node
         self.call_after_refresh(tree.move_cursor, node)
-        data = self._nodemeta.get(id(node))
+        data = self._meta(node)
         if data:
             off, length, accent = data
             self._show(off, length, accent, self._node_name(node),
@@ -2739,7 +2874,7 @@ class AcidcatTUI(App):
         node = self._node_containing(offset)
         if node is not None:
             self._select_node(node)
-            meta = self._nodemeta.get(id(node))
+            meta = self._meta(node)
             # Land the hex WINDOW on the offset rather than showing a one-byte
             # region. Selecting the chunk and paging to the byte inside it is
             # what "jump there and look at it" means; a single highlighted byte
@@ -2884,7 +3019,7 @@ class AcidcatTUI(App):
         """Copy the selected node's bytes (as hex) to the clipboard -- a common
         forensics move (paste an interesting region into another tool)."""
         node = self._cur_node
-        data = self._nodemeta.get(id(node)) if node else None
+        data = self._meta(node)
         if not data or data[0] is None or not data[1]:
             self.notify("nothing to yank (highlight a field/chunk)", severity="warning")
             return
@@ -3021,7 +3156,7 @@ class AcidcatTUI(App):
         where it points, flagging a dangling (out-of-bounds) one -- a real
         forensic tell as well as a navigation aid."""
         node = self._cur_node
-        target = self._xref.get(id(node)) if node else None
+        target = (self._info(node).xref if self._info(node) else None) if node else None
         if target is None:
             self.notify("this field is not a pointer (no xref)", severity="warning")
             return
@@ -3037,20 +3172,24 @@ class AcidcatTUI(App):
             self.action_cancel_edit()
         self._hexedit = None             # ditto an abandoned in-pane hex edit
         self._follow_selection()
-        data = self._nodemeta.get(id(event.node))
+        data = self._meta(event.node)
         if not data:
             return
         off, length, accent = data
         hint = self._edit_hint(event.node, off, length)
-        xref = self._xref.get(id(event.node))
+        xref = (self._info(event.node).xref if self._info(event.node) else None)
         if xref is not None:
             danger = "" if 0 <= xref < self.fsize else " (DANGLING, out of bounds)"
             ptr = f"pointer -> 0x{xref:08x}{danger} -- press x to follow"
             hint = f"{hint}\n{ptr}" if hint else ptr
         spans = None
-        key = self._nodekey.get(id(event.node))
-        if key and key[0] == "chunk":                # tint each field within the chunk
-            c = self.chunks[key[1]]
+        info = self._info(event.node)
+        # The chunk itself rather than an index into self.chunks. That index
+        # only ever named a TOP-LEVEL chunk, so every nested chunk silently lost
+        # its per-field tint; carrying the dict makes the tint work at any depth
+        # for free.
+        c = info.chunk if info is not None and info.kind == "chunk" else None
+        if c is not None:
             spans = [(_field_abs(c, fl), fl.get("len") or 0)
                      for fl in c.get("fields", [])]
             spans = [(a, ln) for a, ln in spans if a is not None and ln]
@@ -3061,9 +3200,12 @@ class AcidcatTUI(App):
         field can be edited (value / enum / hex / text), so it's discoverable."""
         if off is None or not length:
             return ""
-        if id(node) in self._textfield:
-            return f"text-editable ({self._textfield[id(node)]}) -- press e"
-        value, enc, raw = self._editval.get(id(node), (None, None, None))
+        info = self._info(node)
+        if info is not None and info.textfield is not None:
+            return f"text-editable ({info.textfield}) -- press e"
+        value, enc, raw = ((info.editval if info is not None
+                            and info.editval is not None
+                            else (None, None, None)))
         rb = _read(self.work, off, length)
         if enc is not None:
             bt = self._bit_target(off, value, enc)
@@ -3131,7 +3273,7 @@ class AcidcatTUI(App):
             return
         self._view = "hex"
         node = self._cur_node
-        data = self._nodemeta.get(id(node)) if node else None
+        data = self._meta(node)
         if not data:
             self.notify("highlight a field first", severity="warning")
             return
@@ -3142,9 +3284,10 @@ class AcidcatTUI(App):
         name = self._node_name(node)
         # variable-length text field: edit as text through the metadata engine,
         # which re-serializes the chunk so a longer/shorter value is valid.
-        mf = self._textfield.get(id(node))
+        mf = (self._info(node).textfield if self._info(node) else None)
         if mf is not None:
-            value = self._editval.get(id(node), (None,))[0]
+            info = self._info(node)
+            value = (info.editval or (None,))[0] if info is not None else None
             self._arm_edit({"off": off, "length": length, "name": name,
                             "mode": "text", "fmt": None, "metafield": mf,
                             "accent": accent},
@@ -3155,7 +3298,10 @@ class AcidcatTUI(App):
                         severity="warning")
             return
         raw_bytes = _read(self.work, off, length)
-        value, enc, raw_val = self._editval.get(id(node), (None, None, None))
+        info = self._info(node)
+        value, enc, raw_val = ((info.editval if info is not None
+                                and info.editval is not None
+                                else (None, None, None)))
         # bit-packed / enum field: read-modify-write inside its container bytes
         # so neighbouring bit-fields survive. Only if the annotation verifies
         # against the working copy; else fall through to plain value/hex.
@@ -3374,7 +3520,7 @@ class AcidcatTUI(App):
             return
         self._end_edit()
         if self._cur_node:
-            data = self._nodemeta.get(id(self._cur_node))
+            data = self._meta(self._cur_node)
             if data:
                 self._show(*data, self._node_name(self._cur_node), "")
 
@@ -3397,7 +3543,7 @@ class AcidcatTUI(App):
         if self._edit_target:
             self.action_cancel_edit()
         node = self._cur_node
-        data = self._nodemeta.get(id(node)) if node else None
+        data = self._meta(node)
         if not data:
             self.notify("highlight a field first", severity="warning")
             return
@@ -3418,7 +3564,7 @@ class AcidcatTUI(App):
     def _exit_hexedit(self):
         self._hexedit = None
         if self._cur_node:
-            data = self._nodemeta.get(id(self._cur_node))
+            data = self._meta(self._cur_node)
             if data:
                 self._show(*data, self._node_name(self._cur_node), "")
         self.query_one("#tree", Tree).focus()
