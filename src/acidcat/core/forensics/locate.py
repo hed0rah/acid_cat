@@ -438,3 +438,74 @@ def _coalesce_blobs(records):
             continue
         out.append(r)
     return out
+
+
+# A partial Ogg page left dangling at a segment edge. Measured on a 187 MB
+# archive scanned in 16 MB segments: the eleven straddling pairs left gaps of
+# 4,172 to 4,557 bytes, so this is roughly an order of magnitude of headroom
+# over the largest observed and still far below any real inter-file gap.
+_SEG_EDGE_SLACK = 64 * 1024
+
+
+def stitch_segments(regions, seg_size, slack=_SEG_EDGE_SLACK):
+    """Rejoin regions that a SEGMENTED scan cut apart at its own boundaries.
+
+    Scanning a large image in fixed segments means every segment is analysed
+    blind to its neighbours, so a stream crossing a boundary is seen twice: as
+    something that ends at the edge, and as something that starts just past it.
+    Measured on a 187 MB archive of 64 songs, all eleven 16 MB boundaries split
+    a song in two -- reporting 75 regions, eleven of them unplayable halves,
+    with about 4 KB of audio lost in the partial page at each edge.
+
+    A boundary WE introduced is not evidence about the file, so this is not a
+    heuristic about proximity: two regions are rejoined only when the format
+    itself says they are the same thing. For Ogg that is the bitstream serial,
+    which every page carries and which `signature_sweep` already records. All
+    eleven pairs in that archive shared one.
+
+    Regions with no such identity are left alone. Adjacency on its own means
+    nothing here -- the songs in that archive are packed back to back, so
+    merging neighbours would have joined all 64 into 27 runs.
+    """
+    if not regions or not seg_size:
+        return regions
+    out = sorted(regions, key=lambda r: (r.get("offset", 0), r.get("end", 0)))
+    i = 0
+    while i < len(out) - 1:
+        a, b = out[i], out[i + 1]
+        if _joins_across_a_segment_edge(a, b, seg_size, slack):
+            a["end"] = b.get("end", a.get("end"))
+            a["length"] = a["end"] - a.get("offset", 0)
+            sa = set(a.get("stream_serials") or ())
+            sa.update(b.get("stream_serials") or ())
+            if sa:
+                a["stream_serials"] = sorted(sa)
+            # `evidence` is present but None on a fresh record, so setdefault
+            # hands back None and an isinstance guard skips in silence. The
+            # note is the only thing that tells a reader why this region spans
+            # a boundary, so losing it loses the explanation, not a decoration.
+            ev = a.get("evidence")
+            note = ("rejoined across a scan-segment boundary "
+                    "(same bitstream serial)")
+            a["evidence"] = (list(ev) + [note]) if isinstance(ev, (list, tuple))                 else ([ev, note] if ev else [note])
+            del out[i + 1]
+            continue                      # a stream may cross more than one
+        i += 1
+    return out
+
+
+def _joins_across_a_segment_edge(a, b, seg_size, slack):
+    a_end, b_off = a.get("end"), b.get("offset")
+    if not isinstance(a_end, int) or not isinstance(b_off, int):
+        return False
+    if b_off < a_end or b_off - a_end > slack:
+        return False
+    # the gap has to CONTAIN a boundary; two regions that merely sit near each
+    # other in the middle of a segment are two regions
+    if (b_off // seg_size) == (a_end // seg_size) and b_off % seg_size != 0:
+        return False
+    if a.get("format") != b.get("format"):
+        return False
+    sa = set(a.get("stream_serials") or ())
+    sb = set(b.get("stream_serials") or ())
+    return bool(sa and sb and sa & sb)

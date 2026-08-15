@@ -1266,6 +1266,14 @@ class AcidcatTUI(App):
         except Exception:
             pass
         cancelled = bool(self._cancel_scan)
+        # Each segment was analysed blind to its neighbours, so a stream that
+        # crossed an edge was seen twice: as something ending at the edge and
+        # something starting past it. On a 187 MB archive of 64 songs that was
+        # 75 regions, eleven of them halves, with the partial page at each edge
+        # dropped entirely. Rejoined on the bitstream serial -- the format's own
+        # statement that it is one stream -- rather than on adjacency, which
+        # means nothing in a file whose contents are packed back to back.
+        regions = locatemod.stitch_segments(regions, _SCAN_SEG)
         regions = self._merge_boundary(sorted(regions, key=lambda r: r["offset"]))
         self.call_from_thread(self._finish_scan, regions, cancelled)
 
