@@ -556,3 +556,98 @@ class TestAChunkWithFieldsCanStillBeOpened:
                     "the root does not know its children are already its "
                     "contents")
         _run(scenario)
+
+
+class TestAChunkThatCoversItsParentDoesNotRecurse:
+    """The loop a real archive produced, and the reason it slipped through.
+
+    An Ogg region walks to a single `OggS` chunk covering exactly the bytes the
+    region does. Its payload is therefore the region again, so exploring it
+    re-walks the same range and produces the same chunk, forever: on screen,
+    `OggS 0x03ea251d 2,419,671b` inside an identical `OggS 0x03ea251d
+    2,419,671b`, as deep as anyone cared to open.
+
+    The guard against exactly this existed and was correct. It was only ever
+    consulted to decide whether to draw an ARROW, and that decisionshort-circuited
+    on `bool(chunk["fields"])` -- an OggS chunk has six. So the arrow appeared
+    because there were fields to show, and expanding then walked the bytes with
+    nothing checking whether it should.
+
+    An arrow means "there is something under this". It does not mean "these
+    bytes may be walked". Two questions, two answers.
+    """
+
+    @pytest.fixture
+    def ogg_blob(self, tmp_path):
+        import glob
+        found = glob.glob("data/**/*.ogg", recursive=True)
+        if not found:
+            pytest.skip("no .ogg in the test corpus")
+        raw = open(found[0], "rb").read()
+        p = tmp_path / "one.blob"
+        p.write_bytes(b"HDR!" + bytes(4096) + raw)
+        return str(p), 4100, len(raw)
+
+    def test_the_tree_settles_instead_of_growing(self, ogg_blob):
+        path, _off, _n = ogg_blob
+
+        async def scenario():
+            app = AcidcatTUI(path)
+            async with app.run_test(size=(170, 50)) as pilot:
+                tree = await _open_everything(app, pilot, rounds=10)
+                first = len(list(_walk(tree.root)))
+                for _ in range(4):
+                    for n in list(_walk(tree.root)):
+                        if n.allow_expand and not n.is_expanded:
+                            n.expand()
+                    await pilot.pause(0.4)
+                assert len(list(_walk(tree.root))) == first, (
+                    "the tree was still growing after it should have settled")
+        _run(scenario)
+
+    def test_no_chunk_contains_a_chunk_over_the_same_bytes(self, ogg_blob):
+        """The shape as the user sees it: identical offset, identical size, one
+        inside the other, repeating.
+
+        Stated between chunks rather than between any two nodes, because a
+        REGION and the single chunk a walker finds in it legitimately cover the
+        same bytes -- the region IS the Ogg. What cannot happen is that chunk
+        containing another chunk over the same range, because the only way to
+        produce one is to walk the same bytes again.
+        """
+        path, _off, _n = ogg_blob
+
+        async def scenario():
+            app = AcidcatTUI(path)
+            async with app.run_test(size=(170, 50)) as pilot:
+                tree = await _open_everything(app, pilot, rounds=10)
+
+                def check(node, chunk_ancestors):
+                    info = app._info(node)
+                    here = list(chunk_ancestors)
+                    if info is not None and info.kind == "chunk"                             and info.off is not None:
+                        mine = (info.off, info.length)
+                        assert mine not in here, (
+                            f"{app._node_name(node).strip()[:44]!r} sits inside "
+                            f"a chunk over the same bytes "
+                            f"(0x{info.off:08x}+{info.length:,})")
+                        here.append(mine)
+                    for c in node.children:
+                        check(c, here)
+
+                check(tree.root, [])
+        _run(scenario)
+
+    def test_a_chunk_covering_its_parent_still_shows_its_fields(self, ogg_blob):
+        """The fix must not cost the fields. They are the reason the arrow was
+        right in the first place."""
+        path, _off, _n = ogg_blob
+
+        async def scenario():
+            app = AcidcatTUI(path)
+            async with app.run_test(size=(170, 50)) as pilot:
+                tree = await _open_everything(app, pilot, rounds=10)
+                names = [app._node_name(n) for n in _walk(tree.root)]
+                assert any("codec" in x for x in names), names[:12]
+                assert any("bitstream_serial" in x for x in names), names[:12]
+        _run(scenario)

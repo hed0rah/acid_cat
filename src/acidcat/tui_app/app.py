@@ -102,12 +102,12 @@ class NodeInfo:
 
     __slots__ = ("off", "length", "accent", "path", "kind", "chunk",
                  "payload", "xref", "editval", "textfield", "region",
-                 "morerows", "morechunks", "explored")
+                 "morerows", "morechunks", "explored", "can_explore")
 
     def __init__(self, off, length, accent, *, path=None, kind="node",
                  chunk=None, payload=None, xref=None, editval=None,
                  textfield=None, region=None, morerows=None,
-                 morechunks=False):
+                 morechunks=False, can_explore=True):
         self.off = off
         self.length = length
         self.accent = accent
@@ -127,6 +127,11 @@ class NodeInfo:
         # chunk holding a nested container was permanently unopenable, and
         # nothing about the tree showed it.
         self.explored = False
+        # Whether this node's PAYLOAD is worth opening, decided where the
+        # parent range is known. Kept because the arrow and the act are two
+        # different questions: a chunk gets an arrow when it has fields to
+        # show, and that must not be read as permission to walk its bytes.
+        self.can_explore = can_explore
 
     @property
     def range(self):
@@ -776,6 +781,7 @@ class AcidcatTUI(App):
             child = node.add_leaf(self._field_label(fl, accent))
             self._bind_node(child, abs_off, fl.get("len") or 0, accent,
                             kind="field", chunk=chunk, xref=fl.get("xref"),
+                            can_explore=False,
                             path=(base_path + (("field", fl["name"], n),)
                                   if base_path is not None else None))
             n += 1
@@ -815,8 +821,14 @@ class AcidcatTUI(App):
             # walker's own fields) or somewhere to go (a payload big enough to
             # hold anything). Expanding decides which, and says so when neither
             # turns out to be true.
-            child.allow_expand = bool(c.get("fields")) or explore.explorable(
-                (poff, plen), parent, depth)
+            deeper = explore.explorable((poff, plen), parent, depth)
+            self._info(child).can_explore = deeper
+            # An arrow means "there is something under this", which fields
+            # satisfy on their own. It does NOT mean the bytes may be walked:
+            # an Ogg region walks to a single OggS chunk covering the same
+            # bytes, so treating its fields as licence to explore re-walked the
+            # identical range under itself, forever.
+            child.allow_expand = bool(c.get("fields")) or deeper
             if explore.overflows((eoff, elen), parent):
                 child.add_leaf(Text(
                     f"  this chunk claims bytes outside the range it was found "
@@ -841,7 +853,9 @@ class AcidcatTUI(App):
             self._bind_node(child, roff, rlen, TEAL, kind="region",
                             path=(None if parent_path is None
                                   else parent_path + (("found", str(fmt), i),)))
-            child.allow_expand = explore.explorable((roff, rlen), parent, depth)
+            deeper = explore.explorable((roff, rlen), parent, depth)
+            self._info(child).can_explore = deeper
+            child.allow_expand = deeper
             n += 1
         return n
 
@@ -866,7 +880,7 @@ class AcidcatTUI(App):
             n += self._attach_fields(node, info.chunk, info.accent, info.path)
 
         poff, plen = info.payload_range()
-        if poff is None or not plen:
+        if poff is None or not plen or not info.can_explore:
             if not n:
                 node.add_leaf(Text("  nothing to look inside", style=DIM))
             return
