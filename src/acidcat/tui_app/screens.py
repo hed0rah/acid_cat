@@ -191,6 +191,12 @@ class HelpScreen(ModalScreen):
         t.append("acidcat tui  --  keys\n\n", style=f"bold {ACCENT}")
         rows = [
             ("arrows / enter", "move + expand the tree"),
+            ("ctrl+left/right", "pan the tree sideways when a deep branch runs "
+                                "off the pane"),
+            ("shift+left/right", "jump to a node's parent / to the next branch "
+                                 "past it"),
+            ("pgdn / pgup", "page the hex view through a region too big to show "
+                            "at once"),
             ("a / c", "expand all / collapse all"),
             ("tab / shift+tab", "move focus between the tree and the hex pane"),
             ("z", "give the focused pane the whole screen (again to restore)"),
@@ -222,17 +228,26 @@ class HelpScreen(ModalScreen):
             ("ctrl+s", "save to the original (writes a _original backup)"),
             ("ctrl+z / ctrl+r", "undo / redo the last edit"),
             ("o", "open another file"),
-            ("l", "locate audio regions in a blob / disk image (auto for a blob)"),
-            ("u", "from a region, go back up to the region browser"),
+            ("l", "locate audio regions, and list them for extraction"),
             ("+", "on a '... more rows' line, list more of that chunk's rows"),
             ("esc", "cancel the current edit / prompt"),
             ("q", "quit"),
         ]
+        # The separator is its own append, not the tail of the pad. `{k:16}`
+        # ran straight into the description for any key exactly 16 characters
+        # wide -- which `shift+left/right` is -- the same collision the tree
+        # labels had.
+        width = max(len(k) for k, _ in rows)
         for k, d in rows:
-            t.append(f"  {k:16}", style=f"bold {PEND}")
+            t.append(f"  {k:<{width}}", style=f"bold {PEND}")
+            t.append("  ", style=SOFT)
             t.append(f"{d}\n", style=SOFT)
-        t.append("\nRegion browser (a blob opens straight into it): enter descends "
-                 "into a region as if it were a file, x / e extract one / all, "
+        t.append("\nRegions live in the tree, under the file: expand the file to "
+                 "scan for them, expand a region to walk it, and keep expanding "
+                 "for its chunks and fields. `l` opens the same regions as a "
+                 "list, which is where bulk work happens: space marks one, a "
+                 "marks all, x extracts what is marked and e extracts every "
+                 "region. enter descends into a region as if it were a file, "
                  "m cycles the forensics mode (strict/normal/aggressive), t toggles "
                  "the transform lens (audio hidden under XOR/rotate/nibble-swap), "
                  "c carves an arbitrary offset+length, / searches raw bytes. A big "

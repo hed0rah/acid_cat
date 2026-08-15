@@ -138,6 +138,12 @@ class AcidcatTUI(App):
         Binding("down", "viz_scale_prev", show=False, priority=True),
         Binding("left", "viz_prev_node", show=False, priority=True),
         Binding("right", "viz_next_node", show=False, priority=True),
+        # A deep tree runs off the right edge, and `overflow-x: auto` already
+        # puts a scrollbar there -- with nothing on the keyboard able to move
+        # it. Ctrl, not shift: Tree spends shift+left/right on jump-to-parent
+        # and jump-to-next-ancestor, which a deep tree needs more than panning.
+        Binding("ctrl+left", "tree_pan(-8)", show=False, priority=True),
+        Binding("ctrl+right", "tree_pan(8)", show=False, priority=True),
         ("p", "play", "play"),
         ("full_stop", "stop_play", "stop"),
         Binding("v", "validate", "validate", show=False),
@@ -281,7 +287,12 @@ class AcidcatTUI(App):
                 with VerticalScroll(id="idbox"):
                     yield Static(id="title")
                     yield Static(id="anom")
-                yield Tree("file", id="tree")
+                tree = Tree("file", id="tree")
+                # Four columns of indent per level is fine two deep and costs
+                # a third of a split pane four deep. The guides are still
+                # drawn, just narrower.
+                tree.guide_depth = 2
+                yield tree
             with Vertical(id="right"):
                 yield Static(id="detail")
                 with VerticalScroll(id="hexwrap"):
@@ -517,13 +528,86 @@ class AcidcatTUI(App):
             return
         if node is tree.root and self._regions is None and self._scannable():
             if not self._scanning:
-                self.notify("scanning for regions -- space pauses, "
-                            "enter keeps what it has, esc discards")
                 self.action_locate_regions(want_list=False)
             return
         idx = self._regionnode.get(id(node))
         if idx is not None and not node.children:
             self._expand_region_node(node, idx)
+
+    @staticmethod
+    def _id_width(chunks, floor=6, ceiling=12):
+        """Pad the id column to the widest id among SIBLINGS.
+
+        A fixed width cannot be right for every walker: RIFF ids are 4 characters
+        and tracker or E-mu ids are longer, so one path padded to 6 and the other
+        to 8 and both were wrong somewhere. Sizing to the group is what actually
+        aligns a set of rows against each other.
+        """
+        widest = max((len(str(c.get("id", "")).strip()) for c in chunks),
+                     default=floor)
+        return max(floor, min(ceiling, widest))
+
+    def _chunk_label(self, c, off, idw, is_audio=False, accent=ACCENT):
+        """The one chunk label. Both the eager and the lazy path use it.
+
+        The separator lives OUTSIDE the pad. `f"{cid:<8}"` followed directly by
+        the offset produced `comments0x0000bb31` for any id exactly 8 characters
+        long -- the pad contributes nothing at the boundary, so the two fields
+        ran together with no gap. The same latent bug sat on the other path with
+        a width of 6, waiting for a longer id.
+        """
+        cid = str(c.get("id", "?")).strip()
+        size = c.get("size", 0) or 0
+        lbl = Text()
+        lbl.append("~ " if is_audio else "  ",
+                   style=f"bold {TEAL}" if is_audio else DIM)
+        # An id wider than the column is shortened, and a shortened id that
+        # looks whole is a different chunk than the one in the file. Say so.
+        shown = cid if len(cid) <= idw else cid[:idw - 1] + "…"
+        lbl.append(f"{shown:<{idw}}", style=f"bold {TEAL}" if is_audio
+                   else f"bold {accent}")
+        lbl.append("  ", style=DIM)              # the separator, always present
+        lbl.append(f"0x{off:08x}", style=DIM)
+        lbl.append("  ", style=DIM)
+        lbl.append(f"{size:,}b", style=SOFT)
+        summary = trim_size_echo(c.get("summary", ""), size)
+        if summary:
+            lbl.append("  ", style=DIM)
+            lbl.append(summary, style=FG)
+        if is_audio:
+            lbl.append("  [playable]", style=TEAL)
+        return lbl
+
+    @staticmethod
+    def _field_label(fl, accent):
+        """The one field label, shared for the same reason."""
+        flbl = Text()
+        flbl.append(f"{fl['name']}", style=SOFT)
+        flbl.append(" = ", style=DIM)
+        flbl.append(f"{fl['value']!s}", style=accent)
+        if fl.get("note"):
+            flbl.append(f"  {fl['note']}", style=DIM)
+        return flbl
+
+    def _attach_fields(self, node, chunk, base, accent):
+        """Hang a chunk's fields under it, wherever that chunk came from.
+
+        This is what the lazy path was missing entirely: the walk returns the
+        fields either way -- eight of them for an Ogg, on a shallow walk -- and
+        rendering only the chunk threw a whole level away before anyone could
+        ask for it.
+        """
+        n = 0
+        for fl in chunk.get("fields") or []:
+            rel = _field_abs(chunk, fl)
+            abs_off = None if rel is None else base + rel
+            child = node.add_leaf(self._field_label(fl, accent))
+            child.data = (abs_off, fl.get("len") or 0, accent)
+            self._nodemeta[id(child)] = child.data
+            if abs_off is not None:
+                self._allnodes.append((child, abs_off, fl.get("len") or 0))
+            n += 1
+        return n
 
     def _expand_region_node(self, node, idx):
         """Walk one region and hang its chunks under it.
@@ -553,19 +637,24 @@ class AcidcatTUI(App):
         if not chunks:
             node.add_leaf(Text("  walked, no chunks", style=DIM))
             return
-        for c in chunks[:_CHUNK_CAP]:
+        idw = self._id_width(chunks[:_CHUNK_CAP])
+        for i, c in enumerate(chunks[:_CHUNK_CAP]):
+            # Same palette walk the top-level tree does: the accent is what ties
+            # a row to the stripe its bytes get in the hex pane, and a region's
+            # chunks were all one colour, so the pane could not tell them apart.
+            accent = PALETTE[i % len(PALETTE)]
             off = base + (c.get("offset", 0) or 0)
             size = c.get("size", 0) or 0
-            cid = str(c.get("id", "?")).strip()
-            lbl = Text()
-            lbl.append(f"  {cid:<8}", style=f"bold {ACCENT}")
-            lbl.append(f"0x{off:08x}  ", style=DIM)
-            lbl.append(f"{size:,}b  ", style=SOFT)
-            lbl.append(str(c.get("summary", ""))[:60], style=FG)
-            child = node.add_leaf(lbl)
-            child.data = (off, size, ACCENT)
+            # add, not add_leaf. add_leaf is add(allow_expand=False), so it was
+            # one argument -- not a widget limitation -- that dead-ended the
+            # tree two levels down and made a region's chunks unopenable.
+            child = node.add(self._chunk_label(c, off, idw, accent=accent))
+            child.data = (off, size, accent)
             self._nodemeta[id(child)] = child.data
             self._allnodes.append((child, off, size))
+            # An arrow that opens onto nothing is worse than no arrow, so the
+            # fields decide whether there is one.
+            child.allow_expand = bool(self._attach_fields(child, c, base, accent))
         if len(chunks) > _CHUNK_CAP:
             node.add_leaf(Text(f"  ... {len(chunks) - _CHUNK_CAP:,} more chunks",
                                style=DIM))
@@ -838,6 +927,11 @@ class AcidcatTUI(App):
         except OSError:
             total0 = 0
         self._scan_last = (0, total0, 0)                 # a bar at 0% before segment 1
+        # Said here rather than at each caller: expanding the file announced the
+        # scan and `l` did not, so on a large file `l` looked like a key that
+        # had done nothing for as long as the scan took.
+        self.notify("scanning for regions -- space pauses, "
+                    "enter keeps what it has, esc discards")
         self._render_scan_title()
         try:                                             # so space/enter reach the
             self.query_one("#tree", Tree).focus()        # scan-control priority binds,
@@ -1604,6 +1698,7 @@ class AcidcatTUI(App):
         self._nodemeta[id(tree.root)] = (0, self.fsize, ACCENT)
         from acidcat.core.infra.sniff import AUDIO_SAMPLE_IDS
         cbudget = getattr(self, "_chunkbudget", _CHUNK_CAP)
+        idw = self._id_width(self.chunks[:cbudget])
         for i, c in enumerate(self.chunks[:cbudget]):
             accent = PALETTE[i % len(PALETTE)]
             cid = str(c.get("id", "?")).strip()
@@ -1612,16 +1707,12 @@ class AcidcatTUI(App):
             # are audio, so without a mark the only way to find out which is
             # which was to press play and get a burst of noise.
             is_audio = cid in AUDIO_SAMPLE_IDS
-            lbl = Text()
-            lbl.append("~ " if is_audio else "  ", style=f"bold {TEAL}")
-            lbl.append(f"{cid:<6}",
-                       style=f"bold {TEAL}" if is_audio else f"bold {accent}")
-            lbl.append(f"0x{c.get('offset', 0):08x}  ", style=DIM)
-            lbl.append(f"{c.get('size', 0):,}b  ", style=SOFT)
-            lbl.append(trim_size_echo(c.get("summary", ""), c.get("size", 0)),
-                       style=FG)
-            if is_audio:
-                lbl.append("  [playable]", style=TEAL)
+            # The same formatter the lazy path uses. Two builders drifted apart
+            # here: this one padded ids to 6 and that one to 8, this one trimmed
+            # the summary and that one sliced it raw, and both had the pad/
+            # separator collision waiting for an id of exactly the pad width.
+            lbl = self._chunk_label(c, c.get("offset", 0) or 0, idw, is_audio,
+                                    accent)
             node = tree.root.add(lbl)
             node.data = (c.get("offset", 0), c.get("size", 0), accent)
             self._nodemeta[id(node)] = node.data
@@ -1630,13 +1721,7 @@ class AcidcatTUI(App):
             self._allnodes.append((node, c.get("offset", 0), c.get("size", 0)))
             for j, fl in enumerate(c.get("fields", [])):
                 abs_off = _field_abs(c, fl)
-                flbl = Text()
-                flbl.append(f"{fl['name']}", style=SOFT)
-                flbl.append(" = ", style=DIM)
-                flbl.append(f"{fl['value']!s}", style=accent)
-                if fl.get("note"):
-                    flbl.append(f"  {fl['note']}", style=DIM)
-                fnode = node.add_leaf(flbl)
+                fnode = node.add_leaf(self._field_label(fl, accent))
                 fnode.data = (abs_off, fl.get("len") or 0, accent)
                 self._nodemeta[id(fnode)] = fnode.data
                 self._nodekey[id(fnode)] = ("field", i, j)
@@ -1979,6 +2064,22 @@ class AcidcatTUI(App):
         self._viz_scale[self._view] = i
         self._paint_bytes()
         self.notify(f"{self._view} scale: {opts[i]}")
+
+    def action_tree_pan(self, cols: int):
+        """Move the tree sideways, and say so when there is nowhere to move.
+
+        A key that changes nothing and says nothing reads as a broken build, and
+        on a tree that already fits its pane that is exactly what panning is.
+        """
+        tree = self.query_one("#tree", Tree)
+        if tree.max_scroll_x <= 0:
+            self.notify("the tree fits this pane -- nothing to pan to")
+            return
+        want = max(0, min(tree.max_scroll_x, tree.scroll_offset.x + cols))
+        if want == tree.scroll_offset.x:
+            self.notify("left edge" if cols < 0 else "right edge of the tree")
+            return
+        tree.scroll_to(x=want, animate=False)
 
     def action_viz_prev_node(self):
         """left: move the selection to the previous node."""

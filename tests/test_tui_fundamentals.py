@@ -189,6 +189,12 @@ def _snapshot(app):
         tree.cursor_line,
         _expanded(tree),
         "hidden" not in bar.classes,
+        # Panning the tree sideways moves nothing else, so a snapshot without
+        # it reports ctrl+left/right as inert on a tree they genuinely scroll.
+        # The x axis only: vertical scroll follows the cursor, so including it
+        # would let any key that merely moves the cursor look like it did
+        # something here -- which is the thing this snapshot exists to catch.
+        tree.scroll_offset.x,
     )
 
 
