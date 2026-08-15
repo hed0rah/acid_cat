@@ -1,6 +1,5 @@
 """Tests for generic structural triage (core/triage.py) and its walk_file fallback."""
 
-import os
 import struct
 
 import pytest
@@ -131,3 +130,88 @@ def test_a_truncated_listing_says_so(tmp_path):
 def test_a_small_container_gets_no_truncation_warning(tmp_path):
     _, _, warns = triage.generic_walk(_grid(tmp_path, "small.bin", 10))
     assert not any("listing the first" in w for w in warns)
+
+
+def test_the_header_fields_point_at_what_they_name(tmp_path):
+    """A field says a value and an offset. Both have to be about the same bytes.
+
+    This chunk's fields ARE the first eight bytes, not a payload behind a
+    header, so the default rule in _field_abs (payload base = offset + 8) put
+    every one of them eight bytes past what it named: `magic` reported the
+    signature's value while pointing at the byte after the size field. In the
+    TUI that is the wrong four bytes highlighted, and an edit applied there
+    writes over something else.
+    """
+    from acidcat.core.infra.fieldcodec import _field_abs
+    data = _bare_container(magic=b"ABCD", endian="<")
+    p = _write(tmp_path, "hdr.bin", data)
+    label, chunks, _warns = triage.generic_walk(p)
+    header = chunks[0]
+
+    fields = {f["name"]: f for f in header["fields"]}
+    magic = fields["magic"]
+    at = _field_abs(header, magic)
+    assert at == 0, f"magic reports offset 0x{at:x}, but it is the first bytes"
+    assert data[at:at + 4] == b"ABCD"
+    assert magic["value"] == "ABCD"
+
+    # Position only. Which endianness `declared_size` is READ in comes from the
+    # chunk grid rather than from whichever one matched the file length, so its
+    # value can disagree with these bytes without this offset being wrong.
+    assert _field_abs(header, fields["declared_size"]) == 4
+
+
+def test_every_positioned_header_field_is_inside_the_chunk(tmp_path):
+    """The general form: a field cannot sit past the end of the chunk that
+    declares it. An off-by-a-header walks straight out of an 8-byte header."""
+    from acidcat.core.infra.fieldcodec import _field_abs
+    p = _write(tmp_path, "hdr2.bin", _bare_container(magic=b"WXYZ", endian=">"))
+    _label, chunks, _warns = triage.generic_walk(p)
+    header = chunks[0]
+    start = header.get("offset", 0)
+    end = start + header.get("size", 0)
+    for f in header["fields"]:
+        at = _field_abs(header, f)
+        if at is None:
+            continue
+        assert start <= at < end, (
+            f"{f['name']!r} sits at 0x{at:x}, outside its chunk "
+            f"0x{start:x}..0x{end:x}")
+        assert at + (f.get("len") or 0) <= end, (
+            f"{f['name']!r} runs past the end of its chunk")
+
+
+def test_a_grid_bigger_than_the_read_window_says_so(tmp_path):
+    """The count is of the chunks in a 4 MB window, not of the file.
+
+    `_walk_grid` stops where the read stops, so `found` is capped by the same
+    window that caps the list -- which is why the existing "listing the first N"
+    warning never fires to cover it. A 6 MB container holding 12 chunks
+    reported "8 chunk(s)" with no warning at all: a cap wearing a fact's
+    clothes, which is the one thing this codebase does not ship.
+    """
+    n = 12
+    parts = [(b"ch%02d" % i, b"\x00" * (512 * 1024)) for i in range(n)]
+    body = b"".join(t + struct.pack("<I", len(p)) + p for t, p in parts)
+    data = b"BIGC" + struct.pack("<I", len(body) + 4) + b"HDR0" + body
+    assert len(data) > triage._READ_CAP, "fixture must exceed the read window"
+    p = _write(tmp_path, "big.bin", data)
+
+    label, chunks, warns = triage.generic_walk(p)
+    listed = [c for c in chunks if c["id"].startswith("ch")]
+    assert len(listed) < n, "fixture did not actually cross the window"
+
+    blame = [w for w in warns if "window" in w or "past that" in w]
+    assert blame, f"the grid stopped early and no warning said so: {warns}"
+    assert str(triage._READ_CAP) in blame[0] or "4,194,304" in blame[0]
+
+    # and the headline count must not read as the whole file either
+    assert "within the first" in chunks[0]["summary"], chunks[0]["summary"]
+
+
+def test_a_grid_inside_the_window_makes_no_such_claim(tmp_path):
+    """The disclosure has to be about this file, not boilerplate on every one."""
+    p = _write(tmp_path, "small.bin", _bare_container())
+    _label, chunks, warns = triage.generic_walk(p)
+    assert not [w for w in warns if "window" in w], warns
+    assert "within the first" not in chunks[0]["summary"]

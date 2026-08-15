@@ -106,6 +106,15 @@ def generic_walk(filepath):
     H = byte_entropy(seg)
     payload = "compressed/encrypted" if H > 6.5 else "raw/structured"
 
+    # The grid was walked over a 4 MB window, not the file. Past that point the
+    # walk simply ends, so `found` counts the chunks in the window and says
+    # nothing about the rest -- and because `found` is capped the same way the
+    # list is, the LIST-cap warning below never fires to cover it. A 6 MB
+    # container with 12 chunks reported "8 chunk(s)" as a flat fact.
+    windowed = total > _READ_CAP
+    scope = (f" within the first {_READ_CAP // (1024 * 1024)} MB of "
+             f"{total:,} bytes" if windowed else "")
+
     conf = 0.4 + (0.3 if tiled else 0.0) + (0.3 if audio else 0.0)
     verdict = ("likely an AUDIO container" if audio
                else "chunked container (contents unknown)")
@@ -114,8 +123,14 @@ def generic_walk(filepath):
 
     header = {
         "id": magic.decode("latin1"), "offset": 0, "size": 8,
+        # This chunk's fields are the first eight bytes themselves, not a
+        # payload after a header. Without saying so, _field_abs applies the
+        # default rule (offset + 8) and every field here lands eight bytes past
+        # what it names: `magic` claimed to be at the start of the file while
+        # pointing at the byte after the size field.
+        "payload_base": 0,
         "summary": f"{verdict} -- {endian}-endian chunk grid, "
-                   f"{found:,} chunk(s), payload {payload} (H={H:.2f}), "
+                   f"{found:,} chunk(s){scope}, payload {payload} (H={H:.2f}), "
                    f"confidence {min(conf, 0.99):.2f}",
         "fields": [
             _f(0x00, 4, "magic", magic.decode("latin1"), "unknown format signature"),
@@ -139,6 +154,10 @@ def generic_walk(filepath):
         })
     warns = ["generic structural triage: no format-specific walker; "
              "chunk names and sizes are decoded, payloads are not"]
+    if windowed:
+        warns.append(f"grid walked within the first {_READ_CAP:,} bytes of "
+                     f"{total:,}; any chunk whose header falls past that window "
+                     f"is neither counted nor listed")
     if found > len(chunks):
         # the count above is the real one; say plainly that the LIST below is
         # only a prefix, so "257 chunks" is never read as the whole grid
