@@ -14,7 +14,7 @@ reasonable and no single reader serves both, so a normalized chunk now carries
 `extent` (every byte it occupies) and `payload` (the bytes inside), and says
 whether anyone actually declared them. core/infra/geometry.py is the one reader.
 
-Measured over 47 files and 275 chunks in data/, before and after:
+Measured over 47 files and 275 chunks, before and after:
 
                      before   after
     declared            196     200
@@ -31,6 +31,15 @@ second one survived as long as it did.
 A ratchet, not a gate: the known-defect set may shrink and must never grow. Its
 own reach is asserted rather than implied, because a test that quietly stops
 examining anything passes forever.
+
+Those 47 files are `data/` on a development machine, where `data/test_formats/`
+holds 48 specimens that are gitignored. A clone has 7 walkable files and 56
+chunks, so the floor below is the CLONE's corpus, not the measurement above.
+The first version of this file asserted the development numbers and passed on
+the machine it was written on while failing on all five CI platforms -- the
+ratchet reporting a local reading as a fact about the repo, which is the exact
+defect class the rest of this file exists to catch. The floor rises only when
+specimens are COMMITTED.
 """
 
 import glob
@@ -42,6 +51,12 @@ from acidcat.core.infra import geometry
 from acidcat.core.walk import walk_file
 
 _MAX = 8_000_000
+
+# Anchored to the repo, not to os.getcwd(). A relative glob made the whole
+# module a no-op when pytest ran from anywhere but the root: no matches, the
+# fixture skips, and four assertions report success having examined nothing.
+_DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     "data")
 
 
 # (walker label, chunk id) -> why this one is known-wrong. Shrink only.
@@ -57,7 +72,8 @@ KNOWN_DEFECTS = {}
 
 
 def _corpus():
-    for path in sorted(glob.glob("data/**/*.*", recursive=True)):
+    for path in sorted(glob.glob(os.path.join(_DATA, "**", "*.*"),
+                                 recursive=True)):
         try:
             if os.path.getsize(path) > _MAX:
                 continue
@@ -152,21 +168,24 @@ class TestTheGeometryIsReadableByOneRule:
 
 class TestTheRatchetSaysWhatItCovers:
     def test_it_is_measuring_a_real_corpus(self, walked):
-        """A ratchet that examines nothing passes forever. These numbers are the
-        measured state; they exist so a corpus that quietly shrinks -- a moved
-        fixture, a walker that starts raising -- fails here instead of turning
-        every assertion above into a no-op."""
+        """A ratchet that examines nothing passes forever. The floor is the
+        COMMITTED corpus, so it holds in a clone as well as on a machine with
+        the gitignored specimens; it exists so a corpus that quietly shrinks --
+        a moved fixture, a walker that starts raising -- fails here instead of
+        turning every assertion above into a no-op."""
         chunks = sum(len(c) for _p, _l, c, _w in walked)
-        assert len(walked) >= 40, f"only {len(walked)} files walked"
-        assert chunks >= 250, f"only {chunks} chunks examined"
+        assert len(walked) >= 7, f"only {len(walked)} files walked"
+        assert chunks >= 56, f"only {chunks} chunks examined"
 
-    def test_its_reach_is_seven_walkers_not_thirty(self, walked):
-        """Stated rather than implied. data/ exercises seven formats; the repo
-        has roughly thirty walkers, so a clean run here is evidence about those
-        seven and silence about the rest. The gap is corpus, not method: every
-        format added to data/ widens this automatically."""
+    def test_its_reach_is_five_walkers_not_thirty(self, walked):
+        """Stated rather than implied. A clone's data/ exercises five formats;
+        the repo has roughly thirty walkers, so a clean run here is evidence
+        about those five and silence about the rest. The gap is corpus, not
+        method: every format COMMITTED to data/ widens this automatically, and
+        a development machine carrying data/test_formats/ already covers more
+        than this asserts."""
         labels = {lab for _p, lab, _c, _w in walked}
-        assert len(labels) >= 7, sorted(labels)
+        assert len(labels) >= 5, sorted(labels)
         assert {"RIFF/WAVE", "MP4/M4A", "FLAC"} <= labels, sorted(labels)
 
 
