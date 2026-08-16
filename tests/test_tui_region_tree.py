@@ -26,6 +26,7 @@ import pytest
 pytest.importorskip("textual")
 
 from acidcat.tui_app.app import AcidcatTUI          # noqa: E402
+from textual.widgets import DataTable              # noqa: E402
 from acidcat.tui_app.screens import RegionsScreen   # noqa: E402
 
 
@@ -634,7 +635,13 @@ class TestSelectingForExtraction:
                 s.action_toggle_sel()
                 await pilot.pause(0.3)
                 assert app._region_sel == {0}
-                self._screen(app).action_toggle_sel()
+
+                # The cursor ADVANCES after a mark, so the list can be walked
+                # by holding space. Toggling again therefore marks the NEXT
+                # row -- come back to row 0 to unmark it.
+                scr = self._screen(app)
+                scr.query_one("#regtable", DataTable).move_cursor(row=0)
+                scr.action_toggle_sel()
                 await pilot.pause(0.3)
                 assert app._region_sel == set()
         _run(scenario)
@@ -717,3 +724,67 @@ class TestSelectingForExtraction:
 
     def test_the_selection_belongs_to_the_view(self, blob):
         assert "_region_sel" in AcidcatTUI._FRAME_ATTRS
+
+
+class TestTheListReopensWhereYouLeftIt:
+    """Marking re-pushes the screen, so a cursor it does not carry is a cursor
+    it cannot return to. Marking five regions in a list of 266 meant scrolling
+    from the top five times -- in the feature the list exists for.
+
+    The screen always computed the right row and even advanced it by one after
+    a mark, so that holding space walks the list. The app was throwing it away.
+    """
+
+    async def _list(self, app, pilot):
+        from textual.widgets import DataTable as _DT
+        app.action_locate_regions()
+        await pilot.pause(0.2)
+        for _ in range(80):
+            if app._regions is not None and not app._scanning:
+                break
+            await pilot.pause(0.1)
+        for _ in range(80):
+            screens = [x for x in app.screen_stack
+                       if isinstance(x, RegionsScreen)]
+            if screens:
+                try:
+                    screens[-1].query_one("#regtable", _DT)
+                    return screens[-1]
+                except Exception:
+                    pass
+            await pilot.pause(0.05)
+        raise AssertionError("the region list never mounted")
+
+    def _row(self, app):
+        scr = [x for x in app.screen_stack if isinstance(x, RegionsScreen)][-1]
+        return scr.query_one("#regtable", DataTable).cursor_row
+
+    def test_marking_leaves_the_cursor_on_the_next_row(self, blob):
+        async def scenario():
+            app = AcidcatTUI(blob)
+            async with app.run_test(size=(160, 44)) as pilot:
+                await pilot.pause(0.3)
+                s = await self._list(app, pilot)
+                s.action_toggle_sel()
+                await pilot.pause(0.4)
+                assert self._row(app) == 1, (
+                    "the cursor went back to the top after a mark")
+        _run(scenario)
+
+    def test_holding_space_walks_the_list(self, blob):
+        """Three marks in a row should mark three different regions."""
+        async def scenario():
+            app = AcidcatTUI(blob)
+            async with app.run_test(size=(160, 44)) as pilot:
+                await pilot.pause(0.3)
+                await self._list(app, pilot)
+                for _ in range(3):
+                    scr = [x for x in app.screen_stack
+                           if isinstance(x, RegionsScreen)][-1]
+                    scr.action_toggle_sel()
+                    await pilot.pause(0.4)
+                assert app._region_sel == {0, 1, 2}, app._region_sel
+        _run(scenario)
+
+    def test_the_cursor_belongs_to_the_view(self, blob):
+        assert "_region_cursor" in AcidcatTUI._FRAME_ATTRS

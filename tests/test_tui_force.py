@@ -17,7 +17,6 @@ not the header is really its format.
 """
 
 import asyncio
-import os
 import struct
 
 import pytest
@@ -213,4 +212,63 @@ class TestForensicsOverride:
                 app.notify = lambda m, **kw: notes.append(str(m))
                 assert app._apply_to_work(b"nope") is False
                 assert any("read-only" in n for n in notes), notes
+        _run(scenario)
+
+
+class TestForcingDoesNotFreezeTheApp:
+    """`F` tries every walker in turn and each one that gets far enough reads
+    the file. Measured at 16.5 seconds on a 187 MB archive -- sixteen seconds
+    of frozen app with no way to quit, which is the same freeze `_explore_into`
+    runs on a worker to avoid, in a different place.
+    """
+
+    def test_it_returns_before_the_answer_does(self, unknown):
+        async def scenario():
+            app = AcidcatTUI(unknown)
+            async with app.run_test(size=(150, 44)) as pilot:
+                await pilot.pause(0.3)
+                notes = []
+                app.notify = lambda m, **kw: notes.append(str(m))
+                app.action_force_parse()
+                # synchronously after the call: it has said something and has
+                # NOT pushed the result, because the result does not exist yet
+                assert any("one moment" in n or "trying every walker" in n
+                           for n in notes), notes
+                assert not [s for s in app.screen_stack
+                            if isinstance(s, ForcedScreen)], (
+                    "the candidate table appeared synchronously, so the walk "
+                    "ran on the UI thread")
+        _run(scenario)
+
+    def test_the_answer_still_arrives(self, unknown):
+        """Not blocking is only half of it."""
+        async def scenario():
+            app = AcidcatTUI(unknown)
+            async with app.run_test(size=(150, 44)) as pilot:
+                await pilot.pause(0.3)
+                app.action_force_parse()
+                for _ in range(100):
+                    if [s for s in app.screen_stack
+                            if isinstance(s, ForcedScreen)]:
+                        break
+                    await pilot.pause(0.1)
+                assert [s for s in app.screen_stack
+                        if isinstance(s, ForcedScreen)], "no answer ever came"
+        _run(scenario)
+
+    def test_an_answer_for_a_view_that_is_gone_is_dropped(self, unknown):
+        async def scenario():
+            app = AcidcatTUI(unknown)
+            async with app.run_test(size=(150, 44)) as pilot:
+                await pilot.pause(0.3)
+                stale = app._generation
+                app._load()
+                await pilot.pause(0.2)
+                app._forced_landed(stale, [{"format": "wav", "chunks": 1,
+                                            "note": "", "complaint": ""}], None)
+                await pilot.pause(0.2)
+                assert not [s for s in app.screen_stack
+                            if isinstance(s, ForcedScreen)], (
+                    "a stale forced-parse result opened a screen over the "
+                    "current view")
         _run(scenario)

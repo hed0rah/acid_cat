@@ -362,6 +362,7 @@ class AcidcatTUI(App):
         self._region_shape = False  # sparkline column in the region list
         self._want_list = False   # this scan was asked for by `l`
         self._region_sel = set()  # region indexes marked for extraction
+        self._region_cursor = 0   # row the region list should reopen on
         self._hex_from = 0    # byte offset into the selection the hex starts at
         self._region_view = None  # (idx, region) when viewing a descended region
         self._region_tmps = []    # carved-region temp files, cleaned on exit
@@ -475,6 +476,7 @@ class AcidcatTUI(App):
         "_locate_mode", "_locate_transforms",
         "_view", "_viz_scope", "_viz_scale", "_viz_drawn", "_hex_from",
         "_region_sel",
+        "_region_cursor",
     )
 
     def _snapshot(self):
@@ -1074,8 +1076,32 @@ class AcidcatTUI(App):
             return
         if self._offer_toc():
             return
+        # Off the UI thread. This tries every walker in turn, and each one that
+        # gets far enough reads the file: measured at 16.5s on a 187 MB archive,
+        # which is 16.5s of frozen app with no way to quit -- the same freeze
+        # `_explore_into` runs on a worker to avoid, in a different place.
+        self.notify("trying every walker on this file -- one moment")
+        gen, source = self._generation, self.work
+        self.run_worker(lambda: self._force_worker(gen, source),
+                        thread=True, exclusive=True, group="force")
+
+    def _force_worker(self, gen, source):
+        """The blocking half. Touches no widgets."""
         from acidcat.core.forensics.forced import _forced_candidates
-        rows = _forced_candidates(self.work, True)
+        try:
+            rows = _forced_candidates(source, True)
+        except Exception as e:                      # a walker bug is not fatal
+            rows, err = [], f"{e.__class__.__name__}: {e}"
+        else:
+            err = None
+        self.call_from_thread(self._forced_landed, gen, rows, err)
+
+    def _forced_landed(self, gen, rows, err):
+        if gen != self._generation:
+            return                  # the view it was asked about is gone
+        if err:
+            self.notify(f"forced parse failed: {err}", severity="error")
+            return
         if not rows:
             self.notify("no walker produced anything from this file "
                         "(l locates embedded audio instead)", severity="warning")
@@ -1585,7 +1611,8 @@ class AcidcatTUI(App):
             RegionsScreen(regions, name, self._locate_mode,
                           self._locate_transforms, blob_src=self._blob_src,
                           show_shape=self._region_shape,
-                          selected=self._region_sel),
+                          selected=self._region_sel,
+                          cursor=self._region_cursor),
             self._on_region_action)
 
     def _on_region_action(self, result):
@@ -1612,6 +1639,10 @@ class AcidcatTUI(App):
             # the screen cannot hold this: it is re-pushed on every toggle, so
             # the app owns the set and hands it back each time
             self._region_sel = result["selected"]
+            # The screen already worked out where the cursor should land -- it
+            # even advances a row after a mark, so holding space walks the
+            # list. Throwing that away was the whole of the bug.
+            self._region_cursor = result.get("cursor", 0)
             self._show_regions(self._regions)
         elif act == "shape":
             # re-open the same regions with the column on or off; no rescan

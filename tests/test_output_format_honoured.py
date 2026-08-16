@@ -82,3 +82,25 @@ def test_scan_json_to_output_file(tmp_path):
     r = _run(["scan", str(src), "--json", "-o", str(dest), "-q"], tmp_path)
     assert r.returncode == 0, r.stderr
     assert json.loads(dest.read_text())[0]["format"] == "wav"
+
+
+def test_a_non_latin_filename_survives_the_pipe(tmp_path):
+    """Piped stdout on Windows defaults to cp1252, and these rows carry file
+    paths -- so one katakana filename would raise UnicodeEncodeError partway
+    through, leaving a truncated CSV and a traceback.
+
+    `cli._dispatch` already reconfigures stdout to UTF-8 with errors="replace"
+    for exactly this, and the CSV path inherits it. Pinned because it is
+    load-bearing and invisible: nothing else fails if that reconfigure is ever
+    dropped, until someone scans a directory with a non-Latin name in it.
+    """
+    src = tmp_path / "lib"
+    src.mkdir()
+    _wav(src / "\u30c6\u30b9\u30c8_\u00e9\u00fc.wav")     # katakana + accents
+
+    r = _run(["scan", str(src), "-q"], tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "UnicodeEncodeError" not in r.stderr, r.stderr
+    assert "\u30c6\u30b9\u30c8" in r.stdout or "?" in r.stdout, (
+        "the row vanished rather than being encoded or replaced")
+    assert r.stdout.count("\n") >= 2, "the CSV was truncated mid-write"

@@ -487,7 +487,7 @@ class RegionsScreen(ModalScreen):
     show_shape = False
 
     def __init__(self, regions, blob_name, mode="normal", transforms=False,
-                 blob_src=None, show_shape=False, selected=None):
+                 blob_src=None, show_shape=False, selected=None, cursor=0):
         super().__init__()
         self.regions = regions
         self.blob_name = blob_name
@@ -499,6 +499,11 @@ class RegionsScreen(ModalScreen):
         # shape column is toggled or a scan lands, and a selection that did not
         # survive that would be worse than none at all.
         self.selected = set(selected or ())
+        # Where the cursor was when the last one closed. Same reason as the
+        # selection: the screen is re-pushed on every toggle, so a row it does
+        # not carry is a row it cannot return to -- and marking N regions meant
+        # scrolling from the top N times, in the feature the list exists for.
+        self.cursor = cursor
 
     def compose(self) -> ComposeResult:
         with Vertical(id="regbox"):
@@ -566,7 +571,15 @@ class RegionsScreen(ModalScreen):
 
     def on_mount(self):
         try:
-            self.query_one("#regtable", DataTable).focus()
+            table = self.query_one("#regtable", DataTable)
+            table.focus()
+            # Back to the row the last one closed on. The screen is re-pushed
+            # on every toggle, so without this each mark dropped the cursor to
+            # row 0 and marking five regions in a list of 266 meant scrolling
+            # from the top five times.
+            if self.cursor:
+                table.move_cursor(row=min(self.cursor,
+                                          max(0, len(self.regions) - 1)))
         except Exception:
             pass
 
