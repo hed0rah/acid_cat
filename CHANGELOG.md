@@ -56,6 +56,96 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
   Fourteen further cap sites are held behind the same change, and the cap ledger
   in `tests/test_cap_announcements.py` lists every one so none is forgotten.
 
+## [1.1.0] - 2026-08-16
+
+The reverse-engineering half of the TUI. A tree that stops at a fixed depth
+cannot follow a container into a container, and this one did -- three levels,
+then nothing, on a file that had five. Fixing that turned up the reason it was
+never noticed: several places reported a limit of ours as a fact about the file.
+
+### Changed
+
+- **BREAKING: `scan` and `features` write CSV to stdout, not to a file nobody
+  asked for.** `acidcat scan DIR` printed nothing and wrote
+  `<dirname>_metadata.csv` into whatever directory you were standing in,
+  overwriting a file of that name without asking. Both now pipe, and write a
+  file only when `-o` names one. A script that ran `scan DIR` and then opened
+  `DIR_metadata.csv` wants `-o DIR_metadata.csv`.
+
+  The suite held both positions on this at once: one test carried an xfail
+  calling it a defect "documented for 1.0.1", another asserted "the default is
+  load-bearing". `features` disagreed with itself too -- `features DIR --json`
+  already piped while its CSV path wrote a file.
+
+### Added
+
+- **The tree goes as deep as the file does.** `core/forensics/explore.py` asks
+  one question -- what is inside these bytes -- at every level, with no depth
+  ceiling. Engines are alternatives, first hit wins the range: a real walker
+  (with generic structural triage inside it), then the audio sweep. It descends
+  into a chunk's PAYLOAD, not its extent, which is what keeps the hierarchy:
+  through the extent the sweep finds the audio anyway and deletes the layer it
+  sat in.
+- **Regions are tree nodes, and selection works where you are looking.** `space`
+  marks, `A` marks all, `X` extracts what is marked, `E` extracts everything --
+  spelled the same in the tree and in the region list.
+- **Colour themes.** `ACIDCAT_THEME=killengn` or `faterally` beside the default.
+  The stylesheets are templated from the active palette, so a theme reaches the
+  borders and backgrounds rather than only the text.
+- **A table-of-contents detector**, so an archive that carries its own index is
+  read rather than guessed at -- 266 named entries on the specimen this was
+  built against.
+- **A fuzz seed registry** (`tests/seeds.py`). The differential fuzzer covered
+  one walker of 52, not by choice: building a valid input was reinvented in 56
+  test files. Seven formats now, shallow and deep; an 84,000-walk soak with
+  multi-edit mutations found no stray exceptions.
+
+### Fixed
+
+- **Ogg songs were cut at 16 MB scan boundaries.** Each segment was analysed
+  blind to its neighbours, so a stream crossing an edge was seen twice and the
+  partial page between them was claimed by neither. On a 187 MB archive of 64
+  songs: 75 regions, 11 of them unplayable halves, and 120,045 bytes of audio
+  that no region claimed. Rejoined on shared bitstream serial -- the format's
+  own statement of identity, not proximity. Now byte-exact against the archive's
+  index.
+- **`p` played noise instead of music.** The check asked whether the OPEN FILE
+  was decodable; inside an archive it is not, so an Ogg region was reinterpreted
+  as raw PCM. It asks about the selected range now, which also means nested
+  audio plays at any depth.
+- **A chunk states two ranges.** RIFF's `size` is the payload; MP4's counts its
+  own header. Nine sites across six modules re-derived the difference in four
+  spellings, and 28 of 275 chunks put their payload past the end of the file.
+  `core/infra/geometry.py` normalizes extent, payload and provenance at the walk
+  boundary, and never repairs what it cannot verify.
+- **Generic triage misplaced its own header fields by eight bytes** (`magic`
+  reported the signature while pointing at the byte after the size field), and
+  **its 4 MB read window went undisclosed** -- a 6 MB container with 12 chunks
+  reported "8 chunk(s)" flat.
+- **FLAC said nothing about truncation.** A PADDING block claiming 8,192 bytes
+  inside a 200-byte file walked in silence, while RIFF has always reported the
+  same damage in the file's own numbers.
+- **A chunk covering its parent recursed forever**, and once that was fixed the
+  top level -- built by a different path -- hung one quiet duplicate of itself.
+  An arrow means there is something under a node; it does not mean its bytes may
+  be walked.
+- **A stale exploration result could delete a live tree node.** The guard
+  assumed removing a node from a rebuilt tree raises; it does not, and
+  `TreeNode._remove` ends by unregistering whichever live node inherited the
+  stale id.
+- **Quitting leaked every frame's temp files** -- one carved region per descend.
+- **Forcing a walker froze the app for 16.5 seconds** on a large file, with no
+  way to quit. It runs on a worker now.
+- **Six single letters meant two different things** depending on which screen
+  you were on. One was dangerous: `s` was the shape column in the region list
+  and STRIP METADATA in the tree.
+- **The expand arrows were clipped**: Textual's defaults are East Asian Width
+  Ambiguous and one has an emoji presentation, so terminals draw them two cells
+  wide into a one-cell slot.
+- The forced-parse screen titled itself "None"; the region list forgot the
+  cursor on every mark; a nested walker's pointer field was not rebased, so
+  following it jumped to the wrong bytes.
+
 ## [1.0.0] - 2026-08-10
 
 The 1.0 release. Everything below landed after the 1.0.0b2 beta, and the theme
