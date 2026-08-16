@@ -56,7 +56,40 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
   Fourteen further cap sites are held behind the same change, and the cap ledger
   in `tests/test_cap_announcements.py` lists every one so none is forgotten.
 
-## [1.1.0] - 2026-08-16
+## [1.1.1] - 2026-08-16
+
+1.1.0 was tagged and never published. Its own CI run was red on all five
+platforms, and the publish workflow tests the tree it is about to ship, so the
+tag could not become a release. `refs/tags/v*` is protected against deletion and
+non-fast-forward, which is the rule working: a release tag that has been seen is
+not a draft to be corrected. 1.1.1 is 1.1.0 plus the fixes below, and is the
+first published build of that work.
+
+### Fixed
+
+- **Three tests that only passed on the machine that wrote them.** No product
+  code changes here; all three were defects in the tests.
+
+  The chunk-geometry ratchet asserted it had walked at least 40 files across 7
+  formats. That was measured against a `data/` carrying `data/test_formats/`,
+  which is gitignored: a clone walks 7 files across 5. It passed where it was
+  written and failed everywhere else, which is a local reading reported as a
+  fact about the repo, inside the one test whose stated job is catching that.
+  The floor is the committed corpus now. Its glob was also relative to the
+  working directory, so running pytest from anywhere but the repo root matched
+  nothing, skipped the fixture, and reported four assertions as passing having
+  examined no bytes at all.
+
+  The pipe test decoded correct output wrongly. `scan` reconfigures stdout to
+  UTF-8 deliberately, while `text=True` decodes with the locale encoding,
+  cp1252 on the Windows runner. The katakana filename was right on the wire the
+  whole time and arrived as mojibake.
+
+  The forced-parse tests waited a flat half second on a worker that tries every
+  walker in turn. How long that takes is a property of the machine, so it held
+  on the three fastest platforms and failed on the two slowest. They poll now.
+
+## [1.1.0] - 2026-08-16 [unpublished]
 
 The reverse-engineering half of the TUI. A tree that stops at a fixed depth
 cannot follow a container into a container, and this one did -- three levels,
