@@ -50,6 +50,26 @@ async def _settle(app, pilot):
         await pilot.pause()
 
 
+async def _until(pilot, cond, tries=100, step=0.1):
+    """Wait for a background answer rather than guessing how long it takes.
+
+    `F` runs every walker on a worker, so how long it takes is a property of
+    the machine. A flat `pause(0.5)` passed here and on two of five CI
+    platforms, failing on the two slowest -- a timing assumption reported as a
+    result. Polling costs nothing when the answer is already in.
+    """
+    for _ in range(tries):
+        if cond():
+            return True
+        await pilot.pause(step)
+    return cond()
+
+
+def _forced(app):
+    from acidcat.tui_app.screens import ForcedScreen as _FS
+    return [s for s in app.screen_stack if isinstance(s, _FS)]
+
+
 class TestForcedParse:
     def test_an_unknown_file_walks_as_unsupported_with_no_tree(self, unknown):
         """The precondition. Without it the rest of this file tests nothing."""
@@ -68,9 +88,8 @@ class TestForcedParse:
             async with app.run_test(size=(150, 44)) as pilot:
                 await _settle(app, pilot)
                 app.action_force_parse()
-                await pilot.pause(0.5)
-                screens = [s for s in app.screen_stack
-                           if isinstance(s, ForcedScreen)]
+                await _until(pilot, lambda: _forced(app))
+                screens = _forced(app)
                 assert screens, "F offered nothing on an unparsed file"
                 assert screens[0].rows, "the candidate table was empty"
         _run(scenario)
@@ -81,12 +100,11 @@ class TestForcedParse:
             async with app.run_test(size=(150, 44)) as pilot:
                 await _settle(app, pilot)
                 app.action_force_parse()
-                await pilot.pause(0.5)
-                screen = [s for s in app.screen_stack
-                          if isinstance(s, ForcedScreen)][0]
+                await _until(pilot, lambda: _forced(app))
+                screen = _forced(app)[0]
                 pick = screen.rows[0]["format"]
                 screen.dismiss(pick)
-                await pilot.pause(0.5)
+                await _until(pilot, lambda: app._fmt_override == pick)
                 assert app._fmt_override == pick
                 assert app.chunks, "the forced walk produced no chunks"
         _run(scenario)
@@ -192,7 +210,7 @@ class TestForensicsOverride:
             async with app.run_test(size=(150, 44)) as pilot:
                 await _settle(app, pilot)
                 app.action_force_parse()
-                await pilot.pause(1.0)
+                await _until(pilot, lambda: app._force_scan is True)
                 assert app._force_scan is True
                 assert app.scan_note is None, (
                     f"still refusing after an override: {app.scan_note}")
@@ -206,7 +224,7 @@ class TestForensicsOverride:
             async with app.run_test(size=(150, 44)) as pilot:
                 await _settle(app, pilot)
                 app.action_force_parse()
-                await pilot.pause(1.0)
+                await _until(pilot, lambda: app._force_scan is True)
                 assert app._readonly is True
                 notes = []
                 app.notify = lambda m, **kw: notes.append(str(m))

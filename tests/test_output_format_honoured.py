@@ -23,8 +23,16 @@ def _wav(path, rate=44100, secs=0.05):
 
 
 def _run(args, cwd):
+    # encoding="utf-8" explicitly, because text=True decodes with the LOCALE
+    # encoding -- cp1252 on the Windows runners. acidcat reconfigures its stdout
+    # to UTF-8 on purpose (cli._dispatch), so a locale-decoding reader turned
+    # correct output into mojibake and the katakana test below failed on Windows
+    # alone while the bytes on the pipe were right the whole time. errors, not
+    # strict: a genuine encoding regression should surface as a failed assertion
+    # about the content, not as a decode traceback inside the test harness.
     return subprocess.run([sys.executable, "-m", "acidcat"] + args,
-                          cwd=str(cwd), capture_output=True, text=True)
+                          cwd=str(cwd), capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
 
 
 def test_scan_json_goes_to_stdout(tmp_path):
