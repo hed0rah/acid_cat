@@ -9,7 +9,7 @@ import sys
 from acidcat.core.formats.riff import (
     smpl_root_or_none, acid_root_or_none, effective_acid_beats,
 )
-from acidcat.commands._output import add_output_format_arg
+from acidcat.commands._output import add_output_format_arg, out_stream
 from acidcat.core.formats.aiff import is_aiff
 from acidcat.core.tagged import is_tagged_format
 from acidcat.util.midi import midi_note_to_name
@@ -135,10 +135,15 @@ def run(args):
         print(f"acidcat scan: {directory}: Not a directory", file=sys.stderr)
         return 2
 
-    default_base = os.path.basename(os.path.normpath(directory))
-    output_csv = safe_basename_for_csv(
-        getattr(args, 'output', None) or (default_base + "_metadata.csv")
-    )
+    # stdout unless -o names a file. This used to invent
+    # `<dirname>_metadata.csv` in whatever directory you happened to be
+    # standing in, silently overwriting a file of that name. It is documented
+    # as "batch-scan with CSV output", which reads as a pipe, and an earlier
+    # fix here only made the surprise easier to FIND by printing an absolute
+    # path. Not writing it unasked is the actual fix.
+    output_csv = getattr(args, 'output', None)
+    if output_csv:
+        output_csv = safe_basename_for_csv(output_csv)
 
     wanted = None
     has_val = getattr(args, 'has', None)
@@ -284,8 +289,16 @@ def run(args):
         return 0
 
     # output
-    with open(output_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+    #
+    # lineterminator="\n", and out_stream for the file/stdout split. csv's
+    # default terminator is "\r\n"; a file opened with newline="" passes that
+    # through untouched, but stdout is a TEXT stream that translates the "\n"
+    # again -- so the moment this started piping, every row ended "\r\r\n" on
+    # Windows. The sibling renderer already knew: core/infra/render.py's
+    # `_delimited` passes lineterminator="\n" for exactly this reason.
+    with out_stream(output_csv) as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames,
+                                extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     if not quiet:
@@ -293,11 +306,12 @@ def run(args):
         # "500 files" reads as the library's size, not as where we stopped
         cap_note = (f" (stopped at the -n {num} cap; more files may remain)"
                     if count >= num else "")
-        # the ABSOLUTE path. This printed a bare filename, so `scan` dropped a
-        # CSV into whatever directory you happened to be standing in and gave
-        # you no way to find it -- a first-time user running scan "just to look"
-        # had to go hunting with `find`.
-        print(f"\n[INFO] Wrote metadata for {len(rows)} files to "
-              f"{os.path.abspath(output_csv)}{cap_note}", file=sys.stderr)
+        # The ABSOLUTE path when there is one. An earlier fix here printed the
+        # absolute path because a bare filename left people hunting with
+        # `find` -- which made the surprise easier to locate rather than
+        # stopping it. Now there is only a path to print when one was asked for.
+        where = f" to {os.path.abspath(output_csv)}" if output_csv else ""
+        print(f"\n[INFO] Wrote metadata for {len(rows)} files{where}"
+              f"{cap_note}", file=sys.stderr)
 
     return 0

@@ -8,8 +8,7 @@ import sys
 
 from acidcat.util import targets
 from acidcat.core.infra.render import output
-from acidcat.commands._output import add_output_format_arg
-from acidcat.util.csv_helpers import safe_basename_for_csv
+from acidcat.commands._output import add_output_format_arg, out_stream
 
 
 def register(subparsers):
@@ -93,10 +92,11 @@ def run(args):
                 stream.close()
         return 0
 
-    default_base = os.path.basename(os.path.normpath(target))
-    out_path = getattr(args, 'output', None) or safe_basename_for_csv(
-        default_base + "_features.csv"
-    )
+    # CSV goes where json and table already go: stdout unless -o names a file.
+    # It used to invent `<dirname>_features.csv` in the working directory, so
+    # ONE command piped for one format and silently wrote a file for another,
+    # overwriting anything of that name without asking.
+    out_path = getattr(args, 'output', None)
 
     # union of keys across rows, first-row order preserved, extras appended
     fieldnames = list(rows[0].keys())
@@ -106,14 +106,18 @@ def run(args):
             if k not in known:
                 fieldnames.append(k)
                 known.add(k)
-    with open(out_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+    # lineterminator="\n": csv defaults to "\r\n", and stdout is a TEXT stream
+    # that translates the "\n" again, so piping gave "\r\r\n" on every row.
+    with out_stream(out_path) as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames,
+                                extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     if not quiet:
         cap_note = (f" of {len(files):,} (stopped at the -n {num} cap)"
                     if capped else "")
-        print(f"\n[INFO] Wrote features for {len(rows)} file(s){cap_note} "
-              f"to {out_path}", file=sys.stderr)
+        where = f" to {out_path}" if out_path else ""
+        print(f"\n[INFO] Wrote features for {len(rows)} file(s){cap_note}"
+              f"{where}", file=sys.stderr)
 
     return 0

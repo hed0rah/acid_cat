@@ -194,7 +194,7 @@ def test_no_directory_verb_writes_into_the_working_directory(tmp_path):
     d, _planted = _plant(tmp_path)
     work = tmp_path / "cwd"
     work.mkdir()
-    for verb in ("validate", "inspect", "classify", "shape"):
+    for verb in ("validate", "inspect", "classify", "shape", "scan", "features"):
         before = set(os.listdir(work))
         subprocess.run([sys.executable, "-m", "acidcat", verb, str(d)],
                        capture_output=True, text=True, cwd=work, timeout=600)
@@ -204,10 +204,12 @@ def test_no_directory_verb_writes_into_the_working_directory(tmp_path):
             f"directory without being asked for output")
 
 
-@pytest.mark.xfail(reason="scan writes <dir>_metadata.csv into the CWD "
-                          "unasked; documented for 1.0.1, not fixed here",
-                   strict=True)
 def test_scan_does_not_write_into_the_working_directory(tmp_path):
+    """Was xfail with "documented for 1.0.1, not fixed here". Fixed now: the
+    CSV goes to stdout unless -o names a file, which is what "batch-scan with
+    CSV output" said all along and what `--json` already did in the same
+    command. It had been dropping <dirname>_metadata.csv into whatever
+    directory you were standing in, overwriting a file of that name."""
     d, _planted = _plant(tmp_path)
     work = tmp_path / "cwd2"
     work.mkdir()
