@@ -3,7 +3,7 @@
 How acidcat is wired together: the data flow from a file on disk to a query
 result on stdout or over MCP.
 
-Last updated: 2026-08-16 (v1.1.0). This is the deep per-module companion to
+Last updated: 2026-08-16 (v1.1.1). This is the deep per-module companion to
 the top-level ARCHITECTURE.md, which is the current high-level map.
 
 The `inspect` verb covers 46 registered formats via from-scratch walkers in
