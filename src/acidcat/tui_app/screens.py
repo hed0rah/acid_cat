@@ -15,6 +15,7 @@ from textual.widgets import Button, DataTable, DirectoryTree, Input, Label, Stat
 from acidcat.commands.write import _edit as _write_edit
 from acidcat.core.write.edits import EditError
 from acidcat.tui_app.render import _DIFF_CAP
+from acidcat import tui_theme as th
 from acidcat.tui_theme import ACCENT, DIM, PEND, SEV, SOFT
 
 
@@ -36,13 +37,13 @@ class BrowseScreen(ModalScreen):
     """A file picker: navigate a directory tree, enter selects, esc cancels.
     dismiss()es with the chosen path string, or None on cancel."""
 
-    CSS = """
+    CSS = th.css("""
     BrowseScreen { align: center middle; }
-    #browsebox { width: 80%; height: 80%; border: round #08F9DF;
-                 background: #16181C; padding: 1 2; }
-    #browsehint { color: #8A9099; padding-bottom: 1; }
-    DirectoryTree { background: #16181C; }
-    """
+    #browsebox { width: 80%; height: 80%; border: round $TEAL;
+                 background: $BG; padding: 1 2; }
+    #browsehint { color: $SOFT; padding-bottom: 1; }
+    DirectoryTree { background: $BG; }
+    """)
     BINDINGS = [("escape", "cancel", "cancel")]
 
     def __init__(self, start):
@@ -68,17 +69,17 @@ class EditScreen(ModalScreen):
     via commands.write._edit + core.writer.commit (atomic, leaves a _original
     backup). dismiss()es with a result dict on a successful write, else None."""
 
-    CSS = """
+    CSS = th.css("""
     EditScreen { align: center middle; }
-    #editbox { width: 72; height: auto; max-height: 90%; border: round #FF4D00;
-               background: #16181C; padding: 1 2; }
-    #edittitle { color: #FF4D00; text-style: bold; padding-bottom: 1; }
-    #edithint { color: #565B63; padding-bottom: 1; }
-    #editstatus { color: #FF4D00; padding-top: 1; }
-    EditScreen Label { color: #8A9099; }
+    #editbox { width: 72; height: auto; max-height: 90%; border: round $ORANGE;
+               background: $BG; padding: 1 2; }
+    #edittitle { color: $ORANGE; text-style: bold; padding-bottom: 1; }
+    #edithint { color: $DIM; padding-bottom: 1; }
+    #editstatus { color: $ORANGE; padding-top: 1; }
+    EditScreen Label { color: $SOFT; }
     EditScreen Input { margin-bottom: 1; }
     #editbtns { height: auto; padding-top: 1; }
-    """
+    """)
     BINDINGS = [("escape", "cancel", "cancel"), ("ctrl+s", "save", "save")]
 
     def __init__(self, path, profile, fields):
@@ -132,13 +133,13 @@ class ConfirmScreen(ModalScreen):
     """Unsaved-changes prompt. dismiss()es with 'save', 'discard', or None
     (cancel)."""
 
-    CSS = """
+    CSS = th.css("""
     ConfirmScreen { align: center middle; }
-    #confbox { width: 60; height: auto; border: round #FF4D00;
-               background: #16181C; padding: 1 2; }
-    #confmsg { color: #C9CDD3; padding-bottom: 1; }
+    #confbox { width: 60; height: auto; border: round $ORANGE;
+               background: $BG; padding: 1 2; }
+    #confmsg { color: $FG; padding-bottom: 1; }
     #confbtns { height: auto; }
-    """
+    """)
     # save and discard were reachable by mouse only, on the one prompt that
     # stands between the user and losing an edit.
     BINDINGS = [
@@ -179,11 +180,11 @@ class ConfirmScreen(ModalScreen):
 class HelpScreen(ModalScreen):
     """Key reference overlay. Any of esc / ? closes it."""
 
-    CSS = """
+    CSS = th.css("""
     HelpScreen { align: center middle; }
-    #helpbox { width: 74; height: auto; max-height: 90%; border: round #08F9DF;
-               background: #16181C; padding: 1 2; }
-    """
+    #helpbox { width: 74; height: auto; max-height: 90%; border: round $TEAL;
+               background: $BG; padding: 1 2; }
+    """)
     BINDINGS = [("escape", "close", "close"), ("question_mark", "close", "close")]
 
     def compose(self) -> ComposeResult:
@@ -301,11 +302,11 @@ class DiffScreen(ModalScreen):
     _DIFF_CAP. Those were the same number until 1,000 changes reported as 201,
     on the one screen a person consults before overwriting their file."""
 
-    CSS = """
+    CSS = th.css("""
     DiffScreen { align: center middle; }
-    #diffbox { width: 82; height: auto; max-height: 90%; border: round #FF4D00;
-               background: #16181C; padding: 1 2; }
-    """
+    #diffbox { width: 82; height: auto; max-height: 90%; border: round $ORANGE;
+               background: $BG; padding: 1 2; }
+    """)
     BINDINGS = [("escape", "close", "close"), ("d", "close", "close")]
 
     def __init__(self, regions, src_len, work_len, total=None):
@@ -354,11 +355,11 @@ class MapScreen(ModalScreen):
     """A byte-budget map: where the file's bytes actually go, top-level regions
     biggest first with a proportional bar. Any of esc / m closes it."""
 
-    CSS = """
+    CSS = th.css("""
     MapScreen { align: center middle; }
-    #mapbox { width: 86; height: auto; max-height: 90%; border: round #08F9DF;
-              background: #16181C; padding: 1 2; }
-    """
+    #mapbox { width: 86; height: auto; max-height: 90%; border: round $TEAL;
+              background: $BG; padding: 1 2; }
+    """)
     BINDINGS = [("escape", "close", "close"), ("m", "close", "close")]
 
     def __init__(self, segments, fsize, unaccounted):
@@ -396,11 +397,11 @@ class ValidateScreen(ModalScreen):
     `r` applies the witnessed repairs to the working copy (still unsaved); esc /
     v close."""
 
-    CSS = """
+    CSS = th.css("""
     ValidateScreen { align: center middle; }
-    #valbox { width: 86; height: auto; max-height: 90%; border: round #08F9DF;
-              background: #16181C; padding: 1 2; }
-    """
+    #valbox { width: 86; height: auto; max-height: 90%; border: round $TEAL;
+              background: $BG; padding: 1 2; }
+    """)
     BINDINGS = [("escape", "close", "close"), ("v", "close", "close"),
                 ("r", "repair", "repair")]
 
@@ -447,16 +448,16 @@ class RegionsScreen(ModalScreen):
     file), x extracts it, e extracts every region. dismiss()es with a dict
     {action: descend|extract|extract_all, index: row}, or None on esc."""
 
-    CSS = """
+    CSS = th.css("""
     RegionsScreen { align: center middle; }
-    #regbox { width: 92%; height: 84%; border: round #08F9DF;
-              background: #16181C; padding: 1 2; }
-    #reghint { color: #8A9099; padding-bottom: 1; }
+    #regbox { width: 92%; height: 84%; border: round $TEAL;
+              background: $BG; padding: 1 2; }
+    #reghint { color: $SOFT; padding-bottom: 1; }
     #regkeys { height: 1; }
     #regkeys2 { height: 1; padding-bottom: 1; }
     #regtable { height: 1fr; }
-    DataTable { background: #16181C; }
-    """
+    DataTable { background: $BG; }
+    """)
     BINDINGS = [
         # Spelled the same as in the tree. These four used to be space/a/x/e
         # here and expand/edit/follow/strip there -- six single letters meaning
@@ -658,14 +659,14 @@ class DiscScreen(ModalScreen):
     entry, x/a extract one/all. dismiss()es with {action: play|extract|extract_all,
     index} or None on esc."""
 
-    CSS = """
+    CSS = th.css("""
     DiscScreen { align: center middle; }
-    #discbox { width: 92%; height: 84%; border: round #08F9DF;
-               background: #16181C; padding: 1 2; }
-    #dischint { color: #8A9099; padding-bottom: 1; }
+    #discbox { width: 92%; height: 84%; border: round $TEAL;
+               background: $BG; padding: 1 2; }
+    #dischint { color: $SOFT; padding-bottom: 1; }
     #disctable { height: 1fr; }
-    DataTable { background: #16181C; }
-    """
+    DataTable { background: $BG; }
+    """)
     BINDINGS = [
         ("x", "extract", "extract one"),
         ("a", "extract_all", "extract all"),
@@ -728,12 +729,12 @@ class PromptScreen(ModalScreen):
     """A one-line text prompt (output dir, carve range, search pattern...). Enter
     submits, esc cancels. dismiss()es with the typed string, or None."""
 
-    CSS = """
+    CSS = th.css("""
     PromptScreen { align: center middle; }
-    #dpbox { width: 76; height: auto; border: round #FF4D00;
-             background: #16181C; padding: 1 2; }
-    #dphint { color: #8A9099; padding-bottom: 1; }
-    """
+    #dpbox { width: 76; height: auto; border: round $ORANGE;
+             background: $BG; padding: 1 2; }
+    #dphint { color: $SOFT; padding-bottom: 1; }
+    """)
     BINDINGS = [("escape", "cancel", "cancel")]
 
     def __init__(self, prompt, default):
@@ -766,13 +767,13 @@ class YesNoScreen(ModalScreen):
     so neither prompt has to explain which of its buttons do not apply.
     """
 
-    CSS = """
+    CSS = th.css("""
     YesNoScreen { align: center middle; }
-    #ynbox { width: 66; height: auto; border: round #FF4D00;
-             background: #16181C; padding: 1 2; }
-    #ynmsg { color: #C9CDD3; padding-bottom: 1; }
+    #ynbox { width: 66; height: auto; border: round $ORANGE;
+             background: $BG; padding: 1 2; }
+    #ynmsg { color: $FG; padding-bottom: 1; }
     #ynbtns { height: auto; }
-    """
+    """)
     # The buttons are a convenience, not the interface: this prompt guards a
     # loudness hazard, so it has to be answerable without a mouse.
     BINDINGS = [
@@ -820,13 +821,13 @@ class ForcedScreen(ModalScreen):
     actually at the offset claimed. dismiss()es with a format id, or None.
     """
 
-    CSS = """
+    CSS = th.css("""
     ForcedScreen { align: center middle; }
-    #forcedbox { width: 96; height: auto; max-height: 90%; border: round #08F9DF;
-                 background: #16181C; padding: 1 2; }
-    #forcedhint { color: #565B63; padding-bottom: 1; }
+    #forcedbox { width: 96; height: auto; max-height: 90%; border: round $TEAL;
+                 background: $BG; padding: 1 2; }
+    #forcedhint { color: $DIM; padding-bottom: 1; }
     ForcedScreen DataTable { height: auto; max-height: 60%; }
-    """
+    """)
     BINDINGS = [("escape", "cancel", "cancel")]
 
     def __init__(self, rows, title):
@@ -840,7 +841,11 @@ class ForcedScreen(ModalScreen):
         with Vertical(id="forcedbox"):
             t = Text()
             t.append("forced parse  ", style=f"bold {ACCENT}")
-            t.append(f"{self.name}\n", style=SOFT)
+            # title_text, not `name` -- the comment three lines above the
+            # constructor says exactly why it was stored under another name,
+            # and then this read `name` anyway, so the header of the
+            # forced-parse screen said "forced parse  None".
+            t.append(f"{self.title_text}\n", style=SOFT)
             t.append(f"{len(self.rows)} walker(s) produced something. ",
                      style=SOFT)
             t.append("None of them verified a magic number", style=SEV["warn"])

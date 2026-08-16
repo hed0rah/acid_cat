@@ -150,3 +150,62 @@ class TestTheGuidesAreNarrow:
                 await pilot.pause(0.3)
                 assert app.query_one("#tree").guide_depth == 2
         _run(scenario)
+
+
+class TestTheExpandArrowsFitInOneCell:
+    """A glyph the terminal draws two cells wide, in a one-cell slot, is a
+    glyph with its tip cut off.
+
+    Textual's defaults are U+25B6 and U+25BC, both East Asian Width AMBIGUOUS,
+    which a terminal is free to render double-width -- and one with an emoji
+    font behind it usually does, since U+25B6 doubles as an emoji. The small
+    triangles are Neutral, so they are one cell wherever they are drawn.
+    """
+
+    def _icons(self, app):
+        tree = app.query_one("#tree")
+        return tree.ICON_NODE + tree.ICON_NODE_EXPANDED
+
+    def test_no_arrow_glyph_is_ambiguous_width(self, wav):
+        import unicodedata
+
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(120, 30)) as pilot:
+                await pilot.pause(0.3)
+                for ch in self._icons(app):
+                    if not ch.strip():
+                        continue
+                    w = unicodedata.east_asian_width(ch)
+                    assert w == "N", (
+                        f"U+{ord(ch):04X} {unicodedata.name(ch)} has width "
+                        f"{w!r}; a terminal may draw it two cells wide and "
+                        f"clip it")
+        _run(scenario)
+
+    def test_the_arrows_are_not_the_textual_defaults(self, wav):
+        """If a Textual upgrade resets them, this says so rather than the tips
+        quietly going missing again."""
+        from textual.widgets import Tree as _Tree
+
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(120, 30)) as pilot:
+                await pilot.pause(0.3)
+                tree = app.query_one("#tree")
+                assert tree.ICON_NODE != _Tree.ICON_NODE
+                assert tree.ICON_NODE_EXPANDED != _Tree.ICON_NODE_EXPANDED
+        _run(scenario)
+
+    def test_an_arrow_is_actually_drawn(self, wav):
+        """The narrow glyph has to reach the screen, not just the attribute."""
+        async def scenario():
+            app = AcidcatTUI(wav)
+            async with app.run_test(size=(120, 30)) as pilot:
+                await pilot.pause(0.3)
+                tree = app.query_one("#tree")
+                drawn = "".join(
+                    "".join(seg.text for seg in tree.render_line(y))
+                    for y in range(min(6, tree.size.height)))
+                assert "\u25be" in drawn or "\u25b8" in drawn, repr(drawn[:80])
+        _run(scenario)

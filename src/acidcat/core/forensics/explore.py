@@ -35,7 +35,6 @@ built. Such bytes render as unaccounted, which is what they are.
 """
 
 from acidcat.core.forensics import locate as locatemod
-from acidcat.core.infra import geometry
 from acidcat.core.walk import walk_bytes
 from acidcat.core.walk.base import Unsupported
 
@@ -91,7 +90,11 @@ def explore(source, off, length, *, mode="normal", scratch_dir=None):
         chunks = None
         out["warnings"].append(f"walk failed: {e.__class__.__name__}: {e}")
     if chunks:
-        geometry.normalize(chunks, len(data))
+        # NOT normalized again here. `walk_bytes` returns through the walk
+        # boundary, which has already normalized -- so payload_base is filled,
+        # and a second pass would read "someone declared this" and promote
+        # every defaulted chunk to declared. That is the unverified-annotation
+        # -trusted case geometry.py exists to refuse.
         out.update(engine="walker", label=label,
                    chunks=_rebase_chunks(chunks, off))
         out["warnings"].extend(warns or [])
@@ -113,6 +116,15 @@ def _rebase_chunks(chunks, base):
         for key in ("offset", "payload_base"):
             if isinstance(c.get(key), int):
                 c[key] += base
+        # Fields carry offsets relative to their chunk, so they follow for
+        # free -- but `xref` is an ABSOLUTE pointer the walker resolved inside
+        # the slice, and the UI follows it against the whole file. Left
+        # un-rebased it lands somewhere else entirely, and silently, because
+        # both numbers are valid offsets into something. A FLAC SEEKTABLE
+        # inside a located region is the case that finds this.
+        for fl in c.get("fields") or []:
+            if isinstance(fl.get("xref"), int):
+                fl["xref"] += base
     return chunks
 
 

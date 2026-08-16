@@ -502,7 +502,13 @@ def _joins_across_a_segment_edge(a, b, seg_size, slack):
         return False
     # the gap has to CONTAIN a boundary; two regions that merely sit near each
     # other in the middle of a segment are two regions
-    if (b_off // seg_size) == (a_end // seg_size) and b_off % seg_size != 0:
+    # `a_end - 1`, because a_end is EXCLUSIVE. A stream whose last complete
+    # page ends exactly on the boundary has a_end == the boundary, which floor
+    # division puts in the NEXT segment -- the quotients then match and the
+    # pair is read as two regions that merely sit near each other. That is
+    # precisely the case this function exists for, and it was the one case it
+    # refused.
+    if (b_off // seg_size) == ((a_end - 1) // seg_size):
         return False
     if a.get("format") != b.get("format"):
         return False

@@ -48,6 +48,7 @@ from acidcat.core.infra.fieldcodec import (
 
 # brand theme (ink / gunmetal + teal/orange accents); source of truth is
 # acidcat/tui_theme.py, imported by the playground TUI too so they cannot drift.
+from acidcat import tui_theme as th
 from acidcat.tui_theme import (
     PALETTE, ACCENT, FG, SOFT, DIM, GUTTER, PEND, AMBER, SEV, TEAL, byte_color,
     ramp_color,
@@ -147,8 +148,8 @@ class NodeInfo:
 
 
 class AcidcatTUI(App):
-    CSS = """
-    Screen { background: #16181C; }
+    CSS = th.css("""
+    Screen { background: $BG; }
     #left { width: 50%; }
     #right { width: 50%; }
     /* The left column's top box, deliberately the same fixed height as
@@ -157,19 +158,19 @@ class AcidcatTUI(App):
        room for whatever else belongs in a quick readout. It scrolls, so a
        genuinely damaged file's longer list stays reachable without the box
        resizing and shifting everything below it. */
-    #idbox { height: 6; border: round #3A3E45; }
-    #idbox.findings { border: round #FF4D00; }
+    #idbox { height: 6; border: round $GUTTER; }
+    #idbox.findings { border: round $ORANGE; }
     #title { height: auto; padding: 0 1; }
     #anom { height: auto; padding: 0 1; }
-    #tree { border: round #08F9DF; padding: 0 1; }
+    #tree { border: round $TEAL; padding: 0 1; }
     /* Fixed, not auto, and the same height as #idbox opposite it. On auto it
        grew when a summary was long enough to wrap, stealing rows from the hex
        pane and making the layout jump as you moved through the tree. Four
        content rows always, and a long line clips. */
-    #detail { height: 6; border: round #3A3E45; padding: 0 1; color: #C9CDD3; }
-    #hexwrap { border: round #08F9DF; }
+    #detail { height: 6; border: round $GUTTER; padding: 0 1; color: $FG; }
+    #hexwrap { border: round $TEAL; }
     #hex { padding: 0 1; }
-    #editbar { dock: bottom; height: 3; border: round #FF4D00; background: #16181C; }
+    #editbar { dock: bottom; height: 3; border: round $ORANGE; background: $BG; }
     #editbar.hidden { display: none; }
 
     /* Zoom. A hex row is 76 columns wide and the right pane is 52% of the
@@ -182,10 +183,10 @@ class AcidcatTUI(App):
     Screen.zoom-hex #right { width: 100%; }
     Screen.zoom-tree #right { display: none; }
     Screen.zoom-tree #left { width: 100%; }
-    Tree { background: #16181C; }
-    Tree > .tree--guides { color: #3A3E45; }
-    Tree > .tree--guides-selected { color: #08F9DF; }
-    """
+    Tree { background: $BG; }
+    Tree > .tree--guides { color: $GUTTER; }
+    Tree > .tree--guides-selected { color: $TEAL; }
+    """)
 
     # Every binding used to carry show=True, so the footer listed all of them and
     # the ones a user reaches for most -- edit, in particular -- were pushed off
@@ -320,6 +321,10 @@ class AcidcatTUI(App):
         # genuinely maps the other way: path -> node, so a rebuild can find
         # again what was open before it.
         self._pathnode = {}       # stable path -> node, rebuilt with the tree
+        # Bumped by every _load. A worker captures it when it is scheduled and
+        # its result is dropped if the number has moved on -- see
+        # _explore_landed for why an exception could not carry this.
+        self._generation = 0
         self._profile = None      # edit profile of the current file (WAV/AIFF/...)
         self._prefer_be = False   # format is big-endian: bias infer_enc that way
         self._cur_node = None     # last highlighted tree node
@@ -382,6 +387,14 @@ class AcidcatTUI(App):
                     yield Static(id="title")
                     yield Static(id="anom")
                 tree = Tree("file", id="tree")
+                # Textual's default expand arrows are U+25B6 and U+25BC, whose
+                # East Asian Width is AMBIGUOUS -- a terminal is free to render
+                # them two cells wide, and one with an emoji font behind it
+                # usually does, because U+25B6 also has an emoji presentation.
+                # Drawn into a one-cell slot they come out clipped. The small
+                # triangles are Neutral width, so they are one cell everywhere.
+                tree.ICON_NODE = "▸ "          # small right triangle
+                tree.ICON_NODE_EXPANDED = "▾ "  # small down triangle
                 # Four columns of indent per level is fine two deep and costs
                 # a third of a split pane four deep. The guides are still
                 # drawn, just narrower.
@@ -405,6 +418,16 @@ class AcidcatTUI(App):
 
     def on_unmount(self):
         self.action_stop_play(quiet=True)
+        # Every frame owns temps, and quitting is a way of leaving all of them.
+        # `_discard_work` frees the current working copy only, so a session that
+        # descended anywhere leaked one carved region per descend -- plus each
+        # ancestor's working copy -- and did it silently, into %TEMP%.
+        # `_open_path` already drops the whole stack for exactly this reason;
+        # this is the same loop, for the other way out.
+        for fr in list(self._stack) + list(self._forward):
+            self._drop_frame(fr)
+        self._stack, self._forward = [], []
+        self._drop_frame(self._snapshot())
         self._discard_work()
         self._clean_region_tmps()
 
@@ -951,27 +974,49 @@ class AcidcatTUI(App):
         """
         if background and self.is_running:
             placeholder = node.add_leaf(Text("  looking inside...", style=DIM))
+            # Captured at SCHEDULING time, not read at execution time. The
+            # worker can run for seconds; `u`, `U`, a descend or any edit
+            # changes self.work underneath it, and reading it later would walk
+            # a different file at the old offsets and bind the result into the
+            # current view as though it belonged there.
+            gen, source = self._generation, (self.work or self.src)
             self.run_worker(
                 lambda: self._explore_worker(node, placeholder, poff, plen,
-                                             depth),
+                                             depth, gen, source),
                 thread=True, exclusive=False, group="explore")
             return
         self._explore_apply(node, explore.explore(
             self.work or self.src, poff, plen, mode=self._locate_mode),
             poff, plen, depth)
 
-    def _explore_worker(self, node, placeholder, poff, plen, depth):
+    def _explore_worker(self, node, placeholder, poff, plen, depth, gen, source):
         """The blocking half, on a thread. Touches no widgets."""
-        res = explore.explore(self.work or self.src, poff, plen,
-                              mode=self._locate_mode)
+        res = explore.explore(source, poff, plen, mode=self._locate_mode)
         self.call_from_thread(self._explore_landed, node, placeholder, res,
-                              poff, plen, depth)
+                              poff, plen, depth, gen)
 
-    def _explore_landed(self, node, placeholder, res, poff, plen, depth):
+    def _explore_landed(self, node, placeholder, res, poff, plen, depth, gen):
+        """Drop the answer if the view it was computed for is gone.
+
+        This used to guard by catching an exception from `placeholder.remove()`,
+        on the belief that removing a node from a cleared tree raises. It does
+        not, and the belief was worse than useless. Measured against Textual
+        8.2.8: `Tree.clear()` builds a NEW root and resets `_current_id` to 0
+        WITHOUT clearing `_tree_nodes`, so the rebuilt tree hands out the same
+        ids again; the stale node is still listed by its own detached parent, so
+        `remove()` succeeds, and its last act is `del _tree_nodes[self.id]` --
+        deleting the LIVE node that inherited that id. The guard silently
+        corrupted the tree it was meant to protect.
+
+        A generation counter is checked instead, because the question is "is
+        this answer still about the view on screen", and only `_load` knows.
+        """
+        if gen != self._generation:
+            return
         try:
             placeholder.remove()
         except Exception:
-            return          # the tree was rebuilt under us; the answer is stale
+            return
         self._explore_apply(node, res, poff, plen, depth)
 
     def _explore_apply(self, node, res, poff, plen, depth):
@@ -2026,6 +2071,11 @@ class AcidcatTUI(App):
         info = self._info(self._cur_node) if self._cur_node is not None else None
         cur_key = None if info is None else info.path
         expanded = self._open_paths(tree.root)
+        # Everything built before this line belongs to a view that is about to
+        # stop existing. Any explore worker still in flight for it will see the
+        # number move and drop its answer rather than binding detached nodes
+        # into the new tree.
+        self._generation += 1
         tree.clear()
         self._pathnode = {}       # rebuilt with the tree
         self._allnodes = []       # rebuilt each load, for goto/search/finding jumps

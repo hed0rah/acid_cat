@@ -121,3 +121,40 @@ class TestItIsSafeOnTheOrdinaryCase:
         rs = [_r(0, 1_000_000), _r(1_000_000, 2_000_000),
               _r(3_000_000, 4_000_000)]
         assert len(locatemod.stitch_segments(list(rs), SEG)) == 3
+
+
+class TestTheBoundaryItselfIsIncluded:
+    """`a_end` is exclusive, so a stream whose last complete page ends exactly
+    ON a segment boundary has a_end == the boundary. Floor division put that in
+    the NEXT segment, the two quotients matched, and the pair read as two
+    regions that merely sit near each other -- the one case this whole function
+    exists for was the one case it refused.
+
+    Rare (roughly page-size over segment-size per boundary) and exactly the
+    boundary-we-drew class of defect, so it fails silently as a split song.
+    """
+
+    def test_a_stream_ending_on_the_boundary_is_rejoined(self):
+        a, b = _r(SEG - 900_000, SEG), _r(SEG + 3_000, SEG + 2_000_000)
+        out = locatemod.stitch_segments([a, b], SEG)
+        assert len(out) == 1, "a page landing flush on the boundary split a song"
+        assert out[0]["end"] == SEG + 2_000_000
+
+    def test_a_region_ending_up_to_the_boundary_is_a_split(self):
+        """Up to AND including it. Not past it: a region ending at SEG+1 was
+        produced BY the next segment's scan, so no boundary of ours ever cut
+        it -- that is two regions inside one segment, which is the case the
+        predicate is right to refuse. The first version of this test asserted
+        otherwise and was wrong about which side the seam is on."""
+        for a_end in (SEG - 1, SEG):
+            pair = [_r(SEG - 500_000, a_end), _r(SEG + 4_000, SEG * 2)]
+            assert len(locatemod.stitch_segments(pair, SEG)) == 1, a_end
+        past = [_r(SEG + 1, SEG + 2_000), _r(SEG + 4_000, SEG * 2)]
+        assert len(locatemod.stitch_segments(past, SEG)) == 2, (
+            "two regions inside one segment were joined")
+
+    def test_it_did_not_become_a_join_everything_rule(self):
+        """The predicate got looser; it must not have got loose enough to
+        merge two regions sitting in the middle of one segment."""
+        pair = [_r(1_000, 500_000), _r(501_000, 900_000)]
+        assert len(locatemod.stitch_segments(pair, SEG)) == 2
