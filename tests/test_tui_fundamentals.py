@@ -60,7 +60,22 @@ _EXEMPT = {"q", "escape", "space", "enter"}
 #
 # up/down are NOT here. They are gated for the graph too, but in the swept
 # state they fall through to the tree cursor, so the sweep still bites on them.
-_GATED = {"left", "right"}
+# The region actions go the same way: check_action turns them off when nothing
+# has been located, so in the swept state they are not bound rather than
+# bound-and-silent.
+#
+# Each key names the file that presses it, because "exercised somewhere else"
+# is only a redirect if the somewhere is checked. It was one shared filename
+# when every gated key lived in one place; the region keys are armed by a
+# different state and belong to a different file.
+_GATED = {
+    "left": "test_viz_scale_and_scope.py",
+    "right": "test_viz_scale_and_scope.py",
+    "space": "test_tui_one_vocabulary.py",
+    "A": "test_tui_one_vocabulary.py",
+    "X": "test_tui_one_vocabulary.py",
+    "E": "test_tui_one_vocabulary.py",
+}
 
 
 def _bound_keys():
@@ -139,8 +154,9 @@ def test_the_gated_keys_are_actually_gated(wav):
                 key = b[0] if isinstance(b, tuple) else b.key
                 if key in _GATED:
                     actions[key] = b[1] if isinstance(b, tuple) else b.action
-            assert set(actions) == _GATED, (
-                f"_GATED names keys that are not bound: {_GATED - set(actions)}")
+            assert set(actions) == set(_GATED), (
+                f"_GATED names keys that are not bound: "
+                f"{set(_GATED) - set(actions)}")
             for key, action in actions.items():
                 assert app.check_action(action, ()) is False, (
                     f"{key} is live in the swept state, so exempting it from "
@@ -152,12 +168,14 @@ def test_every_gated_key_is_exercised_somewhere_else(wav):
     """The redirect half: the exemption names a file, so that file must press
     them. Cheap to check, and it fails if those tests are ever deleted."""
     import pathlib
-    other = pathlib.Path(__file__).parent / "test_viz_scale_and_scope.py"
-    assert other.is_file(), "the tests _GATED redirects to are gone"
-    text = other.read_text(encoding="utf-8")
-    for key in _GATED:
+    here = pathlib.Path(__file__).parent
+    for key, filename in _GATED.items():
+        other = here / filename
+        assert other.is_file(), f"{key} redirects to {filename}, which is gone"
+        text = other.read_text(encoding="utf-8")
         assert f'press("{key}")' in text, (
-            f"{key} is exempted here and pressed nowhere else")
+            f"{key} is exempted here and pressed nowhere else "
+            f"({filename} does not press it)")
 
 
 def _expanded(tree):

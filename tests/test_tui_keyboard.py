@@ -36,6 +36,11 @@ class _PlayProbe:
     _act_range = AcidcatTUI._act_range
     _info = AcidcatTUI._info
     _cur_node = None
+    # Play asks whether the SELECTED BYTES decode before it reinterprets them
+    # as PCM. These tests are about the reinterpreting path, so the probe says
+    # no -- exercising the guard rather than the decoder.
+    _decodable_at = staticmethod(lambda *a, **kw: None)
+    _play_temp = staticmethod(lambda *a, **kw: None)
 
     # Default to a format the player CANNOT decode. These tests are about the
     # guard that stops raw bytes being reinterpreted as PCM, and a decodable

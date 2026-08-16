@@ -19,6 +19,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Input, Static, Tree
 
 from acidcat.core.infra import geometry
+from acidcat.core.infra.sniff import sniff_bytes
 from acidcat.core.walk import walk_file, Unsupported
 from acidcat.core.forensics import anomalies as ac_anom
 from acidcat.core.forensics import explore
@@ -191,15 +192,15 @@ class AcidcatTUI(App):
     # the end. The footer now carries the common path; `?` lists everything.
     BINDINGS = [
         ("q", "request_quit", "quit"),
-        ("g", "goto", "goto offset"),
+        ("g", "goto", "goto"),
         ("slash", "search", "search"),
         Binding("n", "search_next", "next match", show=False),
         Binding("N", "search_prev", "prev match", show=False),
         Binding("f", "next_finding", "next finding", show=False),
-        ("x", "follow_xref", "follow"),
+        Binding("x", "follow_xref", "follow", show=False),
         Binding("y", "yank", "yank hex", show=False),
         Binding("d", "diff", "pending changes", show=False),
-        ("m", "map", "byte map"),
+        ("m", "map", "map"),
         Binding("b", "cycle_view", "byte view", show=False),
         Binding("r", "viz_scope", "viz: file/region", show=False),
         Binding("S", "viz_scale", "viz: scale", show=False),
@@ -220,14 +221,14 @@ class AcidcatTUI(App):
         Binding("ctrl+left", "tree_pan(-8)", show=False, priority=True),
         Binding("ctrl+right", "tree_pan(8)", show=False, priority=True),
         ("p", "play", "play"),
-        ("full_stop", "stop_play", "stop"),
+        Binding("full_stop", "stop_play", "stop", show=False),
         Binding("v", "validate", "validate", show=False),
-        ("ctrl+s", "save", "save"),
+        Binding("ctrl+s", "save", "save", show=False),
         Binding("ctrl+z", "undo", "undo", show=False),
         Binding("ctrl+r", "redo", "redo", show=False),
         Binding("o", "open", "open file", show=False),
-        Binding("l", "locate_regions", "locate regions", show=False),
-        Binding("F", "force_parse", "force a walker", show=False),
+        Binding("l", "locate_regions", "regions"),
+        Binding("F", "force_parse", "force/names"),
         Binding("pagedown", "hex_page_down", "hex: next page", show=False,
                 priority=True),
         Binding("pageup", "hex_page_up", "hex: previous page", show=False,
@@ -235,7 +236,7 @@ class AcidcatTUI(App):
         ("u", "nav_back", "back"),
         # not shown: the footer has a hard readability cap and `u` implies it
         Binding("U", "nav_forward", "forward", show=False),
-        ("e", "edit_field", "edit field"),
+        ("e", "edit_field", "edit"),
         # ctrl+e, not tab: tab moves focus, and entering an edit mode should
         # take a modifier. Priority because Textual binds ctrl+e at the screen
         # level in some versions.
@@ -243,22 +244,35 @@ class AcidcatTUI(App):
         Binding("ctrl+t", "toggle_mode", "value/hex", show=False),
         Binding("w", "edit", "edit tags", show=False),
         Binding("s", "strip", "strip meta", show=False),
-        ("z", "zoom", "zoom pane"),
+        ("z", "zoom", "zoom"),
         # priority: Textual binds tab/shift+tab to focus_next/focus_previous at
         # the screen level and consumes them first, walking every focusable
         # widget in DOM order rather than pane to pane.
         Binding("tab", "focus_pane", "focus pane", show=False, priority=True),
         Binding("shift+tab", "focus_pane_back", "focus pane back",
                 show=False, priority=True),
-        ("a", "expand_all", "expand"),
-        ("c", "collapse_all", "collapse"),
+        Binding("a", "expand_all", "expand", show=False),
+        Binding("c", "collapse_all", "collapse", show=False),
         ("question_mark", "help", "help"),
         Binding("escape", "cancel_edit", "cancel edit", show=False),
         Binding("plus", "more_rows", "show more rows", show=False),
         Binding("equals_sign", "more_rows", "show more rows", show=False),
         # scan controls: priority so they beat the tree's own space/enter while a
         # scan runs; check_action keeps them dormant otherwise.
-        Binding("space", "pause_scan", "pause scan", priority=True, show=False),
+
+
+        # Region actions, spelled the same here as in the region list. Six
+        # single letters used to mean one thing in the tree and another in the
+        # list (a c e m s x), so every action had to be relearned per screen.
+        # The rule now: lowercase looks, SHIFT acts on the selected regions.
+        # ONE binding for space. There were two -- pause_scan with priority
+        # and select_region after it -- and the first match wins even when its
+        # check_action says no, so the key never reached the second and marking
+        # a region silently did nothing. The action decides instead.
+        Binding("space", "space_key", "select", priority=True),
+        Binding("A", "select_all_regions", "all/none", show=False),
+        Binding("X", "extract_selected", "extract"),
+        Binding("E", "extract_all_regions", "extract all", show=False),
         Binding("enter", "keep_scan", "keep scan", priority=True, show=False),
     ]
 
@@ -268,6 +282,15 @@ class AcidcatTUI(App):
     def check_action(self, action, parameters):
         if action in ("pause_scan", "keep_scan"):
             return self._scanning        # only live during a scan
+        # The region actions are only real once there are regions, and a footer
+        # advertising four keys that decline is a footer that teaches nothing.
+        if action in ("select_region", "select_all_regions",
+                      "extract_selected", "extract_all_regions"):
+            return bool(self._regions)
+        if action == "space_key":
+            # live during a scan (to pause it) and once there is something to
+            # mark; dormant in between, where it would do neither
+            return bool(self._scanning or self._regions)
         if action in self._VIZ_ARROWS:
             # `_view != "hex"` is checked first and on purpose: it is a plain
             # attribute, so this stays cheap and cannot touch the DOM before
@@ -2905,6 +2928,23 @@ class AcidcatTUI(App):
             self.notify("highlight a region with bytes to play", severity="warning")
             return
 
+        # Do THESE BYTES decode on their own? Asked of the bytes rather than of
+        # the open file, which is the whole bug: an Ogg sitting inside a .tmod
+        # is an Ogg, and `self.fmt` says "unsupported" because it describes the
+        # archive. So `p` on a located song played it as raw PCM -- a burst of
+        # noise -- while the identical bytes decoded correctly one keypress
+        # later, after descending made them "the file". Sniffing the range
+        # works at any depth and for anything a decoder handles.
+        fmt = self._decodable_at(off, length)
+        if fmt:
+            path = self._play_temp(off, length)
+            if path:
+                self.action_stop_play(quiet=True)
+                self._play = play.play(path, block=False)
+                self.notify(f"decoding {fmt} at 0x{off:08x} "
+                            f"({length:,} bytes) -- . to stop")
+                return
+
         # Auditioning a header, a tag or a chunk of text as PCM produces a burst
         # of loud noise at whatever volume the user happens to be on. That is a
         # real hazard with headphones, and it is easy to hit -- every field node
@@ -2926,6 +2966,140 @@ class AcidcatTUI(App):
                              lambda ok: ok and self._do_play(off, length))
             return
         self._do_play(off, length)
+
+    def _decodable_at(self, off, length):
+        """The format these bytes are, if a decoder can take them whole.
+
+        `_decodable` asks about the OPEN FILE and is right for that question --
+        "hand the player this file". This asks about a RANGE, which is the
+        question `p` actually has when the thing you selected is a song inside
+        an archive.
+        """
+        if not self.work or off is None or not length:
+            return None
+        head = _read(self.work, off, 64)
+        if not head:
+            return None
+        try:
+            fmt = sniff_bytes(head)
+        except Exception:
+            return None
+        if fmt and any(k in str(fmt).lower() for k in self._DECODABLE):
+            return str(fmt)
+        return None
+
+    def _play_temp(self, off, length):
+        """Carve a range to a file the player can open, owned by this view."""
+        try:
+            fd, tmp = tempfile.mkstemp(prefix="acidcat_play_", suffix=".bin")
+            with os.fdopen(fd, "wb") as f:
+                with open(self.work, "rb") as src:
+                    src.seek(off)
+                    remaining = length
+                    while remaining > 0:
+                        block = src.read(min(1 << 20, remaining))
+                        if not block:
+                            break
+                        f.write(block)
+                        remaining -= len(block)
+            self._region_tmps.append(tmp)
+            return tmp
+        except OSError as e:
+            self.notify(f"could not carve those bytes to play: {e}",
+                        severity="warning")
+            return None
+
+    def _region_index_of(self, node):
+        """Which located region this node IS, or the one it lives inside.
+
+        A chunk found by exploring a region belongs to that region, so marking
+        it marks the thing that would actually be extracted -- otherwise the
+        selection only works on one row of the tree and looks broken everywhere
+        else.
+        """
+        cur = node
+        while cur is not None:
+            info = self._info(cur)
+            if info is not None and info.region is not None:
+                return info.region
+            cur = cur.parent
+        return None
+
+    def action_space_key(self):
+        """space: pause a running scan, or mark a region when none is running.
+
+        One key, one binding, one action that knows which situation it is in.
+        Two bindings on the same key looked like it worked and did not.
+        """
+        if self._scanning:
+            self.action_pause_scan()
+            return
+        self.action_select_region()
+
+    def action_select_region(self):
+        """Mark the region under the cursor for extraction."""
+        if self._scanning:
+            return
+        idx = self._region_index_of(self._cur_node)
+        if idx is None:
+            self.notify("nothing to select here -- highlight a located region",
+                        severity="warning")
+            return
+        if idx in self._region_sel:
+            self._region_sel.discard(idx)
+        else:
+            self._region_sel.add(idx)
+        self._refresh_region_marks()
+        self.notify(f"{len(self._region_sel)} region(s) selected"
+                    f"  --  X extracts them, A selects all")
+
+    def action_select_all_regions(self):
+        """A: all or none, whichever the current state is not."""
+        if not self._regions:
+            self.notify("no regions located yet -- expand the file or press l",
+                        severity="warning")
+            return
+        if len(self._region_sel) == len(self._regions):
+            self._region_sel = set()
+        else:
+            self._region_sel = set(range(len(self._regions)))
+        self._refresh_region_marks()
+        self.notify(f"{len(self._region_sel)} region(s) selected")
+
+    def action_extract_selected(self):
+        """X: extract exactly what is marked."""
+        if not self._regions:
+            self.notify("no regions located yet", severity="warning")
+            return
+        if not self._region_sel:
+            self.notify("nothing selected -- space marks a region, "
+                        "A marks them all, E extracts everything",
+                        severity="warning")
+            return
+        self._extract([self._regions[i] for i in sorted(self._region_sel)
+                       if i < len(self._regions)])
+
+    def action_extract_all_regions(self):
+        """E: extract every located region, selection or not."""
+        if not self._regions:
+            self.notify("no regions located yet", severity="warning")
+            return
+        self._extract(list(self._regions))
+
+    def _refresh_region_marks(self):
+        """Redraw the mark on every region row, so the tree and the list agree
+        about what is selected rather than each keeping its own idea."""
+        tree = self.query_one("#tree", Tree)
+        for node in tree.root.children:
+            info = self._info(node)
+            if info is None or info.region is None:
+                continue
+            label = node.label
+            plain = label.plain if hasattr(label, "plain") else str(label)
+            marked = info.region in self._region_sel
+            stripped = plain[4:] if plain[:4] in ("[x] ", "[ ] ") else plain
+            node.set_label(Text(("[x] " if marked else "[ ] ") + stripped,
+                                style=TEAL if marked else None))
 
     def _chunk_name_at(self, off):
         for c in self.chunks:

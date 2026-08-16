@@ -189,6 +189,24 @@ class HelpScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         t = Text()
         t.append("acidcat tui  --  keys\n\n", style=f"bold {ACCENT}")
+        # The map before the keys. Two of these screens are pixel-identical
+        # apart from a line of title text, which is not enough to tell them
+        # apart from the inside.
+        t.append("Three screens.  ", style=f"bold {PEND}")
+        t.append("The FILE view you start in: tree on the left, bytes on the "
+                 "right. The REGION LIST (l): the same regions as a table you "
+                 "can act on in bulk. A DESCENDED view (enter, from the list): "
+                 "one region opened as though it were a file of its own, so "
+                 "its offsets start again at zero -- u comes back out.\n\n",
+                 style=SOFT)
+        t.append("lowercase looks, SHIFT works on regions.  ", style=f"bold {PEND}")
+        t.append("space marks one, A marks all, X extracts what is marked, E "
+                 "extracts everything -- spelled the same in the tree and in "
+                 "the list. The list's own tools are capitals for the same "
+                 "reason (M mode, T lens, G shape, C carve): no letter should "
+                 "mean one thing here and another there. One used to be worse "
+                 "than confusing -- `s` was the shape column in the list and "
+                 "STRIP METADATA in the tree.\n\n", style=SOFT)
         rows = [
             ("arrows / enter", "move + expand the tree"),
             ("ctrl+left/right", "pan the tree sideways when a deep branch runs "
@@ -211,8 +229,6 @@ class HelpScreen(ModalScreen):
             ("S", "byte view: vertical scale (entropy 0-8 or auto; "
                   "histogram linear, log, clipped)"),
             ("u / U", "back and forward through the views you descended"),
-            ("F", "force a walker on an unrecognised file, or scan forensics "
-                  "on one too large to have been scanned"),
             ("arrows", "on a focused graph: up/down change the scale, "
                        "left/right move the selection (a region-scoped graph "
                        "follows it live)"),
@@ -228,7 +244,17 @@ class HelpScreen(ModalScreen):
             ("ctrl+s", "save to the original (writes a _original backup)"),
             ("ctrl+z / ctrl+r", "undo / redo the last edit"),
             ("o", "open another file"),
-            ("l", "locate audio regions, and list them for extraction"),
+            ("l", "the region list: the same regions as a table, with bulk "
+                  "actions and a name column when the file has a table of "
+                  "contents"),
+            ("F", "two things a stuck view can still do -- force a walker onto "
+                  "a file nothing recognises (this is what finds the NAMES in "
+                  "an archive), and scan forensics on a file too big to have "
+                  "been scanned on open"),
+            ("space", "mark the region under the cursor"),
+            ("A", "mark every region, or none if they all already are"),
+            ("X", "extract only the marked regions"),
+            ("E", "extract every region, marked or not"),
             ("+", "on a '... more rows' line, list more of that chunk's rows"),
             ("esc", "cancel the current edit / prompt"),
             ("q", "quit"),
@@ -426,19 +452,31 @@ class RegionsScreen(ModalScreen):
     #regbox { width: 92%; height: 84%; border: round #08F9DF;
               background: #16181C; padding: 1 2; }
     #reghint { color: #8A9099; padding-bottom: 1; }
+    #regkeys { height: 1; }
+    #regkeys2 { height: 1; padding-bottom: 1; }
     #regtable { height: 1fr; }
     DataTable { background: #16181C; }
     """
     BINDINGS = [
+        # Spelled the same as in the tree. These four used to be space/a/x/e
+        # here and expand/edit/follow/strip there -- six single letters meaning
+        # two things depending on which screen you were looking at, which is
+        # most of why moving between them felt like starting over.
         ("space", "toggle_sel", "select"),
-        ("a", "select_all", "select all/none"),
-        ("x", "extract", "extract selected"),
-        ("e", "extract_all", "extract all"),
-        ("m", "mode", "cycle mode"),
-        ("t", "transforms", "transform lens"),
-        ("c", "carve", "manual carve"),
+        ("A", "select_all", "all/none"),
+        ("X", "extract", "extract"),
+        ("E", "extract_all", "extract all"),
+        # The list's own tools, moved off the letters the tree already spends.
+        # `s` was the dangerous one: shape column here, STRIP METADATA there,
+        # so learning it in one place and reaching for it in the other edits
+        # the file. `m` was costly rather than dangerous -- byte map there,
+        # cycle-mode-and-rescan here.
+        ("M", "mode", "cycle mode"),
+        ("T", "transforms", "transform lens"),
+        ("C", "carve", "manual carve"),
+        ("G", "sparkline", "shape column"),
         ("slash", "search", "byte search"),
-        ("s", "sparkline", "shape column"),
+        ("question_mark", "help", "help"),
         ("escape", "cancel", "back"),
     ]
 
@@ -475,11 +513,17 @@ class RegionsScreen(ModalScreen):
                 id="reghint")
             marked = (f"   {len(self.selected)} selected"
                       if self.selected else "")
+            # Two lines, split by what they do rather than by nothing: looking
+            # at things, then acting on the ones you marked. One undifferentiated
+            # row of eleven keys is a row nobody reads.
             yield Static(
-                Text("enter descend   space select   a all/none   "
-                     "x extract selected   e extract all   m mode   "
-                     "t lens   s shape   c carve   / search   esc back"
-                     + marked, style=SOFT), id="regkeys")
+                Text("look:  enter descend   M mode   T lens   G shape   "
+                     "/ search   C carve   esc back   ? help", style=SOFT),
+                id="regkeys")
+            yield Static(
+                Text("act:   space select   A all/none   X extract sel   "
+                     "E extract all" + marked, style=f"bold {ACCENT}"),
+                id="regkeys2")
             # populate before yield so the table never depends on post-mount
             # query timing (which was flaky for a re-pushed screen)
             t = DataTable(id="regtable")
@@ -598,6 +642,11 @@ class RegionsScreen(ModalScreen):
         """s: toggle the shape column. Re-reads a slice per row, nothing more --
         it never rescans the file."""
         self.dismiss({"action": "shape", "show": not self.show_shape})
+
+    def action_help(self):
+        """? works here too. A screen with its own keys and no way to ask about
+        them is a screen you have to have been told about."""
+        self.app.push_screen(HelpScreen())
 
     def action_cancel(self):
         self.dismiss(None)
