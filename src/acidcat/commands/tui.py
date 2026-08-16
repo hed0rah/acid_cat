@@ -15,6 +15,19 @@ def register(subparsers):
         "tui", help="Interactive terminal inspector/editor (needs acidcat[tui]).")
     p.add_argument("file", nargs="?",
                    help="Audio or synth/DAW preset file. Omit to browse.")
+    # No --theme flag, and that is not an omission.
+    #
+    # tui_theme reads ACIDCAT_THEME once at import, because every consumer does
+    # `from acidcat.tui_theme import ACCENT` and binds the value there. And
+    # `import acidcat` pulls the palette in through core.forensics.viz, which
+    # runs before argparse exists -- so a flag parsed here could only set an
+    # environment variable that nothing would read again. Measured: the flag
+    # was written, and every theme it selected came out as the default.
+    #
+    # The earliest hook that would work is the package __init__, and a library
+    # that reads sys.argv on import is a worse thing to own than an env var.
+    p.epilog = ("Colour theme: set ACIDCAT_THEME=brand|killengn|faterally "
+                "before running, e.g. ACIDCAT_THEME=killengn acidcat tui f.wav")
     p.set_defaults(func=run)
 
 
