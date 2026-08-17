@@ -7,18 +7,17 @@ jobs:
   # Publishing is irreversible: a version number can never be reused on PyPI.
   # The build job used to run alone, so `twine check` passing was the only thing
   # between a tag and the index -- a release could ship a tree whose tests fail.
+  #
+  # That gate was then a hand-written copy of the test workflow, and it had
+  # drifted into being weaker than the thing it stood in for: ONE job, on
+  # ubuntu, on a Python version the matrix does not test, with neither ffmpeg
+  # nor bubblewrap installed. So the least-covered run in the repo was the one
+  # deciding what reached PyPI, and it verified 113 fewer tests than an ordinary
+  # PR did. Calling the real workflow means the gate cannot drift again: there
+  # is only one definition of "the tests pass".
   test:
     name: Test before publishing
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[analysis,mcp,tui,crypto]" pytest
-      - run: pytest -q -rs
+    uses: ./.github/workflows/test.yml
 
   build:
     name: Build sdist + wheel

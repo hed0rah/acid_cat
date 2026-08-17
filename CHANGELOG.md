@@ -8,53 +8,45 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ### Fixed
 
-- **A cap we crossed is no longer a defect the file committed.** A walker that
-  stopped at an internal limit appended a warning, `anomalies.scan` turned every
-  walker warning into a `structure` finding, and findings drive `audit`'s exit
-  code -- so a structurally perfect file exited 1 for being large, and a script
-  doing `audit f || quarantine f` quarantined it. This was live across fourteen
-  walker sites that already announced their caps, which is why the other forty
-  were held back rather than added.
+- **CI was running a suite 85 tests smaller than anyone's local one.**
+  `data/test_formats/` is gitignored and 16 MB, so any test naming a path
+  inside it skipped on every runner: 90 skips beside a green tick, 85 of them
+  that one cause. The suite gating a release was 85 tests smaller than the
+  suite anybody ran locally, and the gap was invisible from both sides. It is
+  what shipped a release whose CI was red on all five platforms while the
+  local run reported 2,826 passing.
 
-  Warnings now carry a kind. `coverage` says our walk stopped early; anything
-  else says the file has something to answer for, and a plain string stays a
-  defect so nothing silently drops out of the findings a user relies on. The
-  kind travels on the warning rather than being read out of its text: matching
-  prose would make the wording of a human-readable string load-bearing across a
-  module boundary, which is the defect fixed in 1.0.0 where the anomaly checks
-  dispatched on a display label.
+  Four committed fixtures now stand in, each for a distinct header path
+  rather than a distinct encoding: 24-bit sample width, WAVE_FORMAT_EXTENSIBLE
+  with a channel mask, big-endian COMM/SSND, and bit depth inside FLAC's
+  STREAMINFO bitfield. Measured on the ubuntu-3.13 runner, 2,743 passed and 90
+  skipped becomes 2,831 passed and 9 skipped: 88 tests that had never run on
+  any runner now run on all five platforms.
 
-  Coverage notes are still reported -- as `info`/`coverage`, sorted below every
-  real finding. A bounded run that says nothing is the thing this project is
-  named for. It just no longer blames the file.
+  A ratchet fails, by file and line, if a test reaches into the gitignored
+  tree again, and checks the stand-ins are COMMITTED against `git ls-files`
+  rather than the filesystem -- the filesystem being exactly what lied the
+  first time.
 
-  The mechanism is a `str` subclass, so all 427 existing warning sites and every
-  consumer keep working untouched; only the fourteen sites that needed
-  classifying were changed. This unblocks the forty deferred cap announcements
-  listed in `tests/test_cap_announcements.py`.
+- **The gate on publishing was the weakest run in the repo.** `publish.yml`
+  carried its own copy of the test job, and the copy had drifted: one job, on
+  ubuntu, on a Python the matrix does not test, with neither ffmpeg nor
+  bubblewrap installed, verifying 113 fewer tests than an ordinary pull
+  request. It now calls `test.yml` directly, so the irreversible action is
+  gated by the full five-platform matrix and there is one definition of "the
+  tests pass" rather than two that can diverge.
 
-### Planned for 1.0.1
+- **Every check ran twice.** A pull request from `develop` matched both the
+  `push` and `pull_request` triggers, costing ten jobs and about 35 minutes of
+  runner time per commit. Grouped on the commit now, so the second trigger
+  supersedes the first; a push with no pull request still gets its own run.
 
-- ~~**Walker cap warnings will stop counting as findings.**~~ Done, above.
-  Original note kept for the reasoning: A walker that stops at
-  an internal limit appends a warning, `anomalies.scan` turns every walker
-  warning into a `structure` finding, and findings drive `audit`'s exit code --
-  so a structurally perfect file that merely crossed one of our own caps exits
-  1, and `audit f || quarantine f` quarantines it. This is recorded here before
-  1.0.0 ships because the README already promises the correct behaviour
-  ("a bounded run is not a failed one -- it says so on stderr and exits by what
-  it actually found"), which makes the change conformance to the published
-  contract rather than a surprise reversal.
-
-  It was not done for 1.0.0 because distinguishing a coverage note from a real
-  defect needs walker warnings to carry a kind. Doing it by matching the text of
-  the message would reintroduce exactly the prose-dispatch bug fixed in this
-  release, where the wording of a display string was load-bearing across a
-  module boundary. That is a walker-contract change and deserves its own
-  release.
-
-  Fourteen further cap sites are held behind the same change, and the cap ledger
-  in `tests/test_cap_announcements.py` lists every one so none is forgotten.
+- **Two tests carried absolute paths from one machine.** The sdist ships
+  `tests/`, so one of them put an account name into every release from 0.55.0
+  onward. Both are opt-in environment variables now
+  (`ACIDCAT_KRZ_CORPUS`, `ACIDCAT_TMOD_SPECIMEN`). Found by scanning the built
+  artifact rather than the working tree, which is the only place it was ever
+  visible.
 
 ## [1.1.1] - 2026-08-16
 
@@ -66,6 +58,11 @@ not a draft to be corrected. 1.1.1 is 1.1.0 plus the fixes below, and is the
 first published build of that work.
 
 ### Fixed
+
+- **A machine's home directory is not a constant.** Two tests carried
+  absolute paths from the machine they were written on, and the sdist ships
+  `tests/`. Both are environment variables now. This is in 1.1.1 because the
+  tag sits on that commit.
 
 - **Three tests that only passed on the machine that wrote them.** No product
   code changes here; all three were defects in the tests.
@@ -134,6 +131,54 @@ never noticed: several places reported a limit of ours as a fact about the file.
   multi-edit mutations found no stray exceptions.
 
 ### Fixed
+
+- **A cap we crossed is no longer a defect the file committed.** A walker that
+  stopped at an internal limit appended a warning, `anomalies.scan` turned every
+  walker warning into a `structure` finding, and findings drive `audit`'s exit
+  code -- so a structurally perfect file exited 1 for being large, and a script
+  doing `audit f || quarantine f` quarantined it. This was live across fourteen
+  walker sites that already announced their caps, which is why the other forty
+  were held back rather than added.
+
+  Warnings now carry a kind. `coverage` says our walk stopped early; anything
+  else says the file has something to answer for, and a plain string stays a
+  defect so nothing silently drops out of the findings a user relies on. The
+  kind travels on the warning rather than being read out of its text: matching
+  prose would make the wording of a human-readable string load-bearing across a
+  module boundary, which is the defect fixed in 1.0.0 where the anomaly checks
+  dispatched on a display label.
+
+  Coverage notes are still reported -- as `info`/`coverage`, sorted below every
+  real finding. A bounded run that says nothing is the thing this project is
+  named for. It just no longer blames the file.
+
+  The mechanism is a `str` subclass, so all 427 existing warning sites and every
+  consumer keep working untouched; only the fourteen sites that needed
+  classifying were changed. This unblocks the forty deferred cap announcements
+  listed in `tests/test_cap_announcements.py`.
+
+### Planned for 1.0.1
+
+- ~~**Walker cap warnings will stop counting as findings.**~~ Done, above.
+  Original note kept for the reasoning: A walker that stops at
+  an internal limit appends a warning, `anomalies.scan` turns every walker
+  warning into a `structure` finding, and findings drive `audit`'s exit code --
+  so a structurally perfect file that merely crossed one of our own caps exits
+  1, and `audit f || quarantine f` quarantines it. This is recorded here before
+  1.0.0 ships because the README already promises the correct behaviour
+  ("a bounded run is not a failed one -- it says so on stderr and exits by what
+  it actually found"), which makes the change conformance to the published
+  contract rather than a surprise reversal.
+
+  It was not done for 1.0.0 because distinguishing a coverage note from a real
+  defect needs walker warnings to carry a kind. Doing it by matching the text of
+  the message would reintroduce exactly the prose-dispatch bug fixed in this
+  release, where the wording of a display string was load-bearing across a
+  module boundary. That is a walker-contract change and deserves its own
+  release.
+
+  Fourteen further cap sites are held behind the same change, and the cap ledger
+  in `tests/test_cap_announcements.py` lists every one so none is forgotten.
 
 - **Ogg songs were cut at 16 MB scan boundaries.** Each segment was analysed
   blind to its neighbours, so a stream crossing an edge was seen twice and the

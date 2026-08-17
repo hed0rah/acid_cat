@@ -7,6 +7,11 @@ on:
     # only ever run on one developer's machine.
     branches: [main, develop]
   pull_request:
+  # Called by publish.yml, so the gate on an irreversible action is this matrix
+  # rather than a thinner copy of it. That copy ran one job on one Python with
+  # no ffmpeg, which made the least-covered run in the repo the one deciding
+  # what reached PyPI.
+  workflow_call:
 
 # A PR from develop matches BOTH triggers, so every check ran twice: ten jobs
 # for one commit, around 35 minutes of runner time, and two identical rows per
