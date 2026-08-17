@@ -138,6 +138,85 @@ def corpus_or_fixture(name, small):
 # a plain WAV for the tests that just need real audio to point at
 CORPUS_WAV = corpus_or_fixture(os.path.join("generated", "src.wav"), "tone.wav")
 
+# The rest of the corpus, each with a committed stand-in, because a test that
+# names a gitignored path does not fail on a runner -- it SKIPS, and a skip is a
+# green run that checked nothing. 85 of CI's 90 skips were this one cause, so
+# the suite that gates a release was 85 tests smaller than the suite anybody
+# ran locally, and the gap was invisible from either side.
+#
+# The name is still the big corpus file, so a machine that has it keeps
+# exercising the real specimen; only the fallback is new.
+CORPUS_WAV_GS = corpus_or_fixture("gs-16b-2c-44100hz.wav", "tone.wav")
+CORPUS_MP3 = corpus_or_fixture(os.path.join("generated", "mp3_44100.mp3"),
+                               "tone.mp3")
+CORPUS_MP3_GS = corpus_or_fixture("gs-16b-2c-44100hz.mp3", "tone.mp3")
+CORPUS_OGG = corpus_or_fixture("gs-16b-2c-44100hz.ogg", "tone.ogg")
+CORPUS_FLAC = corpus_or_fixture("gs-16b-2c-44100hz.flac", "tone.flac")
+CORPUS_M4A = corpus_or_fixture("gs-16b-2c-44100hz.m4a", "tone.m4a")
+
+# Structurally distinct rather than differently encoded: 24-bit width,
+# WAVE_FORMAT_EXTENSIBLE with a channel mask, big-endian AIFF, and bit depth
+# living in FLAC's STREAMINFO bitfield. Each is the only committed file
+# exercising its header path.
+CORPUS_WAV24 = corpus_or_fixture("wav24.wav", "tone24.wav")
+CORPUS_WAV51 = corpus_or_fixture("wav51.wav", "tone51.wav")
+CORPUS_AIFF = corpus_or_fixture(os.path.join("generated", "aiff_pcm.aiff"),
+                                "tone.aiff")
+CORPUS_FLAC24 = corpus_or_fixture(os.path.join("generated", "flac24.flac"),
+                                  "tone24.flac")
+
+
+# For call sites that name a specimen rather than holding a constant -- a
+# parametrized list, say, where the name is also the output filename.
+_STANDIN = {
+    "gs-16b-2c-44100hz.wav": "tone.wav",
+    "gs-16b-2c-44100hz.mp3": "tone.mp3",
+    "gs-16b-2c-44100hz.ogg": "tone.ogg",
+    "gs-16b-2c-44100hz.flac": "tone.flac",
+    "gs-16b-2c-44100hz.m4a": "tone.m4a",
+    "gs-16b-2c-44100hz.opus": "tone.opus",
+    "gs-16b-2c-44100hz.aiff": "tone.aiff",
+    "wav24.wav": "tone24.wav",
+    "wav51.wav": "tone51.wav",
+    "generated/src.wav": "tone.wav",
+    "generated/mp3_44100.mp3": "tone.mp3",
+    "generated/aiff_pcm.aiff": "tone.aiff",
+    "generated/flac24.flac": "tone24.flac",
+}
+
+
+def corpus_glob(pattern):
+    """Every file matching `pattern` under the corpus AND the committed
+    fixtures, by absolute path.
+
+    For parametrize, where a relative glob is worse than a missing file: it
+    collects zero cases, and a module that reports no tests looks exactly like a
+    module whose tests passed.
+    """
+    import glob as _glob
+    found = []
+    for root in (FIXTURES_DIR, SMALL_FIXTURES):
+        found += _glob.glob(os.path.join(root, "**", pattern), recursive=True)
+    return sorted(found)
+
+
+def corpus_path(name):
+    """Resolve a corpus specimen by name, or its committed stand-in.
+
+    Returns None when neither exists, so a caller can still skip; that is a
+    real answer for the specimens nothing can synthesize (.nksf, .nmsv, a
+    187 MB game archive) rather than a corpus that merely happens to be absent.
+    """
+    big = os.path.join(FIXTURES_DIR, *name.split("/"))
+    if os.path.isfile(big):
+        return big
+    small = _STANDIN.get(name)
+    if small:
+        p = os.path.join(SMALL_FIXTURES, small)
+        if os.path.isfile(p):
+            return p
+    return None
+
 
 def have_tool(name):
     """Is an external tool actually runnable?

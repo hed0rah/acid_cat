@@ -531,9 +531,11 @@ def test_detection_does_not_depend_on_the_display_label(tmp_path, name, specimen
     ones leave the checks that look for crafted patterns unexercised. When
     changing this, verify it by restoring a prose branch and confirming it fails.
     """
-    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / specimen
-    if not src.exists():
-        pytest.skip(f"{specimen} not in the corpus")
+    from conftest import corpus_path
+    resolved = corpus_path(specimen)
+    if resolved is None:
+        pytest.skip(f"no specimen or stand-in for {specimen}")
+    src = pathlib.Path(resolved)
     p = tmp_path / specimen
     prepare(src, p)
 

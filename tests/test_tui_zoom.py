@@ -24,8 +24,7 @@ from acidcat.tui_app.app import AcidcatTUI
 
 pytest.importorskip("textual")
 
-_BIG = os.path.join("data", "test_formats", "generated", "src.wav")
-WAV = _BIG if os.path.isfile(_BIG) else os.path.join("data", "fixtures", "tone.wav")
+from conftest import CORPUS_WAV as WAV
 
 ROW_COLUMNS = 76          # what _hex_rows actually emits; see render.py
 

@@ -14,8 +14,7 @@ import shutil
 
 import pytest
 
-_BIG = os.path.join("data", "test_formats", "generated", "src.wav")
-WAV = _BIG if os.path.isfile(_BIG) else os.path.join("data", "fixtures", "tone.wav")
+from conftest import CORPUS_WAV as WAV
 
 
 def _drive(scenario):

@@ -92,10 +92,7 @@ def test_batch_record_accepts_a_hex_offset(tmp_path):
 # ── B3/B4: validate --deep on MP3 ──────────────────────────────────
 
 def _mp3(path):
-    src = (os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    src = os.path.join(src, "data", "test_formats", "gs-16b-2c-44100hz.mp3")
-    if not os.path.exists(src):
-        pytest.skip("no mp3 specimen in the corpus")
+    from conftest import CORPUS_MP3_GS as src
     with open(src, "rb") as f:
         path.write_bytes(f.read())
     return path
@@ -304,12 +301,13 @@ def test_validate_accounts_for_every_file_in_a_directory(tmp_path):
     are added.
     """
     import re
-    corpus = pathlib.Path(__file__).parent.parent / "data" / "test_formats"
+    from conftest import corpus_path
     planted = 0
     for name in ("gs-16b-2c-44100hz.wav", "gs-16b-2c-44100hz.flac",
                  "gs-16b-2c-44100hz.ogg", "gs-16b-2c-44100hz.aiff"):
-        src = corpus / name
-        if src.exists():
+        resolved = corpus_path(name)
+        src = pathlib.Path(resolved) if resolved else None
+        if src is not None:
             (tmp_path / name).write_bytes(src.read_bytes())
             planted += 1
     if planted < 3:
@@ -381,12 +379,13 @@ def test_scan_json_says_when_it_stopped_early(tmp_path):
     """The cap note lived only on the CSV path; the --json branch returned
     before it. So the machine-readable face was the one that could not tell a
     complete run from a truncated one."""
-    corpus = pathlib.Path(__file__).parent.parent / "data" / "test_formats"
+    from conftest import corpus_path
     planted = 0
     for name in ("gs-16b-2c-44100hz.wav", "gs-16b-2c-44100hz.flac",
                  "gs-16b-2c-44100hz.mp3"):
-        src = corpus / name
-        if src.exists():
+        resolved = corpus_path(name)
+        src = pathlib.Path(resolved) if resolved else None
+        if src is not None:
             (tmp_path / name).write_bytes(src.read_bytes())
             planted += 1
     if planted < 3:

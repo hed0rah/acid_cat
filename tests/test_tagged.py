@@ -9,7 +9,6 @@ mutagen = pytest.importorskip("mutagen", reason="mutagen not installed; skip tag
 from acidcat.core.tagged import parse_tagged, is_tagged_format, TAGGED_EXTENSIONS
 
 
-FIXTURES = os.path.join(os.path.dirname(__file__), "..", "data", "test_formats")
 
 
 def test_strip_bom_removes_leading_feff():

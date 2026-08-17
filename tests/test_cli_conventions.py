@@ -26,9 +26,7 @@ def _cli(*args, **kw):
 
 @pytest.fixture
 def two_wavs(tmp_path):
-    src = "data/test_formats/generated/src.wav"
-    if not os.path.isfile(src):
-        pytest.skip("generated wav corpus absent")
+    from conftest import CORPUS_WAV as src
     a, b = tmp_path / "a.wav", tmp_path / "b.wav"
     shutil.copyfile(src, a)
     shutil.copyfile(src, b)
@@ -105,9 +103,7 @@ def test_options_may_follow_operands(two_wavs):
 def test_dash_reads_stdin(verb):
     """Invariant 3. shape, audit and validate had no stdin handling at all --
     audit got it for free once it routed through targets.each."""
-    src = "data/test_formats/generated/src.wav"
-    if not os.path.isfile(src):
-        pytest.skip("generated wav corpus absent")
+    from conftest import CORPUS_WAV as src
     raw = open(src, "rb").read()
     r = subprocess.run([sys.executable, "-m", "acidcat", verb, "-"],
                        capture_output=True, input=raw)

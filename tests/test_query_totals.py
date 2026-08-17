@@ -185,10 +185,8 @@ def test_index_reports_what_it_passed_over(tmp_path_factory):
     base = tmp_path_factory.mktemp("ix")
     home, corpus = base / "home", base / "c"
     corpus.mkdir()
-    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
-        "gs-16b-2c-44100hz.wav"
-    if not src.exists():
-        pytest.skip("no wav specimen")
+    from conftest import CORPUS_WAV_GS
+    src = pathlib.Path(CORPUS_WAV_GS)
     (corpus / "a.wav").write_bytes(src.read_bytes())
     for junk in ("readme.txt", "cover.jpg", "notes.md"):
         (corpus / junk).write_text("x")
@@ -213,10 +211,8 @@ def test_a_forward_version_db_is_a_message_not_a_bug_report(tmp_path_factory):
     base = tmp_path_factory.mktemp("sv")
     home, corpus = base / "home", base / "c"
     corpus.mkdir()
-    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
-        "gs-16b-2c-44100hz.wav"
-    if not src.exists():
-        pytest.skip("no wav specimen")
+    from conftest import CORPUS_WAV_GS
+    src = pathlib.Path(CORPUS_WAV_GS)
     (corpus / "a.wav").write_bytes(src.read_bytes())
     env = dict(os.environ, ACIDCAT_HOME=str(home))
     r = subprocess.run([sys.executable, "-m", "acidcat", "index", str(corpus),
@@ -320,10 +316,8 @@ def test_the_prefilter_does_not_depend_on_insertion_order(tmp_path):
 def two_libs(tmp_path_factory):
     base = tmp_path_factory.mktemp("fan")
     home = base / "home"
-    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
-        "gs-16b-2c-44100hz.wav"
-    if not src.exists():
-        pytest.skip("no wav specimen")
+    from conftest import CORPUS_WAV_GS
+    src = pathlib.Path(CORPUS_WAV_GS)
     env = dict(os.environ, ACIDCAT_HOME=str(home))
     for label in ("liba", "libb"):
         d = base / label
@@ -410,8 +404,8 @@ def test_a_negative_limit_is_rejected(two_libs, verb, flag):
     env, _home = two_libs
     args = [verb, flag, "-1"]
     if verb == "similar":
-        args.append(str(pathlib.Path(__file__).parent.parent / "data" /
-                        "test_formats" / "gs-16b-2c-44100hz.wav"))
+        from conftest import CORPUS_WAV_GS
+        args.append(CORPUS_WAV_GS)
     r = subprocess.run([sys.executable, "-m", "acidcat", *args],
                        capture_output=True, text=True, env=env)
     assert r.returncode == 2, f"rc={r.returncode}\n{r.stdout}{r.stderr}"
@@ -439,10 +433,8 @@ def test_feature_extraction_reports_what_it_could_not_do(tmp_path_factory):
     base = tmp_path_factory.mktemp("ft")
     home, corpus = base / "home", base / "c"
     corpus.mkdir()
-    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
-        "gs-16b-2c-44100hz.wav"
-    if not src.exists():
-        pytest.skip("no wav specimen")
+    from conftest import CORPUS_WAV_GS
+    src = pathlib.Path(CORPUS_WAV_GS)
     (corpus / "good.wav").write_bytes(src.read_bytes())
     # structurally valid, no decodable audio
     body = (b"WAVE" + b"fmt "

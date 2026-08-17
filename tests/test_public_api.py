@@ -82,10 +82,7 @@ def test_play_region_supports_non_blocking_with_a_stoppable_handle():
 
 
 def test_ogg_pages_are_enumerable(tmp_path):
-    import os
-    src = "data/test_formats/gs-16b-2c-44100hz.ogg"
-    if not os.path.isfile(src):
-        pytest.skip("no ogg fixture")
+    from conftest import CORPUS_OGG as src
     pages = list(acidcat.iter_pages(open(src, "rb").read()))
     assert len(pages) > 1
     first = pages[0]

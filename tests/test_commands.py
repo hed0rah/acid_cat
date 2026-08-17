@@ -98,8 +98,6 @@ class TestInfoTagged:
     def need_mutagen(self):
         pytest.importorskip("mutagen")
 
-    FIXTURES = os.path.join(os.path.dirname(__file__), "..", "data", "test_formats")
-
     @pytest.mark.parametrize("name,fmt_keyword", [
         ("gs-16b-2c-44100hz.mp3", "MP3"),
         ("gs-16b-2c-44100hz.flac", "FLAC"),
@@ -108,9 +106,10 @@ class TestInfoTagged:
         ("gs-16b-2c-44100hz.m4a", "M4A"),
     ])
     def test_format_shows_in_output(self, name, fmt_keyword):
-        path = os.path.join(self.FIXTURES, name)
-        if not os.path.isfile(path):
-            pytest.skip(f"{name} not present")
+        from conftest import corpus_path
+        path = corpus_path(name)
+        if path is None:
+            pytest.skip(f"no specimen or stand-in for {name}")
         code, out, err = run_cli(path)
         assert code == 0 or code is None
         assert fmt_keyword in out.upper()

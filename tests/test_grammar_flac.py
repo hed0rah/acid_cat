@@ -13,6 +13,8 @@ import struct
 
 import pytest
 
+from conftest import corpus_glob
+
 from acidcat.core.grammar import interpret
 from acidcat.core.grammar.formats.flac import FLAC
 from acidcat.core.walk.flac import inspect_flac
@@ -129,9 +131,7 @@ def test_streaminfo_truncated_all_or_nothing(tmp_path):
     assert g["warnings"] == ["STREAMINFO is 20 bytes, spec says 34"]
 
 
-@pytest.mark.parametrize("path",
-                         sorted(glob.glob("data/test_formats/**/*.flac",
-                                          recursive=True)))
+@pytest.mark.parametrize("path", corpus_glob("*.flac"))
 def test_streaminfo_corpus_parity(path):
     """Byte-exact STREAMINFO across the real FLAC fixtures (24-bit, 96 kHz,
     truncated)."""
