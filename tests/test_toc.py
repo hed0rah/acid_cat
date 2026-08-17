@@ -163,9 +163,11 @@ def test_a_real_archive_end_to_end():
     match, byte for byte, what the Ogg stream sweep finds independently.
     """
     import os
-    path = "E:/ACIDcat_hunting/tModLoader/CalamityModMusic.tmod"
-    if not os.path.isfile(path):
-        pytest.skip("tModLoader specimen not present")
+    # Opt-in via the environment rather than one machine's drive letter, which
+    # is configuration wearing the clothes of a constant.
+    path = os.environ.get("ACIDCAT_TMOD_SPECIMEN", "")
+    if not (path and os.path.isfile(path)):
+        pytest.skip("set ACIDCAT_TMOD_SPECIMEN to a .tmod archive")
     with open(path, "rb") as fh:
         head = fh.read(1 << 21)
         found = toc.find_toc(head)

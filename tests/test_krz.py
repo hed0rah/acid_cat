@@ -160,10 +160,15 @@ def test_truncated_header_degrades(tmp_path):
     assert warns and "32" in warns[0]
 
 
-_CORPUS = "C:/Users/joshr/Downloads/kurzweil_docs/SWEETWTR"
+# Opt-in via the environment, like ACIDCAT_ABLETON_CORPUS. It was one
+# developer's absolute home directory, which put that account name in the sdist
+# and therefore on PyPI in every release since 0.55.0. A path that only exists
+# on one machine is configuration, not source.
+_CORPUS = os.environ.get("ACIDCAT_KRZ_CORPUS", "")
 
 
-@pytest.mark.skipif(not os.path.isdir(_CORPUS), reason="local KRZ corpus absent")
+@pytest.mark.skipif(not (_CORPUS and os.path.isdir(_CORPUS)),
+                    reason="set ACIDCAT_KRZ_CORPUS to a dir of real .krz banks")
 def test_corpus_never_raises():
     files = glob.glob(_CORPUS + "/**/*.krz", recursive=True) \
         + glob.glob(_CORPUS + "/**/*.KRZ", recursive=True)
