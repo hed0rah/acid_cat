@@ -8,6 +8,14 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ### Fixed
 
+- **`develop` is retired.** Squash-merging a long-lived branch into `main`
+  guarantees divergence every time: squash discards the source commits for a new
+  one with a different hash, so the branches can only be reconciled by hand
+  afterwards, after every merge. It already cost something real -- `develop`
+  kept a file `main` had fixed, and a release cut from it would have shipped the
+  old version back. Short-lived branches off `main`, merged and deleted, are
+  what squash-merge is for and what this repo had already drifted into using.
+
 - **CI was running a suite 85 tests smaller than anyone's local one.**
   `data/test_formats/` is gitignored and 16 MB, so any test naming a path
   inside it skipped on every runner: 90 skips beside a green tick, 85 of them

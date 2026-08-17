@@ -10,7 +10,7 @@ This extracts HEAD (or any commit) to a temporary directory, so the only files
 present are the ones a clone would have, and runs pytest there.
 
     python scripts/as_ci_sees_it.py                  # HEAD
-    python scripts/as_ci_sees_it.py --rev develop
+    python scripts/as_ci_sees_it.py --rev HEAD~3
     python scripts/as_ci_sees_it.py -- -k geometry   # args after -- go to pytest
 
 Note the remaining differences, which this does NOT model: the runner's Python
