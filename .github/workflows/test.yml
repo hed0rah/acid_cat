@@ -2,10 +2,18 @@ name: Tests
 
 on:
   push:
-    # develop is where v1.0 is being assembled, so it gets the same gate as
-    # main. Without this, a long-lived branch accumulates commits that have
-    # only ever run on one developer's machine.
-    branches: [main, develop]
+    # main only. `develop` is retired: squash-merging a LONG-LIVED branch into
+    # main guarantees divergence every time, because squash discards the source
+    # commits for a new one with a different hash, and the two branches can then
+    # only be reconciled by hand. That is not a discipline problem, it recurs
+    # after every merge -- and it already cost something real, when develop kept
+    # a file main had fixed and a release cut from it would have shipped the old
+    # version back.
+    #
+    # Short-lived branches off main, merged and deleted, have none of that: they
+    # are what squash-merge is designed for, and what this repo had already
+    # drifted into using.
+    branches: [main]
   pull_request:
   # Called by publish.yml, so the gate on an irreversible action is this matrix
   # rather than a thinner copy of it. That copy ran one job on one Python with
@@ -13,12 +21,12 @@ on:
   # what reached PyPI.
   workflow_call:
 
-# A PR from develop matches BOTH triggers, so every check ran twice: ten jobs
-# for one commit, around 35 minutes of runner time, and two identical rows per
-# platform in the checks list. Grouping on the commit rather than the ref means
-# the second trigger supersedes the first instead of racing it. Coverage is
-# unchanged: a push with no PR still gets its own full run, which is the point
-# of gating develop in the first place.
+# A branch that is both pushed and has an open PR matches BOTH triggers, so
+# every check ran twice: ten jobs for one commit, around 35 minutes of runner
+# time, and two identical rows per platform in the checks list. Grouping on the
+# commit rather than the ref means the second trigger supersedes the first
+# instead of racing it. Coverage is unchanged: a push with no PR still gets its
+# own full run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
