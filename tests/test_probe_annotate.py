@@ -128,10 +128,7 @@ def test_every_position_is_classified():
 def test_it_marks_a_real_wav_on_disk():
     """The hand-built header above encodes my understanding of RIFF; this
     checks the understanding against a file something else wrote."""
-    path = "data/test_formats/generated/src.wav"
-    if not os.path.isfile(path):
-        import pytest
-        pytest.skip("generated wav corpus absent")
+    from conftest import CORPUS_WAV as path
     size = os.path.getsize(path)
     with open(path, "rb") as f:
         head = f.read(256)

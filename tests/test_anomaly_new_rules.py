@@ -61,10 +61,7 @@ def test_ogg_pages_are_not_mistaken_for_embedded_oggs():
     """Ogg stamps OggS on every page, so page 2 looks like an embedded Ogg.
     Six of six real Ogg and Opus files tripped this before the guard; the
     genuine case -- several logical bitstreams -- is ogg_multistream's job."""
-    import os
-    src = "data/test_formats/gs-16b-2c-44100hz.ogg"
-    if not os.path.isfile(src):
-        pytest.skip("no ogg fixture")
+    from conftest import CORPUS_OGG as src
     fmt, chunks, warns = walk_file(src)
     found = anomalies.scan(src, fmt, chunks, warns)
     assert "embedded_standalone_media" not in _rules(found)
@@ -140,10 +137,7 @@ def test_a_value_that_looks_like_a_key_is_not_reported(tmp_path):
 def test_application_block_fires_on_a_flac_APPLICATION_block(tmp_path):
     """Shipped since it was written, referenced by no test. FLAC's APPLICATION
     block is freeform by spec, which is exactly what makes it a carrier."""
-    import os
-    src = "data/test_formats/gs-16b-2c-44100hz.flac"
-    if not os.path.isfile(src):
-        pytest.skip("no flac fixture")
+    from conftest import CORPUS_FLAC as src
     raw = open(src, "rb").read()
     payload = b"APPL" + b"\xde\xad\xbe\xef" * 64
     block = bytes([2]) + len(payload).to_bytes(3, "big") + payload   # type 2

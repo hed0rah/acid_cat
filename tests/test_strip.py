@@ -12,7 +12,6 @@ from acidcat.commands.write import _strip
 WAV = "data/samples/Drum_Loop.wav"
 from conftest import corpus_or_fixture
 MP3 = corpus_or_fixture(os.path.join("generated", "mp3_44100.mp3"), "tone.mp3")
-FIXTURES = "data/test_formats"
 
 
 def test_strip_wav_removes_tags_keeps_audio():

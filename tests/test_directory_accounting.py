@@ -37,9 +37,6 @@ import pytest
 
 from acidcat import cli
 
-CORPUS = pathlib.Path(__file__).parent.parent / "data" / "test_formats"
-
-
 # ── the corpus: one file per bucket ─────────────────────────────────
 
 def _plant(tmp_path):
@@ -52,10 +49,12 @@ def _plant(tmp_path):
     d = tmp_path / "corpus"
     d.mkdir()
     n = 0
+    from conftest import corpus_path
     for name in ("gs-16b-2c-44100hz.wav", "gs-16b-2c-44100hz.flac",
                  "gs-16b-2c-44100hz.aiff", "gs-16b-2c-44100hz.mp3"):
-        src = CORPUS / name
-        if src.exists():
+        resolved = corpus_path(name)
+        src = pathlib.Path(resolved) if resolved else None
+        if src is not None:
             (d / name).write_bytes(src.read_bytes())
             n += 1
     if n < 3:

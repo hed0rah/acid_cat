@@ -34,9 +34,7 @@ def _run(coro_factory):
 
 @pytest.fixture
 def wav(tmp_path):
-    src = "data/test_formats/generated/src.wav"
-    if not os.path.isfile(src):
-        pytest.skip("generated wav corpus absent")
+    from conftest import CORPUS_WAV as src
     p = tmp_path / "t.wav"
     shutil.copyfile(src, p)
     return str(p)
@@ -93,9 +91,7 @@ def keysweep(request):
     did. Module-scoped because it is the expensive part of this file -- one app
     per key rather than one per key per assertion.
     """
-    src = "data/test_formats/generated/src.wav"
-    if not os.path.isfile(src):
-        pytest.skip("generated wav corpus absent")
+    from conftest import CORPUS_WAV as src
     import tempfile
     d = tempfile.mkdtemp()
     path = os.path.join(d, "t.wav")

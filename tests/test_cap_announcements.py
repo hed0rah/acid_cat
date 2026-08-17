@@ -541,10 +541,8 @@ def test_audit_signal_says_which_checks_did_not_run(tmp_path):
     """`--signal` on a file it cannot decode was byte-identical to a file that
     passed both checks: the caller asked for the signal checks and got silence
     that read as clean."""
-    src = pathlib.Path(__file__).parent.parent / "data" / "test_formats" / \
-        "gs-16b-2c-44100hz.mp3"
-    if not src.exists():
-        pytest.skip("no mp3 specimen")
+    from conftest import CORPUS_MP3_GS
+    src = pathlib.Path(CORPUS_MP3_GS)
     p = tmp_path / "u.mp3"
     p.write_bytes(src.read_bytes())
     r = _probe_cli("audit", str(p), "--signal")

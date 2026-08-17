@@ -11,17 +11,22 @@ import pytest
 
 
 def _fixture_or_skip(rel):
-    """A specimen from the gitignored `data/test_formats/` tree, or a skip.
+    """A specimen by corpus name, resolved to the real file or its stand-in.
 
     These three call sites used to `shutil.copyfile` the path unguarded. That
     was invisible for as long as it existed because CI never installed the
     `tui` extra, so every test in this file was skipped before it could fail.
     Installing the extra turned three silent skips into three hard errors --
     which is the argument for installing it.
+
+    It then skipped on every runner instead, because the paths name the
+    gitignored corpus. A skip is not a pass; it is a test that did not run.
     """
-    if not os.path.isfile(rel):
-        pytest.skip(f"fixture {rel} not present (gitignored corpus)")
-    return rel
+    from conftest import corpus_path
+    resolved = corpus_path(rel)
+    if resolved is None:
+        pytest.skip(f"no specimen or stand-in for {rel}")
+    return resolved
 
 
 def test_tui_command_registers_without_textual():
@@ -124,16 +129,17 @@ def test_all_walker_enc_annotations_verify():
     from acidcat.core.infra.fieldcodec import (encode_value, _field_abs, parse_bitfield,
                                          bitfield_extract, parse_bitsmap, _BITMAPS,
                                          parse_bitsdyn, _DYNMAPS)
-    fixtures = [
-        "data/samples/Drum_Loop.wav",
-        "data/test_formats/wav51.wav",             # WAVE_FORMAT_EXTENSIBLE channel_mask
-        "data/test_formats/wav24.wav",
-        "data/test_formats/generated/mp3_44100.mp3",
-        "data/test_formats/generated/aiff_pcm.aiff",
-        "data/test_formats/generated/flac24.flac",
-        "data/test_formats/gs-16b-2c-44100hz.ogg",
-        "data/test_formats/gs-16b-2c-44100hz.m4a",
-    ]
+    from conftest import corpus_path, SAMPLE_WAV
+    fixtures = [SAMPLE_WAV] + [corpus_path(n) for n in (
+        "wav51.wav",                   # WAVE_FORMAT_EXTENSIBLE channel_mask
+        "wav24.wav",                   # 24-bit sample width
+        "generated/mp3_44100.mp3",
+        "generated/aiff_pcm.aiff",     # big-endian, COMM/SSND
+        "generated/flac24.flac",       # bit depth in the STREAMINFO bitfield
+        "gs-16b-2c-44100hz.ogg",
+        "gs-16b-2c-44100hz.m4a",
+    )]
+    fixtures = [f for f in fixtures if f]
     checked = 0
     for path in fixtures:
         if not os.path.isfile(path):
@@ -434,7 +440,7 @@ def test_mp3_channel_mode_enum_edit(tmp_path):
     from textual.widgets import Tree, Input
 
     orig = tmp_path / "cm.mp3"
-    shutil.copyfile(_fixture_or_skip("data/test_formats/generated/mp3_44100.mp3"), orig)
+    shutil.copyfile(_fixture_or_skip("generated/mp3_44100.mp3"), orig)
 
     def hdr(p):
         _f, ch, _w = walk_file(str(p), deep=True)
@@ -488,7 +494,7 @@ def test_mp3_bitrate_bitsdyn_edit(tmp_path):
     from textual.widgets import Tree, Input
 
     orig = tmp_path / "br.mp3"
-    shutil.copyfile(_fixture_or_skip("data/test_formats/generated/mp3_44100.mp3"), orig)
+    shutil.copyfile(_fixture_or_skip("generated/mp3_44100.mp3"), orig)
 
     def val(p, name):
         _f, ch, _w = walk_file(str(p), deep=True)
@@ -560,7 +566,7 @@ def test_flac_bitfield_edit_preserves_neighbours(tmp_path):
     from textual.widgets import Tree, Input
 
     orig = tmp_path / "b.flac"
-    shutil.copyfile(_fixture_or_skip("data/test_formats/generated/flac24.flac"), orig)
+    shutil.copyfile(_fixture_or_skip("generated/flac24.flac"), orig)
 
     def stream(p):
         _f, ch, _w = walk_file(str(p), deep=True)

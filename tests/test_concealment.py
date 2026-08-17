@@ -203,15 +203,15 @@ def test_a_skipped_check_is_reported_but_not_counted(tmp_path):
     """24-bit audio did not come off a Red Book disc, so concealment analysis
     does not apply. Saying nothing would read as "clean"; counting it as a
     mismatch would make every 24-bit file a failure. It is named separately."""
-    import subprocess
-    from conftest import requires_tool
-    requires_tool("ffmpeg")          # raises Skipped if absent; run() would raise
-    src, deep = tmp_path / "s.wav", tmp_path / "deep.wav"
-    _wav(src, music(n_sectors=14))
-    conv = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src),
-                           "-c:a", "pcm_s24le", str(deep)], capture_output=True)
-    if conv.returncode != 0:
-        pytest.skip("ffmpeg could not write 24-bit here")
+    # A committed 24-bit WAV rather than one built here by ffmpeg. The check
+    # under test fires on sample width alone, so the specimen only has to BE
+    # 24-bit -- and building it per-run made this test depend on a package feed
+    # being up, which is how it went red on 2026-08-10 while nothing about the
+    # product had changed.
+    import shutil
+    from conftest import CORPUS_WAV24
+    deep = tmp_path / "deep.wav"
+    shutil.copyfile(CORPUS_WAV24, deep)
     out = _audit(deep).stdout
     assert "NOT CHECKED" in out
     assert "24-bit" in out
