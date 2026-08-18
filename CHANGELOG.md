@@ -8,6 +8,29 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ### Fixed
 
+- **The table-of-contents detector was confidently wrong on image and audio
+  data.** Asked whether a run of bytes was a filename, it checked only for a
+  dot, slash or backslash. Those are byte values before they are punctuation:
+  0x5C is an ordinary pixel and an ordinary quiet sample, so a wall texture in
+  freedoom1.wad satisfied "looks like a Windows path" and chained into a
+  100-entry table reported at **confidence 0.84**. A detector built to find
+  audio inside unknown containers was being fooled by the audio.
+
+  A name now has to span at least 32 byte values, because a filename draws on
+  several ASCII classes (a dot at 0x2E, digits at 0x30, capitals at 0x41,
+  lowercase at 0x61) while 8-bit image and audio data crawls through a narrow
+  contiguous band -- the second false table freedoom produced spanned NINE, `[`
+  through `d`. It must also be mostly alphanumeric and have its separator doing
+  a separator's job. Confidence now weighs whether the names read like names;
+  it was chain length alone, which only proves a layout is self-consistent, and
+  smooth bytes are extremely self-consistent.
+
+  The 187 MB archive this was built against still reads all 266 entries. The
+  regression specimen is 2,048 real bytes of that texture rather than generated
+  data: the first version of the test used a synthetic ramp, and deleting the
+  fix left every assertion passing, because synthetic ramps trip the other
+  guards. Only the real bytes reach the hole.
+
 - **`develop` is retired.** Squash-merging a long-lived branch into `main`
   guarantees divergence every time: squash discards the source commits for a new
   one with a different hash, so the branches can only be reconciled by hand

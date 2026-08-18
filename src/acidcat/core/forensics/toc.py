@@ -26,10 +26,67 @@ layout stops chaining within an entry or two.
 import re
 import struct
 
-# A name has to look like one. Requiring a dot or a slash is what keeps this
-# from firing on every run of printable bytes in a text field.
+# A name has to look like one, and "contains a dot or a slash" is not enough.
+#
+# Measured on freedoom1.wad: this returned a 100-entry table at confidence 0.84
+# whose names were the CONCRETE wall texture. Eight-bit image data sits in a
+# narrow band of byte values, that band overlaps printable ASCII, and 0x5C is an
+# ordinary pixel -- so a run of graphics satisfied "looks like a Windows path".
+# The same is true of 8-bit audio. A detector aimed at finding audio inside
+# unknown containers was being fooled by the audio.
+#
+# So the test is what actually separates a filename from smooth bytes that
+# happen to be printable:
+#
+#   mostly alphanumeric   `Sounds/Music/Lure.ogg` is ~86% [A-Za-z0-9]; the
+#                         texture was 39%, the rest being []^_` -- punctuation
+#                         that is contiguous with the letters in ASCII and so
+#                         appears wherever a smooth ramp crosses that range
+#   a structured separator   a dot needs a short alphanumeric extension after
+#                         it, a slash needs name characters on both sides. In
+#                         the texture the backslashes sat between [ and ], which
+#                         is not a path, it is a coincidence
+#
+# Both are cheap, and each one alone rejects the specimen that motivated them.
 _NAME = re.compile(rb"[\x20-\x7e]{3,255}")
-_LOOKS_NAMEY = re.compile(rb"^[\x20-\x7e]*[./\\][\x20-\x7e]*$")
+_SEPARATOR = re.compile(rb"[./\\]")
+_EXTENSION = re.compile(rb"\.[A-Za-z0-9]{1,5}$")
+_PATH_SEP = re.compile(rb"[A-Za-z0-9_)\]-][/\\][A-Za-z0-9_(\[-]")
+_ALNUM_FLOOR = 0.6
+
+# A filename draws on several ASCII classes -- a dot at 0x2E, digits at 0x30,
+# capitals at 0x41, lowercase at 0x61 -- so its byte values are spread wide.
+# `CalamityModMusic.dll` spans 75. Smooth 8-bit data crosses printable ASCII as
+# a narrow contiguous ramp: the second false table freedoom produced spanned
+# NINE values, [ through d, and every "name" in it was letters and the
+# punctuation that happens to sit between them in the ASCII table. Alphanumeric
+# ratio cannot see this, because a, b, c and d are alphanumeric.
+_MIN_BYTE_SPAN = 32
+
+
+def _alnum_ratio(name):
+    if not name:
+        return 0.0
+    n = sum(1 for c in name if (48 <= c <= 57) or (65 <= c <= 90)
+            or (97 <= c <= 122))
+    return n / float(len(name))
+
+
+def _looks_like_a_name(name):
+    """Does this run of printable bytes plausibly name something?
+
+    Deliberately strict. A missed table is a container we cannot read yet; a
+    false table is a confident wrong answer with a filename attached to it, and
+    this function exists because the second one shipped.
+    """
+    if not _SEPARATOR.search(name):
+        return False
+    if max(name) - min(name) < _MIN_BYTE_SPAN:
+        return False
+    if _alnum_ratio(name) < _ALNUM_FLOOR:
+        return False
+    # the separator has to be doing a separator's job
+    return bool(_EXTENSION.search(name) or _PATH_SEP.search(name))
 
 # No internal read cap. The caller already chooses how much to hand over --
 # the TUI passes the first 2 MB -- and a second, hidden truncation inside would
@@ -135,7 +192,7 @@ def find_toc(data, min_entries=_MIN_ENTRIES):
     seen_starts = set()
     for m in _NAME.finditer(data):
         name_at = m.start()
-        if name_at in seen_starts or not _LOOKS_NAMEY.fullmatch(m.group(0)):
+        if name_at in seen_starts or not _looks_like_a_name(m.group(0)):
             continue
         for kind in _PREFIXES:
             for nfields in range(1, _MAX_FIELDS + 1):
@@ -150,11 +207,26 @@ def find_toc(data, min_entries=_MIN_ENTRIES):
         seen_starts.add(name_at)
     if best is None:
         return None
-    # Confidence from the length of the chain, which is the only evidence there
-    # is. Capped below a signature match on purpose: this is a shape, not a
-    # magic number, and it must never outrank something that verified one.
+    # Confidence from the chain length AND from whether the names read like
+    # names. Length alone said 0.84 about a wall texture: a long chain only
+    # proves the layout is self-consistent, and smooth bytes are extremely
+    # self-consistent. Two independent things have to hold.
+    #
+    # Capped below a signature match on purpose: this is a shape, not a magic
+    # number, and it must never outrank something that verified one.
     n = len(best["entries"])
-    best["confidence"] = round(min(0.85, 0.4 + n / 200), 2)
+    names = [e["name"].encode("latin-1", "replace")
+             if isinstance(e["name"], str) else e["name"]
+             for e in best["entries"]]
+    quality = sum(_alnum_ratio(nm) for nm in names) / float(len(names))
+    # A table of real paths shares structure between siblings -- an extension
+    # set, a directory prefix. One that does not is a weaker hypothesis even if
+    # every entry passed on its own.
+    exts = {nm.rsplit(b".", 1)[-1].lower() for nm in names if b"." in nm}
+    shared = len(exts) <= max(3, len(names) // 8)
+    length_term = min(0.85, 0.4 + n / 200.0)
+    conf = length_term * quality * (1.0 if shared else 0.75)
+    best["confidence"] = round(min(0.85, conf), 2)
     return best
 
 
