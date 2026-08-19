@@ -1120,18 +1120,24 @@ class AcidcatTUI(App):
 
         The entries become ordinary regions, so descend, extract and the whole
         navigation stack work on them unchanged.
+
+        `read_toc` looks at both ends of the file rather than the first 2 MB
+        this used to hand over. That was not a tuning choice: an index is
+        usually written last, because appending payloads as they are produced
+        and writing the directory afterwards means never seeking backwards.
+        Quake, Doom and Half-Life all put theirs within 450 KB of the tail, so a
+        head-only window missed most of the family it was built for.
         """
         from acidcat.core.forensics import toc as tocmod
         from acidcat.core.infra import sniff as sniffmod
         try:
             with open(self.work, "rb") as fh:
-                found = tocmod.find_toc(fh.read(2 << 20))
-                if not found:
-                    return False
-                entries, field, verified, checked = tocmod.place_entries(
-                    fh, found)
+                got = tocmod.read_toc(fh)
         except OSError:
             return False
+        if got is None:
+            return False
+        found, entries, field, verified, checked = got
         if field is None:
             # the table is real but its payloads are not laid out where this
             # can follow them; the signature sweep is still the way in
