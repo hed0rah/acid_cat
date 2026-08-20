@@ -4,6 +4,29 @@ All notable changes to acidcat. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project will
 adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
+## [1.2.1] - 2026-08-20
+
+### Fixed
+
+- **A test that waits for the tree to stop moving is still guessing.** 1.2.0
+  replaced the TUI suite's fixed pauses with a poller that waits for the node
+  count to settle. That is a proxy, and it has a hole: a Textual worker that has
+  been dispatched and has not yet delivered leaves the count perfectly still, so
+  the poller hands back a half-built tree that merely looks finished.
+
+  It failed the publish gate on one platform with four nodes of an eventual
+  twelve, reporting a missing codec field as a product defect -- the same shape
+  of wrong answer the previous fix was meant to end.
+
+  Four call sites now wait for the condition they actually need rather than for
+  stillness, and the waiting itself is pinned by tests with a fake pilot. A
+  poller that started returning early would otherwise be invisible: every call
+  site would revert to sampling a half-built tree and would still pass on a fast
+  machine, with the failure reappearing only on a loaded runner.
+
+  No product code changed. The suite runs 2,869 tests in 13m02s, against 17m15s
+  when the waits were fixed durations.
+
 ## [1.2.0] - 2026-08-20
 
 ### Added
