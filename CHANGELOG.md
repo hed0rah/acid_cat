@@ -6,6 +6,53 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **The table-of-contents detector reads the other half of the family: an index
+  written as an array of C structs.** It could already read a length-prefixed
+  index, the shape a modern serializer emits, where every name carries its own
+  length. Everything written before that convention existed puts the name in a
+  fixed-width character field, NUL-padded, followed by integers, repeated at a
+  constant stride with nothing marking where a record begins. Reading one does
+  not read the other, and the second is most of the archives that exist.
+
+  Measured against the shipped data of six games, none of which agreed on the
+  layout:
+
+  | archive | stride | name at | integers | index at |
+  |---|---|---|---|---|
+  | Quake, Quake II, Hexen II `.pak` | 64 | +0, width 56 | offset and size | tail |
+  | Duke Nukem 3D, Shadow Warrior `.grp` | 16 | +0, width 12 | size only | head |
+  | Half-Life `.wad3` | 32 | +16, width 16 | before the name | tail |
+  | Doom `.wad` | 16 | +8, width 8 | before the name | tail |
+
+  So the stride, the field width, which side of the name the integers sit on,
+  and whether the archive stores offsets at all are discovered rather than
+  assumed. Eleven archives now read exactly, against counts taken from their own
+  headers: 339, 85, 3,307, 696, 523, 456, 693, 3,116, 3,163, 3,610, 266 entries.
+  That is **2,155 audio files** -- Quake II's 546 WAVs, Shadow Warrior's 565
+  VOCs, Duke Nukem's 373 -- reachable by name and exact extent instead of not at
+  all. In freedoom1.wad all 69 DMX sounds land on their headers, where the
+  statistical sweep had managed 68 with 175 false positives beside them.
+
+  A wrong table is worse than no table, so what settles a hypothesis is never
+  its shape. A compiled symbol table inside SW.GRP is longer and tidier than the
+  archive's own directory and loses because it places no payloads; a General
+  MIDI instrument list inside a Doom WAD looks exactly like an index and loses
+  the same way. Where nothing carries a checkable extension -- a Doom WAD names
+  its lumps and gives them no suffix at all -- the evidence is arithmetic the
+  archive writer must have performed: payload extents that do not overlap and
+  that end where the index begins. Over 1,200 real audio files this placed no
+  table at all. It did report eight, all declined rather than placed, and they
+  turned out to be real: Logic EXS24 instruments carry a genuine 188-byte zone
+  table, one record per chromatic note.
+
+- **`read_toc` looks at both ends of a file.** An index is usually written last,
+  because appending payloads as they are produced and writing the directory
+  afterwards means never seeking backwards -- Quake, Doom and Half-Life all put
+  theirs within 450 KB of the tail. The TUI passed the first 2 MB, which is not
+  a small oversight for this family so much as a window pointed away from it.
+
 ### Fixed
 
 - **The table-of-contents detector was confidently wrong on image and audio

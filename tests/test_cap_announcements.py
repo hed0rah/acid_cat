@@ -141,6 +141,36 @@ EXEMPT = {
                                "covered by tests/test_toc.py, which pins that "
                                "the negative is a non-result, not a verdict"),
 
+    ("acidcat.core.forensics.toc", "_MAX_STRIDE"):
+        (Reason.SEARCH_WINDOW, "the widest fixed-width record considered. The "
+                               "widest measured in a shipped archive is Quake's "
+                               "64-byte entry, so this sits eight times above "
+                               "the real maximum and bounds the search, not the "
+                               "answer"),
+    ("acidcat.core.forensics.toc", "_MAX_CANDIDATE_CHAINS"):
+        (Reason.SEARCH_WINDOW, "how many stride chains are validated per window. "
+                               "This one genuinely CAN hide a table, so what it "
+                               "ranks by is the part that matters: ordering by "
+                               "raw length once dropped DUKE3D.GRP's real "
+                               "directory below eighty longer chains of texture "
+                               "data, and it now orders by NUL-terminated names "
+                               "-- covered by tests/test_toc.py, which pins that "
+                               "a real directory outranks the junk around it"),
+    ("acidcat.core.forensics.toc", "_MAX_CHECKS"):
+        (Reason.SEARCH_WINDOW, "payload magics read while RANKING placement "
+                               "hypotheses. The winner is then re-verified in "
+                               "full, so the verified/checked pair that reaches "
+                               "a caller is a measurement rather than this "
+                               "budget -- covered by tests/test_toc.py, which "
+                               "pins that an archive with more entries than this "
+                               "reports more than this"),
+
+    ("acidcat.core.forensics.toc", "_MAX_RECORDS"):
+        (Reason.RUNAWAY_BACKSTOP, "200,000 records against a real maximum of "
+                                  "3,610 measured across ten shipped game "
+                                  "archives. The walk that would reach it is "
+                                  "stopped far earlier by running out of NUL "
+                                  "padding"),
     ("acidcat.core.forensics.checksums", "_LOOKAHEAD_CANDS"):
         (Reason.SEARCH_WINDOW, "how many spurious CRC-8 hits to step over while "
                                "finding one frame end; changes which candidate "
