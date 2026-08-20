@@ -32,6 +32,7 @@ pytest.importorskip("textual")
 
 from acidcat.tui_app.app import AcidcatTUI          # noqa: E402
 from acidcat.tui_app.screens import RegionsScreen   # noqa: E402
+from conftest import until                          # noqa: E402
 
 
 def _run(scenario):
@@ -296,7 +297,7 @@ class TestTheKeysThemselvesWork:
                 await pilot.pause(0.3)
                 await self._armed(app, pilot)
                 await pilot.press("space")
-                await pilot.pause()
+                await until(pilot, lambda: bool(app._region_sel))
                 assert app._region_sel, "space did not reach the action"
         _run(scenario)
 
@@ -307,7 +308,8 @@ class TestTheKeysThemselvesWork:
                 await pilot.pause(0.3)
                 await self._armed(app, pilot)
                 await pilot.press("A")
-                await pilot.pause()
+                await until(pilot,
+                            lambda: len(app._region_sel) == len(app._regions))
                 assert len(app._region_sel) == len(app._regions)
         _run(scenario)
 
@@ -320,9 +322,13 @@ class TestTheKeysThemselvesWork:
                 got = {}
                 app._extract = lambda rs: got.setdefault("n", len(rs))
                 await pilot.press("space")
-                await pilot.pause()
+                # X refuses when nothing is marked, and refusing calls no
+                # _extract at all -- so a single tick that was not enough for
+                # `space` produced an empty `got` and a failure that read as
+                # "X is broken". Wait for the state X needs, not for a duration.
+                assert await until(pilot, lambda: bool(app._region_sel)),                     "space never marked a region"
                 await pilot.press("X")
-                await pilot.pause()
+                await until(pilot, lambda: "n" in got)
                 assert got.get("n") == 1, got
         _run(scenario)
 
@@ -335,6 +341,6 @@ class TestTheKeysThemselvesWork:
                 got = {}
                 app._extract = lambda rs: got.setdefault("n", len(rs))
                 await pilot.press("E")
-                await pilot.pause()
+                await until(pilot, lambda: "n" in got)
                 assert got.get("n") == len(app._regions), got
         _run(scenario)

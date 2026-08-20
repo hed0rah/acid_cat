@@ -245,3 +245,52 @@ def requires_tool(name):
     import pytest as _pytest
     if not have_tool(name):
         _pytest.skip(f"{name} not available")
+
+
+# ── waiting on a Textual app without guessing how long it takes ──────
+
+async def until(pilot, cond, tries=100, step=0.1):
+    """Wait for a background answer rather than assuming a duration.
+
+    A flat `pause(0.5)` is a timing assumption reported as a result: it passed
+    on three CI platforms and failed on the two slowest, which is not a
+    property of the code under test. Polling costs nothing when the answer is
+    already in, and the failure it produces names the condition that never
+    became true rather than a duration that turned out to be short.
+
+    One definition, because the mistake was made twice in separate files.
+    """
+    for _ in range(tries):
+        if cond():
+            return True
+        await pilot.pause(step)
+    return cond()
+
+
+async def settled(pilot, measure, tries=90, step=0.1, stable=3):
+    """Wait until a measurement stops changing, and return it.
+
+    Different from `until`, which waits for a known target. Here there is no
+    target: the question is whether the app has finished, and the only evidence
+    available is that it has stopped moving. `stable` consecutive identical
+    readings, because one identical pair happens constantly in the gaps between
+    a worker finishing and its results reaching the tree.
+
+    Written for the tree-settles test, which snapshotted a node count, expanded
+    again, and asserted the count had not moved. On a loaded runner the
+    snapshot landed mid-growth -- it read 4 nodes of an eventual 12 -- and the
+    test then reported the tree as "still growing" when what was still growing
+    was the first measurement.
+    """
+    last = object()
+    runs = 0
+    for _ in range(tries):
+        now = measure()
+        if now == last:
+            runs += 1
+            if runs >= stable:
+                return now
+        else:
+            runs, last = 0, now
+        await pilot.pause(step)
+    return measure()

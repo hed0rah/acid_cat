@@ -4,7 +4,7 @@ All notable changes to acidcat. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project will
 adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
-## [1.2.0] - 2026-08-19
+## [1.2.0] - 2026-08-20
 
 ### Added
 
@@ -54,6 +54,32 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
   a small oversight for this family so much as a window pointed away from it.
 
 ### Fixed
+
+- **Four TUI tests measured the clock instead of the app.** Each pressed a key,
+  waited one event-loop tick, and asserted on state the keypress was supposed to
+  produce. That holds while a runner is fast and stops holding when it is not:
+  two of them failed on `main`, on different platforms in different runs, one
+  job out of five each time.
+
+  The shape is always the same, and it is not "the pause was too short". `X`
+  extracts what `space` marked, and declines when nothing is marked -- so a
+  `space` that had not landed yet made `X` decline, and the failure read as
+  `got == {}`, which looks like `X` is broken. Likewise `ctrl+e` refuses unless
+  the cursor is on an editable node, and `z` zooms whichever pane has focus, so
+  pressing it before `tab` has moved focus zooms the wrong one. In every case
+  the test reported a missed keystroke as a defect in the feature.
+
+  They now wait for the condition the next step actually needs, and say which
+  condition never arrived when it does not. A fifth, the tree-settles test,
+  snapshotted a node count while the tree was still growing -- it read 4 of an
+  eventual 12 -- and then reported the tree as "still growing" when what was
+  still growing was its own first measurement. It waits for the count to stop
+  moving before taking it.
+
+  The poller had been written once already, in `test_tui_force.py`, with a
+  docstring naming this exact lesson. It now lives in `tests/conftest.py`
+  alongside a `settled` companion, because the third copy is the point at which
+  a helper is a convention rather than a local fix.
 
 - **The table-of-contents detector was confidently wrong on image and audio
   data.** Asked whether a run of bytes was a filename, it checked only for a
