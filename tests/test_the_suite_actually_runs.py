@@ -114,3 +114,73 @@ def test_the_standin_table_points_at_real_files():
             broken.append(f"{name} -> {small} (missing)")
     assert not broken, "stand-in table entries with no file:\n  " + \
         "\n  ".join(broken)
+
+
+class TestTheWaitingHelpersActuallyWait:
+    """A poller that returned early would be invisible.
+
+    Four TUI tests hand `measured` the question they need answered. If it ever
+    stopped waiting -- a bad edit to `tries`, an early return -- every one of
+    them would revert to sampling a half-built tree and would still PASS on a
+    fast machine. The failure would reappear only on a loaded CI runner, as a
+    missing field reported as a product defect, which is the exact loop these
+    helpers were written to end. So the waiting is pinned here, with a fake
+    pilot, where it is deterministic.
+    """
+
+    class _Pilot:
+        def __init__(self):
+            self.pauses = 0
+
+        async def pause(self, _step=None):
+            self.pauses += 1
+
+    def _run(self, coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    def test_it_returns_at_once_when_the_answer_is_already_in(self):
+        from conftest import measured
+        p = self._Pilot()
+        got = self._run(measured(p, lambda: ["codec"], lambda v: "codec" in v))
+        assert got == ["codec"]
+        assert p.pauses == 0, "waited when the answer was already there"
+
+    def test_it_waits_until_the_answer_arrives(self):
+        from conftest import measured
+        p = self._Pilot()
+        state = {"n": 0}
+
+        def measure():
+            state["n"] += 1
+            return ["codec"] if state["n"] > 5 else []
+
+        got = self._run(measured(p, measure, lambda v: "codec" in v))
+        assert got == ["codec"], "gave up before the worker delivered"
+        assert p.pauses >= 5, f"returned after only {p.pauses} polls"
+
+    def test_it_gives_up_and_hands_back_the_last_measurement(self):
+        """A genuine absence must still fail the caller's assertion, and must
+        fail it with the real values rather than with an empty default."""
+        from conftest import measured
+        p = self._Pilot()
+        got = self._run(measured(p, lambda: ["nothing useful"],
+                                 lambda v: "codec" in v, tries=4))
+        assert got == ["nothing useful"]
+        assert p.pauses == 4, f"did not spend its budget: {p.pauses}"
+
+    def test_settled_needs_consecutive_stillness_not_one_repeat(self):
+        """A tree pauses constantly while a worker is dispatched, so a single
+        repeated reading proves nothing. The sequence below repeats 5 twice
+        before moving on: anything that accepts one repeat stops at 5."""
+        from conftest import settled
+        p = self._Pilot()
+        seq = [5, 5, 9, 12, 12, 12, 12, 12, 12]
+        state = {"i": -1}
+
+        def measure():
+            state["i"] = min(state["i"] + 1, len(seq) - 1)
+            return seq[state["i"]]
+
+        got = self._run(settled(p, measure, stable=3))
+        assert got == 12, f"stopped at {got}, which was a pause and not the end"

@@ -31,7 +31,7 @@ import pytest
 pytest.importorskip("textual")
 
 from acidcat.tui_app.app import AcidcatTUI      # noqa: E402
-from conftest import settled                   # noqa: E402
+from conftest import measured, settled         # noqa: E402
 
 
 def _run(scenario):
@@ -102,6 +102,14 @@ def _depth(node, d=0):
     return max([d] + [_depth(c, d + 1) for c in node.children])
 
 
+async def _names_when(pilot, app, tree, ok, tries=90, step=0.1):
+    """Node names, once `ok` accepts them. Waiting lives in conftest.measured;
+    this only says what is being measured."""
+    return await measured(pilot,
+                          lambda: [app._node_name(n) for n in _walk(tree.root)],
+                          ok, tries, step)
+
+
 async def _open_everything(app, pilot, rounds=8):
     """Expand every arrow the tree offers, until it stops offering new ones."""
     tree = app.query_one("#tree")
@@ -156,7 +164,9 @@ class TestItReachesTheBottom:
             app = AcidcatTUI(path)
             async with app.run_test(size=(170, 50)) as pilot:
                 tree = await _open_everything(app, pilot)
-                names = [app._node_name(n) for n in _walk(tree.root)]
+                names = await _names_when(
+                    pilot, app, tree,
+                    lambda ns: any("sample_rate" in n or "44100" in n for n in ns))
                 assert any("sample_rate" in n or "44100" in n for n in names), (
                     "the innermost WAV's fields were never rendered")
         _run(scenario)
@@ -531,7 +541,8 @@ class TestAChunkWithFieldsCanStillBeOpened:
             app = AcidcatTUI(nested_in_data)
             async with app.run_test(size=(170, 50)) as pilot:
                 tree = await _open_everything(app, pilot)
-                names = [app._node_name(n) for n in _walk(tree.root)]
+                names = await _names_when(
+                    pilot, app, tree, lambda ns: any("22050" in n for n in ns))
                 assert any("22050" in n for n in names), (
                     "the WAV inside the data chunk was never opened: " +
                     str(names))
@@ -543,7 +554,8 @@ class TestAChunkWithFieldsCanStillBeOpened:
             app = AcidcatTUI(nested_in_data)
             async with app.run_test(size=(170, 50)) as pilot:
                 tree = await _open_everything(app, pilot)
-                names = [app._node_name(n) for n in _walk(tree.root)]
+                names = await _names_when(
+                    pilot, app, tree, lambda ns: any("frames" in n for n in ns))
                 assert any("frames" in n for n in names), names
         _run(scenario)
 
@@ -662,7 +674,10 @@ class TestAChunkThatCoversItsParentDoesNotRecurse:
             app = AcidcatTUI(path)
             async with app.run_test(size=(170, 50)) as pilot:
                 tree = await _open_everything(app, pilot, rounds=10)
-                names = [app._node_name(n) for n in _walk(tree.root)]
+                names = await _names_when(
+                    pilot, app, tree,
+                    lambda ns: any("codec" in x for x in ns)
+                    and any("bitstream_serial" in x for x in ns))
                 assert any("codec" in x for x in names), names[:12]
                 assert any("bitstream_serial" in x for x in names), names[:12]
         _run(scenario)

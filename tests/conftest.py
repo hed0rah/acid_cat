@@ -294,3 +294,26 @@ async def settled(pilot, measure, tries=90, step=0.1, stable=3):
             runs, last = 0, now
         await pilot.pause(step)
     return measure()
+
+
+async def measured(pilot, measure, ok, tries=90, step=0.1):
+    """The measurement, once it satisfies `ok` -- or the last one taken.
+
+    The third member of the family, and the one the other two could not
+    express. `until` waits for a condition but hands back only a boolean;
+    `settled` hands back a measurement but waits for it to stop MOVING, which
+    is a proxy. The proxy has a hole: a Textual worker that has been dispatched
+    and has not yet delivered leaves the thing being measured perfectly still,
+    so `settled` returns a half-built answer that merely looks finished.
+
+    Waiting on the answer itself closes that. A run that genuinely never
+    produces it still fails, with the same assertion and the same values, after
+    spending the timeout rather than guessing early.
+    """
+    value = measure()
+    for _ in range(tries):
+        if ok(value):
+            return value
+        await pilot.pause(step)
+        value = measure()
+    return value
