@@ -24,6 +24,10 @@ import pytest
 pytest.importorskip("textual")
 
 from acidcat.tui_app.app import AcidcatTUI          # noqa: E402
+# One definition of the poller, in conftest. This file is where the
+# lesson was learned; two other suites then made the same timing
+# assumption, so the helper moved rather than being copied a third time.
+from conftest import until as _until                # noqa: E402
 from acidcat.tui_app.screens import ForcedScreen    # noqa: E402
 
 
@@ -48,21 +52,6 @@ async def _settle(app, pilot):
     while len(app.screen_stack) > 1:
         app.screen_stack[-1].dismiss(None)
         await pilot.pause()
-
-
-async def _until(pilot, cond, tries=100, step=0.1):
-    """Wait for a background answer rather than guessing how long it takes.
-
-    `F` runs every walker on a worker, so how long it takes is a property of
-    the machine. A flat `pause(0.5)` passed here and on two of five CI
-    platforms, failing on the two slowest -- a timing assumption reported as a
-    result. Polling costs nothing when the answer is already in.
-    """
-    for _ in range(tries):
-        if cond():
-            return True
-        await pilot.pause(step)
-    return cond()
 
 
 def _forced(app):

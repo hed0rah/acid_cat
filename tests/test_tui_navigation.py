@@ -28,6 +28,7 @@ from acidcat.tui_app.app import AcidcatTUI
 pytest.importorskip("textual")
 
 from conftest import CORPUS_WAV as WAV
+from conftest import until as _until
 
 
 @pytest.fixture
@@ -53,9 +54,13 @@ def test_hex_edit_is_reachable_by_its_key(wav):
         async with app.run_test(size=(140, 44)) as pilot:
             await pilot.pause()
             await pilot.press("down")
-            await pilot.pause()
+            # ctrl+e declines unless the cursor sits on a node with an editable
+            # byte range, and declining leaves _hexedit None -- so a `down`
+            # that had not landed yet produced a failure reading "ctrl+e did
+            # not enter hex edit" when ctrl+e was never given anything to edit.
+            assert await _until(pilot, lambda: bool(app._meta(app._cur_node))),                 "the cursor never reached an editable node"
             await pilot.press("ctrl+e")
-            await pilot.pause()
+            await _until(pilot, lambda: app._hexedit is not None)
             assert app._hexedit is not None, "ctrl+e did not enter hex edit"
     _run(scenario)
 
@@ -110,8 +115,13 @@ def test_zoom_zooms_the_focused_pane_not_a_fixed_order(wav):
             await pilot.pause()
             assert app._zoom is None
             await pilot.press("tab")           # now the hex pane
+            # z zooms whatever has focus, so pressing it before tab has moved
+            # focus zooms the tree, and the assertion below then reads as a
+            # zoom bug rather than as the missed keystroke it is.
+            assert await _until(pilot,
+                                lambda: app._focused_pane() == "hexwrap"),                 "tab never moved focus to the hex pane"
             await pilot.press("z")
-            await pilot.pause()
+            await _until(pilot, lambda: app._zoom is not None)
             assert app._zoom == "zoom-hex"
             assert app.query_one("#hexwrap").size.width >= 76
     _run(scenario)
