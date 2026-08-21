@@ -184,3 +184,46 @@ class TestTheWaitingHelpersActuallyWait:
 
         got = self._run(settled(p, measure, stable=3))
         assert got == 12, f"stopped at {got}, which was a pause and not the end"
+
+    class _Workers:
+        """A WorkerManager stand-in: sized, and it drains after N checks."""
+
+        def __init__(self, busy_for):
+            self.busy_for = busy_for
+            self.checks = 0
+
+        def __len__(self):
+            self.checks += 1
+            return 1 if self.checks <= self.busy_for else 0
+
+    class _App:
+        def __init__(self, busy_for):
+            self.workers = TestTheWaitingHelpersActuallyWait._Workers(busy_for)
+
+    def test_quiet_waits_for_the_workers_to_drain(self):
+        from conftest import quiet
+        p = self._Pilot()
+        app = self._App(busy_for=6)
+        assert self._run(quiet(p, app)) is True
+        assert p.pauses >= 6, f"stopped after {p.pauses} polls with work outstanding"
+
+    def test_quiet_lets_the_expansion_start_before_it_counts(self):
+        """The first pause is load-bearing. `expand()` posts messages that spawn
+        the workers, so counting immediately sees an empty manager and returns
+        before the work has begun -- which is indistinguishable from finished."""
+        from conftest import quiet
+        p = self._Pilot()
+        app = self._App(busy_for=0)
+        self._run(quiet(p, app))
+        assert p.pauses >= 2, (
+            "did not bracket the wait: one pause to let workers start, one to "
+            f"let their results land, got {p.pauses}")
+
+    def test_quiet_gives_up_rather_than_hanging(self):
+        """A worker that never finishes must fail the caller's assertion, not
+        stall the suite until the runner kills the job."""
+        from conftest import quiet
+        p = self._Pilot()
+        app = self._App(busy_for=10_000)
+        assert self._run(quiet(p, app, tries=5)) is False
+        assert p.pauses <= 8, f"spent more than its budget: {p.pauses}"

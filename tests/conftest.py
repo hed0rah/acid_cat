@@ -317,3 +317,36 @@ async def measured(pilot, measure, ok, tries=90, step=0.1):
         await pilot.pause(step)
         value = measure()
     return value
+
+
+async def quiet(pilot, app, tries=150, step=0.1):
+    """Wait until the app has no work outstanding, then let its results land.
+
+    The condition itself, at last. `settled` waits for a measurement to stop
+    moving and `measured` waits for it to satisfy a predicate, but both are
+    asking the tree what the WORKERS are doing, and the tree only knows once
+    the answer has already arrived. Textual's WorkerManager knows directly:
+    it is iterable and sized, so "is anything still running" is one question
+    with an exact answer.
+
+    That distinction is not academic. The tree-settles test asks whether
+    expanding an already-complete tree adds nodes, and it has no condition to
+    wait for other than completion -- so a stability window is the only tool
+    `settled` could offer it, and a window short enough to keep the suite quick
+    is a window a loaded runner will outrun. It read 4 nodes of an eventual 12
+    on Windows and reported the tree as still growing.
+
+    Two pauses bracket the wait on purpose. The first lets `expand()` finish
+    posting its messages so the workers it spawns actually exist before they
+    are counted; without it an immediate check sees an empty manager and
+    returns before the work has started. The second lets the finished workers'
+    results reach the tree, because a worker leaving the manager and its output
+    appearing as nodes are separate events.
+    """
+    await pilot.pause()
+    for _ in range(tries):
+        if not len(app.workers):
+            break
+        await pilot.pause(step)
+    await pilot.pause()
+    return not len(app.workers)

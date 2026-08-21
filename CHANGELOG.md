@@ -24,8 +24,30 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
   site would revert to sampling a half-built tree and would still pass on a fast
   machine, with the failure reappearing only on a loaded runner.
 
-  No product code changed. The suite runs 2,869 tests in 13m02s, against 17m15s
-  when the waits were fixed durations.
+  Four call sites now wait for the condition they actually need rather than for
+  stillness, and the waiting itself is pinned by tests with a fake pilot. A
+  poller that started returning early would otherwise be invisible: every call
+  site would revert to sampling a half-built tree and would still pass on a fast
+  machine, with the failure reappearing only on a loaded runner.
+
+- **And one test had no condition to wait for, so it had to ask the workers.**
+  The tree-settles test asks whether expanding an already-complete tree adds
+  nodes. Completion is the only thing it can wait on, which left a stability
+  window as the only tool available -- and a window short enough to keep the
+  suite quick is one a loaded runner outruns. It read 4 nodes of an eventual 12.
+
+  Textual's `WorkerManager` is iterable and sized, so "is anything still
+  running" has an exact answer. The suite now asks that instead of inferring it
+  from the tree, which can only report a worker as finished after its result has
+  already arrived -- the gap every earlier version fell through. The wait is
+  bracketed by two pauses, one so `expand()` can spawn its workers before they
+  are counted and one so their results can reach the tree, and it gives up
+  rather than hanging, so a stuck worker fails an assertion instead of stalling
+  the job.
+
+  No product code changed in any of this. The suite runs 2,869 tests, and the
+  deep-nesting file alone went from 3m56s to 3m14s: waiting on the workers ends
+  each round as soon as they drain instead of always spending a fixed pause.
 
 ## [1.2.0] - 2026-08-20
 
