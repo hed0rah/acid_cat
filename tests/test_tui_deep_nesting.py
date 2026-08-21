@@ -31,7 +31,7 @@ import pytest
 pytest.importorskip("textual")
 
 from acidcat.tui_app.app import AcidcatTUI      # noqa: E402
-from conftest import measured, settled         # noqa: E402
+from conftest import measured, quiet            # noqa: E402
 
 
 def _run(scenario):
@@ -128,14 +128,13 @@ async def _open_everything(app, pilot, rounds=8):
             if n.allow_expand and not n.is_expanded:
                 n.expand()
                 opened += 1
-        await pilot.pause(0.5)
+        # Expanding a node starts work on a worker, so a round that opened
+        # nothing is not the same as a tree that has finished. Waiting a fixed
+        # half second guessed at that; waiting for the workers themselves does
+        # not have to guess.
+        await quiet(pilot, app)
         if not opened:
             break
-    # A round that opened nothing is not the same as a tree that has finished.
-    # Expanding a node starts work on a worker, so children can still be on
-    # their way in when the loop decides there is nothing left to open -- and a
-    # caller that measures the tree at that moment measures it mid-growth.
-    await settled(pilot, lambda: len(list(_walk(tree.root))))
     return tree
 
 
@@ -620,14 +619,13 @@ class TestAChunkThatCoversItsParentDoesNotRecurse:
             app = AcidcatTUI(path)
             async with app.run_test(size=(170, 50)) as pilot:
                 tree = await _open_everything(app, pilot, rounds=10)
-                first = await settled(pilot, lambda: len(list(_walk(tree.root))))
+                first = len(list(_walk(tree.root)))
                 for _ in range(4):
                     for n in list(_walk(tree.root)):
                         if n.allow_expand and not n.is_expanded:
                             n.expand()
-                    await pilot.pause(0.4)
-                after = await settled(pilot,
-                                      lambda: len(list(_walk(tree.root))))
+                    await quiet(pilot, app)
+                after = len(list(_walk(tree.root)))
                 assert after == first, (
                     "the tree was still growing after it should have settled")
         _run(scenario)
