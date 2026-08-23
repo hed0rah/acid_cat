@@ -98,3 +98,51 @@ def test_wii_detection(tmp_path):
     assert not wiidisc.is_wii(str(plain))
     with pytest.raises(wiidisc.WiiError):
         wiidisc.WiiDisc(str(plain))                      # not a Wii disc
+
+
+# ── the predictor's starting state ──────────────────────────────────
+
+def _brstm_with_history(y1, y2):
+    """The same minimal stream, with a non-zero initial history written where
+    the format keeps it: behind the 16 coefficients, past the gain and the
+    initial predictor/scale."""
+    buf = bytearray(_brstm_file())
+    coef_at = (0x40 + 8) + 0x68          # channel info -> coefs, as built above
+    struct.pack_into(">HHhh", buf, coef_at + 32, 0, 0, y1, y2)
+    return bytes(buf)
+
+
+def test_the_initial_history_is_read_from_the_file():
+    h = brstm.parse_header(_brstm_with_history(1234, -567))
+    assert h["hist"][0] == (1234, -567), (
+        "the per-channel initial history was read past; a stream that does not "
+        "begin at silence decodes its first frames against the wrong state")
+
+
+def test_a_seeded_predictor_changes_the_opening_samples():
+    """The reason it matters, rather than the fact that the field exists.
+
+    Coefficients are zero in this fixture, so a decoder that ignores history
+    produces the same audio either way and the field can look decorative. Give
+    the stream a real predictor and the two readings separate immediately.
+    """
+    plain = bytearray(_brstm_with_history(0, 0))
+    seeded = bytearray(_brstm_with_history(4000, 4000))
+    coef_at = (0x40 + 8) + 0x68
+    for buf in (plain, seeded):                  # predictor 1 reads coefs[2:4]
+        struct.pack_into(">h", buf, coef_at + 4, 2048)   # c0 = 2048, i.e. 1.0
+        buf[0x120] = 0x11                        # coefficient index 1, scale 1
+    a = array.array("h"); a.frombytes(brstm.decode(bytes(plain))[0])
+    b = array.array("h"); b.frombytes(brstm.decode(bytes(seeded))[0])
+    assert a[0] != b[0], (
+        "seeding the predictor changed nothing; the history is being dropped "
+        "between the header and the decoder")
+    assert b[0] == a[0] + 4000, (b[0], a[0])     # (2048 * 4000) >> 11 = 4000
+
+
+def test_history_defaults_to_silence_when_the_field_is_absent():
+    """A truncated channel context must not crash the walk. Every shipped
+    specimen measured starts at silence anyway, so zero is also the right
+    answer when the bytes are not there to say otherwise."""
+    h = brstm.parse_header(_brstm_file())
+    assert h["hist"] == [(0, 0)]
