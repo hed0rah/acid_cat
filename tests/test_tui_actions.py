@@ -268,3 +268,108 @@ def test_search_prev_steps_backwards(wav):
             await pilot.pause()
 
     _drive(scenario)
+
+
+def _voc(path, rate=11025, bits=8, fmt=0, samples=b"\x80" * 512):
+    """A minimal Creative Voice File, block 09 so the rate is explicit."""
+    import struct
+    ver = 0x0114
+    head = (b"Creative Voice File\x1a"
+            + struct.pack("<HHH", 26, ver, (~ver + 0x1234) & 0xFFFF))
+    body = struct.pack("<IBBH", rate, bits, 1, fmt) + b"\0" * 4 + samples
+    blk = bytes([9, len(body) & 0xFF, (len(body) >> 8) & 0xFF,
+                 (len(body) >> 16) & 0xFF]) + body
+    path.write_bytes(head + blk + b"\x00")
+    return str(path)
+
+
+def test_playback_geometry_comes_from_whatever_walker_found_it(tmp_path):
+    """Only RIFF and AIFF state their geometry in a chunk named `fmt`/`COMM`.
+    Every other walked format states the same three things under the same field
+    names, and reading only the RIFF pair meant all of them fell back to
+    44100 Hz 16-bit.
+
+    That default is not a neutral guess. A Creative Voice File is typically
+    8-bit at 11025: played as 16-bit every pair of samples becomes one, and
+    played at 44100 it runs four times fast. It sounds like a broken decoder,
+    which is exactly how it was reported.
+    """
+    pytest.importorskip("textual")
+    from acidcat.tui_app import AcidcatTUI
+
+    p = _voc(tmp_path / "duke.voc")
+
+    async def scenario():
+        app = AcidcatTUI(p)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            rate, ch, bits, floating = app._audio_params()
+            assert (rate, ch, bits) == (11025, 1, 8), (
+                f"got {(rate, ch, bits)}; the walker read 11025/1/8 off the "
+                f"file and playback ignored it")
+            assert floating is False
+
+    _drive(scenario)
+
+
+def test_a_riff_still_wins_over_a_later_chunk(tmp_path):
+    """The generalisation must not outrank the unambiguous case: a RIFF states
+    its geometry in `fmt`, and that stays the answer even though other chunks
+    in the same file also carry a sample_rate field."""
+    pytest.importorskip("textual")
+    from acidcat.tui_app import AcidcatTUI
+    from conftest import CORPUS_WAV as WAV
+
+    async def scenario():
+        app = AcidcatTUI(str(WAV))
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            rate, ch, bits, _ = app._audio_params()
+            fmt = [c for c in app.chunks
+                   if str(c.get("id", "")).strip() == "fmt"]
+            assert fmt, "no fmt chunk, so this proves nothing"
+            want = {f["name"]: f["value"] for f in fmt[0]["fields"]}
+            assert rate == int(want["sample_rate"])
+            assert bits == int(want["bits_per_sample"])
+
+    _drive(scenario)
+
+
+def test_the_unambiguous_chunk_outranks_a_merely_earlier_one():
+    """Ordering, tested where it is observable.
+
+    On a real RIFF both routes agree, so `fmt` winning is invisible -- which
+    means the rule could be deleted and every test would still pass. It is not
+    decoration: `fmt` and `COMM` are the two chunks whose geometry describes
+    the whole file, while any other chunk carrying a `sample_rate` describes
+    only itself. A file where the two disagree has to resolve to the former.
+    """
+    pytest.importorskip("textual")
+    from acidcat.tui_app import AcidcatTUI
+
+    class Stub:
+        _RATE_RANGE = AcidcatTUI._RATE_RANGE
+        _CH_RANGE = AcidcatTUI._CH_RANGE
+        _BITS_VALID = AcidcatTUI._BITS_VALID
+        _params_from = AcidcatTUI._params_from
+        _audio_params = AcidcatTUI._audio_params
+
+    def chunk(cid, rate, bits):
+        return {"id": cid, "fields": [{"name": "sample_rate", "value": rate},
+                                      {"name": "bits_per_sample", "value": bits},
+                                      {"name": "channels", "value": 1}]}
+
+    s = Stub()
+    # the misleading one FIRST, so position alone would pick it
+    s.chunks = [chunk("smp[1]", 8000, 8), chunk("fmt", 44100, 16)]
+    assert s._audio_params()[:3] == (44100, 1, 16), (
+        "an ordinary chunk outranked fmt: %r" % (s._audio_params(),))
+
+    # with no fmt at all, the first chunk that states a rate is the answer
+    s.chunks = [{"id": "VOC", "fields": [{"name": "version", "value": "1.20"}]},
+                chunk("snd[1]", 11025, 8), chunk("snd[2]", 22050, 16)]
+    assert s._audio_params()[:3] == (11025, 1, 8), s._audio_params()
+
+    # and nothing at all still yields the documented default
+    s.chunks = []
+    assert s._audio_params() == (44100, 1, 16, False)
