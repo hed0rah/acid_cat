@@ -15,7 +15,7 @@ import tempfile
 from acidcat.core.infra import geometry
 from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import (
-    ableton, aiff, akai, albank, amiga, bfdlac, bitwig, gf1pat, emu, flac, fxp, krz, labx,
+    ableton, aiff, akai, albank, amiga, bfdlac, bitwig, dmx, gf1pat, voc, emu, flac, fxp, krz, labx,
     midi, midi2, mp3,
     mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
     vital, wav, wt,
@@ -32,6 +32,8 @@ _WALKERS = {
     "8svx": ("IFF/8SVX", lambda path, deep: svx.inspect_8svx(path)),
     "bfdlac": ("BFD compressed audio", lambda path, deep: bfdlac.inspect_bfdlac(path)),
     "gf1pat": ("Gravis UltraSound patch", lambda path, deep: gf1pat.inspect_gf1pat(path)),
+    "voc": ("Creative Voice File", lambda path, deep: voc.inspect_voc(path)),
+    "dmx": ("DMX sound (Doom lump)", lambda path, deep: dmx.inspect_dmx(path)),
     "smus": ("IFF/SMUS (Sonix score)", lambda path, deep: amiga.inspect_smus(path)),
     "okt": ("Oktalyzer module", lambda path, deep: amiga.inspect_okt(path)),
     "med": ("MED / OctaMED module", lambda path, deep: amiga.inspect_med(path)),

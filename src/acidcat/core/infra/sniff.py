@@ -38,7 +38,8 @@ KNOWN_FORMATS = frozenset({
     "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
     "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni", "ogg",
     "okt", "pgm", "rf64", "rmid", "rx2", "s3m", "serum", "sf2", "sigmf", "smus",
-    "snd", "snesrom", "vag", "vital", "wav", "wii", "wt", "xm", "xpm", "xpn", "xtd",
+    "dmx", "snd", "snesrom", "vag", "vital", "voc", "wav", "wii", "wt", "xm", "xpm",
+    "xpn", "xtd",
 })
 
 # audio container formats that carry a carvable/recoverable payload: format id ->
@@ -136,6 +137,8 @@ def sniff_bytes(head):
         return "bfdlac"                                # FXpansion BFD compressed audio
     if head[:8] == b"GF1PATCH":
         return "gf1pat"                                # Gravis UltraSound GF1 patch
+    if head[:20] == b"Creative Voice File":
+        return "voc"                                   # Creative Voice File (Sound Blaster)
     if head[:4] == b"VAGp":
         return "vag"                                   # PS1 SPU-ADPCM sample
     if head[:8] == b" HALPST\x00":
@@ -281,6 +284,19 @@ def sniff(filepath):
     # a .cue may open with REM/CATALOG lines before FILE; trust the extension
     if fmt is None and filepath.lower().endswith(".cue"):
         return "cue"
+    # A Doom DS* sound has no magic at all -- eight bytes of header over raw
+    # samples. `03 00` as a format field is not an identification on its own,
+    # and the corroboration needs the FILE: the declared count plus the header
+    # must equal its length exactly. sniff_bytes only ever sees the head, so
+    # this cannot live there and be honest.
+    if fmt is None:
+        import os
+        from acidcat.core.walk import dmx as dmxmod
+        try:
+            if dmxmod.looks_like_dmx(head, os.path.getsize(filepath)):
+                return "dmx"                           # Doom DS* sound lump
+        except OSError:
+            pass
     # every Ableton document except .asd and .amxd is gzipped XML, so the magic
     # is just gzip's. Identifying it needs one decompressed block, which is why
     # this lives here rather than in sniff_bytes.
@@ -404,6 +420,7 @@ def _is_albank(filepath):
     """An N64 libultra .ctl: revision 0x4231, a small bankCount, and a first bank
     offset that lands on an ALBank whose sampleRate is a sane audio rate. The
     sample-rate gate cheaply rejects the many false 0x4231 hits in random data."""
+    import os
     import struct
     try:
         with open(filepath, "rb") as f:
