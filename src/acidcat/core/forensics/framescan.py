@@ -21,6 +21,28 @@ _MIN_FRAMES = 12                 # a chain this long is a stream, not chance
 _MAX_STREAMS = 4096
 _READ_CAP = 256 * 1024 * 1024
 
+# Share of a claimed stream that may be the sync byte itself.
+#
+# A chain of valid, self-consistent frames is not proof of a stream. Inside
+# TILES002.ART, a Duke Nukem art tile sheet, this reported 25 frames of "MPEG 1
+# Layer I, 128 kbps, 48000 Hz" at confidence 0.85, with a full per-frame table
+# -- because the sheet is a field of 0xFF and 0xFF is where a sync lives. Every
+# structural check passed: the headers decoded, the version, layer and rate
+# agreed across all 25, and the chain did not restart at neighbouring offsets.
+#
+# What separates it is the payload, and specifically THIS byte rather than
+# entropy in general. 0xFF is the sync pattern, so a real MPEG payload is full
+# of bit patterns an encoder chose partly to avoid emitting it; a stream that is
+# three quarters 0xFF would be riddled with false syncs of its own. Measured
+# over 25 real MP3s the density runs 0.0029 to 0.0189, and over the art sheet
+# 0.70 to 0.75 -- a factor of 37 with nothing in between.
+#
+# Generic entropy does NOT work here and the difference matters: the highest
+# single-byte share in the corpus is 0.99, in a generated near-silent file whose
+# dominant byte is 0x00. A rule about "too uniform" would have rejected quiet
+# audio and still let the art sheet through.
+_FF_DENSITY_MAX = 0.10           # 5x the worst real reading, 7x under the false one
+
 
 def _chain(data, start, limit):
     """Frames in the consecutive-valid-frame chain from `start`, and its end.
@@ -41,6 +63,19 @@ def _chain(data, start, limit):
         frames += 1
         pos += flen
     return frames, pos
+
+
+def _sync_saturated(data, start, end):
+    """Is this claimed stream mostly the sync byte, and therefore not one?
+
+    Counted over the whole claimed extent rather than a prefix, because the art
+    sheet that motivated this alternates dense and sparse runs and a prefix
+    lands on either depending on where the chain happens to begin.
+    """
+    span = end - start
+    if span <= 0:
+        return False
+    return (data.count(0xFF, start, end) / span) > _FF_DENSITY_MAX
 
 
 def _candidate_offsets(data, n):
@@ -106,6 +141,12 @@ def find_mpeg_streams(data, min_frames=_MIN_FRAMES):
             i = j + 1
             continue
         frames, end = _chain(data, j, n)
+        if frames >= min_frames and _sync_saturated(data, j, end):
+            # A field of 0xFF chains cleanly and means nothing. Resume past it
+            # rather than at j+1: every offset inside it fails the same way,
+            # and stepping a byte at a time re-derives that for each one.
+            i = end
+            continue
         if frames >= min_frames:
             hdr = decode_frame_header(data[j:j + 4])
             out.append({
