@@ -4,6 +4,96 @@ All notable changes to acidcat. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project will
 adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
+## [1.2.2] - 2026-08-23
+
+### Fixed
+
+- **A GameCube stream decoded every sample with the wrong channel's scale
+  factor.** DTK frames give each channel its own header byte carrying a scale
+  exponent, and the low nibble of each data byte belongs to the left channel,
+  the high nibble to the right. This read them the other way round.
+
+  That is not a channel swap. Because each channel has its own header, reading
+  the nibbles backwards pairs every sample with the OTHER channel's scale
+  exponent -- and a scale exponent is a power of two. The music keeps its shape
+  while each sample is off by a factor of 2^n, which is why it sounds like
+  damage rather than like a mix-up. Against a reference decoder: 1.7% of samples
+  correct, error louder than the signal.
+
+  The predictor history was also carried as a clamped 16-bit sample. The
+  hardware keeps six fractional bits and does not clamp it; this is a recursive
+  filter, so rounding its state every step feeds the error back into the next
+  prediction.
+
+  Now bit-exact across all 16 scale exponents and all 16 predictor indices.
+
+- **The one test covering the broken nibble order asserted the bug.** It was
+  written from the implementation rather than from the format, so it agreed
+  with the defect and held it in place. Rewritten from the console's own
+  arithmetic, with an independent reference decoder in the test file so
+  agreement is evidence rather than a tautology.
+
+- **Two decoders started their predictor at silence regardless of where the
+  audio started.** `dsp.decode` takes the initial history and its own docstring
+  passes it; the BRSTM and HPS callers did not. Both formats store it -- BRSTM
+  behind the coefficient table, HPS in each block header -- so it was read past
+  rather than absent. DSP-ADPCM is recursive, so a stream that does not begin
+  at silence decodes its opening frames against the wrong state.
+
+- **An archive index read at half its stride reported twice the entries.** Every
+  other record was real and the ones between were a leftover buffer field
+  mistaken for a name, so the false reading was self-consistent and longer --
+  and length was what picked the winner. Distinctness could not separate them:
+  half the names being real puts it at 0.509 against a floor of 0.5, which is a
+  coincidence rather than a margin.
+
+  How much of a table ONE repeated name accounts for separates them cleanly.
+  Measured over 1,644 candidate readings of 32 shipped archives: the worst
+  genuine index is 0.077, every false reading of a real directory 0.38 to 0.52.
+
+- **Zero-size entries were treated as overlapping.** Only an entry with an
+  extent can collide with its neighbour; marker entries that delimit a run and
+  carry no data point at nothing, and counting them as conflicts rejected the
+  index that contained them.
+
+- **A wall of texture bytes was read as a table of contents,** and a run of
+  0xFF bytes as an MPEG audio frame. The sync-word density that a real MPEG
+  stream never reaches now separates them: five times the worst real reading,
+  seven times under the false one.
+
+- **Playback assumed RIFF.** Any format whose sample rate lives outside a `fmt`
+  or `COMM` chunk played at the wrong rate; the parameters are now taken from
+  whichever chunk declares them.
+
+### Added
+
+- **Creative Voice (`.voc`) walker.** The sample format of the DOS era: block
+  types 01, 02, 05 and 09, the time-constant to sample-rate conversion, and the
+  one-byte terminator. Verified over 896 shipped specimens.
+
+- **Doom DMX (`DS*` lump) walker.** Eight bytes of header over raw samples and
+  no magic string anywhere, so identification is arithmetic rather than a
+  signature: the declared count plus the header must equal the lump's own
+  length, exactly. That held for all 1,181 shipped lumps. The rate is read
+  rather than assumed -- three quarters of the corpus is not 11025 -- and the
+  lead-in padding is reported rather than trimmed, because 168 of those lumps
+  do not have it and cutting a padding that is assumed removes real audio.
+
+- **Filtering and sorting in the TUI region list.** Type to narrow by name or
+  format; Tab focuses the header, left and right pick a column, Enter sorts and
+  flips. Sorting reorders the view, so the row-to-region mapping is now explicit
+  and tested as a bijection across every column in both directions -- a
+  permutation bug there would extract one file twice and another never, and it
+  would not look like an error.
+
+### Changed
+
+- The corpus test over real archives now reports every disagreement instead of
+  the first. The assertion used to fire inside the loop, and because pytest
+  stops at the first one, a run over 32 archives reported ONE and looked like it
+  had cleared the other 31; eleven of them were also wrong. It is now a ratchet
+  that can only go down.
+
 ## [1.2.1] - 2026-08-20
 
 ### Fixed
