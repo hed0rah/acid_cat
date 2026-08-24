@@ -487,7 +487,9 @@ class RegionsScreen(ModalScreen):
     show_shape = False
 
     def __init__(self, regions, blob_name, mode="normal", transforms=False,
-                 blob_src=None, show_shape=False, selected=None, cursor=0):
+                 blob_src=None, show_shape=False, selected=None, cursor=0,
+                 filter_text="", sort_col="offset", sort_desc=False,
+                 header_focus=False, header_col=None):
         super().__init__()
         self.regions = regions
         self.blob_name = blob_name
@@ -504,6 +506,101 @@ class RegionsScreen(ModalScreen):
         # not carry is a row it cannot return to -- and marking N regions meant
         # scrolling from the top N times, in the feature the list exists for.
         self.cursor = cursor
+        # Typed into the list to narrow it. Held by the app for the same reason
+        # as the selection and the cursor: the screen is re-pushed on every
+        # action, so a filter it did not carry would clear itself the moment
+        # you marked a row.
+        self.filter_text = filter_text
+        # Which column orders the list, and which way. Held by the app for the
+        # same reason as the filter: this screen is re-pushed constantly.
+        self.sort_col = sort_col
+        self.sort_desc = sort_desc
+        # Whether the header bar has focus, so left/right pick a column rather
+        # than scrolling the table. Two-step on purpose -- picking a column and
+        # applying it are separate, or you cannot move PAST a column to reach
+        # one further along without re-sorting the whole list on the way.
+        self.header_focus = header_focus
+        # Which sortable column the arrows are pointing at while the header has
+        # focus. Starts on whatever is currently sorting, so tabbing up does not
+        # lose your place.
+        self.header_col = header_col or 0
+        self._pin_header_col = header_col is not None
+        self._sortable = []
+        # Original indexes of the rows currently shown, in display order.
+        # EVERYTHING downstream keys off region index, and once a filter is on,
+        # table row N is no longer region N -- descend, extract and select would
+        # all act on whatever happened to sit at that position in the full list.
+        # This is the translation, and it is the reason the filter is not a
+        # three-line change.
+        self._view = list(range(len(regions)))
+
+    def _matches(self, region):
+        """Substring match, case-insensitive, over the fields you can read.
+
+        Name first because that is what a table of contents gives you and what
+        anyone is looking for, then format so `voc` narrows to the sounds, then
+        kind. Not offset or length: nobody hunts a file by typing part of a
+        byte count, and including them makes every short query match everything.
+        """
+        q = self.filter_text.lower()
+        if not q:
+            return True
+        fmt = (region.get("transform") or region.get("format")
+               or (region.get("probe") or {}).get("top") or "raw-pcm")
+        return (q in (region.get("name") or "").lower()
+                or q in str(fmt).lower()
+                or q in str(region.get("kind", "")).lower())
+
+    def _visible(self):
+        rows = [i for i, r in enumerate(self.regions) if self._matches(r)]
+        return self._sorted(rows)
+
+    # What each sortable column reads off a region. Offset is the natural order
+    # and is spelled out rather than left implicit, so "sorted by offset" and
+    # "not sorted" are the same list and returning to it is one keystroke.
+    SORT_KEYS = {
+        "offset": lambda r: r.get("offset", 0),
+        "end": lambda r: r.get("end", 0),
+        "kind": lambda r: str(r.get("kind", "")),
+        "format": lambda r: str(r.get("transform") or r.get("format")
+                                or (r.get("probe") or {}).get("top") or ""),
+        "conf": lambda r: r.get("confidence") or 0,
+        "length": lambda r: r.get("length", 0),
+        "name": lambda r: (r.get("name") or "").lower(),
+    }
+
+    def _head(self, col):
+        """A column heading, marked up with the sort state.
+
+        The arrow is the whole point of showing it: an order you cannot see is
+        one you re-derive every time you look away, and this screen is redrawn
+        constantly. The bracket marks which column the arrows would move to,
+        which is a different thing from which one is sorting -- you can be
+        pointing at `length` while still ordered by `name`.
+        """
+        if col not in self.SORT_KEYS:
+            return col
+        label = col
+        if col == self.sort_col:
+            label = f"{col} {'v' if self.sort_desc else '^'}"
+        if self.header_focus and self._sortable and                 self._sortable[self.header_col] == col:
+            return f"[{label}]"
+        return label
+
+    def _sorted(self, rows):
+        """Order the visible rows, stably, by the chosen column.
+
+        Stable on purpose: sorting by format leaves the VOCs in the order the
+        archive stores them, which is the order their names run in, so the
+        second key comes free and the list stays predictable. An unstable sort
+        would reshuffle equal rows on every redraw and the screen is redrawn on
+        every keystroke.
+        """
+        key = self.SORT_KEYS.get(self.sort_col)
+        if key is None:
+            return rows
+        return sorted(rows, key=lambda i: key(self.regions[i]),
+                      reverse=self.sort_desc)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="regbox"):
@@ -511,11 +608,15 @@ class RegionsScreen(ModalScreen):
             nt = sum(1 for r in self.regions if r.get("kind") == "transformed")
             nb = len(self.regions) - nc - nt
             lens = "  lens:ON" if self.transforms else ""
+            shown = len(self._visible())
+            narrowed = (f"   filter:{self.filter_text!r} -> {shown} of "
+                        f"{len(self.regions)}" if self.filter_text else "")
             yield Static(
                 Text(f"{self.blob_name}  --  {len(self.regions)} region(s): "
                      f"{nc} container / {nb} blob"
                      + (f" / {nt} transformed" if nt else "")
-                     + f"   [mode:{self.mode}{lens}]", style=f"bold {ACCENT}"),
+                     + f"   [mode:{self.mode}{lens}]" + narrowed,
+                     style=f"bold {ACCENT}"),
                 id="reghint")
             marked = (f"   {len(self.selected)} selected"
                       if self.selected else "")
@@ -523,8 +624,10 @@ class RegionsScreen(ModalScreen):
             # at things, then acting on the ones you marked. One undifferentiated
             # row of eleven keys is a row nobody reads.
             yield Static(
-                Text("look:  enter descend   M mode   T lens   G shape   "
-                     "/ search   C carve   esc back   ? help", style=SOFT),
+                Text("look:  type to filter   bksp undo   esc clear/back   "
+                     "tab sort header (arrows pick, enter flips)   "
+                     "enter descend   M mode   T lens   G shape   "
+                     "/ byte search   C carve   ? help", style=SOFT),
                 id="regkeys")
             yield Static(
                 Text("act:   space select   A all/none   X extract sel   "
@@ -543,8 +646,16 @@ class RegionsScreen(ModalScreen):
             cols.append("name" if self._named else "geometry")
             if self.show_shape:
                 cols.append("shape")
-            t.add_columns(*cols)
-            for i, r in enumerate(self.regions):
+            # Sortable columns, in display order, so left/right walks them the
+            # way they appear rather than the way a dict happens to iterate.
+            self._sortable = [c for c in cols if c in self.SORT_KEYS]
+            if not self._pin_header_col and self.sort_col in self._sortable:
+                self.header_col = self._sortable.index(self.sort_col)
+            self.header_col = min(self.header_col, max(0, len(self._sortable) - 1))
+            t.add_columns(*[self._head(c) for c in cols])
+            self._view = self._visible()
+            for i in self._view:
+                r = self.regions[i]
                 geo = r.get("geometry") or {}
                 gs = ""
                 if geo:
@@ -584,25 +695,50 @@ class RegionsScreen(ModalScreen):
             pass
 
     def on_data_table_row_selected(self, event):
-        self.dismiss({"action": "descend", "index": event.cursor_row})
+        self.dismiss({"action": "descend",
+                      "index": self._index(event.cursor_row)})
 
-    def _cursor(self):
+    def _row(self):
+        """Where the cursor sits in the TABLE. A view position."""
         return self.query_one("#regtable", DataTable).cursor_row
+
+    def _index(self, row=None):
+        """The REGION that table row refers to.
+
+        The two are the same number only while nothing is filtered. Every
+        action here acts on a region and every one of them used to read the
+        table row and use it as an index -- which, the moment a filter hides a
+        single row above the cursor, descends into or extracts the wrong file
+        and says nothing about it.
+        """
+        row = self._row() if row is None else row
+        if 0 <= row < len(self._view):
+            return self._view[row]
+        return self._view[0] if self._view else 0
 
     def action_toggle_sel(self):
         """space: mark the row under the cursor for extraction."""
-        i = self._cursor()
+        row = self._row()
         sel = set(self.selected)
-        sel.symmetric_difference_update({i})
+        sel.symmetric_difference_update({self._index(row)})
         self.dismiss({"action": "select", "selected": sel,
-                      "cursor": i + 1 if i + 1 < len(self.regions) else i})
+                      "filter": self.filter_text,
+                      "cursor": row + 1 if row + 1 < len(self._view) else row})
 
     def action_select_all(self):
-        """a: all or none, whichever you are not already at."""
-        sel = set() if len(self.selected) == len(self.regions) \
-            else set(range(len(self.regions)))
+        """A: all or none -- of what you can SEE.
+
+        Filtered, that is the useful reading and the one that composes: type
+        `voc`, press A, press X, and 331 sounds come out of a 456-entry archive
+        without touching the rest. Selecting the whole archive while looking at
+        eleven rows would be a surprise, and an expensive one by the time it
+        reached the extract step.
+        """
+        vis = set(self._view)
+        sel = set(self.selected)
+        sel = (sel - vis) if vis and vis <= sel else (sel | vis)
         self.dismiss({"action": "select", "selected": sel,
-                      "cursor": self._cursor()})
+                      "filter": self.filter_text, "cursor": self._row()})
 
     def action_extract(self):
         """x: the selected regions, or the one under the cursor if none are.
@@ -614,10 +750,17 @@ class RegionsScreen(ModalScreen):
             self.dismiss({"action": "extract_selected",
                           "indexes": sorted(self.selected)})
         else:
-            self.dismiss({"action": "extract", "index": self._cursor()})
+            self.dismiss({"action": "extract", "index": self._index()})
 
     def action_extract_all(self):
-        self.dismiss({"action": "extract_all", "index": -1})
+        """E: everything visible, which is everything when nothing is filtered.
+
+        Same reasoning as A. "All" has to mean the list in front of you, or the
+        key quietly means two different things depending on state -- and the
+        one where it means more is the one that writes files to disk.
+        """
+        self.dismiss({"action": "extract_selected",
+                      "indexes": sorted(self._view)})
 
     def action_mode(self):
         nxt = {"strict": "normal", "normal": "aggressive",
@@ -633,6 +776,88 @@ class RegionsScreen(ModalScreen):
 
     def action_search(self):
         self.dismiss({"action": "search"})
+
+    # Every shortcut on this screen is an uppercase letter or a symbol, which
+    # is what leaves the whole lowercase alphabet free to type into. That was
+    # not luck -- it is why the filter can be live rather than hidden behind a
+    # prompt, and it is worth preserving: a new lowercase binding here costs
+    # the ability to type that letter.
+    def on_key(self, event):
+        key = event.key
+        if key == "tab":
+            # Into the header and back out. Tab means the same thing here as in
+            # the file view -- move to a different part of the surface -- and it
+            # is free on this screen because nothing else claimed it.
+            self._repush(header_focus=not self.header_focus)
+            event.stop()
+            return
+        if self.header_focus:
+            if key in ("left", "right") and self._sortable:
+                step = -1 if key == "left" else 1
+                self.header_col = (self.header_col + step) % len(self._sortable)
+                self._repush(header_focus=True, header_col=self.header_col)
+                event.stop()
+                return
+            if key in ("enter", "space") and self._sortable:
+                col = self._sortable[self.header_col]
+                # Landing on a new column sorts it ascending; pressing again on
+                # the one already sorting flips it. Anything else means the
+                # first press on a column does something unpredictable.
+                desc = (not self.sort_desc) if col == self.sort_col else False
+                self._repush(sort_col=col, sort_desc=desc, header_focus=True,
+                             header_col=self.header_col)
+                event.stop()
+                return
+            if key == "escape":
+                self._repush(header_focus=False)
+                event.stop()
+                return
+            # While the header has focus the table is not being driven, so
+            # typing would filter a list you cannot see the cursor in.
+            return
+        if key == "backspace":
+            if self.filter_text:
+                self._refilter(self.filter_text[:-1])
+                event.stop()
+            return
+        if key == "escape":
+            # Clear before leaving. Escaping out of a filtered list straight to
+            # the tree loses two things at once, and the one you meant is
+            # usually the filter.
+            if self.filter_text:
+                self._refilter("")
+                event.stop()
+            return
+        if len(key) == 1 and (key.islower() or key.isdigit() or key in "._-"):
+            self._refilter(self.filter_text + key)
+            event.stop()
+
+    def _refilter(self, text):
+        self._repush(filter_text=text, cursor=0)
+
+    def _repush(self, **changes):
+        """Re-open the list with some of its state changed.
+
+        Through the app rather than rebuilt in place, because the app owns the
+        selection, the cursor, the filter and the sort, and this screen is
+        already re-pushed on every other action. Doing it two ways depending on
+        the key is how one path keeps the selection and the other drops it.
+        """
+        state = {"action": "select", "selected": set(self.selected),
+                 "filter": self.filter_text, "cursor": self._safe_row(),
+                 "sort_col": self.sort_col, "sort_desc": self.sort_desc,
+                 "header_focus": self.header_focus,
+                 "header_col": self.header_col}
+        state.update(changes)
+        if "filter_text" in changes:
+            state["filter"] = state.pop("filter_text")
+        self.dismiss(state)
+
+    def _safe_row(self):
+        try:
+            return self._row()
+        except Exception:
+            return 0
 
     def _shape(self, region):
         """An entropy sparkline for one region: what it looks like, before you

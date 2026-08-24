@@ -49,15 +49,22 @@ _OPS = {ast.Mult: lambda a, b: a * b, ast.Add: lambda a, b: a + b,
 
 
 def _const_int(node):
-    """The int an expression evaluates to, or None.
+    """The number an expression evaluates to, or None.
 
     ast.literal_eval is not enough and the difference is not academic: it
     refuses `64 * 1024 * 1024` and `1 << 22`, which is how most byte caps in
     this tree are spelled. Using it here dropped 33 of 84 constants, silently,
     including every _READ_CAP -- the exact class this file is about.
+
+    Floats count too, and leaving them out was the same mistake one layer down.
+    A bound does not stop being a bound for being fractional: `_FF_DENSITY_MAX`
+    decides whether a byte range is reported as MPEG audio, and this ledger
+    could not see it. Two constants were invisible that way, in a file whose
+    whole purpose is that none are.
     """
     if isinstance(node, ast.Constant):
-        return (node.value if isinstance(node.value, int)
+        return (node.value
+                if isinstance(node.value, (int, float))
                 and not isinstance(node.value, bool) else None)
     if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
         a, b = _const_int(node.left), _const_int(node.right)
@@ -171,6 +178,22 @@ EXEMPT = {
                                   "archives. The walk that would reach it is "
                                   "stopped far earlier by running out of NUL "
                                   "padding"),
+    ("acidcat.core.forensics.framescan", "_FF_DENSITY_MAX"):
+        (Reason.FIELD_SANITY, "the share of a claimed MPEG stream that may be "
+                              "the sync byte itself. A ceiling on a value "
+                              "MEASURED from the bytes, used to reject them: "
+                              "real payload runs 0.003 to 0.019, a field of "
+                              "0xFF runs 0.70 to 0.75, and crossing it means "
+                              "the region is not audio rather than that the "
+                              "answer was shortened -- covered by "
+                              "tests/test_framescan.py, which pins both that it "
+                              "rejects the field and that it does not cost a "
+                              "real stream"),
+    ("acidcat.core.forensics.locate", "_BLOB_CONF_MAX"):
+        (Reason.FIELD_SANITY, "the top of the confidence scale a statistical "
+                              "blob may occupy, so a guess can never present "
+                              "as a verified signature. It shortens no answer; "
+                              "it bounds how loudly one is stated"),
     ("acidcat.core.forensics.checksums", "_LOOKAHEAD_CANDS"):
         (Reason.SEARCH_WINDOW, "how many spurious CRC-8 hits to step over while "
                                "finding one frame end; changes which candidate "
@@ -337,10 +360,43 @@ def _smus_many_chunks(tmp_path, n):
     return str(p)
 
 
+def _voc_over_cap(tmp_path, n):
+    """A .voc bigger than n bytes, to cross the VOC walker's read cap.
+
+    That cap is the one bound in the walker that shortens the ANSWER rather
+    than a search: blocks past it are never seen at all, so a file crossing it
+    has to say the description covers a prefix and not the file.
+    """
+    ver = 0x0114
+    head = (b"Creative Voice File\x1a"
+            + struct.pack("<HHH", 26, ver, (~ver + 0x1234) & 0xFFFF))
+    body = struct.pack("<IBBH", 11025, 8, 1, 0) + bytes(4) + bytes([0x80]) * (n * 4)
+    blk = bytes([9, len(body) & 0xFF, (len(body) >> 8) & 0xFF,
+                 (len(body) >> 16) & 0xFF]) + body
+    q = tmp_path / "big.voc"
+    q.write_bytes(head + blk + bytes(1))
+    return str(q)
+
+
+def _dmx_over_cap(tmp_path, n):
+    """A Doom DS* lump larger than n bytes, to cross the DMX read cap.
+
+    The lump has to stay self-consistent while it grows: identification is the
+    arithmetic `8 + count == length`, so a fixture that crosses the cap without
+    also declaring the right count is refused before the cap can bite.
+    """
+    samples = bytes([0x80]) * (n * 4)
+    q = tmp_path / "big.lmp"
+    q.write_bytes(struct.pack("<HHI", 3, 11025, len(samples)) + samples)
+    return str(q)
+
+
 SWEPT = [
     # (module that READS the constant, name, patched value, builder, says)
     ("acidcat.core.walk.svx", "_CHUNK_CAP", 4, _svx_many_chunks, "cap"),
     ("acidcat.core.walk.amiga", "_CHUNK_CAP", 4, _smus_many_chunks, "cap"),
+    ("acidcat.core.walk.voc", "_READ_CAP", 64, _voc_over_cap, "only the first"),
+    ("acidcat.core.walk.dmx", "_READ_CAP", 64, _dmx_over_cap, "only the first"),
 ]
 
 

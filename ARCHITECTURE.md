@@ -6,7 +6,7 @@ see exactly what a file is, flag anomalies, and edit or repair its structure.
 Closer to readelf / 010 Editor / radare2's format layer than to exiftool, with
 some optional audio analysis (BPM/key via librosa).
 
-v1.2.1 · ~39k source LOC · ~23k test LOC · one hard dependency (`mutagen`);
+v1.2.2 · ~39k source LOC · ~23k test LOC · one hard dependency (`mutagen`);
 everything heavier is an optional, lazily imported extra, so `import acidcat`
 pulls only the stdlib core.
 
@@ -28,10 +28,10 @@ unchanged.
    `aiff`, `mp3`, `mp4`, `flac`, `ni`, `tracker`, `sf2`, ...),
    `core/primitives/` (shared byte readers), `core/codecs/` (ADPCM, BRR, VADPCM
    and friends), `core/containers/` (disc images and archives),
-   `core/infra/` (`sniff.py` -- 64 recognized formats, `fieldcodec.py` -- the
+   `core/infra/` (`sniff.py` -- 66 recognized formats, `fieldcodec.py` -- the
    enc-language, `geometry.py` -- which bytes a chunk occupies, `mapped.py`,
    `render.py`).
-2. **Walkers** -- `core/walk/*.py`: 34 walkers behind one dispatcher, serving 53
+2. **Walkers** -- `core/walk/*.py`: 36 walkers behind one dispatcher, serving 55
    registered format labels, each emitting the field model. **The correctness oracle and the
    default.** Dispatch: `core/walk/__init__.py::walk_file`.
 3. **Declarative engine** -- `core/grammar/`: format descriptors as data plus one
@@ -77,7 +77,7 @@ unchanged.
 
 ```
 src/acidcat/
-  core/            148 modules
+  core/            150 modules
     formats/       per-format byte decoders (18)
     walk/          34 walker modules -> 53 format labels (35)
     primitives/    shared byte readers (6)
@@ -95,7 +95,7 @@ src/acidcat/
   mcp_server/      schema, handlers, transport (19 tools)
   tui_app/         Textual inspector/editor
   util/            small shared helpers
-  cli.py  explorer.py  tui_theme.py  __init__.py     (205 modules in total)
+  cli.py  explorer.py  tui_theme.py  __init__.py     (207 modules in total)
 tests/             ~0.59 test:source LOC
 docs/              architecture.md (detailed), format anatomy pages
 internal_docs/     design + review notes (gitignored, local-only)

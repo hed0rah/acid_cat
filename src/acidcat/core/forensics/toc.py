@@ -35,6 +35,7 @@ both detectors, and settle the remaining ambiguities by verifying that the
 integer fields actually land payloads on their magic bytes.
 """
 
+import collections
 import os
 import re
 import struct
@@ -61,6 +62,15 @@ import struct
 #                         is not a path, it is a coincidence
 #
 # Both are cheap, and each one alone rejects the specimen that motivated them.
+#
+# KNOWN COST, measured rather than assumed. The alphanumeric floor rejects
+# real names that are mostly punctuation: `__VER__`, a version stub at the
+# head of several id WADs, is 3 alphanumerics in 7 and scores 0.43. Counting
+# underscore as a name character would recover it and was tried -- it takes
+# the wall-texture specimen from 4 printable runs over the floor to 12 of 17,
+# because the band that texture crawls through is exactly []^_` and the
+# underscore is in it. One lump of 1,674 is the cheaper loss, and the lumps
+# lost this way are version stubs rather than audio.
 _NAME = re.compile(rb"[\x20-\x7e]{3,255}")
 _SEPARATOR = re.compile(rb"[./\\]")
 _EXTENSION = re.compile(rb"\.[A-Za-z0-9]{1,5}$")
@@ -285,6 +295,13 @@ _STRIDE_LOOKAHEAD = 6            # anchors ahead to draw a candidate stride from
 _MIN_NAME = 3
 _MAX_RECORDS = 200000
 _WALK_GRACE = 24                 # records before the padding ratio is judged
+# A resource decision, and one that costs accuracy: in four Doom WADs the real
+# directory ranks 178th, 246th, 318th and 36th among the chains their tail
+# window contains, so three of them are never validated at all. Raising the cap
+# to 200, 400 and 800 was measured over 32 shipped archives and recovers ONE of
+# them for half again the wall time; past 200 nothing further changes. Left at
+# 80 because a 5x cost for one archive is not a trade worth making blind, and
+# because ranking, not budget, is the thing actually getting it wrong.
 _MAX_CANDIDATE_CHAINS = 80
 _OUT_OF_ORDER = 0.05             # of an offset column's steps, may descend
 _WIDTH_SUPPORT = 0.1             # of records that must agree on a field width
@@ -303,6 +320,19 @@ _MAX_CHECKS = 64                 # payload magics read per placement hypothesis
 # rejected during development scored 0.01 to 0.22 here while every genuine
 # directory scored 0.96 or better.
 _UNIQ_FLOOR = 0.5
+# The sharper half of the same question, and the one a ratio of distinct names
+# cannot ask. Reading a real index at half its stride produces a second chain
+# that is perfectly self-consistent and twice as long: every other record is the
+# real one, and the records between them are an integer field mistaken for a
+# name, so they are all THE SAME STRING. Quake's pak2 read at 32 rather than 64
+# yields 116 entries of which 58 are the literal " AB", and distinctness lands
+# at 0.509 -- over the floor above by nine thousandths, which is not a margin,
+# it is a coincidence. How much of a table ONE repeated name accounts for
+# separates the two cleanly. Measured over 1,644 candidate readings of 32
+# shipped archives: the worst genuine index is Doom's, at 0.0769, because
+# THINGS appears once per map; every false reading of a real directory sits
+# between 0.38 and 0.52. This sits 3x above the one and 2x below the others.
+_REPEAT_CEIL = 0.25
 # NUL padding is the half of the evidence that smooth data cannot fake -- 0x00
 # is nowhere near the printable band that made a wall texture look like a list
 # of paths. It cannot be required of every record, because a quarter of the
@@ -576,6 +606,19 @@ def _fixed_table(data, chain, stride, min_entries, limit):
     enough to swing which one leads. So the plausible widths are all tried and
     judged on what they produce -- a width is a hypothesis like the stride and
     the association, and the same evidence settles it.
+
+    A KNOWN LIMIT. The vote only sees widths some record actually pads out to,
+    and a writer that leaves its name buffer dirty pads out to none of them.
+    Quake's shipped pak2 is the case: 56 is the true width and not one of its
+    58 records votes for it, so the widths tried are 22, 23 and 20, and four
+    names come back cut short. The score already knows better -- 56 scores
+    0.5800 against 0.2500 for the winner -- it is simply never offered the
+    hypothesis. Two fixes were measured over 32 shipped archives and both
+    rejected: trying every structurally possible width (stride - 4k) is right
+    for all of them but costs 4.7x wall time for that one archive, and ruling
+    out any width that would truncate a name the chain plainly contains breaks
+    the four big Doom IWADs, whose chains run past the directory into data that
+    reads as longer names.
     """
     cap = min(stride - 4, 255)
     if cap < _MIN_NAME:
@@ -614,6 +657,9 @@ def _table_at_width(data, chain, stride, width, min_entries, limit):
     uniq = len(set(names)) / float(len(names))
     if uniq < _UNIQ_FLOOR:
         return None
+    repeat = max(collections.Counter(names).values()) / float(len(names))
+    if repeat > _REPEAT_CEIL:
+        return None
     # Padding is measured, not gated. A floor here rejected nothing: a chain
     # only exists because four consecutive NUL-terminated names proposed it and
     # the walk held a padding ratio the whole way, so by this point the evidence
@@ -650,7 +696,8 @@ def _table_at_width(data, chain, stride, width, min_entries, limit):
             "name_width": width, "name_offset": 0 if assoc == "after"
             else stride - width, "fields": nfields, "assoc": assoc,
             "offset": entries[0]["offset"], "pairing": round(score, 3),
-            "uniq": round(uniq, 3), "padded": round(padded, 3)}
+            "uniq": round(uniq, 3), "padded": round(padded, 3),
+            "repeat": round(repeat, 3)}
 
 
 def _snap_start(entries, stride, limit):
@@ -828,18 +875,37 @@ def _size_field(entries, offsets, skip, table_start, limit):
         col = [e["fields"][k] for e in entries]
         if any(v < 0 for v in col) or offsets[-1] + col[-1] > limit:
             continue
-        room = sum(1 for i in range(n - 1)
-                   if offsets[i] + col[i] <= offsets[i + 1])
-        fits = room / float(n - 1 or 1)
+        # Only entries that HAVE an extent can overlap one. An index is allowed
+        # to hold entries of size zero, and they are not damage: Doom's S_START,
+        # F_END and their kin delimit runs of lumps and carry no data, so their
+        # offset field points at nothing -- all 50 of DOOM.WAD's are literally
+        # zero. Counting those as extents made six ordinary markers read as six
+        # overlaps, which was enough to make dropping the last two score better
+        # than keeping them, and the file came back with 2,304 of its 2,306.
+        real = [i for i in range(n) if col[i] > 0]
+        if len(real) < 2:
+            continue
+        room = sum(1 for a, b in zip(real, real[1:])
+                   if offsets[a] + col[a] <= offsets[b])
+        fits = room / float(len(real) - 1)
         if fits < _NO_OVERLAP:
             continue
         # "Ends where the index begins" has to mean at or just short of it. An
         # archive that pads its payloads pads the last one too, and that padding
         # sits between the final payload and the index -- so demanding equality
         # rejects exactly the aligned archives the non-overlap rule above was
-        # widened to accept. freedoom hides this: its last lump is a zero-length
-        # marker, so it closes to the byte by luck rather than by rule.
-        end = offsets[-1] + col[-1]
+        # widened to accept.
+        #
+        # And it has to be measured from the last entry that HAS an extent. An
+        # index may end in entries of size zero -- Doom's F_END and S_END mark
+        # the boundaries of a run of lumps and hold no data, so their offset
+        # field is whatever the writer left there. Closing on one of those asks
+        # a payload that does not exist to end in the right place, and it fails,
+        # and the cheapest way to make it pass is to drop the markers: DOOM.WAD
+        # came back with 2,304 of its 2,306 lumps, the two missing ones being
+        # exactly F2_END and F_END.
+        last = real[-1]
+        end = offsets[last] + col[last]
         closes = any(0 <= edge - end <= _CLOSE_SLACK
                      for edge in (table_start, limit))
         score = fits * (1.0 if closes else _UNCLOSED)

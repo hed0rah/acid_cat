@@ -362,6 +362,11 @@ class AcidcatTUI(App):
         self._region_shape = False  # sparkline column in the region list
         self._want_list = False   # this scan was asked for by `l`
         self._region_sel = set()  # region indexes marked for extraction
+        self._region_filter = ""  # substring typed into the region list
+        self._region_sort = "offset"      # column ordering the region list
+        self._region_sort_desc = False
+        self._region_header = False       # header bar has focus (tab)
+        self._region_header_col = None    # which column the arrows point at
         self._region_cursor = 0   # row the region list should reopen on
         self._hex_from = 0    # byte offset into the selection the hex starts at
         self._region_view = None  # (idx, region) when viewing a descended region
@@ -1618,7 +1623,12 @@ class AcidcatTUI(App):
                           self._locate_transforms, blob_src=self._blob_src,
                           show_shape=self._region_shape,
                           selected=self._region_sel,
-                          cursor=self._region_cursor),
+                          cursor=self._region_cursor,
+                          filter_text=self._region_filter,
+                          sort_col=self._region_sort,
+                          sort_desc=self._region_sort_desc,
+                          header_focus=self._region_header,
+                          header_col=self._region_header_col),
             self._on_region_action)
 
     def _on_region_action(self, result):
@@ -1645,6 +1655,17 @@ class AcidcatTUI(App):
             # the screen cannot hold this: it is re-pushed on every toggle, so
             # the app owns the set and hands it back each time
             self._region_sel = result["selected"]
+            # The filter lives here for the same reason the selection does:
+            # the screen is re-pushed on every action, so anything it does not
+            # hand back is cleared by the next keystroke.
+            self._region_filter = result.get("filter", self._region_filter)
+            self._region_sort = result.get("sort_col", self._region_sort)
+            self._region_sort_desc = result.get("sort_desc",
+                                                self._region_sort_desc)
+            self._region_header = result.get("header_focus",
+                                             self._region_header)
+            self._region_header_col = result.get("header_col",
+                                                 self._region_header_col)
             # The screen already worked out where the cursor should land -- it
             # even advances a row after a mark, so holding space walks the
             # list. Throwing that away was the whole of the bug.
@@ -3237,31 +3258,57 @@ class AcidcatTUI(App):
     _CH_RANGE = (1, 64)
     _BITS_VALID = (8, 16, 24, 32, 64)
 
+    def _params_from(self, chunk, rate, ch, bits, floating):
+        """Fold one chunk's geometry fields into the playback parameters."""
+        for f in chunk.get("fields", []):
+            n, v = f.get("name", ""), f.get("value")
+            try:
+                if n == "sample_rate":
+                    lo, hi = self._RATE_RANGE
+                    rate = int(v) if lo <= int(v) <= hi else rate
+                elif n in ("channels", "num_channels"):
+                    lo, hi = self._CH_RANGE
+                    ch = int(v) if lo <= int(v) <= hi else ch
+                elif n == "bits_per_sample":
+                    bits = int(v) if int(v) in self._BITS_VALID else bits
+                elif n == "format_tag" and "float" in str(f.get("note", "")).lower():
+                    floating = True
+            except (ValueError, TypeError):
+                pass
+        return rate, ch, bits, floating
+
     def _audio_params(self):
-        """(rate, channels, bits, floating) from the file's fmt/COMM chunk, or
-        sensible defaults for reinterpreting arbitrary bytes as PCM. Values a
-        corrupt header cannot be telling the truth about fall back to the
-        default rather than propagating into the playback WAV header."""
+        """(rate, channels, bits, floating) for reinterpreting bytes as PCM.
+
+        A RIFF or AIFF states its geometry in `fmt`/`COMM`, and that is checked
+        first because those two are unambiguous. Everything else that carries
+        audio states the same three things under the same field names --
+        `sample_rate`, `channels`, `bits_per_sample` are the house convention,
+        used by fourteen walkers -- and reading only the RIFF pair meant every
+        other format silently fell back to 44100 Hz 16-bit.
+
+        That default is not a neutral guess, it is a wrong answer that sounds
+        like a broken decoder. A Creative Voice File is usually 8-bit at 11025:
+        played as 16-bit each pair of samples becomes one, and played at 44100
+        it runs four times fast. Both at once is the noise that prompted this.
+
+        Values a corrupt header cannot be telling the truth about fall back to
+        the default rather than propagating into the playback WAV header, where
+        an unclamped rate overflows the u32 byte-rate field and takes the player
+        down with it.
+        """
         rate, ch, bits, floating = 44100, 1, 16, False
-        for c in self.chunks:
-            if str(c.get("id", "")).strip() not in ("fmt", "COMM"):
-                continue
-            for f in c.get("fields", []):
-                n, v = f.get("name", ""), f.get("value")
-                try:
-                    if n == "sample_rate":
-                        lo, hi = self._RATE_RANGE
-                        rate = int(v) if lo <= int(v) <= hi else rate
-                    elif n in ("channels", "num_channels"):
-                        lo, hi = self._CH_RANGE
-                        ch = int(v) if lo <= int(v) <= hi else ch
-                    elif n == "bits_per_sample":
-                        bits = int(v) if int(v) in self._BITS_VALID else bits
-                    elif n == "format_tag" and "float" in str(f.get("note", "")).lower():
-                        floating = True
-                except (ValueError, TypeError):
-                    pass
-            break
+        chunks = list(self.chunks or [])
+        named = [c for c in chunks
+                 if str(c.get("id", "")).strip() in ("fmt", "COMM")]
+        if named:
+            return self._params_from(named[0], rate, ch, bits, floating)
+        # Otherwise the first chunk that states a rate. Ordered, so a file with
+        # several streams is played with the geometry of its first one rather
+        # than of whichever happens to be scanned last.
+        for c in chunks:
+            if any(f.get("name") == "sample_rate" for f in c.get("fields", [])):
+                return self._params_from(c, rate, ch, bits, floating)
         return rate, ch, bits, floating
 
     def action_more_rows(self):

@@ -22,6 +22,7 @@ from acidcat.core.primitives.pcm import interleave_stereo
 
 MAGIC = b"RSTM"
 _DSP_ADPCM = 2
+_COEF_LEN = 32                   # 16 signed coefficients, then gain and history
 
 
 class BrstmError(Exception):
@@ -53,14 +54,25 @@ def parse_header(data):
     block_size = struct.unpack_from(">I", data, h1 + 0x18)[0]
     final_size = struct.unpack_from(">I", data, h1 + 0x20)[0]
     final_pad = struct.unpack_from(">I", data, h1 + 0x28)[0]
-    coefs = []
+    # Behind the 16 coefficients each channel keeps a gain, an initial
+    # predictor/scale, and the two history samples the stream starts from. They
+    # are zero in every specimen measured -- these streams begin at silence --
+    # but a stream that does not begin at silence needs them, and reading past
+    # them is how a decoder ends up guessing at its own first frame.
+    coefs, hist = [], []
     for c in range(channels):
         chan_info = base + _refoff(data, h3 + 4 + c * 8)
         coef_at = base + _refoff(data, chan_info)
         coefs.append(list(struct.unpack_from(">16h", data, coef_at)))
+        at = coef_at + _COEF_LEN
+        if at + 8 <= len(data):
+            hist.append(struct.unpack_from(">hh", data, at + 4))
+        else:
+            hist.append((0, 0))
     return {"codec": codec, "channels": channels, "rate": rate, "samples": samples,
             "audio_off": audio_off, "blocks": blocks, "block_size": block_size,
-            "final_size": final_size, "final_pad": final_pad, "coefs": coefs}
+            "final_size": final_size, "final_pad": final_pad, "coefs": coefs,
+            "hist": hist}
 
 
 def decode(data):
@@ -77,7 +89,8 @@ def decode(data):
         for c in range(ch):
             o = block_base + c * stride
             chans[c] += data[o:o + used]
-    pcms = [dsp.decode(bytes(chans[c]), h["coefs"][c], samples=h["samples"])
+    pcms = [dsp.decode(bytes(chans[c]), h["coefs"][c],
+                       h["hist"][c][0], h["hist"][c][1], samples=h["samples"])
             for c in range(ch)]
     n = min((len(p) // 2 for p in pcms), default=0)
     if ch == 1:
