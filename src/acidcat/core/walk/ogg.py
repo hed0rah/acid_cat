@@ -29,8 +29,24 @@ def inspect_ogg(filepath):
     if ident and ident[1]:
         info = ident[1]
         chn, sr = info.get("channels"), info.get("sample_rate")
+        # A stream cannot have nought channels or run at nought hertz. Both are
+        # reported rather than dropped or asserted: the value is what the file
+        # says, and the note is what the format says about it. Dropping the
+        # field hides the evidence, and printing it bare states an impossibility
+        # as a fact -- which is what anything downstream will divide by.
         if chn is not None:
-            fields.append(_f(None, 0, "channels", chn))
+            fields.append(_f(None, 0, "channels", chn,
+                             "" if chn > 0 else
+                             "impossible: the identification header declares no "
+                             "channels, so this stream describes no audio"))
+            if chn <= 0:
+                warns.append("the identification header declares 0 channels; "
+                             "nothing downstream can use this as a divisor")
+        if sr is not None and sr <= 0:
+            fields.append(_f(None, 0, "sample_rate", sr,
+                             "impossible: a stream cannot run at 0 Hz"))
+            warns.append("the identification header declares a 0 Hz sample "
+                         "rate; duration cannot be derived from it")
         if sr:
             note = "Opus always decodes at 48 kHz" if "pre_skip" in info else ""
             fields.append(_f(None, 0, "sample_rate", sr, note))
