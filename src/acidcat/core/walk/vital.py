@@ -44,7 +44,11 @@ def inspect_vital(filepath, deep=False):
     settings = obj.get("settings")
     nkeys = len(settings) if isinstance(settings, dict) else 0
     name = obj.get("preset_name") or "unnamed"
+    # payload_base is declared because there is no chunk header here: `size`
+    # is already the payload, and the default eight-byte rule would push the
+    # range past the end of the file.
     chunks = [{"id": "vital", "offset": 0, "size": file_size,
+               "payload_base": 0,
                "summary": f"'{name}' by {obj.get('author', '?')}, "
                           f"{nkeys} settings keys",
                "fields": fields, "warnings": warns}]

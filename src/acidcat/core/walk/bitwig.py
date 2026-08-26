@@ -179,7 +179,9 @@ def inspect_bitwig(filepath, deep=False):
                           f"{_summarize_embedded(raw)}")
                        for name, size, raw in assets]
             asum = f"{len(assets)} embedded file(s) (deflate zip)"
+        # The embedded zip starts at zoff with no wrapper of its own.
         chunks.append({"id": "assets", "offset": zoff,
-                       "size": file_size - zoff, "summary": asum,
+                       "size": file_size - zoff, "payload_base": zoff,
+                       "summary": asum,
                        "fields": afields, "warnings": []})
     return chunks, file_warns

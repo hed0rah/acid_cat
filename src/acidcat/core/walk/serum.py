@@ -64,8 +64,12 @@ def inspect_serum(filepath, ctx=None):
                    "fields": fields, "warnings": []})
 
     blob_off = json_start + end_bytes
+    # No chunk header: the blob starts at blob_off and `size` is its whole
+    # length, so the base has to be stated or the default adds eight bytes
+    # that are not there.
     chunks.append({"id": "blob", "offset": blob_off,
                    "size": file_size - blob_off,
+                   "payload_base": blob_off,
                    "summary": f"wavetable/modulation data, "
                               f"{file_size - blob_off:,} bytes (opaque)",
                    "fields": [], "warnings": []})

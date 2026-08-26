@@ -32,7 +32,7 @@ pytest.importorskip("textual")
 
 from acidcat.tui_app.app import AcidcatTUI          # noqa: E402
 from acidcat.tui_app.screens import RegionsScreen   # noqa: E402
-from conftest import until                          # noqa: E402
+from conftest import press_until, until             # noqa: E402
 
 
 def _run(scenario):
@@ -310,9 +310,9 @@ class TestTheKeysThemselvesWork:
             async with app.run_test(size=(150, 44)) as pilot:
                 await pilot.pause(0.3)
                 await self._armed(app, pilot)
-                await pilot.press("space")
-                await until(pilot, lambda: bool(app._region_sel))
-                assert app._region_sel, "space did not reach the action"
+                assert await press_until(
+                    pilot, "space", lambda: bool(app._region_sel)), (
+                    "space did not reach the action after four presses")
         _run(scenario)
 
     def test_pressing_A_marks_them_all(self, blob):
@@ -335,12 +335,15 @@ class TestTheKeysThemselvesWork:
                 await self._armed(app, pilot)
                 got = {}
                 app._extract = lambda rs: got.setdefault("n", len(rs))
-                await pilot.press("space")
-                # X refuses when nothing is marked, and refusing calls no
-                # _extract at all -- so a single tick that was not enough for
-                # `space` produced an empty `got` and a failure that read as
-                # "X is broken". Wait for the state X needs, not for a duration.
-                assert await until(pilot, lambda: bool(app._region_sel)),                     "space never marked a region"
+                # The subject here is X, not space. Marking via the action
+                # rather than a keystroke removes a failure this test has no
+                # opinion about: a dropped `space` left nothing marked, X
+                # correctly refused, `_extract` was never called, and the
+                # report read "X is broken" about a key that worked fine.
+                # `test_pressing_space_marks` owns whether space arrives.
+                app.action_select_region()
+                await until(pilot, lambda: bool(app._region_sel))
+                assert app._region_sel, "setup failed: nothing marked"
                 await pilot.press("X")
                 await until(pilot, lambda: "n" in got)
                 assert got.get("n") == 1, got

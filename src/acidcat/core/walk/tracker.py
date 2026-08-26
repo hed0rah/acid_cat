@@ -130,10 +130,23 @@ def inspect_xm(filepath):
                 "id": f"smp[{idx}]", "offset": sm["offset"], "size": sm["length"],
                 "summary": f"{name}  {sm['length']:,} bytes {bits} delta-PCM "
                            f"(instrument '{ins['name']}')",
+                # These describe the sample HEADER, which in XM lives in the
+                # instrument block and not beside the PCM this chunk covers.
+                # They were positioned with absolute offsets while the chunk
+                # declares payload_base at the PCM -- and a field offset is
+                # relative to that base everywhere else, so the two were added
+                # together and every one of them pointed into open water.
+                # Unpositioned with an xref is what the contract offers for a
+                # value that genuinely lives somewhere else.
                 "fields": [
-                    _f(sm["hdr_off"], 4, "length", f"{sm['length']:,}", "bytes"),
-                    _f(sm["hdr_off"] + 14, 1, "type", f"0x{sm['type']:02x}", bits),
-                    _f(sm["hdr_off"] + 18, 22, "name", sm["name"]),
+                    _f(None, 4, "length", f"{sm['length']:,}",
+                       f"bytes (header @ 0x{sm['hdr_off']:08x})",
+                       xref=sm["hdr_off"]),
+                    _f(None, 1, "type", f"0x{sm['type']:02x}", bits,
+                       xref=sm["hdr_off"] + 14),
+                    _f(None, 22, "name", sm["name"],
+                       f"header @ 0x{sm['hdr_off'] + 18:08x}",
+                       xref=sm["hdr_off"] + 18),
                 ],
                 "warnings": [], "payload_base": sm["offset"],
             })

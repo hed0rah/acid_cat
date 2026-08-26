@@ -164,7 +164,12 @@ def _object(b, pos, block_len):
         warns += pw
         summary += f", {s}" if s else ""
 
+    # A KRZ object's block_len counts its own 4-byte header, so the payload
+    # both starts later and is shorter than the default rule assumes. The two
+    # sibling emitters above already declare this; this one did not, and it
+    # was the only object chunk in the file to run past the end.
     return {"id": tname, "offset": pos, "size": block_len,
+            "payload_base": pos + 4, "payload_len": max(0, block_len - 4),
             "summary": summary, "fields": fields, "warnings": warns}
 
 

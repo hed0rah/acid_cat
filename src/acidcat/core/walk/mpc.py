@@ -21,6 +21,7 @@ import os
 import re
 import struct
 import zipfile
+import zlib
 from collections import Counter
 
 from acidcat.core.primitives.zipio import zip_data_offset
@@ -250,7 +251,13 @@ def inspect_xtd(filepath):
     try:
         with gzip.open(filepath, "rb") as g:
             raw = g.read(_XTD_CAP + 1)
-    except (OSError, EOFError) as e:
+    except (OSError, EOFError, zlib.error) as e:
+        # zlib.error is NOT an OSError. gzip raises BadGzipFile (an OSError)
+        # for a bad HEADER, but a corrupt deflate BLOCK surfaces as a bare
+        # zlib.error, which walked straight past this handler and out of the
+        # walker. Found by fuzzing: one bit flipped in a real .xtd produced
+        # "zlib.error: Error -3 while decompressing data: invalid block type"
+        # as an uncaught traceback rather than the clean refusal this promises.
         raise _Unsupported("not a valid .xtd (gzip did not open: "
                            f"{e.__class__.__name__})")
     if not raw.startswith(b"ACVS"):
@@ -427,7 +434,14 @@ def _inspect_pgm_mpc1000(data, size, prog):
         chunks[0]["warnings"].append(
             f"{len(pads)} pads; listing first {_PGM_PAD_CAP}")
     for pi, base, layers in pads[:_PGM_PAD_CAP]:
-        pf = [_f(loff, laysz, f"layer[{j}]", nm, note)
+        # RELATIVE to the pad's payload base, which is what a field offset
+        # means everywhere else (core/infra/fieldcodec.py:_field_abs). These
+        # were absolute, and since payload_base is the pad's own offset the
+        # two were added together -- pad[1]'s first layer reported at 376 when
+        # the pad occupies 188..352. Every consumer that followed the contract
+        # read these from the wrong place, and nothing said so because the
+        # numbers were plausible.
+        pf = [_f(loff - base, laysz, f"layer[{j}]", nm, note)
               for j, (loff, nm, note) in enumerate(layers)]
         chunks.append({"id": f"pad[{pi}]", "offset": base, "size": padsz,
                        "summary": f"pad {pi}: {len(layers)} layer(s)",

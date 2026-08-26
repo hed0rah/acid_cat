@@ -11,7 +11,7 @@ no ordinary reader has any reason to complain.
 That is what makes it worth building: it is the clean case of a hiding spot the
 format itself sanctions. `acidcat cavity` finds it by accounting for every byte
 rather than by looking for damage, and the pair of them is tested together in
-tests/test_cavity_loop.py -- this plants, that finds, and CI fails if it does
+tests/test_lab_loop.py -- this plants, that finds, and CI fails if it does
 not.
 """
 
