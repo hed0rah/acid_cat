@@ -287,7 +287,21 @@ class TestTheKeysThemselvesWork:
         tree = app.query_one("#tree")
         tree.focus()
         tree.move_cursor(regions[0])
+        # Both of these, and in this order. The pause is not redundant with
+        # the wait below: `until` returns immediately when its condition is
+        # already true, so replacing the pause with it removed the tick the app
+        # needs to drain pending work before a key arrives -- and every test
+        # that pressed a key here started failing, deterministically, in the
+        # direction the wait was supposed to prevent.
+        #
+        # A flat pause was doing two jobs. Waiting for focus is the one it
+        # looked like it was doing; letting the app run is the one it was
+        # actually load-bearing for.
         await pilot.pause()
+        assert await until(
+            pilot, lambda: tree.has_focus and tree.cursor_node is regions[0]), (
+            "the tree never took focus with the cursor on the first region, "
+            "so any key pressed from here lands somewhere else")
         return regions
 
     def test_pressing_space_marks(self, blob):
