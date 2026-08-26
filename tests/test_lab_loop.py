@@ -366,6 +366,22 @@ class TestLsbStego:
     cannot see and ignores the case it could.
     """
 
+    def _payload(self, carrier):
+        """A payload the CARRIER can hold, not one this machine can hold.
+
+        These were a fixed 6,000 bytes, which fits the development corpus and
+        needs 48,064 samples of a committed fixture that has 22,050. Green
+        here, red on all five CI platforms -- a test sized against the corpus
+        the author happened to have, which is the same defect this suite has
+        spent the day finding in the tool.
+        """
+        room = lab_stego.capacity(carrier)
+        if room < 512:
+            pytest.skip("carrier holds only %d bytes; too small to measure"
+                        % room)
+        unit = b"SECRET PAYLOAD DATA "
+        return (unit * (room // 2 // len(unit) + 1))[:room // 2]
+
     def _analyse(self, tmp_path, blob):
         from acidcat.core.forensics import lsb
         p = tmp_path / "s.wav"
@@ -392,7 +408,7 @@ class TestLsbStego:
             pytest.skip("no carrier WAV")
         with open(CORPUS_WAV, "rb") as fh:
             carrier = fh.read()
-        payload = b"SECRET PAYLOAD DATA " * 300
+        payload = self._payload(carrier)
         clean = self._analyse(tmp_path, carrier)
         hidden = self._analyse(tmp_path, lab_stego.embed(carrier, payload))
         assert hidden.get("uniform_high") == clean.get("uniform_high")
@@ -410,7 +426,7 @@ class TestLsbStego:
             pytest.skip("no carrier WAV")
         with open(CORPUS_WAV, "rb") as fh:
             carrier = fh.read()
-        payload = b"SECRET PAYLOAD DATA " * 300
+        payload = self._payload(carrier)
         clean = self._analyse(tmp_path, carrier)
         raw = self._analyse(tmp_path, lab_stego.embed(carrier, payload, raw=True))
         assert raw["mean"] < clean["mean"], (
@@ -424,7 +440,7 @@ class TestLsbStego:
             pytest.skip("no carrier WAV")
         with open(CORPUS_WAV, "rb") as fh:
             carrier = fh.read()
-        payload = b"SECRET " * 900
+        payload = self._payload(carrier)
         assert lab_stego.extract(
             lab_stego.embed(carrier, payload))[:len(payload)] == payload
         assert lab_stego.extract(
