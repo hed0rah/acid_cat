@@ -33,6 +33,8 @@ import tempfile
 import pytest
 
 from acidcat.core.forensics import anomalies
+from conftest import FIXTURES_DIR, SMALL_FIXTURES
+
 from acidcat.core.walk import Unsupported, walk_file
 
 mutations = pytest.importorskip("acidcat_lab.mutations",
@@ -42,14 +44,22 @@ mutations = pytest.importorskip("acidcat_lab.mutations",
 # that this is not the slowest thing in the suite. The wider sweep is a manual
 # run; this is the regression floor.
 _ROUNDS = 2
-_MIN_RUNS = 400
+# What the COMMITTED fixtures alone produce, with margin. Measured at 358 on a
+# clone-like tree (12 seeds, no gitignored corpus) and 1,188 with the corpus
+# present. The floor has to clear the smaller number or this becomes a test
+# that only runs on the machine that wrote it -- which is the failure the
+# suite's own guard exists to catch, and did catch, here.
+_MIN_RUNS = 300
 _MAX_SEED_BYTES = 4 * 1024 * 1024
 
 
 def _seeds():
-    here = os.path.dirname(__file__)
-    roots = [os.path.join(here, "..", "data", "fixtures"),
-             os.path.join(here, "..", "data", "test_formats")]
+    # Via conftest, not by naming the tree. The big corpus is gitignored and
+    # absent on every runner, so a test that reaches for it directly does not
+    # fail there -- it quietly runs on whatever is left. The committed
+    # fixtures alone have to clear the floor below, or this is a test that
+    # only works on the machine that wrote it.
+    roots = [SMALL_FIXTURES, FIXTURES_DIR]
     out = []
     for root in roots:
         if not os.path.isdir(root):
