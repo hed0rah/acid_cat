@@ -434,7 +434,14 @@ def _inspect_pgm_mpc1000(data, size, prog):
         chunks[0]["warnings"].append(
             f"{len(pads)} pads; listing first {_PGM_PAD_CAP}")
     for pi, base, layers in pads[:_PGM_PAD_CAP]:
-        pf = [_f(loff, laysz, f"layer[{j}]", nm, note)
+        # RELATIVE to the pad's payload base, which is what a field offset
+        # means everywhere else (core/infra/fieldcodec.py:_field_abs). These
+        # were absolute, and since payload_base is the pad's own offset the
+        # two were added together -- pad[1]'s first layer reported at 376 when
+        # the pad occupies 188..352. Every consumer that followed the contract
+        # read these from the wrong place, and nothing said so because the
+        # numbers were plausible.
+        pf = [_f(loff - base, laysz, f"layer[{j}]", nm, note)
               for j, (loff, nm, note) in enumerate(layers)]
         chunks.append({"id": f"pad[{pi}]", "offset": base, "size": padsz,
                        "summary": f"pad {pi}: {len(layers)} layer(s)",

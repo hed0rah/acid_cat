@@ -298,7 +298,14 @@ def test_pgm_mpc1000(tmp_path):
     assert [x["value"] for x in pad0["fields"]] == ["Kick", "KickB"]
     # each layer carries verified zone params in its note, at a real offset
     assert "level" in pad0["fields"][0]["note"] and "one-shot" in pad0["fields"][0]["note"]
-    assert pad0["fields"][0]["off"] == 24                  # first layer of pad 0
+    # RELATIVE to the pad's payload base, which is what a field offset means
+    # everywhere else. This asserted 24 -- the pad's own absolute offset --
+    # which is what the walker used to emit, so the one test covering this
+    # agreed with the defect and held it in place. `_field_abs` adds the base,
+    # so the old pairing resolved to 48 and pointed outside the pad entirely.
+    assert pad0["fields"][0]["off"] == 0                   # first layer of pad 0
+    from acidcat.core.infra.fieldcodec import _field_abs
+    assert _field_abs(pad0, pad0["fields"][0]) == 24       # ...which IS 24
 
 
 def _make_pgm_mpc2000(tmp_path, names):
