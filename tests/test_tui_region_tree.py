@@ -791,7 +791,14 @@ class TestTheListReopensWhereYouLeftIt:
                 await pilot.pause(0.3)
                 s = await self._list(app, pilot)
                 s.action_toggle_sel()
-                await pilot.pause(0.4)
+                # Keep the pause AND wait for the row. The pause lets the app
+                # drain; the wait is what makes a slow runner report the row it
+                # reached instead of the moment it was asked. Dropping either
+                # one breaks this differently -- and `_row` raises IndexError
+                # while the screen is still coming up, so it cannot be the
+                # condition until after the pause.
+                await pilot.pause(0.1)
+                await until(pilot, lambda: self._row(app) == 1)
                 assert self._row(app) == 1, (
                     "the cursor went back to the top after a mark")
         _run(scenario)
