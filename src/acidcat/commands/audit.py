@@ -40,7 +40,12 @@ from acidcat.core.walk.base import Unsupported
 # anomaly rules that mean concealed or appended data (vs structural lint) -- these
 # get their own HIDDEN section with a carve hint to extract the region
 _HIDDEN_RULES = {"trailing_data", "polyglot", "cavity_content",
-                 "application_block", "mp4_mdat_coverage"}
+                 "application_block", "mp4_mdat_coverage",
+                 # Bytes nothing accounts for belong under HIDDEN, not
+                 # FORENSICS. Without this the audit printed "no concealed or
+                 # appended data" two lines above reporting exactly that, which
+                 # is the tool contradicting itself in the same breath.
+                 "unaccounted_bytes"}
 
 
 def _carve_hint(path, finding):

@@ -775,6 +775,27 @@ def scan(filepath, fmt_label, chunks, warns):
     # `audit` died with a TypeError traceback. A 3-byte b"ID3" was the smallest
     # trigger, but any ordinary corrupt file that crashes one rule while
     # another warns hits it. File-global findings sort ahead of positioned ones.
+    # Bytes no structure explains at all. Distinct from rule 5 above, which
+    # reports a spec-ignorable region CARRYING something: this reports regions
+    # nothing accounts for, and the coverage figure that goes with them. A file
+    # the walker barely understood and a file with nothing hidden in it both
+    # produce no findings, and only the fraction accounted for tells them apart.
+    try:
+        from acidcat.core.forensics import cavity as _cavity
+        report = _cavity.account(filepath, fmt_label, chunks, size=size)
+        for region in report["regions"]:
+            if region["kind"] != "unaccounted":
+                continue            # rule 5 owns the ignorable-region case
+            findings.append({
+                "severity": "notice", "offset": region["offset"],
+                "rule": "unaccounted_bytes",
+                "message": "%s bytes no chunk accounts for; the structure "
+                           "explains %.1f%% of this file"
+                           % (format(region["length"], ","),
+                              100.0 * report["coverage"])})
+    except Exception:
+        pass                        # an accounting is never worth a traceback
+
     findings.sort(key=lambda x: (-_SEVERITY.get(x["severity"], 0),
                                  x["offset"] if x["offset"] is not None else -1))
     return findings
