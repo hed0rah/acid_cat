@@ -63,7 +63,11 @@ _MIN_RUNS = 300
 # collector quietly finding less -- a non-recursive glob walked past thirteen
 # newly added walkers here while the run count stayed healthy and everything
 # passed.
-_MIN_FORMATS = 5
+# A clone now reaches 12, because nine specimens are GENERATED rather than
+# gathered and so exist on every runner. The floor is 10: under the measured
+# number so a missing optional fixture does not fail the build, over the 6 a
+# clone reached before, so losing the generated corpus does.
+_MIN_FORMATS = 10
 _MIN_FORMATS_WITH_CORPUS = 20
 _MAX_SEED_BYTES = 4 * 1024 * 1024
 
@@ -74,7 +78,12 @@ def _seeds():
     # fail there -- it quietly runs on whatever is left. The committed
     # fixtures alone have to clear the floor below, or this is a test that
     # only works on the machine that wrote it.
-    roots = [SMALL_FIXTURES, FIXTURES_DIR]
+    # The generated per-format specimens come first and are always present.
+    # They are the reason a runner exercises more than a handful of walkers:
+    # the gitignored corpus is absent there by definition, and gathering real
+    # files for the rest is not reproducible on anyone else's machine.
+    import make_format_corpus
+    roots = [make_format_corpus.ensure(), SMALL_FIXTURES, FIXTURES_DIR]
     out = []
     for root in roots:
         if not os.path.isdir(root):
