@@ -21,6 +21,8 @@ Two consequences follow:
 import asyncio
 import struct
 
+from conftest import until
+
 import pytest
 
 pytest.importorskip("textual")
@@ -28,6 +30,29 @@ pytest.importorskip("textual")
 from acidcat.tui_app.app import AcidcatTUI          # noqa: E402
 from textual.widgets import DataTable              # noqa: E402
 from acidcat.tui_app.screens import RegionsScreen   # noqa: E402
+
+
+async def _expandable_child(pilot, node):
+    """The first expandable child of `node`, once the tree actually has one.
+
+    Five call sites did this behind a flat `pilot.pause(0.5)` and indexed the
+    result unguarded, so when a background expansion had been dispatched and
+    not yet delivered the list was empty and the test died on an IndexError --
+    naming a duration that turned out to be short rather than the condition
+    that never became true.
+
+    Same defect 1.2.0 and 1.2.1 fixed at four other call sites. This file was
+    missed; it still carries 77 flat pauses and imports no waiter at all.
+    """
+    got = []
+
+    def ready():
+        got[:] = [c for c in node.children if c.allow_expand]
+        return bool(got)
+
+    await until(pilot, ready)
+    assert got, "no expandable child ever appeared under %r" % (node.label,)
+    return got[0]
 
 
 def _run(scenario):
@@ -337,7 +362,7 @@ class TestTheTreeGoesAllTheWayDown:
                 await _scan(app, pilot)
                 region = self._chunks_of_a_region(app)
                 await pilot.pause(0.5)
-                chunk = [c for c in region.children if c.allow_expand][0]
+                chunk = await _expandable_child(pilot, region)
                 chunk.expand()
                 await pilot.pause(0.2)
                 names = [app._node_name(f) for f in chunk.children]
@@ -356,7 +381,7 @@ class TestTheTreeGoesAllTheWayDown:
                 region = self._chunks_of_a_region(app)
                 await pilot.pause(0.5)
                 base = app._regions[app._info(region).region]["offset"]
-                chunk = [c for c in region.children if c.allow_expand][0]
+                chunk = await _expandable_child(pilot, region)
                 chunk.expand()
                 await pilot.pause(0.2)
                 located = [app._meta(f) for f in chunk.children
@@ -424,7 +449,7 @@ class TestARebuildKeepsYourPlaceAtDepth:
                 await _scan(app, pilot)
                 region = self._open_to_depth(app, pilot)
                 await pilot.pause(0.5)
-                chunk = [c for c in region.children if c.allow_expand][0]
+                chunk = await _expandable_child(pilot, region)
                 chunk.expand()
                 await pilot.pause(0.3)
                 want = app._info(chunk).path
@@ -451,7 +476,7 @@ class TestARebuildKeepsYourPlaceAtDepth:
                 await _scan(app, pilot)
                 region = self._open_to_depth(app, pilot)
                 await pilot.pause(0.5)
-                chunk = [c for c in region.children if c.allow_expand][0]
+                chunk = await _expandable_child(pilot, region)
                 chunk.expand()
                 await pilot.pause(0.3)
                 app._load()
@@ -490,7 +515,7 @@ class TestARebuildKeepsYourPlaceAtDepth:
                 await _scan(app, pilot)
                 region = self._open_to_depth(app, pilot)
                 await pilot.pause(0.5)
-                chunk = [c for c in region.children if c.allow_expand][0]
+                chunk = await _expandable_child(pilot, region)
                 chunk.expand()
                 await pilot.pause(0.3)
                 paths = app._open_paths(app.query_one("#tree").root)
@@ -788,3 +813,68 @@ class TestTheListReopensWhereYouLeftIt:
 
     def test_the_cursor_belongs_to_the_view(self, blob):
         assert "_region_cursor" in AcidcatTUI._FRAME_ATTRS
+
+
+class TestTheWaiterItself:
+    """`_expandable_child` cannot be proved against the flake it fixes.
+
+    The flake only appears under full-suite load; on an idle machine the
+    children are already present before the helper is called, so removing the
+    wait entirely still passes. That makes the usual mutation check vacuous and
+    is worth saying rather than papering over -- the fix rests on the mechanism
+    being right, so the mechanism is what gets tested.
+    """
+
+    def test_it_waits_for_a_child_that_is_not_there_yet(self):
+        """A node whose children arrive late must still be handled. This is the
+        real condition; a flat pause only happens to cover it when the machine
+        is fast enough."""
+        class LateNode:
+            label = "late"
+
+            def __init__(self, after):
+                self._after = after
+                self.polls = 0
+
+            @property
+            def children(self):
+                self.polls += 1
+                if self.polls <= self._after:
+                    return []
+                return [_Expandable()]
+
+        class _Expandable:
+            allow_expand = True
+
+        node = LateNode(after=3)
+
+        async def scenario():
+            pilot = _FakePilot()
+            got = await _expandable_child(pilot, node)
+            assert got.allow_expand
+            assert node.polls > 3, (
+                "the helper returned before the children existed, so it is not "
+                "waiting on the condition at all")
+
+        asyncio.run(scenario())
+
+    def test_it_reports_the_condition_when_it_never_becomes_true(self):
+        """The failure a flat pause could not produce: a message naming what
+        never happened rather than a duration that turned out to be short."""
+        class NeverNode:
+            label = "never"
+            children = []
+
+        async def scenario():
+            pilot = _FakePilot()
+            with pytest.raises(AssertionError, match="expandable child"):
+                await _expandable_child(pilot, NeverNode())
+
+        asyncio.run(scenario())
+
+
+class _FakePilot:
+    """Enough pilot for the waiter: `until` only awaits `pause`."""
+
+    async def pause(self, delay=None):
+        await asyncio.sleep(0)
