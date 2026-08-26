@@ -350,3 +350,26 @@ async def quiet(pilot, app, tries=150, step=0.1):
         await pilot.pause(step)
     await pilot.pause()
     return not len(app.workers)
+
+
+async def press_until(pilot, key, cond, attempts=4, tries=40, step=0.1):
+    """Press `key` until `cond()` holds, re-pressing if it does not.
+
+    A keystroke is a request, and under load Textual's pilot can deliver one
+    into an app that is not yet in a state to act on it -- the key is consumed
+    and nothing happens. Waiting longer does not help, because there is nothing
+    in flight to wait for; the press has to happen again.
+
+    That is why this exists rather than a longer `until`. The failing case had
+    already been given a confirmed-focus precondition AND a ten-second wait,
+    and still reported "space did not reach the action" on a loaded runner: not
+    a slow action, a lost keystroke.
+
+    Bounded on purpose. If four presses spread over sixteen seconds do not move
+    the state, the feature is broken and this must say so rather than loop.
+    """
+    for _ in range(attempts):
+        await pilot.press(key)
+        if await until(pilot, cond, tries=tries, step=step):
+            return True
+    return cond()
