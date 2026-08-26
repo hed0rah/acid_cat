@@ -1,5 +1,11 @@
 """The lab plants, the base finds, and CI fails if it does not.
 
+Named for the loop rather than for cavities: it started as four cavity
+files, and it now also carries a polyglot (appended past the end, not a
+cavity at all) and an LSB embed that is deliberately NOT detectable. The
+thing they share is the shape -- lab constructs, base examines -- not the
+hiding place.
+
 This is the test the two-package split exists to make possible. Every other
 test here checks acidcat against a fixture someone wrote by hand, which checks
 it against one person's idea of what a hidden payload looks like. Here the
