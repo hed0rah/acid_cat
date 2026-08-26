@@ -164,12 +164,29 @@ def test_every_gated_key_is_exercised_somewhere_else(wav):
     """The redirect half: the exemption names a file, so that file must press
     them. Cheap to check, and it fails if those tests are ever deleted."""
     import pathlib
+    import re
     here = pathlib.Path(__file__).parent
     for key, filename in _GATED.items():
         other = here / filename
         assert other.is_file(), f"{key} redirects to {filename}, which is gone"
         text = other.read_text(encoding="utf-8")
-        assert f'press("{key}")' in text, (
+        # Both spellings count, because both press the key. `press_until`
+        # exists for keys a loaded runner can drop: it presses, waits for the
+        # state, and presses again, so it exercises the binding at least as
+        # hard as a bare `pilot.press`. Matching only the literal made this
+        # guard fail the moment a flaky keypress was made robust -- which would
+        # have taught the next person to weaken the exemption instead, and a
+        # guard that punishes the fix is worse than no guard.
+        #
+        # A regex rather than `in`, because the call wraps across lines. The
+        # first attempt was "press_until appears somewhere AND the key appears
+        # somewhere", which passed for a key pressed nowhere at all: the name
+        # occurs in docstrings and neighbouring tests, so the two halves met by
+        # accident and the guard stopped guarding.
+        pressed = bool(
+            re.search(r'press\(\s*"%s"\s*\)' % re.escape(key), text)
+            or re.search(r'press_until\(\s*pilot,\s*"%s"' % re.escape(key), text))
+        assert pressed, (
             f"{key} is exempted here and pressed nowhere else "
             f"({filename} does not press it)")
 
