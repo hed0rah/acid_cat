@@ -50,6 +50,21 @@ _ROUNDS = 2
 # that only runs on the machine that wrote it -- which is the failure the
 # suite's own guard exists to catch, and did catch, here.
 _MIN_RUNS = 300
+# Distinct formats the seeds must span. The committed fixtures alone reach 12;
+# with the reference corpus present it is 37. The floor sits just under what a
+# clone can manage, because a sweep that exercises one walker many times is not
+# the same test as one that exercises many walkers -- and only the second finds
+# a decompressor that lets zlib.error escape, which is how this file earned its
+# keep on the day the corpus widened.
+# Two floors, because the two environments genuinely differ and pretending
+# otherwise means either failing every runner or asserting nothing locally.
+# A clone has the committed fixtures and reaches 6; a machine with the
+# gitignored corpus reaches 37. The second floor is the one that catches a
+# collector quietly finding less -- a non-recursive glob walked past thirteen
+# newly added walkers here while the run count stayed healthy and everything
+# passed.
+_MIN_FORMATS = 5
+_MIN_FORMATS_WITH_CORPUS = 20
 _MAX_SEED_BYTES = 4 * 1024 * 1024
 
 
@@ -64,7 +79,13 @@ def _seeds():
     for root in roots:
         if not os.path.isdir(root):
             continue
-        for path in sorted(glob.glob(os.path.join(root, "*.*"))):
+        # Recursive: the reference corpus lives in a subdirectory, and a
+        # non-recursive glob silently walked past all of it -- the sweep kept
+        # reporting the same run count while thirteen new format walkers sat
+        # untouched. A seed collector that quietly finds less is the same
+        # defect as an oracle that quietly checks less.
+        for path in sorted(glob.glob(os.path.join(root, "**", "*.*"),
+                                     recursive=True)):
             try:
                 if 64 < os.path.getsize(path) <= _MAX_SEED_BYTES:
                     out.append(path)
@@ -79,6 +100,27 @@ def _examine(path):
     every assertion below vacuous and the harness itself untested."""
     label, chunks, warns = walk_file(path)
     anomalies.scan(path, label, chunks, warns)
+
+
+def _formats_covered(paths):
+    """Distinct formats acidcat recognises among the seeds.
+
+    The number that actually matters, and not the one that is easy to measure.
+    A corpus of 8,982 files covered twelve of sixty-six supported formats
+    because nearly all of them were WAVs; adding more of the same would have
+    moved the run count and tested nothing new. Breadth is what exercises a
+    walker that has never seen hostile input.
+    """
+    from acidcat.core.infra import sniff
+    out = set()
+    for path in paths:
+        try:
+            kind = sniff.sniff(path)
+        except Exception:
+            continue
+        if kind:
+            out.add(kind)
+    return out
 
 
 def _sweep(examine=None, seeds=None):
@@ -245,3 +287,28 @@ class TestTheSweepMechanism:
         assert clean + refused + len(failures) == runs, (
             clean, refused, len(failures), runs)
         assert clean and refused and failures, (clean, refused, len(failures))
+
+
+def test_the_seeds_span_enough_formats():
+    """Breadth, asserted separately from volume.
+
+    The run count can stay healthy while the corpus collapses to one format --
+    a non-recursive glob did exactly that here, walking past thirteen newly
+    added walkers while the sweep reported the same number as before and
+    passed. Volume said nothing was wrong; breadth would have.
+    """
+    seeds = _seeds()
+    if not seeds:
+        pytest.skip("no seed files present")
+    covered = _formats_covered(seeds)
+    assert len(covered) >= _MIN_FORMATS, (
+        "the seeds span only %d formats (%s), floor is %d. More files of a "
+        "format already covered do not exercise another walker."
+        % (len(covered), ", ".join(sorted(covered)), _MIN_FORMATS))
+    if not os.path.isdir(FIXTURES_DIR):
+        return                      # a clone; the committed fixtures are all
+    assert len(covered) >= _MIN_FORMATS_WITH_CORPUS, (
+        "the corpus is present but the seeds span only %d formats, floor is "
+        "%d. Either the corpus shrank or the collector stopped reaching part "
+        "of it -- the run count will not tell you which, or that it happened."
+        % (len(covered), _MIN_FORMATS_WITH_CORPUS))

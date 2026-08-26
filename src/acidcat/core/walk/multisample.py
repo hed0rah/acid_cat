@@ -35,7 +35,14 @@ def _read_entry(z, name):
     z.fp.seek(_data_offset(z, zi))
     raw = z.fp.read(zi.compress_size)
     if zi.compress_type == zipfile.ZIP_DEFLATED:
-        return zlib.decompress(raw, -15)         # raw deflate, no zlib wrapper
+        try:
+            return zlib.decompress(raw, -15)     # raw deflate, no zlib wrapper
+        except zlib.error as e:
+            # A corrupt deflate stream is a damaged file, not a crash. This
+            # bypasses CRC validation on purpose (Bitwig writes bad CRCs), so
+            # it is exactly the path where corruption arrives unannounced.
+            raise zipfile.BadZipFile(
+                "entry %r did not decompress (%s)" % (name, e))
     return raw
 
 

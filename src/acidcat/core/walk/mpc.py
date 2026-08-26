@@ -21,6 +21,7 @@ import os
 import re
 import struct
 import zipfile
+import zlib
 from collections import Counter
 
 from acidcat.core.primitives.zipio import zip_data_offset
@@ -250,7 +251,13 @@ def inspect_xtd(filepath):
     try:
         with gzip.open(filepath, "rb") as g:
             raw = g.read(_XTD_CAP + 1)
-    except (OSError, EOFError) as e:
+    except (OSError, EOFError, zlib.error) as e:
+        # zlib.error is NOT an OSError. gzip raises BadGzipFile (an OSError)
+        # for a bad HEADER, but a corrupt deflate BLOCK surfaces as a bare
+        # zlib.error, which walked straight past this handler and out of the
+        # walker. Found by fuzzing: one bit flipped in a real .xtd produced
+        # "zlib.error: Error -3 while decompressing data: invalid block type"
+        # as an uncaught traceback rather than the clean refusal this promises.
         raise _Unsupported("not a valid .xtd (gzip did not open: "
                            f"{e.__class__.__name__})")
     if not raw.startswith(b"ACVS"):
