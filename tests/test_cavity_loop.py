@@ -7,29 +7,36 @@ adversary is code: `acidcat_lab` constructs the file and `acidcat` has to find
 it. It runs in one suite because they live in one repo; split across two, this
 would be a version pin and an intention.
 
-FOUR VECTORS, ONE TABLE. These began as four files that had converged on the
-same six assertions differing only by carrier and rule name -- which is a
-parameter, not a module. Adding the fifth format should be one row in VECTORS,
-and anything that genuinely cannot be a row belongs in the per-format section
-at the bottom rather than in a new file.
+ONE TABLE. This began as four files that had converged on the same six
+assertions differing only by carrier and rule name -- which is a parameter, not
+a module. Adding a vector is a row in VECTORS; anything that genuinely cannot
+be a row belongs in TestPerFormat at the bottom rather than in a new file.
 
-NONE OF THIS ADDS DETECTION. All four vectors were measured against acidcat
-before anything was written and all four were already covered. The ID3 rule is
-even named what the planter proposed for it. What was missing is evidence: a
-rule with no adversarial test is a rule that works until somebody refactors
-near it.
+NONE OF THIS ADDS DETECTION. Every vector was measured against acidcat before
+anything was written, and every one was already covered. The ID3 rule is even
+named what its planter proposed for it. What was missing is evidence: a rule
+with no adversarial test is a rule that works until somebody refactors near it.
 
 That habit came from getting it wrong. The first pair was built believing
 acidcat was blind to a JUNK chunk, which came from one undersized test payload.
 Three redundant rules did not get written because the measurement came first
-the next three times.
+every time after.
 
-WHY COVERAGE IS NOT THE TEST. Every vector here leaves the file at coverage
-1.0 -- each payload sits inside a well-formed structure that accounts for it,
-nothing warns, and the file plays everywhere. A detector reporting only
-unexplained bytes would call all four clean and be entirely right about
-coverage while being entirely wrong about the file. That is why these rules
-read CONTENT, and it is asserted per vector rather than described here.
+TWO SHAPES, AND THE DIFFERENCE IS THE POINT.
+
+    inside=True     the payload sits in a structure that ACCOUNTS for it. The
+                    file stays at coverage 1.0, nothing warns, it plays
+                    everywhere -- and only reading the content gives it away.
+
+    inside=False    the payload is appended PAST the declared end, so the
+                    container's own arithmetic disagrees with the file's
+                    length. Geometry catches it without anyone looking at what
+                    the bytes say.
+
+Both live here on purpose. A file that is fully explained and still hiding
+something is the case that says coverage is necessary and not sufficient; a
+file whose coverage drops is the case that says geometry is worth having at
+all. Split across two files, neither would ever have to state the difference.
 """
 
 import os
@@ -44,6 +51,8 @@ from conftest import CORPUS_FLAC, CORPUS_M4A, CORPUS_MP3, CORPUS_WAV
 
 lab = pytest.importorskip("acidcat_lab.cavity",
                           reason="acidcat_lab not installed")
+_lab_polyglot = pytest.importorskip("acidcat_lab.polyglot",
+                                    reason="acidcat_lab not installed")
 
 PAYLOAD = b"THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG. " * 48
 
@@ -57,13 +66,22 @@ class Vector:
     rather than left to be rediscovered.
     """
 
-    def __init__(self, name, carrier, plant, rule, floor=None, extract=None):
+    def __init__(self, name, carrier, plant, rule, floor=None, extract=None,
+                 inside=True):
         self.name = name
         self.carrier = carrier
         self.plant = plant
         self.rule = rule
         self.floor = floor
         self.extract = extract
+        # Whether the payload lands INSIDE a structure that accounts for it.
+        # A cavity does, so the file stays fully explained and only reading the
+        # content gives it away. A polyglot appends past the declared end, so
+        # the container's own arithmetic disagrees with the file's length and
+        # geometry catches it without anyone looking at the bytes. Same loop,
+        # opposite evidence -- which is exactly why both belong in one table
+        # rather than in two files that never have to explain the difference.
+        self.inside = inside
 
     def __repr__(self):
         return self.name
@@ -92,7 +110,22 @@ VECTORS = [
     Vector("mp4-mdat", CORPUS_M4A, lambda c, p: lab.mp4.embed(c, p),
            "mp4_mdat_coverage", floor=1024,
            extract=lambda b: lab.mp4.extract(b)),
+    # Not a cavity: a ZIP appended past the RIFF size. A DAW plays it, unzip
+    # opens it, and the same bytes are both.
+    Vector("wav-zip-polyglot", CORPUS_WAV,
+           lambda c, p: _lab_polyglot.build_wav_zip(c, {"secret.bin": p}),
+           "polyglot", inside=False,
+           extract=lambda b: _unzip_first(b)),
 ]
+
+
+def _unzip_first(blob):
+    """The payload back out of a polyglot, read the way a ZIP tool reads it:
+    scanning from the END, indifferent to the audio in front of it."""
+    import io
+    import zipfile
+    with zipfile.ZipFile(io.BytesIO(blob)) as z:
+        return z.read(z.namelist()[0])
 
 
 def _carrier(v):
@@ -154,9 +187,17 @@ class TestTheLoop:
         carrier = _carrier(vector)
         _rules, rep, warns = _scan(tmp_path, vector.plant(carrier, PAYLOAD),
                                    "acct" + os.path.splitext(vector.carrier)[1])
-        assert rep["coverage"] >= 0.9999, (vector.name, rep["coverage"])
-        assert rep["regions"] == [], (vector.name, rep["regions"])
-        assert not warns, (vector.name, warns)
+        if vector.inside:
+            assert rep["coverage"] >= 0.9999, (vector.name, rep["coverage"])
+            assert rep["regions"] == [], (vector.name, rep["regions"])
+            assert not warns, (vector.name, warns)
+        else:
+            # The opposite evidence, and it must be genuinely opposite: an
+            # appended payload has to move the coverage figure, or geometry is
+            # not seeing what content-reading would have to.
+            assert rep["coverage"] < 1.0, (vector.name, rep["coverage"])
+            assert [r for r in rep["regions"] if r["kind"] == "unaccounted"],                 (vector.name, rep["regions"])
+            assert warns, (vector.name, "appending past the end should warn")
 
 
 # ── the size trades, pinned where they exist ────────────────────────

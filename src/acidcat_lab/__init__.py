@@ -18,6 +18,7 @@ was analysis all along and should move across. Nothing moves back. `probe` and
 """
 
 from acidcat import __version__ as acidcat_version
+from acidcat_lab import cavity, polyglot
 
-__all__ = ["acidcat_version", "__version__"]
+__all__ = ["acidcat_version", "__version__", "cavity", "polyglot"]
 __version__ = acidcat_version
