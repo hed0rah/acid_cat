@@ -53,6 +53,8 @@ lab = pytest.importorskip("acidcat_lab.cavity",
                           reason="acidcat_lab not installed")
 _lab_polyglot = pytest.importorskip("acidcat_lab.polyglot",
                                     reason="acidcat_lab not installed")
+lab_stego = pytest.importorskip("acidcat_lab.stego",
+                                reason="acidcat_lab not installed")
 
 PAYLOAD = b"THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG. " * 48
 
@@ -331,3 +333,94 @@ def _raw_junk(carrier, content):
     out[12:12] = chunk
     struct.pack_into("<I", out, 4, struct.unpack_from("<I", out, 4)[0] + len(chunk))
     return bytes(out)
+
+
+# ── the vector that is NOT detectable, pinned as such ────────────────
+
+class TestLsbStego:
+    """LSB steganography in 16-bit audio, and why it has no row in VECTORS.
+
+    Every other vector here ends in a rule firing. This one does not, and
+    saying so in a test is worth more than leaving it to be rediscovered --
+    because acidcat DOES emit an `lsb_entropy` notice, and it is easy to read
+    that as coverage.
+
+    Measured over six real WAVs from a sample library: the notice fires on all
+    six BEFORE anything is hidden in them. That is not a fault in the rule. The
+    bottom bit of a microphone signal is noise, so "uniformly high LSB entropy"
+    is a property of the format, not evidence about the file. The message says
+    as much -- "consistent with LSB steganography, but also with a
+    noisy/dithered/high-bit-depth recording" -- and a notice that fires on
+    everything carries no information whichever way it is worded.
+
+    The direction is also the opposite of the intuition. Whitening the payload
+    makes it MORE like the carrier and so less visible; the raw embed is the
+    one that moves the statistic, because plaintext is less random than noise.
+    A detector built on "look for uniform LSBs" therefore looks for the case it
+    cannot see and ignores the case it could.
+    """
+
+    def _analyse(self, tmp_path, blob):
+        from acidcat.core.forensics import lsb
+        p = tmp_path / "s.wav"
+        p.write_bytes(blob)
+        label, chunks, _w = walk_file(str(p))
+        return lsb.analyze(str(p), label, chunks) or {}
+
+    def test_the_clean_carrier_already_looks_like_stego(self, tmp_path):
+        """The finding that decides this vector's status. If a clean file
+        trips the indicator, the indicator is not evidence."""
+        if not os.path.isfile(CORPUS_WAV):
+            pytest.skip("no carrier WAV")
+        with open(CORPUS_WAV, "rb") as fh:
+            got = self._analyse(tmp_path, fh.read())
+        assert got.get("uniform_high") is True, (
+            "the carrier no longer trips the LSB indicator, so the reason this "
+            "vector is unlisted may no longer hold -- re-measure before "
+            "assuming it is still undetectable: %r" % got)
+
+    def test_a_whitened_payload_is_indistinguishable(self, tmp_path):
+        """The honest limit. A payload whitened before embedding lands in noise
+        and reads as noise; nothing separates it from the untouched file."""
+        if not os.path.isfile(CORPUS_WAV):
+            pytest.skip("no carrier WAV")
+        with open(CORPUS_WAV, "rb") as fh:
+            carrier = fh.read()
+        payload = b"SECRET PAYLOAD DATA " * 300
+        clean = self._analyse(tmp_path, carrier)
+        hidden = self._analyse(tmp_path, lab_stego.embed(carrier, payload))
+        assert hidden.get("uniform_high") == clean.get("uniform_high")
+        assert abs(hidden["mean"] - clean["mean"]) < 0.01, (
+            "the whitened embed now separates from the carrier by mean LSB "
+            "entropy (%.4f vs %.4f) -- if that is real, this vector has become "
+            "detectable and belongs in VECTORS" % (hidden["mean"], clean["mean"]))
+
+    def test_the_raw_payload_is_the_one_that_shows(self, tmp_path):
+        """Backwards from the intuition, and the direction any future detector
+        would have to look: plaintext is LESS random than the carrier's own
+        noise, so an unwhitened embed lowers the statistic rather than raising
+        it."""
+        if not os.path.isfile(CORPUS_WAV):
+            pytest.skip("no carrier WAV")
+        with open(CORPUS_WAV, "rb") as fh:
+            carrier = fh.read()
+        payload = b"SECRET PAYLOAD DATA " * 300
+        clean = self._analyse(tmp_path, carrier)
+        raw = self._analyse(tmp_path, lab_stego.embed(carrier, payload, raw=True))
+        assert raw["mean"] < clean["mean"], (
+            "the raw embed no longer lowers LSB entropy relative to the "
+            "carrier (%.4f vs %.4f)" % (raw["mean"], clean["mean"]))
+
+    def test_the_payload_survives_a_round_trip_either_way(self):
+        """Pins that both modes really carry data, so the measurements above
+        are about concealment rather than about a planter that did nothing."""
+        if not os.path.isfile(CORPUS_WAV):
+            pytest.skip("no carrier WAV")
+        with open(CORPUS_WAV, "rb") as fh:
+            carrier = fh.read()
+        payload = b"SECRET " * 900
+        assert lab_stego.extract(
+            lab_stego.embed(carrier, payload))[:len(payload)] == payload
+        assert lab_stego.extract(
+            lab_stego.embed(carrier, payload, raw=True),
+            raw=True)[:len(payload)] == payload
