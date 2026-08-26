@@ -508,21 +508,29 @@ def scan(filepath, fmt_label, chunks, warns):
                     hdr = f.read(8)
                     if len(hdr) < 8:
                         break
-                    size, hlen = struct.unpack(">I", hdr[:4])[0], 8
-                    if size == 1:
+                    # `box` and not `size`: the enclosing scope already binds
+                    # `size` to the FILE's length, and this loop was assigning
+                    # a box header to it. Nothing downstream read it until a
+                    # rule was added after this one, which then accounted a
+                    # 254 KB file against a 3.5 KB box and reported that the
+                    # structure explained 1% of it. A loop variable that
+                    # shadows the file size is a trap armed for whoever comes
+                    # next.
+                    box, hlen = struct.unpack(">I", hdr[:4])[0], 8
+                    if box == 1:
                         ext = f.read(8)
                         if len(ext) < 8:
                             break
-                        size, hlen = struct.unpack(">Q", ext)[0], 16
-                    elif size == 0:
-                        size = fsz - pos
-                    if size < hlen or pos + size > fsz:
+                        box, hlen = struct.unpack(">Q", ext)[0], 16
+                    elif box == 0:
+                        box = fsz - pos
+                    if box < hlen or pos + box > fsz:
                         break
                     if hdr[4:8] == b"mdat":
-                        mdat_payload += size - hlen
+                        mdat_payload += box - hlen
                     elif hdr[4:8] == b"moov":
-                        moov_off, moov_size = pos, size
-                    pos += size
+                        moov_off, moov_size = pos, box
+                    pos += box
             if moov_off is not None and mdat_payload > 0:
                 with open(filepath, "rb") as f:
                     f.seek(moov_off)
