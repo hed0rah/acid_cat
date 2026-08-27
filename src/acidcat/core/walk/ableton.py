@@ -115,6 +115,16 @@ def inspect_asd(filepath):
                         f"{h['total_frames']:,} frames (sample rate not inferable)")
         warns.append("largest grid step exceeds 30 ms at every standard sample "
                      "rate; the rate could not be inferred")
+    elif dur is None:
+        # A known rate does not imply a known duration. The rate comes from the
+        # largest STEP and the duration from the last POSITION, and a grid whose
+        # tail has been zeroed keeps the first while losing the second: the
+        # surviving steps still pin a rate, and total_frames is 0. Formatting
+        # the duration anyway raised TypeError rather than saying any of this.
+        grid_summary = (f"{len(h['frames']):,} positions, but the last is 0 -- "
+                        f"no endpoint, so no duration at {rate:,} Hz")
+        warns.append("the frame grid ends at position 0; the table is corrupt "
+                     "or was zeroed, so no duration can be derived from it")
     else:
         approx = "" if h["rate_exact"] else " (lower bound -- grid never hit the cap)"
         # A truncated grid ends early, so total_frames and the duration derived
@@ -144,10 +154,14 @@ def inspect_asd(filepath):
         grid_fields.append(_f(0, 0, "inferred_rate", f"{rate:,} Hz",
                               "exact" if h["rate_exact"] else
                               "lower bound; a short file may never reach the cap"))
-        grid_fields.append(_f(0, 0, "duration", f"{dur:.3f} s",
-                              ("last_position / inferred_rate -- a LOWER BOUND, "
-                               "the grid is truncated") if h["truncated"]
-                              else "last_position / inferred_rate"))
+        # Same split as above: the rate can be known while the duration is not,
+        # so this field is gated on the value it actually prints.
+        if dur is not None:
+            grid_fields.append(_f(0, 0, "duration", f"{dur:.3f} s",
+                                  ("last_position / inferred_rate -- a LOWER "
+                                   "BOUND, the grid is truncated")
+                                  if h["truncated"]
+                                  else "last_position / inferred_rate"))
 
     grid = {"id": "grid", "offset": 10, "size": h["table_end"] - 10,
             "summary": grid_summary, "fields": grid_fields,
