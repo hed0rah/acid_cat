@@ -21,8 +21,11 @@ suite has had to fix twice elsewhere. So the floor is asserted alongside the
 result: a green run means BOTH that nothing crashed and that enough was tried
 for that to mean something.
 
-Measured when this landed: 1,188 mutated inputs from 28 seeds, zero crashes --
-804 walked cleanly and 384 raised the clean refusal.
+Measured on this machine: 3,464 mutated inputs from 121 seeds spanning 50
+formats, zero crashes -- 2,511 walked cleanly and 953 raised the clean refusal.
+On a clone, where the gitignored corpus is absent by definition, the generated
+specimens carry it to 1,252 inputs from 43 seeds across 36 formats -- which is
+the number that matters, because it is the only one CI ever sees.
 """
 
 import glob
@@ -44,31 +47,34 @@ mutations = pytest.importorskip("acidcat_lab.mutations",
 # that this is not the slowest thing in the suite. The wider sweep is a manual
 # run; this is the regression floor.
 _ROUNDS = 2
-# What the COMMITTED fixtures alone produce, with margin. Measured at 358 on a
-# clone-like tree (12 seeds, no gitignored corpus) and 1,188 with the corpus
-# present. The floor has to clear the smaller number or this becomes a test
-# that only runs on the machine that wrote it -- which is the failure the
-# suite's own guard exists to catch, and did catch, here.
-_MIN_RUNS = 300
-# Distinct formats the seeds must span. The committed fixtures alone reach 12;
-# with the reference corpus present it is 37. The floor sits just under what a
-# clone can manage, because a sweep that exercises one walker many times is not
-# the same test as one that exercises many walkers -- and only the second finds
-# a decompressor that lets zlib.error escape, which is how this file earned its
-# keep on the day the corpus widened.
+# What the COMMITTED fixtures alone produce, with margin. Measured at 1,252 on
+# a clone-like tree (43 seeds, no gitignored corpus), up from 358 when the
+# generated corpus did not exist. The floor has to clear the smaller number or
+# this becomes a test that only runs on the machine that wrote it -- which is
+# the failure the suite's own guard exists to catch, and did catch, here.
+_MIN_RUNS = 1150
+# Distinct formats the seeds must span, asserted separately from volume: a
+# sweep that exercises one walker many times is not the same test as one that
+# exercises many walkers, and only the second found a decompressor letting
+# zlib.error escape.
+#
 # Two floors, because the two environments genuinely differ and pretending
 # otherwise means either failing every runner or asserting nothing locally.
-# A clone has the committed fixtures and reaches 6; a machine with the
-# gitignored corpus reaches 37. The second floor is the one that catches a
-# collector quietly finding less -- a non-recursive glob walked past thirteen
-# newly added walkers here while the run count stayed healthy and everything
-# passed.
-# A clone now reaches 12, because nine specimens are GENERATED rather than
-# gathered and so exist on every runner. The floor is 10: under the measured
-# number so a missing optional fixture does not fail the build, over the 6 a
-# clone reached before, so losing the generated corpus does.
-_MIN_FORMATS = 10
-_MIN_FORMATS_WITH_CORPUS = 20
+# A clone reaches 36 and this machine 50. The second floor is the one that
+# catches a collector quietly finding less -- a non-recursive glob walked past
+# thirteen newly added walkers here while the run count stayed healthy and
+# everything passed.
+#
+# A clone gets to 36 only because the specimens are GENERATED rather than
+# gathered and so exist on every runner: fifteen written by hand in
+# make_format_corpus, sixteen borrowed from the walker tests' own fixtures. It
+# reached 6 before any of that existed.
+#
+# These ratchet, and the ratcheting is the point. A floor left at the number
+# that was comfortable two corpus widenings ago asserts nothing: coverage
+# could halve and still clear it.
+_MIN_FORMATS = 33
+_MIN_FORMATS_WITH_CORPUS = 45
 _MAX_SEED_BYTES = 4 * 1024 * 1024
 
 
@@ -96,7 +102,8 @@ def _seeds():
         for path in sorted(glob.glob(os.path.join(root, "**", "*.*"),
                                      recursive=True)):
             try:
-                if 64 < os.path.getsize(path) <= _MAX_SEED_BYTES:
+                if (make_format_corpus.SEED_FLOOR < os.path.getsize(path)
+                        <= _MAX_SEED_BYTES):
                     out.append(path)
             except OSError:
                 pass

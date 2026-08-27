@@ -808,3 +808,34 @@ def test_a_varying_clip_renders_a_range(tmp_path):
     assert "-" in summary and "spans" in summary, summary
     field = [f for f in warp[0]["fields"] if f["name"] == "derived_tempo"][0]
     assert "MOVES" in field["note"], field["note"]
+
+
+def test_zeroed_grid_tail_has_a_rate_but_no_duration(tmp_path):
+    """A known sample rate does not imply a known duration.
+
+    The rate is inferred from the largest STEP between grid positions; the
+    duration is derived from the last POSITION. Zeroing the tail of the table
+    keeps the first and destroys the second -- the surviving steps still pin a
+    rate, while total_frames becomes 0 and the duration becomes None.
+
+    The walker guarded both on `rate is None`, so this state formatted None
+    with `:.3f` and raised TypeError out of a walk. Found by the mutation
+    sweep, which reached it the first time a generated .asd specimen existed
+    to mutate.
+    """
+    frames = list(grid_for(44100, 2.0))
+    frames[-3:] = [0, 0, 0]                      # zero the tail, keep the steps
+    p = tmp_path / "zeroed.asd"
+    p.write_bytes(build_asd(frames))
+
+    chunks, warns = walker.inspect_asd(str(p))   # must not raise
+
+    h = ab.parse_asd_header(p.read_bytes())
+    assert h["sample_rate"] is not None, "the surviving steps should still pin a rate"
+    assert h["duration"] is None, "a grid ending at 0 has no duration to report"
+
+    grid_chunk = [c for c in chunks if c["id"] == "grid"][0]
+    assert "no duration" in grid_chunk["summary"], grid_chunk["summary"]
+    assert not [f for f in grid_chunk["fields"] if f["name"] == "duration"], \
+        "a duration field was emitted for a duration that does not exist"
+    assert any("ends at position 0" in w for w in warns), warns
