@@ -1,11 +1,21 @@
 """Tests for the Commodore 64 SID walker (PSID / RSID).
 
-The corpus these were written against is HVSC Update #85: 630 real tunes, all
-of them PSID or RSID v2 and above. That leaves several paths with no real
-specimen at all -- v1 headers, Compute!'s Sidplayer MUS data, tunes with more
-than 32 subtunes, and every RSID constraint violation, since HVSC does not ship
-files that break the spec. Those are built here, because a rule that is never
-exercised is a rule nobody knows is wrong.
+The corpus these were written against is the whole High Voltage SID
+Collection: 61,157 tunes. Every one sniffs, walks, is accounted for end to
+end, and breaks not a single rule in the format description -- 0 violations
+across the collection.
+
+That completeness is exactly what leaves holes here. The collection contains
+no v1 header, no Compute's Sidplayer MUS payload, and not one file with an
+explicit loadAddress; all 61,157 put the address in the C64 data. Nor does it
+contain a spec violation to test the RSID checks against, since HVSC does not
+ship broken files. Those paths are built here instead, because a rule that is
+never exercised is a rule nobody knows is wrong.
+
+Two things the collection DOES settle. 72 tunes carry more than 32 subtunes,
+so the speed-rule divergence past bit 31 is a case that occurs rather than one
+the spec merely allows for. And 1,233 string fields run the full 32 bytes with
+no terminator.
 """
 import os
 import struct

@@ -168,8 +168,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     describing a 6502 machine-code music player, followed by that player and its data as a raw
     <b>Commodore 64 memory image</b>. Playback means loading the image into a C64, calling an
     <b>init</b> routine with the subtune number in the accumulator, then calling a <b>play</b>
-    routine at interrupt rate while the code writes the SID chip's registers itself. The sound is
-    a side effect of execution, not a payload that can be decoded.</p>
+    routine at interrupt rate while the code writes the SID chip's registers itself.</p>
     <aside class="sig" aria-label="color key">
       <div class="legrows">
         <div class="row"><span class="sw dark k-enum">mauve</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -179,12 +178,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     </aside>
   </div>
 
-  <div class="sec">the byte-order trap</div>
+  <div class="sec">byte order</div>
   <p class="note">Every multi-byte field in the header is <b>Motorola big-endian</b>, on a file
   format that describes a little-endian 6502. The format was designed on the Amiga and the byte
   order followed the host rather than the target. The C64 image after <code>dataOffset</code> is
-  native little-endian. One file, read in both directions, with the boundary at exactly one
-  offset.</p>
+  native little-endian.</p>
 
   <div class="sec">header v1 &mdash; the fixed numeric block</div>
   <p class="note">Offsets 0x00 through 0x15. Identical in every header version; v2 and later only
@@ -195,7 +193,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region" open>
       <summary><span class="chev">&#9656;</span><span class="rname">the two magics</span><span class="rspan">0x00 . 4 bytes</span></summary>
       <div class="rbody">
-        <p class="note">Not two formats. <b>RSID</b> is <b>PSID</b> with four fields pinned and a
+        <p class="note"><b>RSID</b> is <b>PSID</b> with four fields pinned and a
         stricter runtime contract, because the tune needs a real C64 rather than the shortcuts
         early emulators took. A reader that meets an RSID breaking any of these must reject it.</p>
         <div class="kv">
@@ -212,7 +210,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     </details>
 
     <details class="region">
-      <summary><span class="chev">&#9656;</span><span class="rname">where the load address really lives</span><span class="rspan">0x08 . 2 bytes</span></summary>
+      <summary><span class="chev">&#9656;</span><span class="rname">where the load address lives</span><span class="rspan">0x08 . 2 bytes</span></summary>
       <div class="rbody">
         <p class="note">A <code>loadAddress</code> of <b>0</b> does not mean address zero. It means
         the C64 data is an ordinary C64 binary whose <b>first two bytes are the load address,
@@ -236,7 +234,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         always the case for RSID.</p>
         <p class="note"><code>speed</code> is one bit per subtune, bit 0 being subtune 1: a
         <b>0</b> bit selects the vertical blank interrupt (50 Hz PAL, 60 Hz NTSC), a <b>1</b> bit
-        the CIA 1 timer. Past 32 subtunes the two header generations genuinely disagree, and only
+        the CIA 1 timer. Past 32 subtunes the two header generations disagree, and only
         the header says which rule applies.</p>
         <div class="kv">
           <div><span class="k">v1, or PlaySID-specific set</span><span class="v">bits wrap &mdash; subtune 33 reuses bit 0</span></div>
@@ -299,7 +297,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note">Each byte encodes the middle of <b>$Dxx0</b>: 0x42 means <b>$D420</b>,
         0xFE means <b>$DFE0</b>. Only <b>even</b> values in 0x42-0x7F or 0xE0-0xFE are legal, and
         any other value &mdash; including 0x00 &mdash; means no chip at that position.</p>
-        <p class="note">The two gaps are not arbitrary. 0x00-0x41 would collide with the first SID
+        <p class="note">0x00-0x41 would collide with the first SID
         and the VIC-II; 0x80-0xDF lands in colour RAM and the CIAs. The third SID may not share
         the second SID's address.</p>
         <div class="kv">
@@ -313,8 +311,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <details class="region">
       <summary><span class="chev">&#9656;</span><span class="rname">the environment the file assumes</span><span class="rspan">not in the file</span></summary>
       <div class="rbody">
-        <p class="note">A SID header describes a machine as much as a file. Loading the image is
-        not enough; the machine around it has to be in a defined state or the tune's timing is
+        <p class="note">Loading the image is not enough. The machine around it has to be in a defined state or the tune's timing is
         wrong from the first frame.</p>
         <div class="kv">
           <div><span class="k">$02A6</span><span class="v">1 for PAL, 0 for NTSC, from the clock bits</span></div>
@@ -345,8 +342,8 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note">The <b>MOS6581</b> and <b>MOS8580</b> are not interchangeable, which is why
         the header names one. Combined waveforms are far louder on the 8580, to the point that
         combinations clearly audible on one are silent on the other. The 8580's internal DC levels
-        are small enough that volume-register samples need a hardware or software trick. And the
-        two analog filters have entirely different characteristics, so a filter sweep written for
+        are small enough that volume-register samples need a hardware or software trick. The two
+        analog filters have different characteristics, so a filter sweep written for
         one is a different sound on the other.</p>
       </div>
     </details>
@@ -473,7 +470,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       {label:"loadAddress",k:"enum",r:[8,9],val:"$0000",sel:0,branch:[
         ["0","address is in the data"],["non-zero","data is all code"]],
        body:"Zero means the first two bytes of the C64 data hold the load address, little-endian. Non-zero means the data carries no address and this is it. Required to be zero in an RSID.",
-       note:"the single most misread field in the format."},
+       note:"00 00 here does not mean $0000."},
       {label:"initAddress",k:"sync",r:[10,11],val:"$1000",
        body:"Entry point called once per subtune with the subtune number in the 6510 accumulator. Zero means it equals the effective load address.",
        note:"in an RSID this may not point under ROM."},
@@ -544,7 +541,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     {label:"musPlayer",k:"flag",r:[15,15],val:"0",sel:0,branch:[
       ["0","built-in player"],["1","Compute!'s Sidplayer MUS data"]],
      body:"Spec bit 0. When set the payload is MUS music data with no player in it, and an external player must be merged before it can be replayed.",
-     note:"changes what the payload IS, not just how it sounds."}
+     note:"a structural difference, not a tonal one: there is no player to call."}
   ]);
 
   // the head of the C64 data when loadAddress is 0
