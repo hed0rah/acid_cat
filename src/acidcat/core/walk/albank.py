@@ -30,6 +30,22 @@ def _s32(d, o): return struct.unpack_from(">i", d, o)[0]
 def _u32(d, o): return struct.unpack_from(">I", d, o)[0]
 
 
+def _ptr(d, o):
+    """A u32 offset, or 0 when the POINTER ITSELF lies outside the file.
+
+    Every offset table here is walked `count` times, and `count` is a number
+    the file supplied. Each caller checked the bytes the pointer points AT and
+    trusted that the four bytes holding the pointer were there to read -- true
+    for a real bank, false for one whose declared counts outlive its length,
+    and struct.error escaped the walk rather than a clean refusal.
+
+    Zero is the right answer rather than an exception because zero is already
+    what every caller reads as "absent"; a table entry that is not present in
+    the file is exactly that.
+    """
+    return _u32(d, o) if 0 <= o and o + 4 <= len(d) else 0
+
+
 def inspect_albank(filepath, deep=False):
     """Walk a .ctl ALBankFile. Returns (chunks, file_warnings)."""
     size = os.path.getsize(filepath)
@@ -47,12 +63,12 @@ def inspect_albank(filepath, deep=False):
                   _f(0, 2, "revision", f"0x{rev:04X}", "'B1', AL_BANK_VERSION"),
                   _f(2, 2, "bankCount", bank_count)]}
     for i in range(max(0, min(bank_count, 64))):
-        off = _u32(d, 4 + 4 * i) if 4 + 4 * i + 4 <= len(d) else 0
+        off = _ptr(d, 4 + 4 * i)
         header["fields"].append(_f(4 + 4 * i, 4, f"bank[{i}]", f"-> 0x{off:X}"))
 
     chunks = [header]
     for bi in range(max(0, min(bank_count, 64))):
-        bo = _u32(d, 4 + 4 * bi)
+        bo = _ptr(d, 4 + 4 * bi)
         if not bo or bo + 12 > len(d):
             continue
         chunks.append(_walk_bank(d, bo, bi, deep))
@@ -75,12 +91,12 @@ def _walk_bank(d, bo, bi, deep):
     # walk instruments -> sounds -> wavetables; summarize the waveforms + codebooks
     rows, adpcm, raw, seen = [], 0, 0, set()
     for i in range(max(0, min(inst_count, 256))):
-        io = _u32(d, bo + 0x0C + 4 * i)
+        io = _ptr(d, bo + 0x0C + 4 * i)
         if not io or io + 0x10 > len(d):
             continue
         sound_count = _s16(d, io + 0x0E)
         for j in range(max(0, min(sound_count, 128))):
-            so = _u32(d, io + 0x10 + 4 * j)
+            so = _ptr(d, io + 0x10 + 4 * j)
             if not so or so in seen or so + 12 > len(d):
                 continue
             seen.add(so)
