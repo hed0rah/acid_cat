@@ -1284,14 +1284,6 @@ class AcidcatTUI(App):
 
     _SID_PREVIEW_SECONDS = 45.0
 
-    def _sniffed_fmt(self):
-        """The format id for the open file, or None. Cheap and cached-ish."""
-        try:
-            from acidcat.core.infra import sniff
-            return sniff.sniff(self.work) if self.work else None
-        except Exception:
-            return None
-
     def _play_sid(self):
         """Render the open tune and play it.
 
@@ -3083,7 +3075,7 @@ class AcidcatTUI(App):
         # its 6510 player and synthesise what it writes to the chip. So this
         # branch comes before every "find the audio chunk" path below, all of
         # which would be looking for something that is not there.
-        if (self.fmt or "").lower().startswith("commodore 64 sid") or                 self._sniffed_fmt() == "sid":
+        if "sid tune" in (self.fmt or "").lower():
             self._play_sid()
             return
         # A compressed container has no raw PCM anywhere in it, so the whole

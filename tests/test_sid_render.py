@@ -362,3 +362,17 @@ def test_output_is_finite_and_in_range():
     pcm, _info = sid_render.render(_tune(), seconds=1.0)
     a = np.frombuffer(pcm, dtype="<i2")
     assert len(a) and int(np.max(np.abs(a.astype(np.int32)))) <= 32767
+
+
+def test_the_tui_play_branch_matches_the_walker_label():
+    """The TUI decides to render rather than hunt for a PCM chunk by matching
+    a substring of the walker's label. That is a coupling between two files
+    with nothing but a string holding it together, so it is asserted here: if
+    the label is ever reworded, this fails instead of `p` silently falling
+    through to the "no audio payload" path on every SID.
+    """
+    from acidcat.core.walk import _WALKERS
+    label = _WALKERS["sid"][0]
+    assert "sid tune" in label.lower(), (
+        "tui_app/app.py::action_play keys on 'sid tune' in the label; "
+        "this one reads %r" % label)
