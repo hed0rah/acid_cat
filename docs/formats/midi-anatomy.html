@@ -409,7 +409,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           ["0x00","none"],["0x01","manufacturer specific"],["0x02","profile specific"],["0x03","pitch 7.9"]],
           body:"Optional per-note attribute; the paired 16-bit data sits in word 2. 0 here."},
         {label:"velocity",k:"enum",r:[4,5],val:"0x8000 (mid)",
-          body:"16-bit velocity, 256x MIDI 1.0's 7 bits. A Note On with velocity 0 is a real zero here, NOT a Note Off (a 1.0 translator remaps 0 to 1).",
+          body:"16-bit velocity, 512x MIDI 1.0's 7 bits. A Note On with velocity 0 is a real zero here, NOT a Note Off (a 1.0 translator remaps 0 to 1).",
           note:"the point of MIDI 2.0 channel voice: 16-bit velocity, 32-bit controllers, per-note pitch bend and controllers, and RPN/NRPN in a single message."},
         {label:"attribute data",k:"enum",r:[6,7],val:"0",body:"16-bit data paired with the attribute type; 0 when there is no attribute."}
       ]);
