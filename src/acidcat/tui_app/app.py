@@ -1282,6 +1282,65 @@ class AcidcatTUI(App):
         secs = len(pcm) / max(1, info["rate"] * info["channels"] * 2)
         self.notify(f"playing {label}  ~{secs:.0f}s (preview) -- . to stop")
 
+    _SID_PREVIEW_SECONDS = 45.0
+
+    def _sniffed_fmt(self):
+        """The format id for the open file, or None. Cheap and cached-ish."""
+        try:
+            from acidcat.core.infra import sniff
+            return sniff.sniff(self.work) if self.work else None
+        except Exception:
+            return None
+
+    def _play_sid(self):
+        """Render the open tune and play it.
+
+        Rendering runs the tune's own machine code, so it costs real time --
+        roughly a tenth of the audio's duration, more for a multi-chip tune.
+        That is far too long to hold the UI thread, so it goes to a worker and
+        the notification comes back when there is something to hear.
+        """
+        from acidcat.core.codecs import sid_render
+        if not play.have_audio():
+            self.notify("no audio player found (install ffmpeg for ffplay)",
+                        severity="warning")
+            return
+        try:
+            with open(self.work, "rb") as fh:
+                raw = fh.read()
+        except OSError as e:
+            self.notify(f"could not read the tune: {e}", severity="warning")
+            return
+        can, why = sid_render.can_render(raw)
+        if not can:
+            self.notify(f"this tune cannot be driven here: {why}",
+                        severity="warning")
+            return
+        self.notify("running the tune's 6510 player and synthesising the SID ...")
+        self.run_worker(lambda: self._sid_work(raw), thread=True)
+
+    def _sid_work(self, raw):
+        from acidcat.core.codecs import sid_render
+        try:
+            pcm, info = sid_render.render(
+                raw, seconds=self._SID_PREVIEW_SECONDS)
+        except sid_render.CannotRender as e:
+            self.call_from_thread(self.notify, f"cannot play this tune: {e}",
+                                  severity="warning")
+            return
+        except Exception as e:                       # noqa: BLE001
+            self.call_from_thread(self.notify, f"render failed: {e}",
+                                  severity="error")
+            return
+        label = info["name"] or "SID tune"
+        if info["songs"] > 1:
+            label += f" (subtune {info['subtune']} of {info['songs']})"
+        if info["sid_chips"] > 1:
+            label += f", {info['sid_chips']} SID chips"
+        self.call_from_thread(self._play_pcm, pcm,
+                              {"rate": info["sample_rate"], "channels": 1},
+                              label)
+
     def _extract_disc(self, entries):
         default = os.path.join(os.path.dirname(os.path.abspath(self._disc_src)),
                                os.path.splitext(os.path.basename(self._disc_src))[0]
@@ -3018,6 +3077,14 @@ class AcidcatTUI(App):
         if not play.have_audio():
             self.notify("no audio player found (install ffmpeg for ffplay)",
                         severity="warning")
+            return
+        # A SID is a program, not a payload. There is no audio anywhere in the
+        # file and no decoder can find any -- the only way to hear it is to run
+        # its 6510 player and synthesise what it writes to the chip. So this
+        # branch comes before every "find the audio chunk" path below, all of
+        # which would be looking for something that is not there.
+        if (self.fmt or "").lower().startswith("commodore 64 sid") or                 self._sniffed_fmt() == "sid":
+            self._play_sid()
             return
         # A compressed container has no raw PCM anywhere in it, so the whole
         # "which chunk is the audio" question does not apply -- there is no

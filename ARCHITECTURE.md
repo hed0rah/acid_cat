@@ -77,11 +77,11 @@ unchanged.
 
 ```
 src/acidcat/
-  core/            153 modules
+  core/            156 modules
     formats/       per-format byte decoders (19)
     walk/          35 walker modules -> 54 format labels (36)
     primitives/    shared byte readers (6)
-    codecs/        sample-data decoders: ADPCM, BRR, VADPCM, ... (12)
+    codecs/        sample-data decoders + the 6510/SID player (15)
     containers/    disc images and archives (5)
     infra/         sniff, fieldcodec, mmap, rendering (8)
     forensics/     anomalies, entropy/viz, audioscan, provenance (19)
@@ -95,7 +95,7 @@ src/acidcat/
   mcp_server/      schema, handlers, transport (19 tools)
   tui_app/         Textual inspector/editor
   util/            small shared helpers
-  cli.py  explorer.py  tui_theme.py  __init__.py     (210 modules in total)
+  cli.py  explorer.py  tui_theme.py  __init__.py     (213 modules in total)
 tests/             ~0.59 test:source LOC
 docs/              architecture.md (detailed), format anatomy pages
 internal_docs/     design + review notes (gitignored, local-only)
