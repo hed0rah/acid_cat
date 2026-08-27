@@ -4,6 +4,78 @@ All notable changes to acidcat. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project will
 adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
+## [1.3.0] - 2026-08-27
+
+### Added
+
+- **Commodore 64 SID tunes (`.sid`), and playback by running them.** A SID file
+  holds no audio: it is a big-endian header describing a 6502 music player,
+  followed by that player and its data as a raw C64 memory image. The walker
+  reports the structure; playback means executing it. acidcat ships a 6510
+  interpreter and a SID synthesiser, calls the tune's init routine, then its
+  play routine once per emulated frame, and turns the resulting register writes
+  into PCM. `p` in the TUI plays a `.sid`.
+
+  Verified against the whole High Voltage SID Collection, 61,157 tunes: every
+  one sniffs, walks, produces trustworthy geometry and is accounted for end to
+  end, with zero spec violations. The songlength hash matched all 61,157
+  entries of the HVSC database. 57,122 (93.4%) can be driven from a play
+  address; of a random 2,309-tune sample rendered for eight seconds each, 99.4%
+  produced sound and none crashed.
+
+  Three things in the format are traps rather than details, and all three are
+  handled: the header is big-endian on a file describing a little-endian 6502;
+  a `loadAddress` of 0 means the address is the first two bytes of the C64 data,
+  little-endian (which every real tune does); and a 32-byte string field holding
+  32 characters has no terminator, so a C-string read runs into the next field.
+  RSID is a restricted PSID whose four pinned fields a reader must reject on.
+
+  What will not play is declined with a reason rather than rendered as silence:
+  a tune that installs its own interrupt handler (every RSID), or a Compute!'s
+  Sidplayer MUS payload with no player in it. The render is deliberately
+  approximate -- pitch, oscillators and envelopes are right, the analog filter
+  is a straight-line stand-in for a curve that differs between chip revisions --
+  and the result carries an `approximate` flag rather than leaving a listener to
+  discover it.
+
+- **A per-format specimen corpus, generated rather than gathered.** Twenty-five
+  formats now have a minimal valid file built at test time, so CI exercises 36
+  format walkers instead of 21 and sweeps 1,252 mutated inputs instead of 880.
+  Sixteen of those specimens come from builders the walker tests already had.
+
+### Fixed
+
+- **Eight walker bugs, all in formats that had never had a specimen.** Among
+  them: a decompressor that let `zlib.error` escape a walk, several field
+  offsets read as absolute when the contract is relative to `payload_base`, and
+  `channels: 0` reported as a fact rather than as impossible.
+
+- **An MP4 box length overwrote the file's own length.** A local variable named
+  `size` held `os.path.getsize`, and three hundred lines later a box header
+  loop reassigned it. Harmless until something read it afterwards, at which
+  point a 254 KB file was measured against a 3,531-byte box and the structure
+  was reported as explaining 1.0% of it.
+
+- **An Ableton `.asd` with a zeroed grid tail raised `TypeError` out of a
+  walk.** The sample rate comes from the largest step between grid positions
+  and the duration from the last position; zeroing the tail keeps the first and
+  destroys the second. Both were guarded on the rate alone, so `None` reached a
+  `:.3f` format.
+
+- **An N64 `.ctl` bank whose declared counts outlive its length let
+  `struct.error` escape.** Four sites checked the bytes each pointer pointed at
+  while trusting that the pointer itself was readable.
+
+- **A wall texture is not a table of contents.** The fixed-width TOC detector
+  accepted a run of repeated names as an index.
+
+### Changed
+
+- The publish workflow now calls the test workflow rather than a copy of it.
+  The copy had drifted into being weaker than the thing it stood for: one job,
+  on a Python the matrix does not test, with neither ffmpeg nor bubblewrap, so
+  the least-covered run in the repo was the one deciding what reached PyPI.
+
 ## [1.2.2] - 2026-08-23
 
 ### Fixed
