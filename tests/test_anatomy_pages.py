@@ -11,11 +11,11 @@ picture is wrong regardless of what the format says:
 An off-by-one in a hand-written range is invisible to a reader and fatal to
 anyone using the page the way it asks to be used -- as a spec. These are the
 only claims on the pages that can be checked without an external document, and
-there are 120 maps across 31 pages, so checking them by hand is not a plan.
+there are 124 maps across 32 pages, so checking them by hand is not a plan.
 
 What this cannot check is whether a field's stated meaning is correct. That
 needs a primary spec per format, and a cross-check against the kaitai_struct
-specs covers 7 of the 31 (the rest have no .ksy at all).
+specs covers 7 of the 32 (the rest have no .ksy at all).
 """
 
 import pathlib

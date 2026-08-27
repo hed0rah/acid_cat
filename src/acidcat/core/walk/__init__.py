@@ -18,7 +18,7 @@ from acidcat.core.walk import (
     ableton, aiff, akai, albank, amiga, bfdlac, bitwig, dmx, gf1pat, voc, emu, flac, fxp, krz, labx,
     midi, midi2, mp3,
     mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
-    vital, wav, wt,
+    sid, vital, wav, wt,
 )
 from acidcat.core.walk.base import Unsupported
 
@@ -68,6 +68,8 @@ _WALKERS = {
     "agr": ("Ableton groove",
             lambda path, deep: ableton.inspect_ableton_xml(path, "agr")),
     "amxd": ("Max for Live device", lambda path, deep: ableton.inspect_amxd(path)),
+    "sid": ("Commodore 64 SID tune (PSID/RSID)",
+            lambda path, deep: sid.inspect_sid(path, deep=deep)),
     "wt": ("Surge/Bitwig wavetable", lambda path, deep: wt.inspect_wt(path)),
     "multisample": ("Bitwig multisample",
                     lambda path, deep: multisample.inspect_multisample(path)),
