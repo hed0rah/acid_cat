@@ -47,6 +47,7 @@ extractable, and it varies wildly per game and sound driver.
 | Neo Geo (cart, 1990) | YM2610 (FM + ADPCM-A x8 + ADPCM-B x1) | ADPCM-A/-B (4-bit) in the V-ROMs | REACHABLE (ADPCM-A/B documented) |
 | SNES / Super Famicom (1990) | SPC700 + S-DSP (8ch) | **BRR** -- 4-bit ADPCM, 9-byte blocks (1 header + 8 data = 16 samples), fixed 4 filters | REACHABLE (BRR is small and well documented) |
 | GBA (2001) | 2 Direct Sound 8-bit PCM + 4 PSG | raw 8-bit PCM; sound drivers vary (Sappy/M4A, Krawall, GAX...) | SCOPE (per-driver, heuristic) |
+| C64 (1982) | MOS 6581/8580 SID (3 osc, ADSR, analog filter) | none -- samples are volume-register tricks | **SUPPORTED** (`.sid`: header walked, tune executed) |
 | N64 (1996) | RSP audio microcode | **VADPCM** -- vector-quantized 4-bit ADPCM, per-instrument codebook (`.ctl`/`.tbl`, ALBank) | REACHABLE (VADPCM + ALBank documented) |
 
 ---
@@ -159,10 +160,20 @@ N64 VADPCM; OKI/RF5C/YM2610 samples for the CD add-ons.
 for a "disc-era complete" stopping point. Beyond it lie Wwise Vorbis, XMA,
 ATRAC9, and Bink -- each a substantial, largely-proprietary undertaking.
 
-**Explicitly out of scope:** chip-era sequenced music (a synthesis program, not a
-recording -- only its triggered samples are data), and the per-game cartridge
-sound drivers (GBA, most 8/16-bit) where extraction is heuristic rather than a
-format.
+**Chip-era sequenced music was out of scope until SID.** The reasoning was that
+a synthesis program is not a recording, so only its triggered samples are data.
+That holds right up until you execute the program: `.sid` ships a 6510
+interpreter and a SID synthesiser, so the tune is walked as structure and
+rendered by running it. The same shape -- memory image, CPU, sound chip, driver
+loop -- covers NSF, SAP, AY, GBS and SPC, and the 6502 core is already shared
+with NSF and SAP.
+
+That does not make every chip format cheap. Each needs its own sound chip, and
+accuracy is a separate problem from playability: the SID render is deliberate
+about being approximate, and the analog filter is the part that is hard.
+
+**Still out of scope:** the per-game cartridge sound drivers (GBA, most 8/16-bit)
+where extraction is heuristic rather than a format.
 
 ### Maintaining this file
 
