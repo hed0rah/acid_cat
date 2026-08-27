@@ -391,12 +391,27 @@ def _dmx_over_cap(tmp_path, n):
     return str(q)
 
 
+def _sid_over_cap(tmp_path, n):
+    """A .sid larger than n bytes, to cross the SID walker's read cap.
+
+    This cap shortens the ANSWER rather than a search. The C64 memory image
+    past it is never read, so the reported image length -- and the memory
+    extent derived from it, which is the whole point of the data chunk --
+    would describe a prefix while reading as a fact about the tune.
+    """
+    from test_sid import _sid
+    q = tmp_path / "big.sid"
+    q.write_bytes(_sid(data=struct.pack("<H", 0x1000) + bytes(max(1, n))))
+    return str(q)
+
+
 SWEPT = [
     # (module that READS the constant, name, patched value, builder, says)
     ("acidcat.core.walk.svx", "_CHUNK_CAP", 4, _svx_many_chunks, "cap"),
     ("acidcat.core.walk.amiga", "_CHUNK_CAP", 4, _smus_many_chunks, "cap"),
     ("acidcat.core.walk.voc", "_READ_CAP", 64, _voc_over_cap, "only the first"),
     ("acidcat.core.walk.dmx", "_READ_CAP", 64, _dmx_over_cap, "only the first"),
+    ("acidcat.core.walk.sid", "_SID_READ_CAP", 64, _sid_over_cap, "parsed the first"),
 ]
 
 

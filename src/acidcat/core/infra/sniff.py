@@ -23,6 +23,7 @@ confirms it from disk; ``sniff_bytes`` cannot classify a MOD from a head.
 
 from acidcat.core.codecs import ncw as ncwmod
 from acidcat.core.formats import ableton as abletonmod
+from acidcat.core.formats import sid as sidmod
 
 # containers an ID3v2 tag is known to wrap; the tag then does not make
 # the file an MP3.
@@ -38,7 +39,7 @@ KNOWN_FORMATS = frozenset({
     "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
     "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni", "ogg",
     "okt", "pgm", "rf64", "rmid", "rx2", "s3m", "serum", "sf2", "sigmf", "smus",
-    "dmx", "snd", "snesrom", "vag", "vital", "voc", "wav", "wii", "wt", "xm", "xpm",
+    "dmx", "sid", "snd", "snesrom", "vag", "vital", "voc", "wav", "wii", "wt", "xm", "xpm",
     "xpn", "xtd",
 })
 
@@ -161,6 +162,10 @@ def sniff_bytes(head):
         return "bitwig"
     if head[:4] == b"ampf":
         return "amxd"                                  # Max for Live device
+    # 'PSID'/'RSID' plus a version of 1-4. The magic alone would do; the version
+    # check costs two bytes and makes a false positive essentially impossible.
+    if sidmod.looks_like_sid(head):
+        return "sid"                                   # Commodore 64 SID tune
     # two magic bytes would be far too weak on their own; looks_like_asd also
     # requires the reserved u32 at offset 6 to be zero and a sane entry count.
     if abletonmod.looks_like_asd(head):

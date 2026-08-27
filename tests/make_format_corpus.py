@@ -251,6 +251,7 @@ def _borrowed():
         import test_mpc
         import test_ncw
         import test_s3m
+        import test_sid
         import test_tracker
     except ImportError:
         return []
@@ -270,6 +271,10 @@ def _borrowed():
             # returns (blob, offset, offset); only the bytes matter here
             ("it.it", test_tracker._make_it()[0]),
             ("s3m.s3m", test_s3m._make_s3m()),
+            # PSID and RSID share one format id but not one set of rules, and
+            # the RSID constraints only exist on the RSID path
+            ("sid.sid", test_sid._sid()),
+            ("rsid.sid", test_sid._sid(magic=b"RSID", play=0, speed=0)),
             ("asd.asd", test_ableton.build_asd(
                 test_ableton.grid_for(44100, 2.0))),
         ]
