@@ -160,59 +160,101 @@ class SID(object):
             out += wave * env
         return self._filter(out, np)
 
+    def _phase(self, v, frames, sr, np):
+        """This voice's phase across the block, 0.0 to 1.0, advancing state."""
+        hz = v.freq * self.clock / 16777216.0
+        step = hz / sr
+        ph = (v.phase + step * np.arange(frames)) % 1.0
+        v.phase = float((v.phase + step * frames) % 1.0)
+        return ph, hz
+
     def _wave(self, v, frames, sr, np, idx=None):
         """One voice's waveform, as -1.0 to 1.0.
 
-        The oscillator is a 24-bit phase accumulator clocked at the system
-        clock; its output frequency is freq * clock / 2^24. Running a float
-        phase at the OUTPUT rate instead is the same frequency with the same
-        waveform shape, and skips a million steps a second we would only be
-        downsampling away.
+        Combined waveforms are a bitwise AND, which is what the chip does. Bob
+        Yannes, who designed it (interview with Andreas Varga, August 1996):
+
+            "The multiplexers were single transistors and did not provide a
+            'lock-out', allowing combinations of the waveforms to be selected.
+            The combination was actually a logical ANDing of the bits of each
+            waveform, which produced unpredictable results, so I didn't
+            encourage this ..."
+
+        So each generator is evaluated as its real 12-bit value and the
+        selected ones are ANDed. That is why a combined waveform is quieter and
+        more lopsided than either component -- an AND can only clear bits --
+        and why the result is not any kind of mix.
+
+        Modelling it as an average is audibly wrong for triangle+sawtooth: the
+        two agree only 0.77 by correlation, and the average is symmetric where
+        the real thing is not. A pulse combined with anything is the one case
+        an average could be rescued into, because a pulse is all ones or all
+        zeros and ANDing with it is a gate; that special case now falls out of
+        the general rule rather than being written separately.
+
+        The oscillator is a 24-bit accumulator clocked at the system clock, so
+        its output frequency is freq * clock / 2^24. The accumulator is
+        reconstructed from a float phase advanced at the OUTPUT rate: same
+        frequency, same waveform, without stepping a million times a second to
+        then throw most of it away.
         """
-        hz = v.freq * self.clock / 16777216.0
         if v.ctrl & TEST:
+            # the test bit holds the accumulator at zero and silences the voice
             v.phase = 0.0
             return np.zeros(frames)
-        step = hz / sr
-        phase = (v.phase + step * np.arange(frames)) % 1.0
-        v.phase = float((v.phase + step * frames) % 1.0)
+        phase, hz = self._phase(v, frames, sr, np)
+        acc = (phase * 16777216.0).astype(np.uint32)
 
         ctrl = v.ctrl
-        parts = []
+        out = None
+
+        def merge(value):
+            return value if out is None else (out & value)
+
         if ctrl & SAWTOOTH:
-            parts.append(phase * 2.0 - 1.0)
+            out = merge((acc >> 12) & 0xFFF)
         if ctrl & TRIANGLE:
-            # ring modulation replaces the triangle's folding bit with the XOR
-            # of this oscillator's MSB and the previous voice's, which is why a
-            # ring-modulated triangle is the classic SID bell
-            tri = np.where(phase < 0.5, phase * 4.0 - 1.0, 3.0 - phase * 4.0)
-            if ctrl & RING:
-                prev = self.voices[(idx - 1) % 3] if idx is not None else v
-                tri = tri * (1.0 if prev.phase < 0.5 else -1.0)
-            parts.append(tri)
-        if ctrl & NOISE:
-            parts.append(self._noise(v, frames, hz, sr, np))
-
+            # "Ring Modulation was accomplished by substituting the accumulator
+            # MSB of an oscillator in the EXOR function of the triangle
+            # waveform generator with the accumulator MSB of the previous
+            # oscillator." -- Yannes, same interview. So ring modulation does
+            # not scale the triangle, it swaps which oscillator decides the
+            # fold. That is also why ring mod is audible only on a triangle:
+            # no other generator has that EXOR to substitute into.
+            msb = (acc >> 23) & 1
+            if ctrl & RING and idx is not None:
+                prev = self.voices[(idx - 1) % 3]
+                prev_hz = prev.freq * self.clock / 16777216.0
+                prev_ph = (prev.phase + (prev_hz / sr) * np.arange(frames)) % 1.0
+                msb = ((prev_ph * 16777216.0).astype(np.uint32) >> 23) & 1
+            folded = (acc >> 11) & 0xFFF
+            out = merge(np.where(msb.astype(bool), (~folded) & 0xFFF, folded))
         if ctrl & PULSE:
-            # Combined waveforms on real hardware are bits pulling each other
-            # DOWN on a shared bus -- closer to an AND than a sum. So a pulse
-            # combined with anything gates it rather than adding to it, and a
-            # pulse alone is the square wave.
-            #
-            # Modelling this as a sum is not a small error. A voice running
-            # pulse+sawtooth with a pulse width of 0 has a permanently low
-            # pulse, which as a summed -1 is a large DC offset on the whole
-            # mix; as a gate it is silence, which is what the chip does.
-            duty = (v.pw & 0xFFF) / 4096.0
-            high = phase < duty
-            if parts:
-                acc = sum(parts) / len(parts)
-                return acc * high
-            return np.where(high, 1.0, -1.0)
+            # High while the accumulator is BELOW the pulse width, so the
+            # register reads as a duty cycle the way the datasheet describes
+            # it: 0 is a 0% pulse, 0x800 a square wave, 0xFFF nearly 100%.
+            # Inverting this comparison still gives a square wave at 0x800,
+            # so the 50% case cannot catch the mistake -- only pw=0 can.
+            out = merge(np.where(((acc >> 12) & 0xFFF) < (v.pw & 0xFFF),
+                                 0xFFF, 0x000).astype(np.uint32))
+        if ctrl & NOISE:
+            out = merge(self._noise12(v, frames, hz, sr, np))
 
-        if not parts:
+        if out is None:
             return np.zeros(frames)
-        return sum(parts) / len(parts)
+        # The AND is deliberately NOT fed back into the LFSR. On hardware a
+        # noise-plus-anything combination can fill the shift register with
+        # zeroes and stop it, which Yannes names as the reason he discouraged
+        # combining at all. Reproducing that would silence voices in real
+        # tunes, and with no reference player available here there is no way to
+        # tell a faithful silence from a bug -- so the lock is documented and
+        # not implemented.
+        return (out.astype(np.float64) - 0x800) / 2048.0
+
+    def _noise12(self, v, frames, hz, sr, np):
+        """The LFSR as a 12-bit value, for ANDing with the other generators."""
+        f = self._noise(v, frames, hz, sr, np)
+        return (((f + 1.0) * 2047.0).astype(np.uint32)) & 0xFFF
 
     def _noise(self, v, frames, hz, sr, np):
         """The 23-bit LFSR, sampled at the rate the oscillator would clock it.

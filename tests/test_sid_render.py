@@ -376,3 +376,27 @@ def test_the_tui_play_branch_matches_the_walker_label():
     assert "sid tune" in label.lower(), (
         "tui_app/app.py::action_play keys on 'sid tune' in the label; "
         "this one reads %r" % label)
+
+
+@pytest.mark.parametrize("pw,duty", [(0x000, 0.0), (0x400, 0.25), (0x800, 0.5), (0xC00, 0.75)])
+def test_pulse_width_is_a_duty_cycle(pw, duty):
+    """The register is a duty cycle, so 0 is a 0% pulse and 0x800 is square.
+
+    Inverting the comparison that produces the pulse still yields a square
+    wave at 0x800, so the common case cannot detect the mistake. Only the
+    extremes can, which is why they are here: this exact inversion was
+    introduced and passed every other test in this file.
+    """
+    chip = sid_chip.SID()
+    chip.write(0x00, 0x00)
+    chip.write(0x01, 0x10)                       # a low, steady frequency
+    chip.write(0x02, pw & 0xFF)
+    chip.write(0x03, (pw >> 8) & 0x0F)
+    chip.write(0x06, 0xF0)                       # full sustain
+    chip.write(0x04, 0x41)                       # pulse + gate
+    chip.write(0x18, 0x0F)
+    out = chip.render(8192, np)
+    high = float((out > 0).mean())
+    assert abs(high - duty) < 0.06, (
+        "pulse width %#05x should be about %.0f%% duty, measured %.0f%%"
+        % (pw, duty * 100, high * 100))

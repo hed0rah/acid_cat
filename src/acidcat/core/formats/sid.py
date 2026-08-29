@@ -130,6 +130,16 @@ def song_speed(speed, song, songs, psid_specific, version):
     header alone tells you which reading applies. 72 tunes in the High Voltage
     SID Collection have more than 32, so this is a case that occurs rather
     than one the spec merely allows for.
+
+    THE WRAP DELIBERATELY DIVERGES FROM THE LITERAL SPEC TEXT. The format
+    description says "the speed specified for tune 32 is the same as tune 1,
+    for tune 33 it is the same as tune 2" -- but its own preceding sentence
+    assigns subtune 1 to bit 0, which leaves subtune 32 holding bit 31. Read
+    literally, the later sentence strands bit 31 and shifts every subtune above
+    it by one. That is an off-by-one in the document, not a rule: it is present
+    in the current published copy as well as the local one. The wrap here
+    therefore starts at subtune 33, which is the only reading consistent with
+    the field's own definition.
     """
     idx = song - 1
     if idx >= 32:

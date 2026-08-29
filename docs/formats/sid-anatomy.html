@@ -203,7 +203,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
           <div><span class="k-en">RSID: loadAddress</span><span class="v">must be 0, so the address comes from the data</span></div>
           <div><span class="k-en">RSID: playAddress</span><span class="v">must be 0, so init installs its own interrupt handler</span></div>
           <div><span class="k-en">RSID: speed</span><span class="v">must be 0, so the tune configures its own timing</span></div>
-          <div><span class="k-en">RSID: load floor</span><span class="v">the effective load address must not be below $07E8</span></div>
+          <div><span class="k-en">RSID: load floor</span><span class="v">the effective load address must not be below $07E8, which is $0400 plus the 1,000 bytes of default screen RAM: the first byte a tune can occupy without landing on the screen</span></div>
           <div><span class="k-en">RSID: init</span><span class="v">must not point into $A000-$BFFF or $D000-$FFFF; both ROMs are banked in</span></div>
         </div>
       </div>
@@ -236,10 +236,23 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <b>0</b> bit selects the vertical blank interrupt (50 Hz PAL, 60 Hz NTSC), a <b>1</b> bit
         the CIA 1 timer. Past 32 subtunes the two header generations disagree, and only
         the header says which rule applies.</p>
+        <p class="note">This is not the field's original design. The specification carries its
+        own warning that <code>speed</code> never worked as intended on PlaySID for Amiga, and
+        that what is documented today is a <b>redefinition</b> of the v2NG field. The
+        <code>clock</code> bits exist because of that failure: the speed field alone cannot
+        express NTSC.</p>
+        <p class="note">The bits stay meaningful even when nothing reads them. With
+        <code>playAddress</code> at 0 they should still be set, for players old enough to act on
+        them; a player running in a real C64 environment ignores them in that case.</p>
         <div class="kv">
           <div><span class="k">v1, or PlaySID-specific set</span><span class="v">bits wrap &mdash; subtune 33 reuses bit 0</span></div>
           <div><span class="k">v2NG with that flag clear</span><span class="v">bit 31 repeats for every subtune above 32</span></div>
         </div>
+        <p class="note">The wrapping rule above is the self-consistent reading, not the literal
+        one. The format description states that "the speed specified for tune 32 is the same as
+        tune 1", but its own preceding sentence gives subtune 1 to bit 0, which leaves subtune 32
+        holding bit 31. Taking the later sentence literally would strand bit 31 and shift every
+        subtune above it by one. The wrap therefore begins at subtune <b>33</b>.</p>
       </div>
     </details>
 
