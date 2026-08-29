@@ -405,6 +405,19 @@ def _sid_over_cap(tmp_path, n):
     return str(q)
 
 
+def _mdx_over_cap(tmp_path, n):
+    """An .mdx larger than n bytes, to cross the MDX walker's read cap.
+
+    The cap shortens the ANSWER. Channel extents are derived from where the
+    next stream starts, so a file read short reports the last channel and the
+    voice region as smaller than they are, and the coverage adds up.
+    """
+    from test_mdx import _mdx
+    q = tmp_path / "big.mdx"
+    q.write_bytes(_mdx(mml_len=max(64, n)))
+    return str(q)
+
+
 SWEPT = [
     # (module that READS the constant, name, patched value, builder, says)
     ("acidcat.core.walk.svx", "_CHUNK_CAP", 4, _svx_many_chunks, "cap"),
@@ -412,6 +425,7 @@ SWEPT = [
     ("acidcat.core.walk.voc", "_READ_CAP", 64, _voc_over_cap, "only the first"),
     ("acidcat.core.walk.dmx", "_READ_CAP", 64, _dmx_over_cap, "only the first"),
     ("acidcat.core.walk.sid", "_SID_READ_CAP", 64, _sid_over_cap, "parsed the first"),
+    ("acidcat.core.walk.mdx", "_MDX_READ_CAP", 64, _mdx_over_cap, "parsed the first"),
 ]
 
 

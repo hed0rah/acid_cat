@@ -23,6 +23,7 @@ confirms it from disk; ``sniff_bytes`` cannot classify a MOD from a head.
 
 from acidcat.core.codecs import ncw as ncwmod
 from acidcat.core.formats import ableton as abletonmod
+from acidcat.core.formats import mdx as mdxmod
 from acidcat.core.formats import sid as sidmod
 
 # containers an ID3v2 tag is known to wrap; the tag then does not make
@@ -37,7 +38,7 @@ KNOWN_FORMATS = frozenset({
     "asd", "bfdlac", "bitwig", "brstm",
     "cdxa", "cue", "e4b", "e5b", "fc", "flac", "fxp", "gcm", "gf1pat", "hps",
     "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
-    "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni", "ogg",
+    "mdx", "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni", "ogg",
     "okt", "pgm", "rf64", "rmid", "rx2", "s3m", "serum", "sf2", "sigmf", "smus",
     "dmx", "sid", "snd", "snesrom", "vag", "vital", "voc", "wav", "wii", "wt", "xm", "xpm",
     "xpn", "xtd",
@@ -302,6 +303,15 @@ def sniff(filepath):
                 return "dmx"                           # Doom DS* sound lump
         except OSError:
             pass
+    # MDX has no magic at all: it opens with a Shift-JIS title. Identification
+    # is whether the arithmetic lands -- a title terminator, a NUL-terminated
+    # sample-bank name, then an offset table that resolves to 9 or 16 channels
+    # with every offset inside the file.
+    # The shared head is 20 bytes, which cannot reach an MDX offset table, so
+    # this one reads the file itself -- the same shape as the gzipped-Ableton
+    # check above.
+    if fmt is None and mdxmod.looks_like_mdx_file(filepath):
+        return "mdx"                                   # Sharp X68000 MXDRV tune
     # every Ableton document except .asd and .amxd is gzipped XML, so the magic
     # is just gzip's. Identifying it needs one decompressed block, which is why
     # this lives here rather than in sniff_bytes.
