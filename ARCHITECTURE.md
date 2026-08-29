@@ -28,10 +28,10 @@ unchanged.
    `aiff`, `mp3`, `mp4`, `flac`, `ni`, `tracker`, `sf2`, ...),
    `core/primitives/` (shared byte readers), `core/codecs/` (ADPCM, BRR, VADPCM
    and friends), `core/containers/` (disc images and archives),
-   `core/infra/` (`sniff.py` -- 67 recognized formats, `fieldcodec.py` -- the
+   `core/infra/` (`sniff.py` -- 68 recognized formats, `fieldcodec.py` -- the
    enc-language, `geometry.py` -- which bytes a chunk occupies, `mapped.py`,
    `render.py`).
-2. **Walkers** -- `core/walk/*.py`: 37 walkers behind one dispatcher, serving 56
+2. **Walkers** -- `core/walk/*.py`: 38 walkers behind one dispatcher, serving 57
    registered format labels, each emitting the field model. **The correctness oracle and the
    default.** Dispatch: `core/walk/__init__.py::walk_file`.
 3. **Declarative engine** -- `core/grammar/`: format descriptors as data plus one
@@ -77,9 +77,9 @@ unchanged.
 
 ```
 src/acidcat/
-  core/            156 modules
-    formats/       per-format byte decoders (19)
-    walk/          35 walker modules -> 54 format labels (36)
+  core/            158 modules
+    formats/       per-format byte decoders (20)
+    walk/          36 walker modules -> 55 format labels (37)
     primitives/    shared byte readers (6)
     codecs/        sample-data decoders + the 6510/SID player (15)
     containers/    disc images and archives (5)
@@ -95,7 +95,7 @@ src/acidcat/
   mcp_server/      schema, handlers, transport (19 tools)
   tui_app/         Textual inspector/editor
   util/            small shared helpers
-  cli.py  explorer.py  tui_theme.py  __init__.py     (213 modules in total)
+  cli.py  explorer.py  tui_theme.py  __init__.py     (215 modules in total)
 tests/             ~0.59 test:source LOC
 docs/              architecture.md (detailed), format anatomy pages
 internal_docs/     design + review notes (gitignored, local-only)

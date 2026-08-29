@@ -248,6 +248,7 @@ def _borrowed():
         import test_bfdlac
         import test_emu
         import test_krz
+        import test_mdx
         import test_mpc
         import test_ncw
         import test_s3m
@@ -271,6 +272,8 @@ def _borrowed():
             # returns (blob, offset, offset); only the bytes matter here
             ("it.it", test_tracker._make_it()[0]),
             ("s3m.s3m", test_s3m._make_s3m()),
+            # no magic at all: identification is arithmetic on the offset table
+            ("mdx.mdx", test_mdx._mdx(title="CORPUS SPECIMEN", voices=3)),
             # PSID and RSID share one format id but not one set of rules, and
             # the RSID constraints only exist on the RSID path
             ("sid.sid", test_sid._sid()),
