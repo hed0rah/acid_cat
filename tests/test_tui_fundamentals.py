@@ -343,8 +343,17 @@ def test_a_huge_chunk_count_does_not_freeze_the_mount(tmp_path):
         return elapsed, nodes
 
     elapsed, nodes = asyncio.run(go())
-    assert elapsed < 10.0, f"mount took {elapsed:.1f}s on a 2 MB file"
+    # The node count is the real assertion. The bug was an unbounded chunk
+    # count -- one Tree widget per chunk -- and `nodes <= 2001` catches that
+    # deterministically on any machine.
     assert nodes <= 2001, f"{nodes} top-level nodes; the chunk cap is not applied"
+    # The clock is only a hang detector. It was 10 s, which is a plausible
+    # mount time on a loaded shared runner rather than a broken one: Windows CI
+    # took 15.9 s and failed a green build. Raising a budget every time it
+    # trips is how a floor stops meaning anything, so this is deliberately far
+    # out of reach of a slow machine and still nowhere near the 46 s that the
+    # unbounded version needed for 262,146 chunks.
+    assert elapsed < 60.0, f"mount took {elapsed:.1f}s on a 2 MB file; that is a hang, not a slow runner"
 
 
 def test_the_hidden_chunks_are_counted_and_reachable(tmp_path):
