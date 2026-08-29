@@ -4,6 +4,83 @@ All notable changes to acidcat. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project will
 adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
+## [1.3.1] - 2026-08-29
+
+### Added
+
+- **Sharp X68000 MXDRV tunes (`.mdx`).** A Music Macro Language score for the
+  YM2151 (OPM) FM chip, with optional ADPCM samples in a separate `.PDX` file
+  the MDX names. Big-endian throughout, which for once follows the machine: the
+  X68000 is a 68000.
+
+  The format has **no magic number**. A file opens with its title in Shift-JIS,
+  so identification is arithmetic: a `0D 0A 1A` terminator, a NUL-terminated
+  sample-bank name, then an offset table that must resolve to 9 or 16 channels
+  with every offset inside the file.
+
+  Every offset is relative to the position of the voice-offset *word*, not to
+  the start of the file. The title and sample-bank name are both variable
+  length, so that base moves per file; read them as absolute and a tune points
+  nowhere useful, by an amount that grows with its title.
+
+  The channel count is derived rather than stored: `(first_offset - 2) / 2`.
+  That works only because the first channel's data begins immediately after the
+  table, which nothing in the format states but which holds in every file
+  measured, with the voice block always placed after the channel data. Both are
+  asserted, since a file breaking either would make its own count underivable.
+
+  Verified against 27,166 tunes from the X68000 MDX Master Library: 26,689
+  identified, zero crashes, zero untrustworthy geometry, and every identified
+  file accounted for byte for byte. An anatomy page documents the layout.
+
+### Changed
+
+- **SID combined waveforms are now a bitwise AND, which is what the chip does.**
+  Bob Yannes, who designed it: "The combination was actually a logical ANDing of
+  the bits of each waveform, which produced unpredictable results, so I didn't
+  encourage this." Each generator is evaluated as its real 12-bit value and the
+  selected ones are ANDed, so a combined waveform is quieter and more lopsided
+  than either component.
+
+  **This changes rendered audio.** Averaging was wrong for triangle plus
+  sawtooth, which correlate only 0.77. Measured across 203 tunes rendered both
+  ways, not one gained or lost sound and the median RMS is unchanged; across
+  112 compared sample for sample, 111 differ but the median difference is 0.0%.
+  Only tunes that actually combine waveforms are affected.
+
+  Ring modulation follows the same source: it substitutes the previous
+  oscillator's accumulator MSB into the triangle generator's EXOR rather than
+  scaling the triangle by a sign, which is why ring mod is audible only on a
+  triangle.
+
+### Fixed
+
+- **The MIDI anatomy page stated MIDI 2.0 velocity as 256x MIDI 1.0's.** It is
+  512x: 7 bits is 128 values, 16 bits is 65,536. The sentence gave both widths
+  and got the ratio between them wrong.
+
+- **A SID pulse width of 0 is a 0% duty cycle**, not a 100% one. A square wave
+  is correct under either reading of the comparison, so the existing 50% test
+  could never have caught the inversion; the new test covers 0, 25, 50 and 75%.
+
+### Documentation
+
+- The SID page gains three facts from the specification: that `$07E8` is
+  `$0400` plus the 1,000 bytes of default screen RAM, that the `speed` field is
+  a redefinition of one that never worked as intended on PlaySID for Amiga, and
+  that its bits should still be set when nothing reads them.
+
+- It also now says where it disagrees with its own source. The specification
+  states "the speed specified for tune 32 is the same as tune 1", but its
+  preceding sentence gives subtune 1 to bit 0, leaving subtune 32 holding bit
+  31. Read literally that strands bit 31 and shifts everything above it by one.
+  The wrap begins at subtune 33.
+
+- `docs/formats/README.md` said the published site was canonical and this
+  directory a mirror. The direction reversed when the design work moved into
+  this repository, so it was telling readers to edit the copy that gets
+  overwritten.
+
 ## [1.3.0] - 2026-08-27
 
 ### Added
