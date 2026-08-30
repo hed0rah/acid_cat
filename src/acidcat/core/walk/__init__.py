@@ -18,7 +18,7 @@ from acidcat.core.walk import (
     ableton, aiff, akai, albank, amiga, bfdlac, bitwig, dmx, gf1pat, voc, emu, flac, fxp, krz, labx,
     mdx, midi, midi2, mp3,
     mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
-    sid, vital, wav, wt,
+    sid, streams, vital, wav, wt,
 )
 from acidcat.core.walk.base import Unsupported
 
@@ -68,6 +68,13 @@ _WALKERS = {
     "agr": ("Ableton groove",
             lambda path, deep: ableton.inspect_ableton_xml(path, "agr")),
     "amxd": ("Max for Live device", lambda path, deep: ableton.inspect_amxd(path)),
+    # console stream formats: header plus ADPCM, one module, shared vocabulary
+    "adx": ("CRI ADX stream", lambda path, deep: streams.inspect_adx(path, deep)),
+    "brstm": ("Nintendo BRSTM stream",
+              lambda path, deep: streams.inspect_brstm(path, deep)),
+    "hps": ("HAL PCM Stream (GameCube)",
+            lambda path, deep: streams.inspect_hps(path, deep)),
+    "vag": ("Sony VAG (SPU-ADPCM)", lambda path, deep: streams.inspect_vag(path, deep)),
     "mdx": ("Sharp X68000 MXDRV tune (MDX)",
             lambda path, deep: mdx.inspect_mdx(path, deep=deep)),
     "sid": ("Commodore 64 SID tune (PSID/RSID)",

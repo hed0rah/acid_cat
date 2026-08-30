@@ -94,6 +94,7 @@ From a checkout, swap `acidcat` for `-e .`:
 | NCW    | `.ncw`    | NI Compressed Wave header, channel/block info (inspect + convert to WAV) |
 | SoundFont | `.sf2`, `.sf3` | sfbk metadata + every named sample with its byte offset; SF3 = Ogg-Vorbis samples (inspect + convert to WAV/Ogg) |
 | Tracker | `.mod`, `.xm`, `.it` | ProTracker / FastTracker II / Impulse Tracker: header, pattern order, every embedded sample at its byte offset; IT offset tables as pointers (inspect) |
+| Console streams | `.adx`, `.brstm`, `.hps`, `.vag` | CRI ADX, Nintendo BRSTM, HAL PCM Stream and Sony VAG: codec, channels, rate, frame count and derived duration in one shared vocabulary, plus each format's own block layout (inspect + extract) |
 | MDX    | `.mdx`    | Sharp X68000 MXDRV tune: Shift-JIS title, PDX sample-bank reference, per-channel MML offsets and OPM voice definitions (inspect) |
 | SID    | `.sid`    | PSID/RSID: big-endian header, C64 memory image, subtunes, chip model, clock, up to three SID addresses, HVSC songlength key (inspect); plays by running the tune's 6510 player |
 | MP4    | `.mp4`, `.m4a` | Box tree, codec info, iTunes tags, `stco`/`co64` offset tables (inspect + repair) |
