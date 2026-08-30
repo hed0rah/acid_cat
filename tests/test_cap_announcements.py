@@ -418,6 +418,20 @@ def _mdx_over_cap(tmp_path, n):
     return str(q)
 
 
+def _hps_over_cap(tmp_path, n):
+    """An .hps larger than n bytes, to cross the stream walkers' read cap.
+
+    HPS is the one of the four where the cap shortens an ANSWER rather than a
+    search: the block chain is walked through the buffer, so a file read short
+    reports fewer blocks than it has, and a block count is exactly the kind of
+    number a reader would take as complete.
+    """
+    from test_streams import _hps
+    q = tmp_path / "big.hps"
+    q.write_bytes(_hps(channels=2, blocks=max(4, n // 32)))
+    return str(q)
+
+
 SWEPT = [
     # (module that READS the constant, name, patched value, builder, says)
     ("acidcat.core.walk.svx", "_CHUNK_CAP", 4, _svx_many_chunks, "cap"),
@@ -426,6 +440,7 @@ SWEPT = [
     ("acidcat.core.walk.dmx", "_READ_CAP", 64, _dmx_over_cap, "only the first"),
     ("acidcat.core.walk.sid", "_SID_READ_CAP", 64, _sid_over_cap, "parsed the first"),
     ("acidcat.core.walk.mdx", "_MDX_READ_CAP", 64, _mdx_over_cap, "parsed the first"),
+    ("acidcat.core.walk.streams", "_HEAD_CAP", 64, _hps_over_cap, "lower bound"),
 ]
 
 

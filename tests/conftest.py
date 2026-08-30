@@ -158,6 +158,11 @@ CORPUS_M4A = corpus_or_fixture("gs-16b-2c-44100hz.m4a", "tone.m4a")
 # WAVE_FORMAT_EXTENSIBLE with a channel mask, big-endian AIFF, and bit depth
 # living in FLAC's STREAMINFO bitfield. Each is the only committed file
 # exercising its header path.
+# A real 504 KB Nintendo stream when the corpus is present, and the synthetic
+# one the BRSTM tests already build when it is not. Without the stand-in the
+# real-specimen test named a gitignored path and therefore ran nowhere.
+CORPUS_BRSTM = corpus_or_fixture(os.path.join("reference", "brstm.brstm"),
+                                 "brstm.brstm")
 CORPUS_WAV24 = corpus_or_fixture("wav24.wav", "tone24.wav")
 CORPUS_WAV51 = corpus_or_fixture("wav51.wav", "tone51.wav")
 CORPUS_AIFF = corpus_or_fixture(os.path.join("generated", "aiff_pcm.aiff"),

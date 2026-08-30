@@ -2,7 +2,8 @@
 acidcat info -- single-file metadata dump.
 
 The star command: ``acidcat file.wav`` dumps metadata like exiftool.
-Supports WAV, AIFF, MIDI, Serum, MP3, FLAC, OGG, and M4A files.
+Works on anything `acidcat formats` lists; an enumeration here could only
+go stale, and the one it replaces named eight of fifty-seven.
 """
 
 import os
@@ -35,7 +36,7 @@ def _vlog(args, msg):
 def register(subparsers):
     p = subparsers.add_parser("info", help="Show metadata for a single audio file.")
     p.add_argument("target", nargs="+", metavar="FILE",
-                   help="Audio file(s) or directory(ies) (WAV, AIFF, MIDI, presets).")
+                   help="Audio file(s) or directory(ies); see `acidcat formats`.")
     add_output_format_arg(p, only=("table", "json", "csv", "tsv"))
     p.add_argument("--deep", action="store_true",
                    help="Include librosa deep analysis (BPM/key detection + spectral features).")

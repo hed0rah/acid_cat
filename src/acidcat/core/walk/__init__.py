@@ -18,7 +18,7 @@ from acidcat.core.walk import (
     ableton, aiff, akai, albank, amiga, bfdlac, bitwig, dmx, gf1pat, voc, emu, flac, fxp, krz, labx,
     mdx, midi, midi2, mp3,
     mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
-    sid, vital, wav, wt,
+    sid, streams, vital, wav, wt,
 )
 from acidcat.core.walk.base import Unsupported
 
@@ -68,6 +68,13 @@ _WALKERS = {
     "agr": ("Ableton groove",
             lambda path, deep: ableton.inspect_ableton_xml(path, "agr")),
     "amxd": ("Max for Live device", lambda path, deep: ableton.inspect_amxd(path)),
+    # console stream formats: header plus ADPCM, one module, shared vocabulary
+    "adx": ("CRI ADX stream", lambda path, deep: streams.inspect_adx(path, deep)),
+    "brstm": ("Nintendo BRSTM stream",
+              lambda path, deep: streams.inspect_brstm(path, deep)),
+    "hps": ("HAL PCM Stream (GameCube)",
+            lambda path, deep: streams.inspect_hps(path, deep)),
+    "vag": ("Sony VAG (SPU-ADPCM)", lambda path, deep: streams.inspect_vag(path, deep)),
     "mdx": ("Sharp X68000 MXDRV tune (MDX)",
             lambda path, deep: mdx.inspect_mdx(path, deep=deep)),
     "sid": ("Commodore 64 SID tune (PSID/RSID)",
@@ -149,10 +156,14 @@ def walk_file(filepath, deep=False, fmt_override=None):
             generic = None
         if generic is not None:
             return _normalized(filepath, generic)
-        raise Unsupported("not a recognized audio/preset file (WAV, RF64, AIFF, "
-                          "MIDI, Serum, Bitwig, Vital, NCW, SF2, MP4/M4A, Ogg, "
-                          "Native Instruments, MP3, FLAC, a MOD/S3M/XM/IT "
-                          "tracker module, or a SigMF/IQ capture)")
+        # Naming the formats here was a list that could only go stale, and had:
+        # it named fifteen while the tool walked fifty-seven, so it told anyone
+        # who read it that half the supported formats were not supported.
+        # `acidcat formats` prints the real set with its capabilities, and it
+        # cannot drift because it is generated from the dispatch table below.
+        raise Unsupported("not a recognized audio or preset file; "
+                          "run `acidcat formats` for the %d it reads"
+                          % len(_WALKERS))
     label, walker = entry
     try:
         chunks, file_warns = walker(filepath, deep)

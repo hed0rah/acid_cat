@@ -59,7 +59,7 @@ def register(subparsers):
     p.add_argument("-F", "--frames", action="store_true",
                    help="Per-element deep dump: every MPEG frame (MP3) or "
                         "MIDI event. No effect on formats without per-element "
-                        "structure (WAV, AIFF, FLAC).")
+                        "structure, e.g. WAV, AIFF or FLAC.")
     p.add_argument("--only", metavar="IDS",
                    help="Show only these chunk ids (comma-separated, e.g. "
                         "'fmt,bext'). Case-insensitive, matched against the "
