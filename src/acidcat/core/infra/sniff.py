@@ -38,8 +38,9 @@ KNOWN_FORMATS = frozenset({
     "asd", "bfdlac", "bitwig", "brstm",
     "cdxa", "cue", "e4b", "e5b", "fc", "flac", "fxp", "gcm", "gf1pat", "hps",
     "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
-    "mdx", "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni", "ogg",
-    "okt", "pgm", "rf64", "rmid", "rx2", "s3m", "serum", "sf2", "sigmf", "smus",
+    "mdx", "mp3", "mp4", "mpcpattern", "multisample", "n64rom", "ncw", "ni",
+    "nsf", "nsfe", "ogg",
+    "okt", "pgm", "rf64", "rmid", "rx2", "s3m", "sap", "serum", "sf2", "sigmf", "smus",
     "dmx", "sid", "snd", "snesrom", "vag", "vital", "voc", "wav", "wii", "wt", "xm", "xpm",
     "xpn", "xtd",
 })
@@ -105,6 +106,12 @@ def sniff_bytes(head):
     Magic-only: an ID3v2 tag classifies as "mp3" here; use ``sniff`` to
     distinguish a tag that wraps a different container.
     """
+    if head[:5] == b"NESM\x1a":
+        return "nsf"                                    # NES Sound Format (v1 and NSF2)
+    if head[:4] == b"NSFE":
+        return "nsfe"                                   # NSF extended, chunk-based
+    if head[:5] == b"SAP\r\n":
+        return "sap"                                    # Slight Atari Player (POKEY)
     if head[:12] == b"\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00":
         return "cdxa"                                   # raw CD sector image (Mode1/2/2352)
     if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WAVE":

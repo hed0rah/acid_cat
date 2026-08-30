@@ -446,6 +446,35 @@ def _cdxa_over_cap(tmp_path, n):
     return str(q)
 
 
+def _nsf_over_cap(tmp_path, n):
+    """An NSF larger than the read cap.
+
+    The cap has to stay above the 128-byte header or the walk takes the
+    truncated-header path instead, which is a different answer to a different
+    question. What is being checked is that a file read SHORT still says so.
+    """
+    from test_chiptune import _nsf
+    q = tmp_path / "big.nsf"
+    q.write_bytes(_nsf(body=b"\xea" * (n * 2)))
+    return str(q)
+
+
+def _nsfe_over_cap(tmp_path, n):
+    """An NSFe with more chunks than the walk will follow.
+
+    A chunk count is exactly the kind of number a reader takes as complete, so
+    stopping early has to be said out loud rather than inferred from a suspiciously
+    round total.
+    """
+    from test_chiptune import _chunk, _info, _nsfe
+    chunks = [_chunk(b"INFO", _info())]
+    chunks += [_chunk(b"tlbl", b"x\x00")] * (n + 4)
+    chunks.append(_chunk(b"DATA", b"\xea"))
+    q = tmp_path / "many.nsfe"
+    q.write_bytes(_nsfe(chunks))
+    return str(q)
+
+
 SWEPT = [
     # (module that READS the constant, name, patched value, builder, says)
     ("acidcat.core.walk.svx", "_CHUNK_CAP", 4, _svx_many_chunks, "cap"),
@@ -456,6 +485,10 @@ SWEPT = [
     ("acidcat.core.walk.mdx", "_MDX_READ_CAP", 64, _mdx_over_cap, "parsed the first"),
     ("acidcat.core.walk.streams", "_HEAD_CAP", 64, _hps_over_cap, "lower bound"),
     ("acidcat.core.walk.containers", "_XA_SCAN_CAP", 8, _cdxa_over_cap, "examined the first"),
+    ("acidcat.core.walk.chiptune", "_NSF_READ_CAP", 256, _nsf_over_cap,
+     "read the first"),
+    ("acidcat.core.walk.chiptune", "_NSFE_CHUNK_MAX", 4, _nsfe_over_cap,
+     "stopped after"),
 ]
 
 

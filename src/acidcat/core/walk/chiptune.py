@@ -1,0 +1,562 @@
+"""Chiptune containers: NSF, NSFe and SAP.
+
+None of these three is a description of music. Each one ships the original 6502
+program that PRODUCED the music, plus enough metadata to start it: where to load
+it, where to call it, and how often. What a walker can honestly say about them is
+therefore where the code goes and where the entry points are, not what it sounds
+like -- the sound is a property of running it on a chip this module does not
+emulate.
+
+That lineage is not a coincidence. Both formats were shaped by PSID: the literal
+`<?>` convention for an unknown author appears in all three, and all three are
+"ship the code and run it" containers.
+
+What separates them at the container level is who knows the load address. An NSF
+carries a flat ROM image with the address out-of-band in the header, so nothing
+in the payload can be checked against anything. A SAP payload is
+self-describing: it is a standard Atari executable, and every block carries its
+own start and end. SAP's binary half is the more parseable of the two, and it is
+the only part of SAP with a second independent source.
+
+Sources: the NESdev wiki (living spec, authoritative where it contradicts
+Horton), Kevin Horton's nsfspec.txt v1.61 (2000, original intent), Disch's NSFe
+Revision 2 (2003), and asap.sourceforge.net for SAP. No player source was read;
+the reference implementations are GPL and this is MIT.
+
+Two things a reader should know about the confidence here. NSF has only ever had
+two version bytes, 1 and 2 -- there is no v1.01/1.02/1.03 ladder, and the
+appearance of one in tooling is usually PSID bleeding across. And SAP is
+effectively single-source outside its binary blocks, so the tag semantics below
+rest on one document rather than two.
+"""
+
+import os
+import re
+import struct
+
+from acidcat.core.primitives.notes import coverage
+from acidcat.core.walk.base import _f
+
+# An NSF is a NES ROM image: the mapper windows 4 KB banks into 32 KB of address
+# space, so past about 1 MB the data cannot be reached by any bank value. The cap
+# sits far above that, high enough never to truncate a real file.
+_NSF_READ_CAP = 16 * 1024 * 1024
+
+# NSFe and NSF2 trailers declare chunk lengths as unchecked 32-bit words, so a
+# forged length can claim 4 GB. Chunks are walked to this many before the walk
+# stops and says so.
+_NSFE_CHUNK_MAX = 4096
+
+_NSF_HEADER = 0x80
+_STR_SLOT = 32
+
+_EXPANSION = [
+    (0, "VRC6"), (1, "VRC7"), (2, "FDS"), (3, "MMC5"),
+    (4, "Namco 163"), (5, "Sunsoft 5B"), (6, "VT02+"),
+]
+
+# Every SAP tag the spec defines, with how its argument is written. Kept as data
+# because the validity rules below are per-tag and reading them next to the
+# vocabulary is the only way to see that they cover it.
+_SAP_TAGS = {
+    "AUTHOR": "string", "NAME": "string", "DATE": "string",
+    "SONGS": "dec", "DEFSONG": "dec", "FASTPLAY": "dec",
+    "STEREO": "none", "NTSC": "none",
+    "TYPE": "letter",
+    "INIT": "hex", "MUSIC": "hex", "PLAYER": "hex", "COVOX": "hex",
+    "TIME": "time",
+}
+
+_SAP_TYPES = {
+    "B": "standard: INIT called with the subsong in A, then PLAYER on a timer",
+    "C": "Chaos Music Composer: MUSIC required, INIT invalid, fixed call sequence",
+    "D": "digitised: INIT does not return and drives the audio itself",
+    "S": "SoftSynth: PLAYER unused, $45 counts down and $B07B is bumped",
+    "R": "raw POKEY register dump, not an Atari executable (no player implements it)",
+}
+
+# The header's permitted characters top out at 0x7C, so 0xFF cannot occur in it.
+# The binary half must open with FF FF. That is what makes the boundary findable.
+_SAP_TEXT_OK = set(range(0x20, 0x60)) | set(range(0x61, 0x7B)) | {0x7C, 0x0D, 0x0A}
+
+
+def _addr(a):
+    return "$%04X" % (a & 0xFFFF)
+
+
+def _slot(raw, off):
+    """One fixed-width 32-byte string slot, truncated at its first NUL.
+
+    The slot is ALWAYS 32 bytes; the NUL terminates the text inside it rather
+    than ending the field. Scanning for the NUL instead of capping at the slot
+    would run a malformed 32-non-NUL slot into the next field, which is how the
+    artist ends up appended to the title.
+
+    Nothing in the file declares the encoding. Nominally ASCII, but real rips use
+    Shift-JIS for Japanese titles and occasionally CP-1252, and no byte says
+    which. Latin-1 cannot fail, so it is used to get SOMETHING printable, and the
+    caller is told when the bytes were not plain ASCII rather than being handed a
+    confident mojibake.
+    """
+    blob = raw[off:off + _STR_SLOT]
+    nul = blob.find(b"\x00")
+    text = blob if nul < 0 else blob[:nul]
+    tail = b"" if nul < 0 else blob[nul + 1:]
+    return (text.decode("latin-1").rstrip(),
+            nul < 0,                                  # no terminator in the slot
+            bool(tail.strip(b"\x00")),                # dirty padding after it
+            any(b > 0x7E for b in text))              # not plain ASCII
+
+
+def inspect_nsf(filepath, deep=False):
+    """An NSF: a 128-byte header, a flat ROM image, and maybe an NSFe trailer.
+
+    The header is little-endian throughout, which is worth saying only because
+    the sibling formats in this repo are not: a SID header is big-endian on a
+    little-endian target, and an MDX offset is relative to a word rather than to
+    the file. NSF is the straightforward one.
+
+    Two fields do not mean what they appear to. The load address stops being an
+    address when bankswitching is in use -- its low 12 bits become a count of pad
+    bytes at the start of the ROM. And bytes $7C-$7F were four reserved bytes in
+    the original spec that were later given meaning, so in a version-1 file $7C
+    must be ignored while $7D-$7F may still legitimately carry a trailer length.
+    """
+    size = os.path.getsize(filepath)
+    warns = []
+    with open(filepath, "rb") as fh:
+        raw = fh.read(min(size, _NSF_READ_CAP))
+    if size > _NSF_READ_CAP:
+        warns.append(coverage("read the first %s of %s bytes"
+                              % (format(_NSF_READ_CAP, ","), format(size, ","))))
+    if len(raw) < _NSF_HEADER:
+        return [{"id": "header", "offset": 0, "size": size,
+                 "summary": "NSF header is truncated (%d of 128 bytes)" % len(raw),
+                 "fields": [], "warnings": [], "payload_base": 0}], \
+               warns + ["file ends inside the 128-byte header"]
+
+    ver = raw[5]
+    total, start = raw[6], raw[7]
+    load, init, play = struct.unpack_from("<HHH", raw, 8)
+    ntsc_speed, = struct.unpack_from("<H", raw, 0x6E)
+    banks = list(raw[0x70:0x78])
+    pal_speed, = struct.unpack_from("<H", raw, 0x78)
+    region, chips, nsf2flags = raw[0x7A], raw[0x7B], raw[0x7C]
+    data_len = raw[0x7D] | (raw[0x7E] << 8) | (raw[0x7F] << 16)
+
+    banked = any(banks)
+    is_nsf2 = ver == 2
+    dual = bool(region & 0x02)
+    pal = bool(region & 0x01)
+
+    names, slots = [], []
+    for off, label in ((0x0E, "title"), (0x2E, "artist"), (0x4E, "copyright")):
+        text, unterminated, dirty, hi = _slot(raw, off)
+        names.append(text)
+        note = "32-byte slot, NUL-terminated inside it"
+        if unterminated:
+            note = "no NUL anywhere in the 32-byte slot"
+            warns.append("the %s slot has no terminator; text may run past it"
+                         % label)
+        elif dirty:
+            note = "non-zero bytes after the terminator (ripper remnants)"
+        elif hi:
+            note = "bytes above 0x7E; the encoding is not declared anywhere"
+        slots.append(_f(off, _STR_SLOT, label, text or "(empty)", note))
+
+    fields = [
+        _f(0, 5, "magic", "NESM 1A", "the 0x1A is part of the signature"),
+        _f(5, 1, "version", ver,
+           "NSF2" if is_nsf2 else "NSF; only 1 and 2 have ever existed",
+           enc="B", raw=ver),
+        _f(6, 1, "songs", total, "1-based count", enc="B", raw=total),
+        _f(7, 1, "startSong", start, "1-based index, unlike NSFe which is 0-based",
+           enc="B", raw=start),
+        _f(8, 2, "loadAddress", _addr(load),
+           "low 12 bits are a pad count, not an address, while banked" if banked
+           else "where the ROM image is placed", enc="<H", raw=load),
+        _f(0x0A, 2, "initAddress", _addr(init), "called once per song",
+           enc="<H", raw=init),
+        _f(0x0C, 2, "playAddress", _addr(play), "called on a timer",
+           enc="<H", raw=play),
+    ] + slots + [
+        _f(0x6E, 2, "ntscSpeed", "%s us" % format(ntsc_speed, ","),
+           "microseconds between PLAY calls; 16666 is 60 Hz",
+           enc="<H", raw=ntsc_speed),
+        _f(0x70, 8, "bankInit",
+           " ".join("%02X" % b for b in banks),
+           "all zero means bankswitching is unused; there is no flag bit"),
+        _f(0x78, 2, "palSpeed", "%s us" % format(pal_speed, ","),
+           "20000 is 50 Hz", enc="<H", raw=pal_speed),
+        _f(0x7A, 1, "region",
+           "dual" if dual else ("PAL" if pal else "NTSC"),
+           "bit1 dual, bit0 PAL", enc="B", raw=region),
+        _f(0x7B, 1, "expansion",
+           ", ".join(n for b, n in _EXPANSION if chips & (1 << b)) or "none",
+           "stock 2A03 APU only" if not chips else "extra sound hardware",
+           enc="B", raw=chips),
+    ]
+
+    if is_nsf2:
+        feat = []
+        if nsf2flags & 0x10:
+            feat.append("IRQ")
+        if nsf2flags & 0x20:
+            feat.append("non-returning INIT")
+        if nsf2flags & 0x40:
+            feat.append("no PLAY")
+        if nsf2flags & 0x80:
+            feat.append("mandatory metadata")
+        fields.append(_f(0x7C, 1, "nsf2Flags", ", ".join(feat) or "none",
+                         "bits 0-3 must be clear", enc="B", raw=nsf2flags))
+    elif nsf2flags:
+        fields.append(_f(0x7C, 1, "reserved", "0x%02X" % nsf2flags,
+                         "must be ignored in a version 1 file, but it is not zero"))
+
+    fields.append(_f(0x7D, 3, "dataLength",
+                     format(data_len, ",") if data_len else "0 (runs to EOF)",
+                     "where the appended metadata starts, if any"))
+
+    if banked:
+        pad = load & 0x0FFF
+        fields.append(_f(0, 0, "romPadding", format(pad, ","),
+                         "loadAddress & 0x0FFF while banked"))
+
+    # ── validity, weighted rather than absolute ──────────────────────
+    if ver not in (1, 2):
+        warns.append("version byte is %d; only 1 and 2 have ever been defined, so "
+                     "this is corruption rather than a newer file" % ver)
+    if total == 0:
+        warns.append("song count is zero, and the count is 1-based")
+    if start == 0 or start > max(total, 1):
+        warns.append("start song %d is outside 1..%d" % (start, total))
+    if region & 0xFC:
+        warns.append("region byte has reserved bits set (0x%02X)" % region)
+    if chips & 0x80:
+        warns.append("expansion byte bit 7 is reserved and set")
+    for label, a in (("init", init), ("play", play)):
+        if a and a < 0x6000:
+            warns.append("%s address %s is below $6000, which no NSF maps"
+                         % (label, _addr(a)))
+    if load < 0x8000 and not (chips & 0x04):
+        warns.append("load address %s is below $8000 without the FDS bit; FDS rips "
+                     "do this legitimately, other files do not" % _addr(load))
+    if (pal or dual) and not pal_speed:
+        warns.append("declared PAL but the PAL speed word is zero")
+    if (not pal or dual) and not ntsc_speed:
+        warns.append("declared NTSC but the NTSC speed word is zero")
+    if is_nsf2 and nsf2flags & 0x0F:
+        warns.append("NSF2 feature bits 0-3 are reserved and set")
+    if is_nsf2 and (nsf2flags & 0x80) and not data_len:
+        warns.append("claims mandatory appended metadata but declares no data "
+                     "length, so the trailer has no stated boundary")
+    if data_len and _NSF_HEADER + data_len > size:
+        warns.append("declared data length runs %s bytes past the end of the file"
+                     % format(_NSF_HEADER + data_len - size, ","))
+        data_len = 0
+    if all(n == "<?>" for n in names):
+        warns.append("title, artist and copyright are all <?>: a bare rip, "
+                     "which is a convention rather than damage")
+
+    # bit 7 has no name, so a file with only bit 7 set joins to the empty string
+    # and the summary reads "NTSC, " with nothing after it
+    named = ", ".join(n for b, n in _EXPANSION if chips & (1 << b))
+    chip_note = "stock APU" if not chips else (named or "unnamed bits 0x%02X" % chips)
+    chunks = [{"id": "header", "offset": 0, "size": _NSF_HEADER,
+               "summary": "%s header, %d song(s), %s, %s"
+                          % ("NSF2" if is_nsf2 else "NSF", total,
+                             "dual" if dual else ("PAL" if pal else "NTSC"),
+                             chip_note),
+               "fields": fields, "warnings": [], "payload_base": 0}]
+
+    body_end = _NSF_HEADER + data_len if data_len else size
+    body_end = min(body_end, size)
+    if body_end > _NSF_HEADER:
+        chunks.append({"id": "program", "offset": _NSF_HEADER,
+                       "size": body_end - _NSF_HEADER,
+                       "summary": "%s bytes of 6502 code and data%s"
+                                  % (format(body_end - _NSF_HEADER, ","),
+                                     ", banked" if banked else ""),
+                       "fields": [], "warnings": [], "payload_base": _NSF_HEADER})
+    if body_end < size:
+        trailer, tw = _nsfe_chunks(raw, body_end, size, bare=True)
+        warns.extend(tw)
+        chunks.append({"id": "metadata", "offset": body_end, "size": size - body_end,
+                       "summary": "NSFe metadata appended after the program data",
+                       "fields": trailer, "warnings": [], "payload_base": body_end})
+    return chunks, warns
+
+
+def _nsfe_chunks(raw, start, end, bare=False):
+    """Walk an NSFe chunk sequence, returning fields describing what is there.
+
+    The trap this exists to avoid: an NSFe chunk header is LENGTH FIRST, THEN
+    FourCC. That is the reverse of RIFF and IFF, so plumbing borrowed from either
+    reads the FourCC as a size and walks off into nothing. There is also no
+    even-byte padding rule, so chunks are packed tight.
+
+    Mandatoriness is encoded in the capitalisation of the FourCC's first byte:
+    A-Z means a player that does not understand the chunk must refuse the file.
+    An unknown chunk with a capital initial is the format saying "you do not
+    understand me", which is worth more than silently skipping it.
+    """
+    fields, warns = [], []
+    pos, n = start, 0
+    while pos + 8 <= end and n < _NSFE_CHUNK_MAX:
+        length, = struct.unpack_from("<I", raw, pos)
+        fourcc = raw[pos + 4:pos + 8]
+        name = fourcc.decode("latin-1", "replace")
+        if pos + 8 + length > end:
+            warns.append("chunk %r at 0x%X declares %s bytes, which runs past the "
+                         "end of the file" % (name, pos, format(length, ",")))
+            break
+        mandatory = 0x41 <= fourcc[0] <= 0x5A
+        fields.append(_f(pos, 8, name, "%s bytes" % format(length, ","),
+                         "mandatory" if mandatory else "optional (skippable)"))
+        n += 1
+        pos += 8 + length
+        if fourcc == b"NEND":
+            if pos < end:
+                warns.append("%s bytes follow NEND, which ends the file"
+                             % format(end - pos, ","))
+            break
+    if n >= _NSFE_CHUNK_MAX:
+        warns.append(coverage("stopped after %d chunks" % _NSFE_CHUNK_MAX))
+    if bare and not fields:
+        warns.append("the appended metadata carries no readable chunk")
+    return fields, warns
+
+
+def inspect_nsfe(filepath, deep=False):
+    """An NSFe: "NSFE" then chunks to the end, length before FourCC.
+
+    Where NSF puts everything in a fixed record, NSFe puts each fact in its own
+    chunk, which is how it escapes the 31-character limit on the header strings
+    and how it carries per-track times and labels at all. It has no version
+    number by design; new revisions arrive as new mandatory chunk types, and the
+    capitalisation rule is what makes that safe.
+    """
+    size = os.path.getsize(filepath)
+    with open(filepath, "rb") as fh:
+        raw = fh.read(min(size, _NSF_READ_CAP))
+    warns = []
+    if size > _NSF_READ_CAP:
+        warns.append(coverage("read the first %s of %s bytes"
+                              % (format(_NSF_READ_CAP, ","), format(size, ","))))
+    if len(raw) < 4 or raw[:4] != b"NSFE":
+        return [{"id": "chunks", "offset": 0, "size": size,
+                 "summary": "not an NSFe (magic is not NSFE)",
+                 "fields": [], "warnings": [], "payload_base": 0}], \
+               ["magic is not NSFE"]
+
+    fields, warns2 = _nsfe_chunks(raw, 4, len(raw))
+    warns.extend(warns2)
+    seen = {f["name"] for f in fields}
+    for need in ("INFO", "DATA", "NEND"):
+        if need not in seen:
+            warns.append("no %s chunk; the spec requires it" % need)
+    if "INFO" in seen and "DATA" in seen:
+        order = [f["name"] for f in fields]
+        if order.index("DATA") < order.index("INFO"):
+            warns.append("DATA appears before INFO, which the spec forbids")
+    dupes = sorted({f["name"] for f in fields}
+                   & {n for n in seen if [f["name"] for f in fields].count(n) > 1})
+    for d in dupes:
+        warns.append("chunk %r appears more than once, which the spec disallows" % d)
+    unknown = [f["name"] for f in fields
+               if f["name"] not in ("INFO", "DATA", "NEND", "BANK", "RATE", "NSF2",
+                                    "VRC7", "plst", "psfx", "time", "fade", "tlbl",
+                                    "taut", "auth", "text", "mixe", "regn")]
+    for u in unknown:
+        if u and 0x41 <= ord(u[0]) <= 0x5A:
+            warns.append("unknown MANDATORY chunk %r: the file says it cannot be "
+                         "played by anything that does not understand it" % u)
+
+    head = [_f(0, 4, "magic", "NSFE"),
+            _f(0, 0, "chunks", len(fields),
+               "length comes before the FourCC, the reverse of RIFF")]
+    return [{"id": "chunks", "offset": 0, "size": size,
+             "summary": "NSFe, %d chunk(s)" % len(fields),
+             "fields": head + fields, "warnings": [], "payload_base": 0}], warns
+
+
+def _sap_boundary(raw):
+    """Where the text header stops and the Atari executable starts.
+
+    The spec defines no end-of-header marker: no END tag, no blank line, no
+    length. This rule is DERIVED, not quoted. The header's permitted character
+    set tops out at 0x7C so 0xFF cannot occur in it, and the binary half must
+    open with FF FF, so the first FF FF is the boundary. The check that the byte
+    before it is a newline is what separates a real boundary from an FF FF inside
+    a corrupt file.
+    """
+    i = raw.find(b"\xff\xff", 5)
+    return -1 if i < 0 else i
+
+
+def inspect_sap(filepath, deep=False):
+    """A SAP: an ASCII tag header, then a standard Atari executable.
+
+    The two halves are literally concatenated -- the spec points out you can
+    build one with `cat`. So the walk is two chunks, and the interesting question
+    is where one stops, which the format never says.
+    """
+    size = os.path.getsize(filepath)
+    with open(filepath, "rb") as fh:
+        raw = fh.read(min(size, _NSF_READ_CAP))
+    warns = []
+    if raw[:5] != b"SAP\r\n":
+        return [{"id": "header", "offset": 0, "size": size,
+                 "summary": "not a SAP (signature is not 'SAP' CR LF)",
+                 "fields": [], "warnings": [], "payload_base": 0}], \
+               ["the first five bytes are not 53 41 50 0D 0A"]
+
+    cut = _sap_boundary(raw)
+    text = raw[:cut if cut > 0 else len(raw)]
+    tags, fields = {}, []
+    times = []
+    for line in text.split(b"\n"):
+        line = line.rstrip(b"\r")
+        if not line or line == b"SAP":
+            continue
+        s = line.decode("latin-1")
+        m = re.match(r"^([A-Z0-9]+)(?: (.*))?$", s)
+        if not m:
+            warns.append("header line %r is not TAG or TAG<space>ARG" % s[:40])
+            continue
+        tag, arg = m.group(1), (m.group(2) or "")
+        if tag == "TIME":
+            times.append(arg)
+        else:
+            tags[tag] = arg
+        if tag not in _SAP_TAGS:
+            warns.append("unknown tag %r" % tag)
+
+    bad = [b for b in text if b not in _SAP_TEXT_OK]
+    if bad:
+        warns.append("the text header holds %d byte(s) outside the character set "
+                     "shared by ASCII and ATASCII" % len(bad))
+    if b"\r\n" not in raw[:cut if cut > 0 else len(raw)][5:] and len(text) > 5:
+        warns.append("header lines are not CR LF terminated, which the spec asks for")
+
+    typ = tags.get("TYPE", "").strip()
+    fields.append(_f(0, 5, "magic", "SAP CR LF", "five bytes, and that is all of it"))
+    for tag in ("NAME", "AUTHOR", "DATE"):
+        if tag in tags:
+            fields.append(_f(0, 0, tag.lower(), tags[tag].strip('"') or "(empty)"))
+    if typ:
+        fields.append(_f(0, 0, "type", typ,
+                         _SAP_TYPES.get(typ, "not a defined player type")))
+    songs = _int(tags.get("SONGS", "1"))
+    fields.append(_f(0, 0, "songs", songs, "omitted when 1"))
+    if "DEFSONG" in tags:
+        fields.append(_f(0, 0, "defSong", _int(tags["DEFSONG"]), "0-based"))
+    for tag in ("INIT", "PLAYER", "MUSIC", "COVOX"):
+        if tag in tags:
+            fields.append(_f(0, 0, tag.lower(), "$" + tags[tag].strip().upper(),
+                             "hex address"))
+    if "FASTPLAY" in tags:
+        fp = _int(tags["FASTPLAY"])
+        fields.append(_f(0, 0, "fastplay", fp,
+                         "scanlines between PLAYER calls; 312 is PAL 50 Hz"))
+    for flag in ("STEREO", "NTSC"):
+        if flag in tags:
+            fields.append(_f(0, 0, flag.lower(), "yes",
+                             "dual POKEY" if flag == "STEREO" else "NTSC timing"))
+    if times:
+        fields.append(_f(0, 0, "times", len(times), "one TIME line per subsong"))
+
+    if not typ:
+        warns.append("no TYPE tag, and there is no documented default")
+    elif typ not in _SAP_TYPES:
+        warns.append("TYPE %r is not one of B, C, D, S, R" % typ)
+    if typ in ("B", "D", "S") and "INIT" not in tags:
+        warns.append("TYPE %s requires INIT" % typ)
+    if typ == "C" and "INIT" in tags:
+        warns.append("TYPE C must not carry INIT")
+    if typ == "C" and "MUSIC" not in tags:
+        warns.append("TYPE C requires MUSIC")
+    if typ and typ != "C" and "MUSIC" in tags:
+        warns.append("MUSIC is only valid for TYPE C")
+    if songs == 0:
+        warns.append("SONGS is zero")
+    if songs > 32:
+        warns.append("SONGS is %d; ASAP caps subsongs at 32" % songs)
+    if "DEFSONG" in tags and _int(tags["DEFSONG"]) >= max(songs, 1):
+        warns.append("DEFSONG is not below SONGS")
+    if times and len(times) != songs:
+        warns.append("%d TIME line(s) for %d song(s)" % (len(times), songs))
+    if "COVOX" in tags and tags["COVOX"].strip().upper() != "D600":
+        warns.append("COVOX address is not D600, the only one ASAP supports")
+
+    chunks = [{"id": "header", "offset": 0, "size": max(cut, 0) if cut > 0 else size,
+               "summary": "SAP text header, TYPE %s, %d song(s)"
+                          % (typ or "?", songs),
+               "fields": fields, "warnings": [], "payload_base": 0}]
+    if cut < 0:
+        if typ != "R":
+            warns.append("no FF FF anywhere, so the Atari executable never begins")
+        return chunks, warns
+
+    blocks, bw = _sap_blocks(raw, cut, len(raw), deep)
+    warns.extend(bw)
+    chunks.append({"id": "binary", "offset": cut, "size": size - cut,
+                   "summary": "Atari executable, %d block(s)" % len(
+                       [b for b in blocks if b["name"].startswith("block")]),
+                   "fields": blocks, "warnings": [], "payload_base": cut})
+    return chunks, warns
+
+
+def _sap_blocks(raw, pos, end, deep):
+    """Walk the Atari executable blocks.
+
+    Two things make this unforgiving. The FF FF is required only on the FIRST
+    block and optional after, so a walker cannot resynchronise by scanning for
+    it: one wrong length desynchronises everything that follows. And the end
+    address is INCLUSIVE, so a block is end - start + 1 bytes; reading it as
+    end - start loses the last byte of every block in the file.
+    """
+    fields, warns = [], []
+    n = 0
+    if raw[pos:pos + 2] == b"\xff\xff":
+        pos += 2
+    while pos + 4 <= end and n < _NSFE_CHUNK_MAX:
+        if raw[pos:pos + 2] == b"\xff\xff":       # optional repeat
+            pos += 2
+            if pos + 4 > end:
+                break
+        start, last = struct.unpack_from("<HH", raw, pos)
+        if last < start:
+            warns.append("block %d ends at %s before it starts at %s"
+                         % (n, _addr(last), _addr(start)))
+            break
+        length = last - start + 1
+        n += 1
+        if pos + 4 + length > end:
+            warns.append("block %d claims %s bytes but only %s remain; the file "
+                         "ends mid-block, which players tolerate"
+                         % (n, format(length, ","), format(end - pos - 4, ",")))
+            fields.append(_f(pos, 4, "block %d" % n,
+                             "%s-%s" % (_addr(start), _addr(last)),
+                             "truncated"))
+            break
+        if deep or n <= 16:
+            fields.append(_f(pos, 4, "block %d" % n,
+                             "%s-%s" % (_addr(start), _addr(last)),
+                             "%s bytes, end address is inclusive"
+                             % format(length, ",")))
+        if 0xD000 <= start <= 0xD7FF:
+            warns.append("block %d loads into $%04X, which is hardware register "
+                         "space rather than RAM" % (n, start))
+        pos += 4 + length
+    if n > 16 and not deep:
+        fields.append(_f(0, 0, "more", "%d further block(s)" % (n - 16),
+                         "shown with deep inspection"))
+    return fields, warns
+
+
+def _int(s):
+    try:
+        return int(str(s).strip())
+    except ValueError:
+        return 0

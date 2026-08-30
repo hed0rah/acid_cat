@@ -15,7 +15,7 @@ import tempfile
 from acidcat.core.infra import geometry
 from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import (
-    ableton, aiff, akai, albank, amiga, bfdlac, bitwig, containers, dmx,
+    ableton, aiff, akai, albank, amiga, bfdlac, bitwig, chiptune, containers, dmx,
     gf1pat, voc, emu, flac, fxp, krz, labx,
     mdx, midi, midi2, mp3,
     mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
@@ -70,6 +70,13 @@ _WALKERS = {
             lambda path, deep: ableton.inspect_ableton_xml(path, "agr")),
     "amxd": ("Max for Live device", lambda path, deep: ableton.inspect_amxd(path)),
     # containers: they hold other things, so the walk describes what is inside
+    # chiptune: the 6502 program that made the music, not the music
+    "nsf": ("NES Sound Format",
+            lambda path, deep: chiptune.inspect_nsf(path, deep)),
+    "nsfe": ("NSF extended (chunked)",
+             lambda path, deep: chiptune.inspect_nsfe(path, deep)),
+    "sap": ("Slight Atari Player (POKEY)",
+            lambda path, deep: chiptune.inspect_sap(path, deep)),
     "cdxa": ("raw CD sector image (CD-XA)",
              lambda path, deep: containers.inspect_cdxa(path, deep)),
     "cue": ("CUE sheet (CD track layout)",
