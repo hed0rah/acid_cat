@@ -198,3 +198,86 @@ def test_a_cue_whose_file_line_is_damaged_names_no_binary(tmp_path):
     assert got["binaries"] == 0, "a sheet with no FILE line names no binary"
     assert got["tracks"] == 1
     assert any("name no file" in w for w in warns), warns
+
+
+# ── CDXA: a container with no header at all ─────────────────────────
+
+def _cdxa(tmp_path, streams=((1, 0, 0x01, 6), (1, 1, 0x00, 3)), name="disc.cdxa"):
+    from test_cdxa import _xa_sector
+    blob = b"".join(_xa_sector(f, ch, cod, bytes(2304)) * n
+                    for f, ch, cod, n in streams)
+    p = tmp_path / name
+    p.write_bytes(blob)
+    return str(p)
+
+
+def test_a_cd_image_is_identified_and_walked(tmp_path):
+    path = _cdxa(tmp_path)
+    assert sniff.sniff(path) == "cdxa"
+    chunks, warns = containers.inspect_cdxa(path)
+    assert chunks[0]["id"] == "sectors"
+    assert not warns
+
+
+def test_cdxa_covers_every_byte(tmp_path):
+    path = _cdxa(tmp_path)
+    chunks, _ = containers.inspect_cdxa(path)
+    size = os.path.getsize(path)
+    geometry.normalize(chunks, size)
+    assert all(geometry.is_trustworthy(c) for c in chunks)
+    covered = sum(c["payload_len"] + (c["payload_base"] - c["offset"])
+                  for c in chunks)
+    assert covered == size, (covered, size)
+
+
+def test_a_stream_is_a_file_channel_pair_not_a_position(tmp_path):
+    """XA audio is interleaved through the data track, so a stream is every
+    sector sharing a (file, channel) tag rather than a contiguous run. Two
+    channels of one file are two streams."""
+    path = _cdxa(tmp_path, streams=((1, 0, 0x01, 6), (1, 1, 0x00, 3)))
+    chunks, _ = containers.inspect_cdxa(path)
+    got = {f["name"]: f["value"] for f in chunks[0]["fields"]}
+    assert got["xaStreams"] == 2
+    assert got["audioSectors"] == "9"
+
+
+def test_cdxa_decodes_the_coding_byte(tmp_path):
+    """Bit 0-1 is stereo, 2-3 the rate, 4-5 the width. Getting these backwards
+    reports mono 18 kHz audio as stereo 37 kHz and nothing complains."""
+    path = _cdxa(tmp_path, streams=((1, 0, 0x01, 2), (2, 0, 0x00, 2)))
+    chunks, _ = containers.inspect_cdxa(path)
+    notes = {f["name"]: f["note"] for f in chunks[0]["fields"] if "ch" in f["name"]}
+    assert "stereo, 37,800 Hz, 4-bit ADPCM" == notes["file 1 ch 0"]
+    assert "mono, 37,800 Hz, 4-bit ADPCM" == notes["file 2 ch 0"]
+
+
+def test_a_partial_trailing_sector_is_its_own_chunk(tmp_path):
+    """An image truncated mid-sector still has whole sectors before the cut, and
+    the remainder is not one of them."""
+    from test_cdxa import _xa_sector
+    p = tmp_path / "cut.cdxa"
+    p.write_bytes(_xa_sector(1, 0, 0x01, bytes(2304)) * 3 + b"\x00" * 100)
+    chunks, _ = containers.inspect_cdxa(str(p))
+    assert [c["id"] for c in chunks] == ["sectors", "tail"]
+    assert chunks[1]["size"] == 100
+
+
+def test_something_that_is_not_a_cd_image_is_refused_not_guessed(tmp_path):
+    p = tmp_path / "no.cdxa"
+    p.write_bytes(b"\x00" * 5000)
+    chunks, warns = containers.inspect_cdxa(str(p))
+    assert "not a raw CD sector image" in chunks[0]["summary"]
+    assert any("sync mark" in w for w in warns)
+
+
+def test_a_mode1_image_says_why_it_has_no_streams(tmp_path):
+    """Mode1 has no subheader, so there is nothing to tag audio with. Reporting
+    zero streams without saying that reads as "this disc has no music"."""
+    from acidcat.core.codecs import cdxa as c
+    s = bytearray(c.SECTOR)
+    s[0:12] = c._SYNC
+    s[15] = 1
+    p = tmp_path / "m1.cdxa"
+    p.write_bytes(bytes(s) * 4)
+    _chunks, warns = containers.inspect_cdxa(str(p))
+    assert any("no XA subheader" in w for w in warns), warns

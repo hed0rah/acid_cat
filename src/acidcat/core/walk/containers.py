@@ -170,3 +170,109 @@ def inspect_gcm(filepath, deep=False):
              "summary": "%s bytes of disc data, indexed by the FST above"
                         % format(max(0, size - 0x440), ","),
              "fields": [], "warnings": [], "payload_base": min(0x440, size)}], warns
+
+
+# A raw CD image is one sector array, and finding its audio means reading the
+# submode byte of every sector. A PS1 disc is 300,000+ of them, so the scan is
+# bounded -- and the bound is stated, because "no audio found" and "no audio in
+# the part I looked at" are different answers and only one of them is honest.
+_XA_SCAN_CAP = 60000                 # ~135 MB of image, ~13 minutes of disc
+
+
+def inspect_cdxa(filepath, deep=False):
+    """A raw CD sector image: the disc geometry, then its CD-XA audio streams.
+
+    Unlike everything else here there is no header. A CD image is a flat array
+    of 2352-byte sectors, each carrying its own 12-byte sync mark, and the
+    structure is a property of every sector rather than of a block at the front.
+    So the walk reports geometry and what the sectors say about themselves.
+
+    XA audio is not a file in a directory. It is interleaved through the data
+    track and tagged per sector by an 8-byte subheader: a file number, a channel
+    number, and a submode bit that says "this sector is audio". A stream is
+    every sector sharing a (file, channel) pair, scattered across the disc.
+    """
+    from acidcat.core.codecs import cdxa
+    from acidcat.core.primitives.notes import coverage
+
+    size = os.path.getsize(filepath)
+    warns = []
+    info = cdxa.detect_cd_image(filepath)
+    if not info:
+        return [{"id": "image", "offset": 0, "size": size,
+                 "summary": "not a raw CD sector image (no sync mark)",
+                 "fields": [], "warnings": [], "payload_base": 0}], \
+               ["the first two sectors carry no 12-byte sync mark"]
+
+    total = info["sectors"]
+    scanned = min(total, _XA_SCAN_CAP)
+    counts, codings = {}, {}
+    audio_sectors = 0
+    if info["mode"] == 2:
+        with open(filepath, "rb") as fh:
+            done = 0
+            while done < scanned:
+                batch = min(256, scanned - done)
+                blob = fh.read(cdxa.SECTOR * batch)
+                if len(blob) < cdxa.SECTOR:
+                    break
+                for i in range(len(blob) // cdxa.SECTOR):
+                    s = blob[i * cdxa.SECTOR:(i + 1) * cdxa.SECTOR]
+                    if s[18] & 0x04:                 # submode bit: audio
+                        audio_sectors += 1
+                        key = (s[16], s[17])
+                        counts[key] = counts.get(key, 0) + 1
+                        codings.setdefault(key, {})
+                        codings[key][s[19]] = codings[key].get(s[19], 0) + 1
+                done += batch
+
+    fields = [
+        _f(0, 12, "sync", "00 FF x10 00", "every sector opens with this mark"),
+        _f(0x0F, 1, "mode", info["mode"],
+           "Mode2 carries the 8-byte XA subheader; Mode1 does not"),
+        _f(0, 0, "sectorSize", format(cdxa.SECTOR, ","), "raw, sync and headers included"),
+        _f(0, 0, "sectors", format(total, ",")),
+        _f(0, 0, "discTime", _msf(total), "at 75 sectors per second"),
+        _f(0, 0, "sectorsExamined", format(scanned, ","),
+           "the whole image" if scanned >= total
+           else "of %s; the rest was not read" % format(total, ",")),
+        _f(0, 0, "audioSectors", format(audio_sectors, ","),
+           "submode bit 0x04, within the sectors examined"),
+        _f(0, 0, "xaStreams", len(counts),
+           "one per (file, channel) pair; a stream is interleaved, not contiguous"),
+    ]
+
+    if scanned < total:
+        warns.append(coverage("examined the first %s of %s sectors; a stream "
+                              "living entirely past that point is not listed"
+                              % (format(scanned, ","), format(total, ","))))
+    if info["mode"] == 2 and not counts:
+        warns.append("no sector in the range examined is tagged as audio")
+    if info["mode"] != 2:
+        warns.append("Mode%d image: there is no XA subheader, so no audio "
+                     "stream can be tagged" % info["mode"])
+
+    for key in sorted(counts, key=lambda k: -counts[k])[:16 if not deep else None]:
+        best = max(codings[key].items(), key=lambda kv: kv[1])[0]
+        c = cdxa.coding_of(best)
+        fields.append(_f(0, 0, "file %d ch %d" % key,
+                         "%s sector(s)" % format(counts[key], ","),
+                         "%s, %s Hz, %d-bit ADPCM"
+                         % ("stereo" if c["stereo"] else "mono",
+                            format(c["rate"], ","), c["bits"])))
+    if len(counts) > 16 and not deep:
+        fields.append(_f(0, 0, "more", "%d further stream(s)" % (len(counts) - 16),
+                         "shown with deep inspection"))
+
+    body = total * cdxa.SECTOR
+    chunks = [{"id": "sectors", "offset": 0, "size": body,
+               "summary": "%s raw sectors, Mode%d%s"
+                          % (format(total, ","), info["mode"],
+                             ", %d XA stream(s)" % len(counts) if counts else ""),
+               "fields": fields, "warnings": [], "payload_base": 0}]
+    if size > body:
+        chunks.append({"id": "tail", "offset": body, "size": size - body,
+                       "summary": "%s bytes past the last whole sector"
+                                  % format(size - body, ","),
+                       "fields": [], "warnings": [], "payload_base": body})
+    return chunks, warns

@@ -70,6 +70,8 @@ _WALKERS = {
             lambda path, deep: ableton.inspect_ableton_xml(path, "agr")),
     "amxd": ("Max for Live device", lambda path, deep: ableton.inspect_amxd(path)),
     # containers: they hold other things, so the walk describes what is inside
+    "cdxa": ("raw CD sector image (CD-XA)",
+             lambda path, deep: containers.inspect_cdxa(path, deep)),
     "cue": ("CUE sheet (CD track layout)",
             lambda path, deep: containers.inspect_cue(path, deep)),
     "gcm": ("GameCube disc image",

@@ -432,6 +432,20 @@ def _hps_over_cap(tmp_path, n):
     return str(q)
 
 
+def _cdxa_over_cap(tmp_path, n):
+    """A CD image with more sectors than the walker will scan.
+
+    The cap here shortens a SEARCH, and the result of a shortened search reads
+    exactly like the result of a complete one: "2 XA streams" looks the same
+    whether the disc has two or whether the third begins past the last sector
+    examined. So the walker states how far it got.
+    """
+    from test_cdxa import _xa_sector
+    q = tmp_path / "big.cdxa"
+    q.write_bytes(_xa_sector(1, 0, 0x01, bytes(2304)) * (n + 4))
+    return str(q)
+
+
 SWEPT = [
     # (module that READS the constant, name, patched value, builder, says)
     ("acidcat.core.walk.svx", "_CHUNK_CAP", 4, _svx_many_chunks, "cap"),
@@ -441,6 +455,7 @@ SWEPT = [
     ("acidcat.core.walk.sid", "_SID_READ_CAP", 64, _sid_over_cap, "parsed the first"),
     ("acidcat.core.walk.mdx", "_MDX_READ_CAP", 64, _mdx_over_cap, "parsed the first"),
     ("acidcat.core.walk.streams", "_HEAD_CAP", 64, _hps_over_cap, "lower bound"),
+    ("acidcat.core.walk.containers", "_XA_SCAN_CAP", 8, _cdxa_over_cap, "examined the first"),
 ]
 
 
