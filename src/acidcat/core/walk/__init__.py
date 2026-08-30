@@ -149,10 +149,14 @@ def walk_file(filepath, deep=False, fmt_override=None):
             generic = None
         if generic is not None:
             return _normalized(filepath, generic)
-        raise Unsupported("not a recognized audio/preset file (WAV, RF64, AIFF, "
-                          "MIDI, Serum, Bitwig, Vital, NCW, SF2, MP4/M4A, Ogg, "
-                          "Native Instruments, MP3, FLAC, a MOD/S3M/XM/IT "
-                          "tracker module, or a SigMF/IQ capture)")
+        # Naming the formats here was a list that could only go stale, and had:
+        # it named fifteen while the tool walked fifty-seven, so it told anyone
+        # who read it that half the supported formats were not supported.
+        # `acidcat formats` prints the real set with its capabilities, and it
+        # cannot drift because it is generated from the dispatch table below.
+        raise Unsupported("not a recognized audio or preset file; "
+                          "run `acidcat formats` for the %d it reads"
+                          % len(_WALKERS))
     label, walker = entry
     try:
         chunks, file_warns = walker(filepath, deep)

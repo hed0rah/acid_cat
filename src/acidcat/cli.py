@@ -2,7 +2,7 @@
 acidcat CLI -- top-level argument parser and subcommand dispatcher.
 
 Usage:
-    acidcat file.wav                 # info for a single file (WAV, AIFF, MIDI, Serum)
+    acidcat file.wav                 # info for a single file (see `acidcat formats`)
     acidcat /path/to/samples         # scan a directory
     acidcat -                        # read from stdin
     cat file.wav | acidcat           # piped input (implicit stdin)
