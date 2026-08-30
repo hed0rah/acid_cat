@@ -135,3 +135,48 @@ def test_pages_do_not_quote_corpus_counts(page):
     assert not hits, (
         f"{page.name} quotes a corpus count ({hits}); these pages are format "
         f"specs, not audit reports")
+
+
+# ── keyboard and mobile affordances, fleet-wide ─────────────────────
+
+@pytest.mark.parametrize("page", _pages(), ids=lambda p: p.name)
+def test_field_rows_are_reachable_by_keyboard(page):
+    """The maps bound mouseenter and click and nothing else.
+
+    A page that can only be read with a pointer is not a spec anyone can use,
+    and the field list -- not the byte grid -- is the content. So the rows take
+    focus and the grid deliberately does not: forty tab stops to cross one
+    header would bury the list the grid is an index of.
+    """
+    t = page.read_text(encoding="utf-8")
+    for needed, what in [
+        ("row.tabIndex=0", "focusable rows"),
+        ('row.setAttribute("role","button")', "a role"),
+        ('row.setAttribute("aria-label"', "an accessible name"),
+        ('row.addEventListener("focus"', "focus driving the highlight"),
+        ('row.addEventListener("keydown"', "key handling"),
+        ('e.key==="Enter"', "Enter to pin"),
+        ('e.key==="Escape"', "Escape to unpin"),
+        ('e.key==="ArrowDown"', "arrow navigation"),
+    ]:
+        assert needed in t, f"{page.name} has no {what}"
+
+
+@pytest.mark.parametrize("page", _pages(), ids=lambda p: p.name)
+def test_keyboard_focus_is_visible(page):
+    """`button:focus-visible` is an element selector and the rows are divs, so
+    the rule that existed never reached them. Focus with no visible position is
+    the same as no focus."""
+    t = page.read_text(encoding="utf-8")
+    assert ".field:focus-visible" in t, (
+        f"{page.name} can be focused but does not show where focus is")
+
+
+@pytest.mark.parametrize("page", _pages(), ids=lambda p: p.name)
+def test_the_colour_key_survives_a_narrow_screen(page):
+    """It used to be display:none below 720px while the colours it explains
+    stayed on screen, which leaves a phone reader four colours and no decoder."""
+    t = page.read_text(encoding="utf-8")
+    assert ".sig{display:none}" not in t, (
+        f"{page.name} hides the colour key on mobile but keeps the colours")
+    assert "@media(max-width:720px)" in t, f"{page.name} lost its mobile rules"

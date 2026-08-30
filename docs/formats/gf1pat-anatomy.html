@@ -71,7 +71,12 @@ body{background:var(--paper);color:var(--ink);font-family:var(--ff);font-weight:
 .tree b{color:var(--ink);font-weight:500}
 .tree .kf{color:var(--enum)} .tree .kr{color:var(--flag)}
 footer a{color:inherit;border-bottom:1px solid var(--hair)} footer a:hover{color:var(--enum);border-color:var(--enum)}
-@media(max-width:720px){.intro{display:block}.sig{display:none}}
+@media(max-width:720px){.intro{display:block}
+/* the key was hidden here while the colours it explains stayed on screen. It reflows instead: label above, swatches wrapping across. */
+.sig{flex-direction:column;align-items:flex-start;align-self:stretch;gap:0.55rem;padding:0.9rem 0 0;margin-top:0.9rem;border-left:0;border-top:1px solid var(--hair)}
+.sig .siglabel{order:-1;writing-mode:horizontal-tb;text-orientation:mixed;align-self:flex-start;justify-content:flex-start;padding:0 0 0.2rem;border-left:0;width:auto}
+.sig .legrows{flex-direction:row;flex-wrap:wrap;gap:0.45rem 0.9rem}
+.sig .misnote{max-width:none;text-align:left}}
 .k-en{color:var(--enum)} .k-fl{color:var(--flag)}
 .sec{font-size:0.66rem;letter-spacing:0.26em;text-transform:uppercase;font-weight:600;color:var(--ink);margin:2.6rem 0 0.3rem;display:flex;align-items:center;gap:0.7rem}
 .sec::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -314,6 +319,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     }
     var list=document.createElement("div"); list.className="fields";
     var aside=document.createElement("aside"); aside.className="detail";
+    aside.setAttribute("role","status"); aside.setAttribute("aria-live","polite");
     aside.innerHTML="<div class='dl'><span>field detail</span><span class='kind'></span></div>"+
       "<h3>Hover a field or byte</h3><div class='dc'>"+(unit==="bit"?N+" bits":bytes.length+" bytes")+"</div>"+
       "<p>Hover any field row or byte to light it and read the decode. Click to pin it; a field marked + opens its table.</p><div class='dn'></div>";
@@ -340,8 +346,26 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         bw.innerHTML="<table>"+f.branch.map(function(p,i){return "<tr class='"+(i===f.sel?"sel":"")+"'><td class='k'>"+p[0]+"</td><td>"+p[1]+"</td></tr>";}).join("")+"</table>";
         row.appendChild(bw);
       }
+      // keyboard parity: the row is the semantic unit, so it is what takes
+      // focus. The byte cells below stay unfocusable on purpose -- making a
+      // forty-cell grid tabbable buries the list it is an index of.
+      var plain=document.createElement("div"); plain.innerHTML=f.val;
+      row.tabIndex=0;
+      row.setAttribute("role","button");
+      row.setAttribute("aria-label",f.label+", "+lab+", "+(plain.textContent||""));
       row.addEventListener("mouseenter",function(){cue(fi);});
+      row.addEventListener("focus",function(){cue(fi);});
+      row.addEventListener("blur",restore);
       row.addEventListener("click",function(){pin(fi);});
+      row.addEventListener("keydown",function(e){
+        if(e.key==="Enter"||e.key===" "){e.preventDefault();pin(fi);}
+        else if(e.key==="Escape"){rows.forEach(function(r){r.classList.remove("active");});clearHi();}
+        else if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+          e.preventDefault();
+          var n=fi+(e.key==="ArrowDown"?1:-1);
+          if(n>=0&&n<rows.length) rows[n].focus();
+        }
+      });
       rows.push(row); list.appendChild(row);
     });
     cells.forEach(function(c){
@@ -513,7 +537,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       -webkit-appearance:none;appearance:none;background:none;border:0;padding:6px;margin:0;
       cursor:pointer;color:inherit;border-radius:999px;line-height:0;display:inline-flex;
     }
-    button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+    button:focus-visible,.field:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+    /* the field rows are divs with role=button, so the element selector above
+       never reached them and keyboard focus had no visible position */
     .box{width:var(--acidcat-size,40px);height:var(--acidcat-size,40px)}
     /* cat holds still: the eyes, Zzz, swirl and tongue carry the three moods */
     .eye{transition:opacity .28s ease}
