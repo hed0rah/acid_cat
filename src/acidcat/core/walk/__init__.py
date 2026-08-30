@@ -15,7 +15,8 @@ import tempfile
 from acidcat.core.infra import geometry
 from acidcat.core.infra import sniff as sniffmod
 from acidcat.core.walk import (
-    ableton, aiff, akai, albank, amiga, bfdlac, bitwig, dmx, gf1pat, voc, emu, flac, fxp, krz, labx,
+    ableton, aiff, akai, albank, amiga, bfdlac, bitwig, containers, dmx,
+    gf1pat, voc, emu, flac, fxp, krz, labx,
     mdx, midi, midi2, mp3,
     mp4, mpc, multisample, ncw, ni, ogg, rf64, rmid, rx2, serum, sf2, sigmf, svx, tracker,
     sid, streams, vital, wav, wt,
@@ -68,6 +69,11 @@ _WALKERS = {
     "agr": ("Ableton groove",
             lambda path, deep: ableton.inspect_ableton_xml(path, "agr")),
     "amxd": ("Max for Live device", lambda path, deep: ableton.inspect_amxd(path)),
+    # containers: they hold other things, so the walk describes what is inside
+    "cue": ("CUE sheet (CD track layout)",
+            lambda path, deep: containers.inspect_cue(path, deep)),
+    "gcm": ("GameCube disc image",
+            lambda path, deep: containers.inspect_gcm(path, deep)),
     # console stream formats: header plus ADPCM, one module, shared vocabulary
     "adx": ("CRI ADX stream", lambda path, deep: streams.inspect_adx(path, deep)),
     "brstm": ("Nintendo BRSTM stream",

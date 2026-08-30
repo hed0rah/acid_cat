@@ -31,7 +31,7 @@ unchanged.
    `core/infra/` (`sniff.py` -- 68 recognized formats, `fieldcodec.py` -- the
    enc-language, `geometry.py` -- which bytes a chunk occupies, `mapped.py`,
    `render.py`).
-2. **Walkers** -- `core/walk/*.py`: 39 walkers behind one dispatcher, serving 61
+2. **Walkers** -- `core/walk/*.py`: 40 walkers behind one dispatcher, serving 63
    registered format labels, each emitting the field model. **The correctness oracle and the
    default.** Dispatch: `core/walk/__init__.py::walk_file`.
 3. **Declarative engine** -- `core/grammar/`: format descriptors as data plus one
@@ -77,13 +77,13 @@ unchanged.
 
 ```
 src/acidcat/
-  core/            159 modules
+  core/            160 modules
     formats/       per-format byte decoders (20)
-    walk/          37 walker modules -> 59 format labels (38)
+    walk/          40 walker modules -> 63 format labels (41)
     primitives/    shared byte readers (6)
     codecs/        sample-data decoders + the 6510/SID player (15)
     containers/    disc images and archives (5)
-    infra/         sniff, fieldcodec, mmap, rendering (8)
+    infra/         sniff, fieldcodec, mmap, rendering (9)
     forensics/     anomalies, entropy/viz, audioscan, provenance (19)
     analysis/      PCM decode, BPM/key, features, bandwidth (8)
     write/         strict IFF engine, constraints, repairers (12)
@@ -95,7 +95,7 @@ src/acidcat/
   mcp_server/      schema, handlers, transport (19 tools)
   tui_app/         Textual inspector/editor
   util/            small shared helpers
-  cli.py  explorer.py  tui_theme.py  __init__.py     (216 modules in total)
+  cli.py  explorer.py  tui_theme.py  __init__.py     (217 modules in total)
 tests/             ~0.59 test:source LOC
 docs/              architecture.md (detailed), format anatomy pages
 internal_docs/     design + review notes (gitignored, local-only)

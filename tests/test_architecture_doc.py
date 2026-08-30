@@ -96,3 +96,21 @@ def test_directory_module_counts(doc, rel, pattern):
 def test_total_module_count(doc):
     stated = _stated(doc, r"\((\d+) modules in total\)")
     assert stated == _modules(".")
+
+
+def test_readme_format_count_matches_the_dispatcher():
+    """The README used to enumerate the formats `inspect` reads, and named
+    about twenty of sixty-three.
+
+    A list like that cannot be maintained by anyone who is not already thinking
+    about it, and adding a format is not a moment when anyone is. It was
+    replaced by a count plus a pointer to `acidcat formats`, which is the same
+    move the unsupported-file error already makes -- except the error computes
+    its number at runtime and prose cannot. So the number is asserted instead.
+    """
+    from acidcat.core import walk
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    stated = _stated(readme, r"for the (\d+) formats\s*\n?\s*`acidcat formats` lists")
+    assert stated == len(walk._WALKERS), (
+        f"README says inspect reads {stated} formats, the dispatcher "
+        f"registers {len(walk._WALKERS)}")
