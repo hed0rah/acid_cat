@@ -4,7 +4,72 @@ All notable changes to acidcat. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project will
 adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
-## [1.3.1] - 2026-08-29
+## [1.3.2] - 2026-08-31
+
+### Added
+
+- **NES Sound Format (`.nsf`, NSF2), NSFe, and Slight Atari Player (`.sap`).**
+  None of the three describes music. Each ships the original 6502 program that
+  produced it, plus enough metadata to start it, so a walker can honestly report
+  where the code goes and where the entry points are and nothing about how it
+  sounds.
+
+  That lineage is stated by the format's own author: NSF is "somewhat sorta
+  based on the PSID file format for C64 music/sound". The literal `<?>` for an
+  unknown author appears in NSF, SAP and PSID alike.
+
+  Three things in these layouts do not mean what they appear to. An NSF load
+  address stops being an address when the file is banked -- the low twelve bits
+  become a count of padding bytes -- and nothing flags the change, because the
+  all-zero bank array *is* the flag. The three 32-byte text slots are fixed
+  width **and** NUL-terminated inside, and either half alone gets you a title
+  that runs into the artist. And an NSFe chunk header is length-then-FourCC, the
+  reverse of RIFF and IFF, so plumbing borrowed from either reads a FourCC as a
+  size and still produces output that looks like a parse.
+
+  NSF has only ever had version bytes 1 and 2. There is no 1.01/1.02/1.03
+  ladder; those numbers belong to the specification document's own revision
+  history, and to PSID. A version byte of 3 or higher is damage.
+
+  A SAP block's end address is inclusive, so a block holds `end - start + 1`
+  bytes; reading it as `end - start` loses the last byte of every block and the
+  file still parses. SAP also defines no end-of-header marker at all, so the
+  rule that the text stops at the first `FF FF` is derived from the permitted
+  character set rather than quoted from the specification, and is labelled that
+  way.
+
+  Verified across 21,060 real files: 13,042 `.nsf`, 1,682 `.nsfe` and 6,335
+  `.sap`. Nothing raised, nothing produced untrustworthy geometry, every byte
+  accounted for, and 98.8% walked with no warning at all. That last figure is
+  the one that mattered: a check firing on a third of a real corpus is not a
+  check, it is noise that teaches a reader to skip the warning line, and no
+  amount of synthetic testing can measure it.
+
+  Three things the specifications left unmeasured are now measured. Every one of
+  the 1,682 NSFe files carries the `NEND` chunk both specs call mandatory, so
+  its absence can be reported as damage rather than as a tolerated omission.
+  SAP's `TYPE R` does not occur at all, which resolves a contradiction in the
+  specification about whether it exists. And the derived `FF FF` boundary rule
+  split every SAP file in the right place.
+
+- **Anatomy pages for NSF and SAP.** Both open with the chip the format exists
+  to drive -- the 2A03's five voices, POKEY's four dividers and polynomial
+  counters -- because the container only makes sense as a way of feeding it.
+
+### Fixed
+
+- **`inspect_nsf` checked its length and not its magic.** Both sibling walkers
+  checked theirs, so any file of at least 128 bytes parsed as an NSF and
+  reported a confident title, artist and load address out of bytes that were
+  never a header.
+
+  The corpus held 50 files wearing a `.nsf` extension that are HTML error pages
+  from failed downloads and macOS AppleDouble resource forks. Every one of them
+  walked clean, and between them they generated around 180 structural complaints
+  about files that are not NSFs at all. An invariant test now asserts all three
+  walkers verify their signature.
+
+## [1.3.1] - 2026-08-30
 
 ### Added
 
@@ -33,7 +98,64 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
   identified, zero crashes, zero untrustworthy geometry, and every identified
   file accounted for byte for byte. An anatomy page documents the layout.
 
+- **Console stream formats: CRI ADX, Nintendo BRSTM, HAL HPS, Sony VAG.**
+  Decoders for all four already existed and `extract` was using them to rip
+  audio, so the structure was being computed and thrown away. `inspect` refused
+  to describe files the tool could already open.
+
+  One module, one shared vocabulary: codec, channels, sample rate, frame count
+  and duration render in the same order with the same names whichever console
+  wrote the file, so comparing two of them is not also translating between two
+  sets of words for the same number. What is deliberately *not* shared is the
+  chunk structure, because it genuinely differs -- a header and a body, a header
+  pointing at named blocks, a linked list, and a header with a name in the
+  middle of it.
+
+  HPS is the one where a shortened read shortens an answer rather than a search:
+  its block chain is walked through the buffer, so a file read short reports
+  fewer blocks than it has.
+
+- **CUE sheets and GameCube disc images.** Same story: `extract` parsed the
+  layout to find the tracks and discarded it.
+
+  A CUE is the odd one in the whole set. Its positions are in *sectors*, and
+  they are relative to a `.bin` the sheet only names, so it is the only format
+  here whose offsets point outside the file being walked. Whether that binary is
+  actually beside the sheet is therefore reported rather than assumed.
+
+  The GameCube walker reads the 0x440 header and the file-system table and
+  nothing else; the image is gigabytes and none of it is loaded.
+
+- **Raw CD sector images (CD-XA).** There is no header at all. A CD image is a
+  flat array of 2352-byte sectors, each carrying its own sync mark, and what the
+  image *is* lives in a byte repeated across every one of them.
+
+  XA audio is not a file in a directory either: it is interleaved through the
+  data track and tagged per sector, so a stream is every sector sharing a
+  (file, channel) pair, scattered across the disc. The scan is capped, because a
+  PlayStation disc is over 300,000 sectors, and the walk states how far it got.
+  A shortened search reports "2 streams" in exactly the words a complete one
+  would.
+
 ### Changed
+
+- **Every anatomy page is now reachable by keyboard.** The byte maps bound
+  `mouseenter` and `click` and nothing else, so the decode -- which is the whole
+  point of the pages -- was pointer-only. Field rows now take focus, drive the
+  same highlight on focus as on hover, pin on Enter or Space, unpin on Escape,
+  and move with the arrow keys.
+
+  The byte cells deliberately stay unfocusable: forty tab stops to cross one
+  header would bury the field list, and the grid is an index of that list rather
+  than a peer of it.
+
+  The focus ring existed as `button:focus-visible`, which is an element
+  selector. The rows are `div`s carrying `role=button`, so the rule never
+  matched them and focus had no visible position.
+
+  The colour key was `display:none` below 720px while the colours it explains
+  stayed on screen, leaving a phone reader four colours and no way to decode
+  them. It reflows into a horizontal strip instead.
 
 - **SID combined waveforms are now a bitwise AND, which is what the chip does.**
   Bob Yannes, who designed it: "The combination was actually a logical ANDing of
