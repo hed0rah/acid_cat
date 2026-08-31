@@ -441,3 +441,157 @@ def test_a_byte_outside_the_atascii_set_is_flagged(tmp_path):
     path = _w(tmp_path, "as.sap", blob)
     _chunks, warns = chiptune.inspect_sap(path)
     assert any("ATASCII" in w for w in warns), warns
+
+
+def test_a_file_that_is_not_an_nsf_is_refused(tmp_path):
+    """Found by the corpus, not by me.
+
+    The NSFe and SAP walkers both check their magic; this one only checked
+    length, so any file of at least 128 bytes parsed and produced a confident
+    title, artist and load address out of whatever bytes were there. A real
+    corpus of 13,042 .nsf files held 50 that are HTML error pages or macOS
+    AppleDouble resource forks wearing the extension, and every one of them
+    walked without complaint.
+    """
+    p = tmp_path / "notreally.nsf"
+    p.write_bytes(b"<html><head><title>404</title></head>" + b"x" * 200)
+    chunks, warns = chiptune.inspect_nsf(str(p))
+    assert "not an NSF" in chunks[0]["summary"]
+    assert not chunks[0]["fields"], "no field may be reported from non-NSF bytes"
+    assert any("4E 45 53 4D 1A" in w for w in warns), warns
+
+
+def test_the_three_walkers_all_check_their_magic(tmp_path):
+    """The invariant behind the bug above: a walker that does not verify its
+    signature will describe anything. Asserted for all three so the next one
+    added cannot quietly skip it."""
+    junk = b"\x99" * 512
+    for name, walk in (("x.nsf", chiptune.inspect_nsf),
+                       ("x.nsfe", chiptune.inspect_nsfe),
+                       ("x.sap", chiptune.inspect_sap)):
+        p = tmp_path / name
+        p.write_bytes(junk)
+        chunks, warns = walk(str(p))
+        assert warns, "%s accepted 512 junk bytes silently" % name
+        assert not chunks[0]["fields"], "%s reported fields from junk" % name
+
+
+# ── opt-in: the real corpora ────────────────────────────────────────
+#
+# Everything above this line is synthetic and therefore only proves the walker
+# agrees with my reading of the spec. These four are the ones that can tell me
+# the reading was wrong.
+#
+#   ACIDCAT_NSF_CORPUS   a tree of .nsf / .nsfe (the MrNorbert1994 or Gr8NSF set)
+#   ACIDCAT_SAP_CORPUS   a tree of .sap (ASMA)
+
+def _corpus(var, exts):
+    import glob
+    root = os.environ.get(var)
+    if not root:
+        return []
+    out = []
+    for e in exts:
+        out += glob.glob(os.path.join(root, "**", "*" + e), recursive=True)
+    return sorted(out)
+
+
+NSF_CORPUS = "ACIDCAT_NSF_CORPUS"
+SAP_CORPUS = "ACIDCAT_SAP_CORPUS"
+
+
+@pytest.mark.skipif(not os.environ.get(NSF_CORPUS),
+                    reason="set ACIDCAT_NSF_CORPUS to a dir of real .nsf/.nsfe")
+def test_the_real_nsf_corpus_walks_completely():
+    """Measured on 13,042 .nsf and 1,682 .nsfe: nothing raised, nothing
+    produced untrustworthy geometry, and every file was covered end to end.
+
+    Coverage rather than a crash count, because a walker that quietly stopped
+    early would pass the second and fail the first.
+
+    This corpus is also where the walker's worst bug was found. `inspect_nsf`
+    checked its length and not its magic, so 50 files that are HTML error pages
+    and macOS AppleDouble forks wearing a .nsf extension all parsed, and
+    reported a title and a load address out of bytes that were never a header.
+    """
+    from acidcat.core.walk import walk_file
+    files = _corpus(NSF_CORPUS, (".nsf", ".nsfe"))
+    assert files, "no .nsf/.nsfe under $" + NSF_CORPUS
+    walked = 0
+    for p in files:
+        if sniff.sniff(p) not in ("nsf", "nsfe"):
+            continue                       # impostors: correctly refused
+        _label, chunks, _warns = walk_file(p)
+        size = os.path.getsize(p)
+        geometry.normalize(chunks, size)
+        assert all(geometry.is_trustworthy(c) for c in chunks), p
+        covered = sum(c["payload_len"] + (c["payload_base"] - c["offset"])
+                      for c in chunks)
+        assert covered == size, (p, covered, size)
+        walked += 1
+    assert walked > len(files) * 0.9, (
+        "only %d of %d walked; a sweep that skipped most of the corpus reports "
+        "the same clean result as one that checked it" % (walked, len(files)))
+
+
+@pytest.mark.skipif(not os.environ.get(SAP_CORPUS),
+                    reason="set ACIDCAT_SAP_CORPUS to a dir of real .sap files")
+def test_the_real_sap_corpus_walks_completely():
+    """Measured on ASMA, 6,335 tunes: nothing raised, geometry sound on all.
+
+    The claim worth pinning is the boundary. SAP defines no end-of-header
+    marker at all -- the rule that the text stops at the first FF FF is derived
+    from the character set, not quoted from the spec. Every file in ASMA splits
+    where that rule says it does.
+    """
+    from acidcat.core.walk import walk_file
+    files = _corpus(SAP_CORPUS, (".sap",))
+    assert files, "no .sap under $" + SAP_CORPUS
+    for p in files:
+        _label, chunks, _warns = walk_file(p)
+        size = os.path.getsize(p)
+        geometry.normalize(chunks, size)
+        assert all(geometry.is_trustworthy(c) for c in chunks), p
+        covered = sum(c["payload_len"] + (c["payload_base"] - c["offset"])
+                      for c in chunks)
+        assert covered == size, (p, covered, size)
+
+
+@pytest.mark.skipif(not os.environ.get(NSF_CORPUS),
+                    reason="set ACIDCAT_NSF_CORPUS to a dir of real .nsf/.nsfe")
+def test_every_real_nsfe_carries_nend():
+    """Both specs call NEND mandatory and neither had been measured.
+
+    1,682 of 1,682 carry it, so treating its absence as damage rather than as a
+    tolerated omission is justified by the corpus rather than only by the text.
+    """
+    import glob
+    root = os.environ[NSF_CORPUS]
+    files = sorted(glob.glob(os.path.join(root, "**", "*.nsfe"), recursive=True))
+    assert files, "no .nsfe under $" + NSF_CORPUS
+    missing = []
+    for p in files:
+        chunks, _warns = chiptune.inspect_nsfe(p)
+        if "NEND" not in {f["name"] for f in chunks[0]["fields"]}:
+            missing.append(p)
+    assert not missing, "%d of %d NSFe files carry no NEND: %s" % (
+        len(missing), len(files), [os.path.basename(m) for m in missing[:5]])
+
+
+@pytest.mark.skipif(not os.environ.get(NSF_CORPUS),
+                    reason="set ACIDCAT_NSF_CORPUS to a dir of real .nsf/.nsfe")
+def test_the_walker_refuses_files_that_only_wear_the_extension():
+    """The regression guard for the magic-check bug, held against the real set.
+
+    A corpus is full of files that are not what their name says. Anything the
+    sniffer will not call an NSF must not produce fields from the walker either
+    -- otherwise the two disagree, and the walker is the one making things up.
+    """
+    files = _corpus(NSF_CORPUS, (".nsf",))
+    assert files, "no .nsf under $" + NSF_CORPUS
+    impostors = [p for p in files if sniff.sniff(p) != "nsf"]
+    for p in impostors:
+        chunks, warns = chiptune.inspect_nsf(p)
+        assert not chunks[0]["fields"], (
+            "%s is not an NSF but the walker described one" % os.path.basename(p))
+        assert warns, os.path.basename(p)

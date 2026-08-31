@@ -129,6 +129,16 @@ def inspect_nsf(filepath, deep=False):
     if size > _NSF_READ_CAP:
         warns.append(coverage("read the first %s of %s bytes"
                               % (format(_NSF_READ_CAP, ","), format(size, ","))))
+    if raw[:5] != b"NESM\x1a":
+        # The siblings both check their magic and this did not, so anything at
+        # least 128 bytes long parsed as an NSF and produced a confident title,
+        # artist and load address out of arbitrary bytes. A corpus of 13,042
+        # .nsf files held 50 that are HTML error pages or macOS resource forks
+        # wearing the extension, and every one of them "walked".
+        return [{"id": "header", "offset": 0, "size": size,
+                 "summary": "not an NSF (magic is not NESM 1A)",
+                 "fields": [], "warnings": [], "payload_base": 0}], \
+               warns + ["the first five bytes are not 4E 45 53 4D 1A"]
     if len(raw) < _NSF_HEADER:
         return [{"id": "header", "offset": 0, "size": size,
                  "summary": "NSF header is truncated (%d of 128 bytes)" % len(raw),
