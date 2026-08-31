@@ -192,6 +192,20 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   and in small conventions like the literal <code>&lt;?&gt;</code> for an unknown author, which NSF,
   SAP and PSID all share.</p>
 
+  <div class="sec">the sound hardware</div>
+  <p class="note">The console's own audio lives inside the <b>2A03</b>, the chip that is also the
+  CPU: a 6502 with decimal mode disabled and an audio unit bolted alongside. It offers five voices --
+  <b>two pulse</b> channels with four duty cycles each, one <b>triangle</b> fixed at 4-bit and
+  stepped through 32 values, one <b>noise</b> channel driven by a shift register with two tap modes,
+  and a <b>DMC</b> channel playing 7-bit delta-modulated samples. That is the whole palette every
+  stock NSF is written for.</p>
+  <p class="note">Everything in the expansion byte below is a <b>cartridge</b> adding a sixth voice
+  and upward. That was a Famicom capability rather than an NES one: the Famicom's cartridge connector
+  carries an audio-in pin that mixes cartridge sound back into the console's output, and the western
+  NES cartridge slot does not route it. Expansion audio therefore plays on a Famicom, on an emulator,
+  or on a modified NES -- which is why so much of the music below was never heard outside Japan on
+  real hardware.</p>
+
   <div class="sec">the header &#8212; identification and entry points</div>
   <p class="note">Offsets <code>0x00</code> through <code>0x0D</code>. Every multi-byte value in an
   NSF header is <b>little-endian</b>, matching the 6502 it describes. This is worth stating only
@@ -261,9 +275,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   <div id="nsf-region"></div>
 
   <div class="sec">the expansion byte</div>
-  <p class="note">The NES had a sound chip on the console; the Famicom let the <b>cartridge</b> add
-  another. Each bit here claims one. More than one bit may be set, which never described real
-  hardware but is legal in the container.</p>
+  <p class="note">Each bit claims one cartridge sound chip, on top of the five stock voices. More
+  than one bit may be set: no cartridge ever carried two of these, but the container allows it and
+  files built to exercise emulators do it deliberately.</p>
   <div id="nsf-chips"></div>
 
   <div class="sec">the three text fields</div>
@@ -522,7 +536,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
      body:"The Sunsoft FME-7 audio expansion: three square channels, a General Instrument AY design.",
      note:"bit 5."},
     {label:"Namco 163",k:"flag",r:[3,3],val:"0",
-     body:"Wavetable synthesis, up to eight channels sharing one RAM. Named Namco 106 in the original specification.",
+     body:"Wavetable synthesis with up to eight channels sharing 128 bytes of RAM. The channels are time-shared, so enabling all eight divides the update rate between them and audibly coarsens the sound -- the count is a budget, not eight free voices. Named Namco 106 in the original specification.",
      note:"bit 4."},
     {label:"MMC5",k:"flag",r:[4,4],val:"0",
      body:"Nintendo's own mapper, adding two more square channels and an 8-bit PCM output.",
@@ -531,7 +545,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
      body:"The Famicom Disk System's wavetable channel. Files using it also change how the bank registers work.",
      note:"bit 2."},
     {label:"VRC7",k:"flag",r:[6,6],val:"0",
-     body:"Konami's FM chip, a cut-down Yamaha OPLL with six channels and a fixed instrument set.",
+     body:"Konami's FM chip, a cut-down Yamaha OPLL with six channels. Fifteen of its instruments are burned in and one is user-definable, so a composer wanting a sound of their own had exactly one slot to put it in.",
      note:"bit 1."},
     {label:"VRC6",k:"flag",r:[7,7],val:"1",
      body:"Konami's expansion: two pulse channels with more duty cycles than the stock APU, plus a sawtooth. Set in this file.",
