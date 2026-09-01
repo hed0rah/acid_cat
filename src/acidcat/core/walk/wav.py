@@ -130,21 +130,39 @@ def _parse_fmt(b, ctx):
     return summary, fields, warns
 
 
+# A writer streaming to a pipe cannot know its length, so it writes a placeholder
+# and the reader is expected to read to EOF. These are not damage, and reporting
+# them as a size mismatch says the same thing about a streamed file as about a
+# truncated one. 0xFFFFFFFF is ffmpeg's, 0x7FFFF000 is SoX's, and 0 is written by
+# several. A declared size of 0 is the dangerous one: taken literally it reports
+# a file full of audio as empty.
+_STREAM_SENTINELS = {
+    0: "zero, the most common placeholder",
+    0xFFFFFFFF: "the 32-bit maximum",
+    0x7FFFF000: "the largest sample-aligned 31-bit value",
+}
+
+
 def _parse_data(b, ctx, size, avail=None):
     fields, warns = [], []
     align = ctx.get("block_align")
     rate = ctx.get("sample_rate")
     # a declared size larger than the bytes actually present is a lie we
     # already lint at the file level; never derive frames/duration from it.
-    overrun = avail is not None and size > avail
-    eff = avail if overrun else size
+    # a sentinel means "I did not know", so the bytes present ARE the payload and
+    # there is nothing to reconcile. Checked before the overrun test, which would
+    # otherwise report a streamed file as a size mismatch.
+    streaming = size in _STREAM_SENTINELS and avail is not None and (
+        size == 0 and avail > 0 or size > avail)
+    overrun = (not streaming) and avail is not None and size > avail
+    eff = avail if (overrun or streaming) else size
     fact = ctx.get("fact_samples")
     # bytes / block_align is the frame count only for uncompressed audio.
     # block-compressed formats (ADPCM) pack many samples per block, so trust
     # the fact chunk's sample count when present. on an overrun we still
     # derive from the bytes actually present, never a declared count.
     frames = None
-    if overrun:
+    if overrun or streaming:
         if align:
             frames = eff // align
     elif fact is not None:
@@ -153,7 +171,13 @@ def _parse_data(b, ctx, size, avail=None):
         frames = eff // align
     if frames is not None:
         ctx["frames"] = frames
-    if overrun:
+    if streaming:
+        summary = (f"audio payload, {eff:,} bytes, size field is a streaming "
+                   f"placeholder ({_STREAM_SENTINELS[size]})")
+        warns.append("the data size is a streaming placeholder, so the payload "
+                     "runs to the end of the file; this is how a writer records "
+                     "audio it cannot measure in advance, not damage")
+    elif overrun:
         summary = f"audio payload, {size:,} bytes declared, only {avail:,} present"
     else:
         summary = f"audio payload, {size:,} bytes"
@@ -167,7 +191,7 @@ def _parse_data(b, ctx, size, avail=None):
             note += ", from fact chunk"
         summary += f", {dur:.3f} s"
         fields.append(_f(0x00, eff, "frames", frames, note))
-    if size == 0:
+    if size == 0 and not streaming:
         warns.append("data chunk is empty")
     return summary, fields, warns
 
@@ -555,7 +579,7 @@ def inspect_wav(filepath, ctx=None):
         for cid, offset, size in iter_chunks(filepath):
             seen.append(cid)
             avail = max(0, file_size - offset - 8)
-            if size > avail:
+            if size > avail and not (cid == "data" and size in _STREAM_SENTINELS):
                 file_warns.append(
                     f"chunk {cid!r} at 0x{offset:08x} claims {size:,} bytes "
                     f"but only {avail:,} remain"

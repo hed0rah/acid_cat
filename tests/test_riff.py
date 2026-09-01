@@ -221,3 +221,69 @@ class TestEffectiveAcidBeats:
     def test_no_beats_is_none(self):
         meta = {"acid_beats": 0, "acid_one_shot": False, "bpm": 120.0}
         assert effective_acid_beats(meta, 4.0) is None
+
+
+class TestStreamingSizeSentinels:
+    """A WAV written to a pipe is not a damaged WAV.
+
+    A writer streaming to stdout cannot know its length in advance, so it puts a
+    placeholder in the data chunk's size field and the reader reads to end of
+    file. Three are in circulation, and all three used to be reported in exactly
+    the words a genuinely truncated file gets -- so the tool could not tell a
+    streamed file from a broken one, and said the same thing about both.
+
+    The zero case was worse than noisy. Taken literally it reported a file
+    holding real audio as EMPTY, with no warning at all, which is a silent wrong
+    answer rather than a loud one.
+    """
+
+    def _walk(self, tmp_path, declared, payload=b"\x00" * 800):
+        blob = _wav_bytes(_fmt_chunk(),
+                          b"data" + struct.pack("<I", declared) + payload)
+        p = tmp_path / "s.wav"
+        p.write_bytes(blob)
+        chunks, file_warns = inspect_wav(str(p))
+        return _chunk_by_id(chunks, "data"), file_warns
+
+    @pytest.mark.parametrize("declared,name", [
+        (0, "zero"),
+        (0xFFFFFFFF, "the 32-bit maximum"),
+        (0x7FFFF000, "the largest sample-aligned 31-bit value"),
+    ])
+    def test_a_sentinel_reports_the_bytes_that_are_there(self, tmp_path,
+                                                         declared, name):
+        data, file_warns = self._walk(tmp_path, declared)
+        assert "streaming placeholder" in data["summary"]
+        assert "800 bytes" in data["summary"], data["summary"]
+        assert not file_warns, "a streamed file is not a size mismatch"
+
+    def test_a_genuinely_wrong_size_is_still_reported(self, tmp_path):
+        """The control. If every odd size were excused, the check would be
+        excusing corruption along with convention."""
+        data, file_warns = self._walk(tmp_path, 999_999)
+        assert "declared" in data["summary"] and "only" in data["summary"]
+        assert any("but only" in w for w in file_warns), file_warns
+        assert "streaming placeholder" not in data["summary"]
+
+    def test_a_zero_size_with_no_payload_is_still_empty(self, tmp_path):
+        """The control that matters most, because it is the one that keeps the
+        zero sentinel honest. Zero means "placeholder" only when bytes follow;
+        with nothing after it, the chunk really is empty and must say so."""
+        data, _fw = self._walk(tmp_path, 0, payload=b"")
+        assert "streaming placeholder" not in data["summary"]
+        assert any("empty" in w for w in data["warnings"]), data["warnings"]
+
+    def test_the_walker_does_not_claim_both_at_once(self, tmp_path):
+        """It briefly reported a streamed file as carrying a payload to end of
+        file AND as being an empty data chunk, which cannot both be true."""
+        data, _fw = self._walk(tmp_path, 0)
+        joined = " ".join(data["warnings"])
+        assert not ("placeholder" in joined and "empty" in joined), joined
+
+    def test_duration_comes_from_the_bytes_present(self, tmp_path):
+        """A sentinel says nothing about length, so the frame count has to be
+        derived from what is actually there rather than from the field."""
+        # the fmt above is mono 16-bit at 44100, so block_align is 2 and one
+        # second is 88,200 bytes rather than the 176,400 a stereo file would use
+        data, _fw = self._walk(tmp_path, 0xFFFFFFFF, payload=b"\x00" * 88_200)
+        assert "1.000 s" in data["summary"], data["summary"]
