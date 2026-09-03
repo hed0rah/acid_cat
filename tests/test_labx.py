@@ -105,3 +105,17 @@ def test_labx_zip_without_layout_falls_back(tmp_path):
     chunks, warns = labx.inspect_labx(str(p))
     assert any("does not follow" in w for w in warns)
     assert {c["id"] for c in chunks} == {"labx", "asset"}
+
+
+def test_crafted_digit_run_stays_a_rejection(tmp_path):
+    """Found by an adversarial audit: a length prefix of 4301+ ASCII digits hit
+    Python 3.11's int() conversion limit and raised ValueError out of the
+    walker. A digit run too long to be an honest prefix (the head is capped at
+    8 KB) must be rejected like any other non-prefix token."""
+    p = tmp_path / "digits.labx"
+    with zipfile.ZipFile(p, "w", zipfile.ZIP_STORED) as z:
+        z.writestr("Analog/User/Bank/Preset",
+                   b"22 serialization::archive 10 0 7 0 7 4 Type "
+                   + b"9" * 5000 + b" x")
+    chunks, warns = labx.inspect_labx(str(p))
+    assert chunks                        # walked, fields simply absent

@@ -95,3 +95,24 @@ def test_entropy_edge_cases():
     assert entropy_from_counts([0] * 256, 0) == 0.0        # no data
     assert entropy_from_counts([64] + [0] * 255, 64) == 0.0  # one symbol: no surprise
     assert abs(entropy_from_counts([4] * 256, 1024) - 8.0) < 1e-12  # uniform bytes
+
+
+def test_log2_table_stays_capped():
+    """Found by an adversarial audit: the log2 table grew to the largest TOTAL
+    ever measured and lived forever in the module global -- one whole-blob call
+    over 8 MB pinned 272 MB of floats for the life of the process, and
+    anomalies.py hands this up to 64 MB of attacker-controlled bytes. Above the
+    cap a count takes a direct math.log2; the answer must not change."""
+    import math
+    from acidcat.core.primitives import signal
+    big = signal._LOG2_CAP * 4
+    counts = [big // 2, big // 2] + [0] * 254
+    h = signal.entropy_from_counts(counts, big)
+    assert abs(h - 1.0) < 1e-9                       # two equal symbols: 1 bit
+    assert len(signal._LOG2) <= signal._LOG2_CAP
+    # mixed small and huge counts against the direct formula
+    counts = [big, 3, 5, 7] + [0] * 252
+    n = sum(counts)
+    ref = -sum((c / n) * math.log2(c / n) for c in counts if c)
+    assert abs(signal.entropy_from_counts(counts, n) - ref) < 1e-9
+    assert len(signal._LOG2) <= signal._LOG2_CAP

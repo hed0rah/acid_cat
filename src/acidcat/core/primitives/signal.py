@@ -46,13 +46,26 @@ def byte_counts(data):
 # entropy_from_counts once per window and every window is a 256-bin histogram,
 # so the naive form spends millions of calls taking log2 of the same handful of
 # small counts. Counts are integers, so they table exactly.
+#
+# Capped, because the table is a module global that lives forever and its old
+# form grew to the LARGEST TOTAL EVER SEEN: one whole-blob entropy call over an
+# 8 MB buffer left 272 MB of floats pinned for the life of the process (and
+# anomalies.py hands this up to 64 MB of attacker-controlled bytes). Above the
+# cap a count is a one-off whole-blob case, not a hot window loop, and a direct
+# math.log2 costs what it costs.
 _LOG2 = [0.0, 0.0]                       # log2(0) unused, log2(1) = 0
+_LOG2_CAP = 1 << 16                      # 64 KiB window scale; ~512 KB of floats
 
 
 def _log2_table(upto):
+    upto = min(upto, _LOG2_CAP - 1)
     while len(_LOG2) <= upto:
         _LOG2.append(math.log2(len(_LOG2)))
     return _LOG2
+
+
+def _log2_int(tbl, n):
+    return tbl[n] if n < len(tbl) else math.log2(n)
 
 
 def entropy_from_counts(counts, total):
@@ -70,13 +83,13 @@ def entropy_from_counts(counts, total):
     seen = 0
     for c in counts:
         if c:
-            acc += c * tbl[c]
+            acc += c * _log2_int(tbl, c)
             seen += 1
     # Shannon entropy is non-negative; a certain distribution (one symbol with
     # every count) cancels to zero in exact arithmetic but lands a few ulp below
     # it here, since c*log2(c)/c does not round back to log2(c). Clamp rather
     # than hand a caller a negative "amount of information".
-    h = tbl[total] - acc / total
+    h = _log2_int(tbl, total) - acc / total
     if h <= 0.0:
         return 0.0
     # The same rounding at the other end: a perfectly uniform distribution is
@@ -84,7 +97,7 @@ def entropy_from_counts(counts, total):
     # 8.000000000000014 against a documented 0..8. log2 of the number of symbols
     # actually present is the true ceiling, and it is the right one for any
     # alphabet rather than a hardcoded 8.
-    ceiling = tbl[seen] if seen < len(tbl) else _log2_table(seen)[seen]
+    ceiling = _log2_int(tbl, seen)
     return h if h < ceiling else ceiling
 
 

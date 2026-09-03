@@ -577,7 +577,13 @@ def _is_labx(filepath):
         with zipfile.ZipFile(filepath) as z:
             for n in z.namelist()[:8]:
                 if len(n.split("/")) >= 3 and ("/User/" in n or "/Factory/" in n):
-                    if z.read(n)[:40].split(b" ", 1)[-1].startswith(
+                    # open().read(40) inflates ~40 bytes; z.read(n)[:40]
+                    # inflates the WHOLE member first, which let a small
+                    # crafted zip cost hundreds of MB inside the sniffer,
+                    # before any walker boundary
+                    with z.open(n) as member:
+                        head = member.read(40)
+                    if head.split(b" ", 1)[-1].startswith(
                             b"serialization::archive"):
                         return True
     except Exception:

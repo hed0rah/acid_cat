@@ -299,3 +299,52 @@ def test_multisample_bitwig(tmp_path):
     # yields the literal file, not the zip local header
     raw = f.read_bytes()
     assert raw[zones[0]["offset"]:zones[0]["offset"] + zones[0]["size"]] == b"RIFF____WAVE"
+
+
+def test_multisample_deflate_bomb_is_capped(tmp_path):
+    """Found by an adversarial audit: _read_entry bypasses ZipFile.read for
+    Bitwig's bad CRCs, and the bypass also lost read()'s implicit bound -- an
+    unbounded zlib.decompress let a 79 KB archive demand hundreds of MB. The
+    inflate is now capped and the walk degrades to a warning."""
+    import io
+    import tracemalloc
+    import zipfile as zf
+    from acidcat.core.walk.multisample import inspect_multisample
+    buf = io.BytesIO()
+    with zf.ZipFile(buf, "w", zf.ZIP_DEFLATED, compresslevel=9) as z:
+        z.writestr("multisample.xml",
+                   b"<multisample>" + b"\x00" * (40 * 1024 * 1024) + b"</multisample>")
+    p = tmp_path / "bomb.multisample"
+    p.write_bytes(buf.getvalue())
+    tracemalloc.start()
+    try:
+        chunks, warns = inspect_multisample(str(p))
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert any("did not parse" in w for w in warns)
+    assert peak < 80 * 1024 * 1024, f"peak {peak >> 20} MB: the cap is not holding"
+
+
+def test_labx_deflated_entry_head_read_is_capped(tmp_path):
+    """The sibling bomb: a DEFLATED .labx preset entry had its whole member
+    inflated just to keep 8 KB of head. Real banks are STORED, so the DEFLATED
+    path is precisely the hostile one."""
+    import io
+    import tracemalloc
+    import zipfile as zf
+    from acidcat.core.walk.labx import inspect_labx
+    buf = io.BytesIO()
+    with zf.ZipFile(buf, "w", zf.ZIP_DEFLATED, compresslevel=9) as z:
+        z.writestr("Analog/User/Bank/Preset",
+                   b"22 serialization::archive " + b"\x00" * (40 * 1024 * 1024))
+    p = tmp_path / "bomb.labx"
+    p.write_bytes(buf.getvalue())
+    tracemalloc.start()
+    try:
+        chunks, warns = inspect_labx(str(p))
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert chunks
+    assert peak < 40 * 1024 * 1024, f"peak {peak >> 20} MB: the cap is not holding"

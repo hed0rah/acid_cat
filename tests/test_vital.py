@@ -47,3 +47,16 @@ def test_clean_preset_no_side_channel_warnings(tmp_path):
     data = _preset(macro1=0.5, preset_style="Bass") + b"\n"
     chunks, _w = vital.inspect_vital(_write(tmp_path, data))
     assert chunks[0]["warnings"] == []
+
+
+def test_nameless_lfo_does_not_break_deep_mode(tmp_path):
+    """Found by an adversarial audit: a valid, loadable preset whose lfos list
+    holds a dict with no "name" put None in the summary list, and the walker's
+    ", ".join raised TypeError -- deep mode degraded to zero chunks on a real
+    preset shape. wavetables already filtered on the name; lfos now does too."""
+    data = _preset(settings={"osc_1_on": 1.0,
+                             "lfos": [{"points": [0, 1]}, {"name": "wobble"}]})
+    chunks, warns = vital.inspect_vital(_write(tmp_path, data), deep=True)
+    assert chunks
+    lfo_fields = [f for c in chunks for f in c["fields"] if f["name"] == "lfos"]
+    assert lfo_fields and "wobble" in lfo_fields[0]["value"]

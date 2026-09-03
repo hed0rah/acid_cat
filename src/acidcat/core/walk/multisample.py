@@ -29,6 +29,12 @@ def _data_offset(z, zi):
     return zip_data_offset(z, zi)
 
 
+# bypassing ZipFile.read (below, for the bad CRCs) also bypassed its implicit
+# bound; deflate packs ~1032:1, so an unbounded inflate let a 79 KB archive
+# demand hundreds of MB. multisample.xml is metadata measured in KB.
+_ENTRY_CAP = 16 * 1024 * 1024
+
+
 def _read_entry(z, name):
     """Read one zip entry bypassing CRC validation (Bitwig writes bad CRCs)."""
     zi = z.getinfo(name)
@@ -36,11 +42,17 @@ def _read_entry(z, name):
     raw = z.fp.read(zi.compress_size)
     if zi.compress_type == zipfile.ZIP_DEFLATED:
         try:
-            return zlib.decompress(raw, -15)     # raw deflate, no zlib wrapper
-        except zlib.error as e:
             # A corrupt deflate stream is a damaged file, not a crash. This
             # bypasses CRC validation on purpose (Bitwig writes bad CRCs), so
             # it is exactly the path where corruption arrives unannounced.
+            d = zlib.decompressobj(-15)          # raw deflate, no zlib wrapper
+            out = d.decompress(raw, _ENTRY_CAP)
+            if d.unconsumed_tail:
+                raise zipfile.BadZipFile(
+                    "entry %r inflates past the %d MB metadata cap"
+                    % (name, _ENTRY_CAP >> 20))
+            return out
+        except zlib.error as e:
             raise zipfile.BadZipFile(
                 "entry %r did not decompress (%s)" % (name, e))
     return raw

@@ -64,7 +64,10 @@ def deep_structure(obj):
     out["wavetables"] = [w.get("name") for w in wt
                          if isinstance(w, dict) and w.get("name")]
     lfos = s.get("lfos") or []
-    out["lfos"] = [l.get("name") for l in lfos if isinstance(l, dict)]
+    # filter on the name being present, like wavetables above: a nameless LFO
+    # dict put None in the list and ", ".join over it raised in the walker
+    out["lfos"] = [l.get("name") for l in lfos
+                   if isinstance(l, dict) and l.get("name")]
     out["effects"] = [fx for fx in _VITAL_EFFECTS if s.get(fx + "_on")]
     wired = []
     for i, m in enumerate(s.get("modulations") or [], 1):

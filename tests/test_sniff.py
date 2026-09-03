@@ -160,3 +160,28 @@ class TestWeakJsonMagic:
         p = self._w(tmp_path, "big.json",
                     b'{"a":"' + b"x" * 300_000 + b'","b":1}')
         assert sniff(p) != "vital"
+
+
+def test_labx_zip_probe_reads_forty_bytes_not_the_member(tmp_path):
+    """Found by an adversarial audit: the labx probe did z.read(n)[:40], which
+    inflates the WHOLE member to keep 40 bytes -- an allocation bomb inside the
+    sniffer, upstream of every walker boundary and every cap. The probe must
+    stream. (Bound asserted via tracemalloc: a 60 MB member, ~60 KB zipped.)"""
+    import io
+    import tracemalloc
+    import zipfile as zf
+    from acidcat.core.infra.sniff import sniff as _sniff
+    buf = io.BytesIO()
+    with zf.ZipFile(buf, "w", zf.ZIP_DEFLATED, compresslevel=9) as z:
+        z.writestr("X/User/B/P",
+                   b"22 serialization::archive " + b"\x00" * (60 * 1024 * 1024))
+    p = tmp_path / "probe.zip"
+    p.write_bytes(buf.getvalue())
+    tracemalloc.start()
+    try:
+        fmt = _sniff(str(p))
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert fmt == "labx"                 # still recognized from the 40 bytes
+    assert peak < 8 * 1024 * 1024, f"peak {peak >> 20} MB inside the sniffer"

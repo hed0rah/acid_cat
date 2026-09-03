@@ -44,7 +44,12 @@ def _read_head(z, zi, cap=_META_CAP):
     if zi.compress_type == zipfile.ZIP_STORED:
         return doff, z.fp.read(min(zi.file_size, cap))
     try:
-        return doff, z.read(zi.filename)[:cap]
+        # open().read(cap) inflates ~cap bytes; z.read()[:cap] inflated the
+        # whole member (a crafted DEFLATED entry cost hundreds of MB to keep
+        # 8 KB). Real Analog Lab banks are STORED, so this path is exactly
+        # the one only a hostile or foreign archive takes.
+        with z.open(zi) as member:
+            return doff, member.read(cap)
     except Exception:
         return doff, b""
 
@@ -53,12 +58,23 @@ def _printable(b):
     return bool(b) and not any(c < 0x20 and c not in (9, 10, 13) for c in b)
 
 
+def _lp_int(tok):
+    """A Boost length prefix as an int, or -1 when the token cannot be one.
+    Bounded before converting: the head is at most _META_CAP bytes, so an
+    honest prefix has 4 digits, and Python 3.11+ raises ValueError on int()
+    past 4300 digits -- a crafted digit run must stay a rejection, not a
+    walker exception."""
+    if not tok.isdigit() or len(tok) > 8:
+        return -1
+    return int(tok)
+
+
 def _lps_at(b, j):
     """Read the length-prefixed string '<n> <n bytes>' starting at b[j]."""
     sp = b.find(b" ", j)
-    if sp < 0 or not b[j:sp].isdigit():
+    n = _lp_int(b[j:sp]) if sp >= 0 else -1
+    if n < 0:
         return ""
-    n = int(b[j:sp])
     return b[sp + 1:sp + 1 + n].decode("utf-8", "replace")
 
 
@@ -81,9 +97,9 @@ def _first_lps_after(b, start):
         j = i
         while j < end and b[j] != 0x20:
             j += 1
-        if not b[i:j].isdigit():
+        n = _lp_int(b[i:j])
+        if n < 0:
             return ""
-        n = int(b[i:j])
         k = j + 1
         if n >= 1 and b[k + n:k + n + 1] in (b" ", b"") and _printable(b[k:k + n]):
             return b[k:k + n].decode("utf-8", "replace")
@@ -106,7 +122,7 @@ def _lps_before(b, pos):
         cand = b[s + 1:end]
         s2 = b.rfind(b" ", 0, s)
         tok = b[s2 + 1:s]
-        if tok.isdigit() and int(tok) == len(cand):
+        if _lp_int(tok) == len(cand):
             return cand.decode("utf-8", "replace")
     return ""
 
@@ -119,9 +135,10 @@ def _tag_blob(b):
     if i < 1:
         return ""
     k = b.rfind(b" ", 0, i - 1)          # space before the length prefix
-    if k < 0 or not b[k + 1:i - 1].isdigit():
+    n = _lp_int(b[k + 1:i - 1]) if k >= 0 else -1
+    if n < 0:
         return ""
-    blob = b[i:i + int(b[k + 1:i - 1])].decode("utf-8", "replace")
+    blob = b[i:i + n].decode("utf-8", "replace")
     for part in blob.split(";"):
         if part.startswith("Characteristics,"):
             return part[len("Characteristics,"):]
