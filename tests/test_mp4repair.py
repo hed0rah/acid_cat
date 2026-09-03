@@ -136,3 +136,76 @@ def test_multitrack_refused():
     data = _box(b"ftyp", b"M4A \x00\x00\x00\x00") + tree + _box(b"mdat", payload)
     with pytest.raises(R.Mp4RepairError):
         R.repair_mp4(data)
+
+
+def _forged_count(btype, count, body=b""):
+    """A FullBox whose count field claims entries its box does not hold."""
+    return _fullbox(btype, struct.pack(">I", count) + body)
+
+
+def _forged_stsz(count):
+    return _fullbox(b"stsz", struct.pack(">II", 0, count))   # zero table bytes
+
+
+def _hostile(stsz=None, stsc=None, stco=None):
+    """A structurally valid single-track m4a with one forged sample table."""
+    sizes, runs, payload, start, good = _make_multichunk()
+    stbl = ((stsz if stsz is not None else _stsz(sizes))
+            + (stsc if stsc is not None else _stsc(runs))
+            + (stco if stco is not None else _stco([1, 1, 1])))  # broken on purpose
+    tree = _box(b"moov", _box(b"trak", _box(b"mdia",
+               _box(b"minf", _box(b"stbl", stbl)))))
+    return (_box(b"ftyp", b"M4A \x00\x00\x00\x00") + tree
+            + _box(b"mdat", payload))
+
+
+def test_forged_counts_raise_damage_not_struct_error():
+    """The defect this pins, found by an adversarial audit: stsz/stsc/stco
+    counts were fed to unpack_from unbounded, so a 196-byte crafted .m4a took
+    repair, validate AND audit down with an uncaught struct.error (and a
+    large-but-satisfiable count was a MemoryError). The count must be checked
+    against the bytes its own box holds, and the failure must be Mp4Damage --
+    in-contract, catchable, and reported as damage rather than out-of-scope."""
+    for hostile in (_hostile(stsz=_forged_stsz(0x00FFFFFF)),
+                    _hostile(stsc=_forged_count(b"stsc", 0x00FFFFFF)),
+                    _hostile(stco=_forged_count(b"stco", 0x00FFFFFF))):
+        with pytest.raises(R.Mp4Damage):
+            R.repair_mp4(hostile)
+
+
+def test_forged_count_fails_validate_without_advertising_repair(tmp_path, capsys):
+    """validate must not certify a forged table as consistent (the old
+    behavior after merely catching the error would be a silent OK), and must
+    not send the user to a repair that has nothing safe to rewrite."""
+    from acidcat.cli import main
+    p = tmp_path / "hostile.m4a"
+    p.write_bytes(_hostile(stsz=_forged_stsz(0x00FFFFFF)))
+    rc = main(["validate", str(p)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "declares" in out
+    assert "fix with: acidcat repair" not in out
+
+
+def test_forged_count_repair_leaves_the_file_alone(tmp_path):
+    from acidcat.cli import main
+    p = tmp_path / "hostile.m4a"
+    original = _hostile(stsz=_forged_stsz(0x00FFFFFF))
+    p.write_bytes(original)
+    main(["repair", "--overwrite", str(p)])
+    assert p.read_bytes() == original
+
+
+def test_out_of_scope_is_still_a_quiet_note_not_damage(tmp_path, capsys):
+    """The multi-track refusal must stay an out-of-scope note: a healthy file
+    the repairer declines is not a damaged file, and validate must keep
+    saying OK for it."""
+    from acidcat.cli import main
+    sizes, runs, payload, start, good = _make_multichunk()
+    stbl = _stsz(sizes) + _stsc(runs) + _stco(good) + _stco(good)
+    tree = _box(b"moov", _box(b"trak", _box(b"mdia",
+               _box(b"minf", _box(b"stbl", stbl)))))
+    p = tmp_path / "multi.m4a"
+    p.write_bytes(_box(b"ftyp", b"M4A \x00\x00\x00\x00") + tree
+                  + _box(b"mdat", payload))
+    assert main(["validate", str(p)]) == 0

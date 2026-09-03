@@ -156,6 +156,13 @@ class Mp4OffsetRepairer(Repairer):
         with a note and no violations rather than an error."""
         try:
             new_data, changes = mp4repair.repair_mp4(data, patch=patch)
+        except mp4repair.Mp4Damage as e:
+            # internally inconsistent sample tables: report damage with no
+            # witness (nothing safe to rewrite), never an out-of-scope OK --
+            # validate must not certify a forged table as consistent.
+            return data, Report(self.label, [Violation(
+                COUNT, "moov sample tables", "entry_count", None, None,
+                witness="", detail=str(e))])
         except mp4repair.Mp4RepairError as e:
             return data, Report(self.label, note=str(e))
         vios = [Violation(OFFSET, c["path"], c["field"], c["old"], c["new"],

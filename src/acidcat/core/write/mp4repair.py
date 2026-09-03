@@ -32,6 +32,14 @@ class Mp4RepairError(ValueError):
     """The offset tables could not be repaired with confidence."""
 
 
+class Mp4Damage(Mp4RepairError):
+    """A sample table is internally inconsistent: a count claims more entries
+    than its box holds, or the box is shorter than its own fixed header.
+    Distinct from out-of-scope, deliberately: an out-of-scope file (multi-track,
+    no mdat) is healthy and silently left alone, while this one is damaged and
+    must not be certified consistent by validate."""
+
+
 def _read_fullbox_u32s(data, payload_off, count_off):
     """Read (entry_count, [u32 ...]) from a FullBox table whose count sits at
     ``count_off`` from the payload and whose u32 entries follow it."""
@@ -40,13 +48,34 @@ def _read_fullbox_u32s(data, payload_off, count_off):
     return count, base
 
 
+def _checked_count(box, fixed, per, name):
+    """The entry count a table may claim, bounded by the box's own length.
+
+    ``iter_boxes`` guarantees a non-truncated box fits the buffer, but the
+    count field inside it answers to nobody: a forged count reached
+    unpack_from as-is and took repair/validate/audit down with struct.error
+    (or MemoryError for a large-but-satisfiable one). The box holds
+    ``size - hdr - fixed`` table bytes; a count needing more is a lie."""
+    avail = box["size"] - box["hdr"] - fixed
+    top = avail // per if avail > 0 else -1
+    def check(n):
+        if n > top:
+            raise Mp4Damage(
+                "%s declares %d entries but the box holds %d" % (name, n, max(top, 0)))
+        return n
+    return check
+
+
 def _parse_stsz(data, box):
     """Sample sizes: (sample_size, sample_count, [sizes] or None)."""
     p = box["offset"] + box["hdr"]
+    if box["size"] - box["hdr"] < 12:
+        raise Mp4Damage("stsz box too short for its fixed header")
     sample_size = struct.unpack_from(">I", data, p + 4)[0]
     sample_count = struct.unpack_from(">I", data, p + 8)[0]
     if sample_size != 0:
         return sample_size, sample_count, None
+    _checked_count(box, 12, 4, "stsz")(sample_count)
     sizes = list(struct.unpack_from(">%dI" % sample_count, data, p + 12))
     return 0, sample_count, sizes
 
@@ -54,7 +83,9 @@ def _parse_stsz(data, box):
 def _parse_stsc(data, box):
     """Sample-to-chunk runs: list of (first_chunk, samples_per_chunk)."""
     p = box["offset"] + box["hdr"]
-    n = struct.unpack_from(">I", data, p + 4)[0]
+    if box["size"] - box["hdr"] < 8:
+        raise Mp4Damage("stsc box too short for its fixed header")
+    n = _checked_count(box, 8, 12, "stsc")(struct.unpack_from(">I", data, p + 4)[0])
     runs = []
     for i in range(n):
         fc, spc, _ = struct.unpack_from(">III", data, p + 8 + i * 12)
@@ -66,7 +97,11 @@ def _parse_stco(data, box):
     """Chunk offsets: (is64, entry_count, entries_base_off, [values])."""
     p = box["offset"] + box["hdr"]
     is64 = box["type"] == b"co64"
-    n = struct.unpack_from(">I", data, p + 4)[0]
+    if box["size"] - box["hdr"] < 8:
+        raise Mp4Damage("stco box too short for its fixed header")
+    # bytes(): box["type"] is a memoryview on the analyze path
+    n = _checked_count(box, 8, 8 if is64 else 4, bytes(box["type"]).decode("latin-1"))(
+        struct.unpack_from(">I", data, p + 4)[0])
     base = p + 8
     fmt = ">%d%s" % (n, "Q" if is64 else "I")
     values = list(struct.unpack_from(fmt, data, base))
