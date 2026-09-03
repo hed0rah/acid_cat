@@ -82,7 +82,8 @@ def test_wav_ctx_matches_walker(tmp_path):
 
 # The corpus these three sweeps run over. ACIDCAT_CORPUS points them at a big
 # local library (~/sample_packs on the dev box, 2,327 files); with nothing set
-# they fall back to a generated one that is committed with the tests.
+# they fall back to one regenerated deterministically by make_corpus.ensure()
+# (the generator is committed; the corpus itself is gitignored).
 #
 # That fallback matters more than it looks. These sweeps used to skip entirely
 # without a local corpus, which meant 6,998 of the suite's 8,515 collected tests
