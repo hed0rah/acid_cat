@@ -57,7 +57,9 @@ def _orphaned_audio(node):
     want = _IFF_AUDIO.get(node.form_type)
     if not want or not node.tail:
         return None
-    if node.tail[:4] != want:
+    # offset 1 as well as 0: a mis-parse that stops on a pad byte leaves the
+    # audio header one byte into the tail (the odd-nested-LIST case)
+    if node.tail[:4] != want and node.tail[1:5] != want:
         return None
     return len(node.tail)
 
@@ -121,6 +123,17 @@ class IffRepairer(Repairer):
                 f"size would leave {orphan:,} bytes of audio outside it and "
                 f"unreadable. Nothing written -- the audio is still intact")
         before = _iff_audio(structure.parse(data))
+        want = _IFF_AUDIO.get(node.form_type)
+        if want and before is None and want in bytes(data):
+            # the equality guard below is vacuous when the audio chunk was
+            # never located as a child: None == None passes while a mis-parse
+            # quietly writes a size that ends before the audio. If the audio id
+            # exists anywhere in the bytes but not in the tree, refuse rather
+            # than certify a comparison of nothing against nothing.
+            raise AudioGuardError(
+                f"cannot locate the {want.decode('latin-1')} chunk in the "
+                f"parsed structure, so audio preservation cannot be verified. "
+                f"Nothing written")
         new_data = structure.emit(node)
         after = _iff_audio(structure.parse(new_data))
         if before != after:

@@ -198,7 +198,19 @@ def _parse_container(data, off, end, endian, top=False, depth=0):
         pos = nxt
     if pos < span_end:
         node.tail = data[pos:span_end]
-    return node, span_end
+    nxt = span_end
+    # same rule as _parse_leaf: an odd-length nested container is followed by a
+    # pad byte, and that byte belongs to this chunk. Without this the parent
+    # resumes ON the pad, sees a byte that cannot open a chunk id, and dumps
+    # every following sibling (including the audio payload) into its tail.
+    if not top and (span_end - (off + 8)) & 1 and nxt < end:
+        if _id_ok(data, nxt) and not _id_ok(data, nxt + 1):
+            pass                       # unpadded writer
+        else:
+            node.pad = 1
+            node.pad_byte = data[nxt]
+            nxt += 1
+    return node, nxt
 
 
 # ── recompute (repair) ─────────────────────────────────────────────

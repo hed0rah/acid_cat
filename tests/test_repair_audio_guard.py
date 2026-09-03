@@ -130,6 +130,84 @@ def test_aiff_is_guarded_too(tmp_path):
     assert p.read_bytes() == original, "AIFF audio was orphaned"
 
 
+def _odd_list_wav(stale_by=7):
+    """A WAV with an odd-length nested LIST (padded) ahead of the audio.
+
+    The second orphaning route, found by a later audit: _parse_container did
+    not consume the pad byte after an odd nested LIST the way _parse_leaf does
+    after an odd leaf. The parent resumed ON the pad, could not read a chunk id
+    there, and dumped every following sibling -- the data chunk included --
+    into its tail. recompute then wrote a master size that ends before the
+    audio, and the before/after audio guard passed vacuously (None == None).
+    An unpadded odd adtl/labl LIST is precisely the malformed input repair
+    exists to accept."""
+    fmt = b"fmt " + struct.pack("<I", 16) + struct.pack("<HHIIHH", 1, 1, 8000, 16000, 2, 16)
+    labl = b"labl" + struct.pack("<I", 5) + struct.pack("<I", 1) + b"x"
+    inner = b"adtl" + labl                      # 17 bytes: the LIST is odd
+    lst = b"LIST" + struct.pack("<I", len(inner)) + inner + b"\x00"
+    pcm = b"\x01\x02" * 50
+    data = b"data" + struct.pack("<I", len(pcm)) + pcm
+    body = b"WAVE" + fmt + lst + data
+    return b"RIFF" + struct.pack("<I", len(body) + stale_by), body
+
+
+def test_odd_nested_list_does_not_orphan_the_audio(tmp_path):
+    head, body = _odd_list_wav()
+    p = tmp_path / "oddlist.wav"
+    p.write_bytes(head + body)
+    assert _readable_bytes(p) == 100
+
+    assert main(["repair", "--overwrite", str(p)]) == 0
+    assert _readable_bytes(p) == 100, "repair orphaned the audio behind the LIST pad"
+    assert main(["validate", str(p)]) == 0
+
+
+def test_odd_nested_list_round_trips_byte_exact():
+    """The pad byte after an odd nested container belongs to the LIST, and a
+    parse that owns it must also re-emit it."""
+    from acidcat.core.write import structure
+    head, body = _odd_list_wav(stale_by=0)
+    raw = head + body
+    node = structure.parse(raw)
+    assert [c.id for c in node.children] == [b"fmt ", b"LIST", b"data"]
+    assert node.tail == b""
+    assert structure.emit(node) == raw
+
+
+def test_orphan_guard_sees_audio_one_byte_into_the_tail(tmp_path, capsys):
+    """A parse stopped by a stray byte leaves the data header at tail offset 1,
+    where the original tail[:4] check looked straight past it."""
+    fmt = b"fmt " + struct.pack("<I", 16) + struct.pack("<HHIIHH", 1, 1, 8000, 16000, 2, 16)
+    pcm = b"\x01\x02" * 50
+    data = b"data" + struct.pack("<I", len(pcm)) + pcm
+    body = b"WAVE" + fmt + b"\x00" + data        # one stray byte, then the audio
+    p = tmp_path / "straybyte.wav"
+    p.write_bytes(b"RIFF" + struct.pack("<I", len(body) + 7) + body)
+    original = p.read_bytes()
+
+    assert main(["repair", "--overwrite", str(p)]) != 0
+    assert p.read_bytes() == original
+
+
+def test_guard_refuses_when_the_audio_is_nowhere_in_the_tree(tmp_path, capsys):
+    """The equality guard is vacuous when parse never located the audio chunk
+    at all; if the id exists in the bytes, refuse rather than certify
+    None == None."""
+    fmt = b"fmt " + struct.pack("<I", 16) + struct.pack("<HHIIHH", 1, 1, 8000, 16000, 2, 16)
+    pcm = b"\x01\x02" * 50
+    data = b"data" + struct.pack("<I", len(pcm)) + pcm
+    inner = b"adtl" + b"\xff\xff\xff\xff" + data # garbage hides data in the LIST tail
+    lst = b"LIST" + struct.pack("<I", len(inner)) + inner
+    body = b"WAVE" + fmt + lst
+    p = tmp_path / "buried.wav"
+    p.write_bytes(b"RIFF" + struct.pack("<I", len(body) + 7) + body)
+    original = p.read_bytes()
+
+    assert main(["repair", "--overwrite", str(p)]) != 0
+    assert p.read_bytes() == original
+    assert "cannot" in capsys.readouterr().err.lower()
+
+
 def test_the_orphan_guard_is_reported_as_unrepairable():
     """A violation with no safe rewrite must carry no witness, or every caller
     that keys off `repairable` will offer to fix it."""
