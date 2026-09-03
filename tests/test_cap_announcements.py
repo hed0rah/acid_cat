@@ -121,6 +121,18 @@ class Reason(enum.Enum):
 # covered, if anywhere. An exemption pointing at another test is a redirect; one
 # pointing at nothing is a hole.
 EXEMPT = {
+    ("acidcat.core.walk.multisample", "_ENTRY_CAP"):
+        (Reason.RESOURCE_LIMIT, "a manifest inflating past 16 MB raises "
+                                "BadZipFile, which the walker reports as a "
+                                "did-not-parse warning -- covered by "
+                                "tests/test_container_coverage.py::"
+                                "test_multisample_deflate_bomb_is_capped"),
+    ("acidcat.core.primitives.signal", "_LOG2_CAP"):
+        (Reason.SEARCH_WINDOW, "a lookup-table size, not a coverage bound: a "
+                               "count past it takes a direct math.log2 and the "
+                               "returned entropy is bit-identical -- covered by "
+                               "tests/test_primitives_signal.py::"
+                               "test_log2_table_stays_capped"),
     ("acidcat.core.census", "_MAX_DEPTH"):
         (Reason.DEPTH_GUARD, "nesting past this is malformed; census reports it"),
     ("acidcat.core.containers.gcm", "_MAX_DEPTH"):
