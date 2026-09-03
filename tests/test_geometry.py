@@ -136,3 +136,38 @@ class TestTheAccessorsStandAlone:
     def test_they_do_not_raise_on_a_half_built_chunk(self, chunk):
         G.payload_of(chunk)
         G.extent_of(chunk)
+
+
+class TestAnnotationGarbageIsInvalidNotACrash:
+    """Found by an adversarial audit: offset/size/payload_len/extent_len were
+    isinstance-guarded but payload_base was not, so a walker bug emitting a
+    non-int payload_base raised TypeError inside normalize -- which ran
+    OUTSIDE the walk boundary's try, escaping the very net that promises to
+    contain walker bugs."""
+
+    @pytest.mark.parametrize("pb", ["0x10", 3.5, b"\x10", [16]])
+    def test_non_int_payload_base_normalizes_to_invalid(self, pb):
+        c = {"id": "x", "offset": 8, "size": 16, "payload_base": pb}
+        G.normalize([c], 1024)
+        assert c["geometry"] == G.INVALID
+
+    def test_the_walk_boundary_contains_a_normalize_failure(self, tmp_path,
+                                                            monkeypatch):
+        """Even if normalize itself breaks, the walk must degrade to a
+        geometry warning with the chunks kept, not raise (outside CI)."""
+        import struct as _struct
+        from acidcat.core import walk as walkmod
+        monkeypatch.delenv("ACIDCAT_WALKER_RAISE", raising=False)
+
+        def boom(chunks, size, parent_extent=None):
+            raise TypeError("synthetic geometry bug")
+        monkeypatch.setattr(walkmod.geometry, "normalize", boom)
+        fmt = b"fmt " + _struct.pack("<I", 16) + _struct.pack(
+            "<HHIIHH", 1, 1, 8000, 16000, 2, 16)
+        data = b"data" + _struct.pack("<I", 4) + b"\x00" * 4
+        body = b"WAVE" + fmt + data
+        p = tmp_path / "t.wav"
+        p.write_bytes(b"RIFF" + _struct.pack("<I", len(body)) + body)
+        label, chunks, warns = walkmod.walk_file(str(p))
+        assert chunks
+        assert any("geometry error" in w for w in warns)

@@ -70,8 +70,9 @@ def _one(c, lo, hi):
         c.setdefault("geometry", UNPOSITIONED)
         return c
 
-    declared = c.get("payload_base") is not None
-    base = c["payload_base"] if declared else off + DEFAULT_HEADER
+    pb = c.get("payload_base")
+    declared = isinstance(pb, int)
+    base = pb if declared else off + DEFAULT_HEADER
     header = base - off
 
     # A walker that already speaks the new vocabulary is believed; one that does
@@ -89,7 +90,12 @@ def _one(c, lo, hi):
           and base >= off
           and lo <= off
           and base + pay_len <= hi
-          and off + ext_len <= hi)
+          and off + ext_len <= hi
+          # a payload_base that is present but not an int is walker garbage:
+          # the default was substituted above so the arithmetic held, but the
+          # annotation itself is wrong and must read as INVALID, not raise
+          # TypeError on `base - off` (every other key was already guarded)
+          and (pb is None or declared))
 
     c["payload_base"] = base
     c["payload_len"] = pay_len

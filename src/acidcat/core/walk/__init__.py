@@ -189,7 +189,18 @@ def walk_file(filepath, deep=False, fmt_override=None):
             raise
         return (label, [],
                 [f"walker error ({fmt}): {e.__class__.__name__}: {e}"])
-    return _normalized(filepath, (label, chunks, file_warns))
+    try:
+        return _normalized(filepath, (label, chunks, file_warns))
+    except Exception as e:
+        # normalization ran OUTSIDE the walker try above, so a geometry edge
+        # a walker bug produced escaped the very boundary that promises to
+        # contain walker bugs. Degrade keeping the walk (consumers fall back
+        # to geometry.payload_of's default rule); CI still gets the traceback.
+        if os.environ.get("ACIDCAT_WALKER_RAISE"):
+            raise
+        return (label, chunks,
+                list(file_warns)
+                + [f"geometry error ({fmt}): {e.__class__.__name__}: {e}"])
 
 
 def walk_bytes(data, deep=False, fmt_override=None, suffix=".bin",
