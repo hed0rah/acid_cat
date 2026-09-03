@@ -64,6 +64,10 @@ def inspect_rf64(filepath):
 
     with open(filepath, "rb") as f:
         hdr = f.read(12)
+        if len(hdr) < 12:
+            # reachable via fmt_override, which promises to degrade like any
+            # other walk; wav.py has the same guard for the same reason
+            return chunks, [f"file is {len(hdr)} bytes; an RF64 header needs 12"]
         riff_size = struct.unpack("<I", hdr[4:8])[0]
         if riff_size != sentinel:
             file_warns.append(

@@ -320,6 +320,10 @@ def inspect_aiff(filepath, form_type, ctx=None):
 
     with open(filepath, "rb") as f:
         hdr = f.read(12)
+        if len(hdr) < 12:
+            # reachable via fmt_override, which promises to degrade like any
+            # other walk; wav.py has the same guard for the same reason
+            return chunks, [f"file is {len(hdr)} bytes; a FORM header needs 12"]
         form_size = struct.unpack(">I", hdr[4:8])[0]
         if form_size + 8 != file_size:
             file_warns.append(

@@ -184,3 +184,24 @@ class TestWalkBytesIsTheHarnessEntryPoint:
         except Unsupported:
             pass
         assert list(scratch.iterdir()) == []
+
+
+def test_every_walker_survives_tiny_forced_input():
+    """fmt_override's docstring promises a forced walker "degrades to warnings
+    like any other walk" -- with no seed required, so this covers all 67
+    registered labels, not just the seedable ones. The audit found four
+    walkers that broke the promise on sub-header input: voc (reachable from
+    the natural sniff: a file that is exactly the 20-byte magic), rf64 and
+    aiff (12-byte header unpacked unguarded), and asd (domain AbletonError
+    escaping). Conftest sets ACIDCAT_WALKER_RAISE=1, so any raise fails here.
+    """
+    from acidcat.core.walk import _WALKERS, walk_bytes
+    tiny = (b"", b"\xaa" * 4, b"\x00" * 11, b"Creative Voice File\x1a",
+            bytes(range(32)))
+    for fmt in sorted(_WALKERS):
+        for blob in tiny:
+            try:
+                walk_bytes(blob, fmt_override=fmt)
+                walk_bytes(blob, deep=True, fmt_override=fmt)
+            except Unsupported:
+                pass

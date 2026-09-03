@@ -206,7 +206,10 @@ def inspect_voc(filepath):
 
     want = (~info["version"] + 0x1234) & 0xFFFF
     hdr_warns = []
-    if info["checksum"] != want:
+    if len(data) < _HDR_MIN:
+        hdr_warns.append(f"header truncated: {len(data)} bytes of the "
+                         f"{_HDR_MIN}-byte header are present")
+    elif info["checksum"] != want:
         hdr_warns.append(
             f"header checksum is 0x{info['checksum']:04x}, and the version "
             f"field says it should be 0x{want:04x}")
@@ -218,12 +221,15 @@ def inspect_voc(filepath):
                     f"{len(info['streams'])} stream(s), {total:,} B of samples"),
         "fields": [
             _f(0x00, 20, "magic", "Creative Voice File\\x1a"),
-            _f(0x14, 2, "header_size", struct.unpack_from("<H", data, 20)[0],
-               "offset of the first block"),
-            _f(0x16, 2, "version", _version(info["version"]),
-               f"0x{info['version']:04x}"),
-            _f(0x18, 2, "checksum", f"0x{info['checksum']:04x}",
-               "(~version + 0x1234) & 0xFFFF"),
+            # guarded like parse_voc's own reads: a file that is just the
+            # 20-byte magic reached this unpack and raised (the one crasher a
+            # full truncation sweep found across twelve formats)
+            *([_f(0x14, 2, "header_size", struct.unpack_from("<H", data, 20)[0],
+                  "offset of the first block")] if len(data) >= 22 else []),
+            *([_f(0x16, 2, "version", _version(info["version"]),
+                  f"0x{info['version']:04x}"),
+               _f(0x18, 2, "checksum", f"0x{info['checksum']:04x}",
+                  "(~version + 0x1234) & 0xFFFF")] if len(data) >= 26 else []),
         ],
         "warnings": hdr_warns,
     }]

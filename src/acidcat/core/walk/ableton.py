@@ -83,7 +83,12 @@ def inspect_asd(filepath):
                  "fields": [], "warnings": [], "payload_base": 0}], \
             ["file carries the .asd extension but is an AppleDouble stub"]
 
-    h = abmod.parse_asd_header(raw)
+    try:
+        h = abmod.parse_asd_header(raw)
+    except abmod.AbletonError as exc:
+        # reachable via fmt_override on a non-asd file: the domain error must
+        # degrade to a warning like the gunzip path below, not escape the walk
+        return [], [str(exc)]
     if h["truncated"]:
         warns.append(f"frame grid claims {h['count'] - 1:,} entries but the "
                      f"file holds only {(size - 10) // 4:,}")
