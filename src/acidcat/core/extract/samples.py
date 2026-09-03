@@ -19,6 +19,14 @@ import struct
 import zipfile
 
 from acidcat.core.codecs import ncw as ncwmod
+# imported for their exception types only (the decoders themselves stay lazily
+# imported at their call sites): a codec refusing malformed input is the same
+# kind of failure as a parser refusing it, and must become SampleError, not a
+# traceback out of `acidcat extract`
+from acidcat.core.codecs.adx import AdxError
+from acidcat.core.codecs.brstm import BrstmError
+from acidcat.core.codecs.hps import HpsError
+from acidcat.core.codecs.vag import VagError
 from acidcat.core.formats import sf2 as sf2mod
 from acidcat.core.formats import svx as svxmod
 from acidcat.core.formats import tracker as tkmod
@@ -764,7 +772,7 @@ EXTRACTABLE = frozenset(_EXTRACTORS) | frozenset(_PATH_EXTRACTORS)
 from acidcat.core.containers import cue as _cuemod
 
 _MALFORMED = (sf2mod.Sf2Error, ncwmod.NcwError, svxmod.SvxError, struct.error,
-              _cuemod.CueError)
+              _cuemod.CueError, AdxError, BrstmError, HpsError, VagError)
 
 
 def iter_samples(filepath, fmt=None):

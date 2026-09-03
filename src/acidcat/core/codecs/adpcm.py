@@ -76,8 +76,11 @@ def _ima_mono(data, block_align):
 
 def _ima_stereo(data, block_align):
     out = bytearray()
-    for b0 in range(0, len(data), block_align):
-        block = data[b0:b0 + block_align]
+    # same zero/implausible-stride guard as _ima_mono: a WAV header's
+    # block_align is not to be trusted as a range() step
+    step = block_align if block_align and block_align >= 8 else len(data)
+    for b0 in range(0, len(data), step):
+        block = data[b0:b0 + step]
         if len(block) < 8:
             break
         pred = [struct.unpack_from("<h", block, 0)[0],
@@ -149,8 +152,10 @@ def _ms_mono(data, block_align, coefs):
 
 def _ms_stereo(data, block_align, coefs):
     out = bytearray()
-    for b0 in range(0, len(data), block_align):
-        blk = data[b0:b0 + block_align]
+    # same zero/implausible-stride guard as _ms_mono
+    step = block_align if block_align and block_align >= 14 else len(data)
+    for b0 in range(0, len(data), step):
+        blk = data[b0:b0 + step]
         if len(blk) < 14:
             break
         p = [blk[0] if blk[0] < len(coefs) else len(coefs) - 1,

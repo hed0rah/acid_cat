@@ -80,8 +80,17 @@ def decode(data):
     channels, rate, frames. Raises BrstmError on a bad header / unsupported codec."""
     h = parse_header(data)
     ch, blksz = h["channels"], h["block_size"]
+    if ch not in (1, 2):
+        raise BrstmError(f"BRSTM channel count {ch} (1 or 2 supported)")
+    if blksz == 0:
+        raise BrstmError("BRSTM block size is 0")
+    # the block count is a header u32 nothing has checked against the file: a
+    # forged 0xFFFFFFFF spun ~4.3 billion loop iterations over empty slices.
+    # Decode the blocks the bytes can actually hold and no more.
+    span = max(0, len(data) - h["audio_off"])
+    blocks = min(h["blocks"], -(-span // (blksz * ch)))
     chans = [bytearray() for _ in range(ch)]
-    for b in range(h["blocks"]):
+    for b in range(blocks):
         last = b == h["blocks"] - 1
         used = h["final_size"] if (last and h["final_size"]) else blksz
         stride = h["final_pad"] if last else blksz      # last block packs at its padded size

@@ -195,3 +195,18 @@ def test_a_whole_brstm_walks_completely():
     covered = sum(c["payload_len"] + (c["payload_base"] - c["offset"])
                   for c in chunks)
     assert covered == size, (covered, size)
+
+
+def test_codec_refusals_reach_extract_as_sampleerror(tmp_path):
+    """Found by an adversarial audit: the walker accepts an .hps with 1..8
+    channels but the decoder only 1..2, and HpsError was not in the extract
+    boundary's malformed set -- so a 5-channel file escaped `acidcat extract`
+    as a raw traceback. Codec refusals are malformed input, not bugs in us."""
+    import struct
+    import pytest
+    from acidcat.core.codecs.hps import MAGIC
+    from acidcat.core.extract.samples import iter_samples, SampleError
+    p = tmp_path / "five.hps"
+    p.write_bytes(MAGIC + struct.pack(">II", 32000, 5) + bytes(0x200))
+    with pytest.raises(SampleError):
+        list(iter_samples(str(p), fmt="hps"))

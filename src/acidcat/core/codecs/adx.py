@@ -77,6 +77,15 @@ def decode(data):
         raise AdxError(f"unsupported ADX encoding type {h['enc_type']} "
                        "(AHX/encrypted not handled)")
     ch, blk, rate = h["channels"], h["block_size"], h["rate"]
+    # header bytes nothing has validated yet. blk == 0 never advanced the loop
+    # (an infinite hang at the CLI), ch == 0 indexed outs[0] out of nothing,
+    # and rate == 0 divided by itself in _coefs.
+    if ch not in (1, 2):
+        raise AdxError(f"ADX channel count {ch} (1 or 2 supported)")
+    if blk < 3:
+        raise AdxError(f"ADX block size {blk} cannot hold a scale and nibbles")
+    if rate == 0:
+        raise AdxError("ADX sample rate is 0")
     coef1, coef2 = _coefs(h["highpass"], rate)
     spf = (blk - 2) * 2                               # samples per frame (usually 32)
     outs = [array.array("h") for _ in range(ch)]

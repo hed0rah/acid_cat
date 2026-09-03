@@ -66,3 +66,21 @@ def test_extract_wires_adx(tmp_path):
     assert len(recs) == 1 and "ADX" in recs[0]["note"]
     w = wave.open(io.BytesIO(recs[0]["wav"]))
     assert w.getnchannels() == 1
+
+
+def test_hostile_header_values_raise_not_hang():
+    """Found by an adversarial audit: block_size 0 never advanced the decode
+    loop (an infinite hang reachable from `acidcat extract`), rate 0 divided
+    by zero in _coefs, and channels 0 indexed an empty channel list. Each must
+    be an AdxError -- the recognized malformed-input type -- before any loop."""
+    frame = bytes(18)
+    with pytest.raises(adx.AdxError):
+        adx.decode(_adx_file(frame, blk=0))
+    with pytest.raises(adx.AdxError):
+        adx.decode(_adx_file(frame, blk=1))       # spf would be negative
+    with pytest.raises(adx.AdxError):
+        adx.decode(_adx_file(frame, rate=0))
+    with pytest.raises(adx.AdxError):
+        adx.decode(_adx_file(frame, ch=0))
+    with pytest.raises(adx.AdxError):
+        adx.decode(_adx_file(frame, ch=3))

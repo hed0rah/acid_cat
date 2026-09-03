@@ -146,3 +146,34 @@ def test_history_defaults_to_silence_when_the_field_is_absent():
     answer when the bytes are not there to say otherwise."""
     h = brstm.parse_header(_brstm_file())
     assert h["hist"] == [(0, 0)]
+
+
+def _with_header_u32(data, h1_rel, value):
+    """The fixture with one HEAD1 field overwritten."""
+    buf = bytearray(data)
+    struct.pack_into(">I", buf, 0x48 + 0x18 + h1_rel, value)
+    return bytes(buf)
+
+
+def test_forged_block_count_is_bounded_by_the_file():
+    """Found by an adversarial audit: `blocks` is a header u32 nothing checked
+    against the file, and 0xFFFFFFFF spun ~4.3 billion iterations over empty
+    slices -- an unbounded hang reachable from `acidcat extract`. The decode
+    must be bounded by the bytes that exist, and identical for any declared
+    count past that bound."""
+    good = _brstm_file()
+    honest, _ = brstm.decode(good)
+    forged, _ = brstm.decode(_with_header_u32(good, 0x14, 0xFFFFFFFF))
+    assert forged == honest
+
+
+def test_zero_block_size_raises():
+    with pytest.raises(brstm.BrstmError):
+        brstm.decode(_with_header_u32(_brstm_file(), 0x18, 0))
+
+
+def test_hostile_channel_count_raises():
+    buf = bytearray(_brstm_file())
+    buf[0x48 + 0x18 + 2] = 0
+    with pytest.raises(brstm.BrstmError):
+        brstm.decode(bytes(buf))

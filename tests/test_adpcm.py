@@ -99,3 +99,17 @@ def test_convert_to_pcm_ms_by_tag(tmp_path):
         assert w.getsampwidth() == 2 and w.getnchannels() == 1 and w.getframerate() == 22050
         assert w.getnframes() == 4                       # sample2, sample1, + 2 nibbles
         assert struct.unpack("<4h", w.readframes(4)) == (50, 100, 100, 100)
+
+
+def test_stereo_zero_block_align_does_not_raise():
+    """Found by an adversarial audit: the mono paths guarded an implausible
+    block_align, the stereo paths fed it straight to range() as a step --
+    ValueError from `acidcat convert --to-pcm` on a WAV whose fmt chunk says
+    channels 2, block_align 0. The stereo paths now fall back to one whole
+    block, the same rule as mono."""
+    hdr = struct.pack("<hxx", 0) + struct.pack("<hxx", 0)
+    data = hdr + bytes(16)
+    out = adpcm.decode_ima(data, 0, 2)
+    assert isinstance(out, bytes)
+    out = adpcm.decode_ms_adpcm(data + bytes(16), 0, 2)
+    assert isinstance(out, bytes)
