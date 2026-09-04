@@ -52,6 +52,7 @@ _MAGIC = {
     "smus": b"FORM\x00\x00\x00\x00SMUS", "e4b": b"FORM\x00\x00\x00\x00E4B0",
     "e5b": b"FORM\x00\x00\x00\x00E5B0", "flac": b"fLaC" + bytes(8),
     "mp4": b"\x00\x00\x00\x18ftypisom" + bytes(8),
+    "au": b".snd" + bytes(20),
     "mp3": b"ID3\x03\x00" + bytes(20), "vital": b"{}" + bytes(10),   # negatives
 }
 
@@ -85,9 +86,11 @@ def test_convert_set_matches_live_dispatch():
     from acidcat.core.formats import sf2 as sf2mod, svx as svxmod
     from acidcat.core.codecs import ncw as ncwmod
     from acidcat.core.formats import bitwig as bwmod
+    from acidcat.core.walk import au as aumod
     def convertible(fid, m):
         return (m[:4] == ncwmod.MAGIC or svxmod.is_8svx(m) or sf2mod.is_sf2(m)
-                or m[:4] == bwmod.MAGIC or (m[:4] == b"RIFF" and m[8:12] == b"WAVE"))
+                or m[:4] == bwmod.MAGIC or (m[:4] == b"RIFF" and m[8:12] == b"WAVE")
+                or aumod.parse_header(m) is not None)
     probe = dict(_MAGIC, ncw=ncwmod.MAGIC + bytes(8), bitwig=bwmod.MAGIC + bytes(8))
     derived = {fid for fid, m in probe.items() if convertible(fid, m)}
     assert derived == formats._CONVERT

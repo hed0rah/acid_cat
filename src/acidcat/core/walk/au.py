@@ -86,6 +86,20 @@ def _annotation(data, data_offset):
     return raw.split(b"\0", 1)[0].decode("latin-1", "replace")
 
 
+def parse_header(data):
+    """The six header words as a dict, or None if this is not a .au header.
+
+    Shared with the convert path so the 24-byte layout has one definition. Fields
+    are big-endian: data_offset, data_size (0xFFFFFFFF = unknown), encoding (an
+    _ENC code), sample_rate, channels.
+    """
+    if len(data) < _HDR_MIN or data[:4] != MAGIC:
+        return None
+    off, size, enc, rate, ch = struct.unpack_from(">IIIII", data, 4)
+    return {"data_offset": off, "data_size": size, "encoding": enc,
+            "sample_rate": rate, "channels": ch}
+
+
 def _duration(size, rate, bits, channels, linear):
     """Seconds of audio, or None when it is not computable from linear PCM."""
     if not (linear and size and rate and bits and channels):

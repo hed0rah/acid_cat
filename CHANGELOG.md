@@ -27,6 +27,14 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
   The id is `au`; the MPC2000 `.snd` (id `snd`) is a different format with no
   `.snd` magic, told apart from this one by content at sniff time.
 
+- **`convert` for `.au` -> 16-bit WAV.** mu-law and A-law decode through a new
+  `core/codecs/g711` table (the companding curves Python's `audioop` carried
+  until it was removed in 3.13); 8- and 16-bit big-endian linear PCM are re-framed
+  to little-endian. The wider linear codes and the floats are named by the walker
+  but refused by convert for now, cleanly, rather than emitting noise. Same
+  decode-not-bypass class as the NCW and 8SVX conversions. Also ships an anatomy
+  page for the format.
+
 ## [1.3.2] - 2026-08-31
 
 ### Added

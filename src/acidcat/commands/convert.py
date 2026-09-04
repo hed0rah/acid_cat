@@ -9,6 +9,9 @@
 - IFF 8SVX (.8svx / .iff) -> a 16-bit WAV: the Amiga voice format, optionally
   Fibonacci-delta compressed (DPCM's grandfather). Same decode-not-bypass class
   as the NCW path.
+- Sun/NeXT audio (.au / .snd) -> a 16-bit WAV: the self-describing header that
+  predated RIFF. mu-law and A-law (G.711) decode through a fixed table; 8- and
+  16-bit big-endian linear PCM are re-framed to little-endian. Same class again.
 """
 
 import os
@@ -18,10 +21,12 @@ import sys
 from acidcat.util import outpath
 
 from acidcat.core.codecs import adpcm
+from acidcat.core.codecs import g711
 from acidcat.core.formats import bitwig as bwmod
 from acidcat.core.codecs import ncw as ncwmod
 from acidcat.core.formats import sf2 as sf2mod
 from acidcat.core.formats import svx as svxmod
+from acidcat.core.walk import au as aumod
 from acidcat.core.write.midi_write import notes_to_smf
 from acidcat.core.primitives.wavio import pcm_wav
 
@@ -36,10 +41,11 @@ def _safe_name(name, idx, ext="wav"):
 def register(subparsers):
     p = subparsers.add_parser(
         "convert",
-        help="Bitwig clip -> MIDI, NCW/8SVX -> WAV, or SF2 -> a folder of WAVs.",
+        help="Bitwig clip -> MIDI, NCW/8SVX/AU -> WAV, or SF2 -> a folder of WAVs.",
     )
-    p.add_argument("input", help="Input file (.bwclip / .ncw / .sf2 / .8svx), or "
-                                 "a directory to batch-convert every .ncw within.")
+    p.add_argument("input", help="Input file (.bwclip / .ncw / .sf2 / .8svx / "
+                                 ".au), or a directory to batch-convert every "
+                                 ".ncw within.")
     p.add_argument("-o", "--output",
                    help="Output path (single file); ignored for a directory, "
                         "where each WAV is written beside its .ncw.")
@@ -181,6 +187,72 @@ def _run_svx(path, data, args):
     return 0
 
 
+# encodings the convert path turns into a 16-bit PCM WAV: mu-law and A-law
+# decode through g711, 8- and 16-bit linear are re-framed to 16-bit little-endian.
+# The wider linear codes and the floats are named by the walker but not converted
+# here yet, so convert refuses them cleanly rather than emitting noise.
+_AU_TO_PCM = {1, 2, 3, 27}
+
+
+def _au_pcm16(encoding, body):
+    """Interleaved signed 16-bit little-endian PCM from an .au audio body, plus a
+    codec label. Only the encodings in _AU_TO_PCM reach here."""
+    if encoding == 1:
+        return g711.decode_ulaw(body), "G.711 mu-law"
+    if encoding == 27:
+        return g711.decode_alaw(body), "G.711 A-law"
+    if encoding == 2:                                    # 8-bit signed linear
+        vals = struct.unpack(f">{len(body)}b", body)
+        return struct.pack(f"<{len(body)}h", *[v << 8 for v in vals]), "8-bit linear PCM"
+    # encoding 3: 16-bit linear, big-endian -> little-endian
+    n = len(body) // 2
+    vals = struct.unpack(f">{n}h", body[:n * 2])
+    return struct.pack(f"<{n}h", *vals), "16-bit linear PCM"
+
+
+def _run_au(path, data, args):
+    """Sun/NeXT .au -> a 16-bit PCM WAV. mu-law/A-law decode through G.711; 8- and
+    16-bit big-endian linear are re-framed to little-endian. Same decode-not-bypass
+    class as the NCW and 8SVX paths."""
+    hdr = aumod.parse_header(data)
+    if hdr is None:
+        print(f"acidcat convert: {path}: not a Sun/NeXT audio file", file=sys.stderr)
+        return 1
+    enc = hdr["encoding"]
+    name = aumod._ENC.get(enc, (f"encoding {enc}", 0, False, False))[0]
+    if enc not in _AU_TO_PCM:
+        print(f"acidcat convert: {path}: {name} is not supported for conversion "
+              f"yet (mu-law, A-law, 8- and 16-bit linear PCM are)", file=sys.stderr)
+        return 1
+    off = hdr["data_offset"]
+    if off < 24 or off > len(data):
+        print(f"acidcat convert: {path}: data offset {off} is outside the file",
+              file=sys.stderr)
+        return 1
+    size = hdr["data_size"]
+    body = data[off:] if size == aumod._UNKNOWN_SIZE else data[off:off + size]
+    if not body:
+        print(f"acidcat convert: {path}: no audio to convert", file=sys.stderr)
+        return 1
+    ch = hdr["channels"] or 1
+    rate = hdr["sample_rate"] or 8000
+    pcm, label = _au_pcm16(enc, body)
+    out = args.output or (os.path.splitext(path)[0] + ".wav")
+    err = outpath.refuse_self_overwrite("convert", path, out)
+    if not err and not args.output:
+        err = outpath.refuse_clobber("convert", out, force=args.force)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+    with open(out, "wb") as f:
+        f.write(pcm_wav(pcm, rate, ch, sampwidth=2))
+    frames = len(pcm) // 2 // max(ch, 1)
+    dur = frames / rate if rate else 0.0
+    print(f"wrote {out}: {ch}ch 16-bit {rate} Hz, {frames:,} frames "
+          f"({dur:.2f}s) from {label}")
+    return 0
+
+
 def _pcm16_wav(frames, rate, channels):
     return pcm_wav(frames, rate or 44100, channels)
 
@@ -279,14 +351,16 @@ def run(args):
         return _run_svx(path, data, args)
     if sf2mod.is_sf2(data):
         return _run_sf2(path, data, args)
+    if aumod.parse_header(data) is not None:
+        return _run_au(path, data, args)
     if data[:4] != bwmod.MAGIC:
         # 2, like every other "this verb does not model that format".
         # The list also omitted --to-pcm, which is the documented path for a
         # WAV -- so someone holding exactly that was told convert could not help
         # while the feature they wanted went unmentioned.
         print(f"acidcat convert: {path}: unsupported input (expected a Bitwig "
-              f".bwclip, NCW .ncw, SF2 .sf2, or IFF 8SVX). For a WAV, "
-              f"--to-pcm decodes ADPCM or a mistagged codec to plain PCM.",
+              f".bwclip, NCW .ncw, SF2 .sf2, IFF 8SVX, or Sun/NeXT .au). For a "
+              f"WAV, --to-pcm decodes ADPCM or a mistagged codec to plain PCM.",
               file=sys.stderr)
         return 2
     try:

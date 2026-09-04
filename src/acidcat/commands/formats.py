@@ -27,7 +27,7 @@ from acidcat.core.infra.render import format_json
 # bytes in commands/convert.py and core/constraints.py), so these are listed here
 # rather than derived. test_formats.py pins each against the live dispatch by
 # probing a real magic sample, so a set that falls out of sync fails the suite.
-_CONVERT = {"ncw", "8svx", "sf2", "bitwig", "wav"}          # commands/convert.py run()
+_CONVERT = {"ncw", "8svx", "sf2", "bitwig", "wav", "au"}    # commands/convert.py run()
 # every RIFF/FORM container (IffRepairer.applies == structure.is_iff) plus flac and
 # mp4 -- constraints._repairers(). Not just the WAVE/AIFF subset it looks like.
 _REPAIR = {"wav", "rf64", "aiff", "aifc", "sf2", "8svx", "smus", "rmid", "akp",
