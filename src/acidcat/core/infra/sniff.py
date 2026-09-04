@@ -35,6 +35,7 @@ _ID3_WRAPPED_MAGICS = (b"RIFF", b"RF64", b"FORM", b"fLaC", b"MThd")
 # test suite asserts both directions). "id3-wrapped" is a sentinel, not a format.
 KNOWN_FORMATS = frozenset({
     "8svx", "adg", "adv", "adx", "agr", "aifc", "aiff", "akp", "albank", "alc", "als", "amxd",
+    "au",
     "asd", "bfdlac", "bitwig", "brstm",
     "cdxa", "cue", "e4b", "e5b", "fc", "flac", "fxp", "gcm", "gf1pat", "hps",
     "id3-wrapped", "iq", "it", "krz", "labx", "med", "midi", "midi2", "mod",
@@ -148,6 +149,8 @@ def sniff_bytes(head):
         return "gf1pat"                                # Gravis UltraSound GF1 patch
     if head[:20] == b"Creative Voice File":
         return "voc"                                   # Creative Voice File (Sound Blaster)
+    if head[:4] == b".snd":
+        return "au"                                    # Sun/NeXT audio (also .snd)
     if head[:4] == b"VAGp":
         return "vag"                                   # PS1 SPU-ADPCM sample
     if head[:8] == b" HALPST\x00":

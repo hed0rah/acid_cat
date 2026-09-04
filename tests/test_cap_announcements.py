@@ -133,6 +133,19 @@ EXEMPT = {
                                "returned entropy is bit-identical -- covered by "
                                "tests/test_primitives_signal.py::"
                                "test_log2_table_stays_capped"),
+    ("acidcat.core.walk.au", "_HEAD_CAP"):
+        (Reason.SEARCH_WINDOW, "the header/annotation read window, not a coverage "
+                               "bound: the audio size comes from the header and "
+                               "os.path.getsize, so a file past it reports its "
+                               "full data size -- covered by tests/test_au.py::"
+                               "test_a_file_larger_than_the_header_window_still_"
+                               "sizes_its_audio"),
+    ("acidcat.core.walk.au", "_ANNOT_CAP"):
+        (Reason.SEARCH_WINDOW, "how many annotation bytes are rendered into the "
+                               "field; a comment past it is display-truncated and "
+                               "the audio geometry is unaffected -- covered by "
+                               "tests/test_au.py::"
+                               "test_a_huge_annotation_is_display_bounded"),
     ("acidcat.core.census", "_MAX_DEPTH"):
         (Reason.DEPTH_GUARD, "nesting past this is malformed; census reports it"),
     ("acidcat.core.containers.gcm", "_MAX_DEPTH"):

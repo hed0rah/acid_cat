@@ -4,6 +4,29 @@ All notable changes to acidcat. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project will
 adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
+## [Unreleased]
+
+### Added
+
+- **Sun/NeXT audio (`.au`, also `.snd`).** The header that predated RIFF and
+  gave raw PCM a way to describe itself: a fixed 24-byte big-endian block --
+  magic, data offset, size, encoding code, sample rate, channels -- an optional
+  annotation, then samples. It is where the `.snd` magic and the G.711 companded
+  codecs of early Unix and NeXT workstations were written down.
+
+  Two fields do not mean what they look like. A `data_size` of `0xFFFFFFFF` is
+  not four gigabytes of audio; it is the "length not known" sentinel of a stream
+  written before its own length was, so the real size is whatever follows the
+  header. And the eight-bit mu-law (code 1) and A-law (code 27) encodings are
+  companded telephone codecs, not linear PCM: fed straight to a PCM player they
+  play as noise, so they are named and flagged the way the VOC walker treats
+  them rather than passed off as samples. The linear and float codes carry a
+  usable bit depth; the fixed-point, emphasis, DSP-program and ADPCM codes are
+  framed from their documented layouts and named, not decoded.
+
+  The id is `au`; the MPC2000 `.snd` (id `snd`) is a different format with no
+  `.snd` magic, told apart from this one by content at sniff time.
+
 ## [1.3.2] - 2026-08-31
 
 ### Added
