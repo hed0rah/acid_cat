@@ -73,7 +73,8 @@ KNOWN_DEFECTS = {}
 
 
 def _corpus():
-    """Real specimens from `data/`, then a built one for every seeded format.
+    """Real specimens from `data/`, a built one for every seeded format, and,
+    when `ACIDCAT_HUNT_CORPUS` is set, a bounded slice of the real local corpus.
 
     The specimens are the better evidence and the seeds are the wider net, and
     the split matters because of where each exists. `data/test_formats/` is
@@ -114,6 +115,61 @@ def _corpus():
         except Exception:
             continue
         yield path, label, chunks, (warns or [])
+
+    yield from _hunt()
+
+
+# The real corpus, opt in. Seeds make the invariants gate in a clone; they
+# cannot show what a real file's oddities would. `ACIDCAT_HUNT_CORPUS` names
+# one or more roots (os.pathsep-separated) of real specimens: copyrighted,
+# local, never committed. Every file under them is sniffed, and the first N
+# per format walked. The floor in the ratchet is NOT raised by this:
+# it stays what a clone reaches, so a run on a machine with the corpus is
+# stronger evidence, never a stricter assertion.
+_HUNT_PER_FORMAT = 40      # files walked per format id; ACIDCAT_HUNT_PER_FORMAT overrides
+_HUNT_SCAN_CAP = 400_000   # files sniffed before the scan stops, so a huge tree stays bounded
+_HUNT_SECONDS = 600
+
+# (path, exception) for every real file that made a walker RAISE. With
+# ACIDCAT_WALKER_RAISE=1 (conftest sets it) a walker bug surfaces here rather
+# than being demoted to a warning. A corpus sweep that quietly skipped a
+# crashing walker would be the green-run-that-checked-nothing defect again.
+HUNT_RAISED = []
+
+
+def _hunt():
+    roots = os.environ.get("ACIDCAT_HUNT_CORPUS")
+    if not roots:
+        return
+    import time
+
+    from acidcat.core.infra import sniff as _sniff
+
+    per = int(os.environ.get("ACIDCAT_HUNT_PER_FORMAT") or _HUNT_PER_FORMAT)
+    taken, scanned, t0 = {}, 0, time.time()
+    for root in roots.split(os.pathsep):
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames.sort()                            # deterministic order
+            for name in sorted(filenames):
+                scanned += 1
+                if scanned > _HUNT_SCAN_CAP or time.time() - t0 > _HUNT_SECONDS:
+                    return
+                path = os.path.join(dirpath, name)
+                try:
+                    if not 12 <= os.path.getsize(path) <= _MAX:
+                        continue
+                    fid = _sniff.sniff(path)
+                except Exception:
+                    continue
+                if not fid or taken.get(fid, 0) >= per:
+                    continue
+                try:
+                    label, chunks, warns = walk_file(path, deep=False)
+                except Exception as exc:               # noqa: BLE001 (recorded, asserted below)
+                    HUNT_RAISED.append((path, repr(exc)))
+                    continue
+                taken[fid] = taken.get(fid, 0) + 1
+                yield path, label, chunks, (warns or [])
 
 
 def _overshoots(chunks, fsize):
@@ -262,6 +318,20 @@ class TestTheRatchetSaysWhatItCovers:
         assert {"RIFF/WAVE", "FLAC"} <= labels, sorted(labels)
 
 
+class TestTheHuntCorpusWalks:
+    def test_no_real_file_made_a_walker_raise(self, walked):
+        """Only meaningful with ACIDCAT_HUNT_CORPUS set; empty otherwise.
+
+        A walker bug on a real specimen re-raises under ACIDCAT_WALKER_RAISE
+        and lands in HUNT_RAISED instead of being skipped. This is the sweep the
+        audit asked for: the walk path is fuzzed with seeds, but only a real
+        corpus holds the wrong format wearing the right extension."""
+        del walked                                   # forces the corpus to have run
+        assert not HUNT_RAISED, (
+            f"{len(HUNT_RAISED)} real file(s) made a walker raise:\n" + "\n".join(
+                f"  {os.path.basename(p)}: {e}" for p, e in HUNT_RAISED[:10]))
+
+
 class TestFieldsLandInsideTheirChunk:
     def test_no_positioned_field_escapes_its_payload(self, walked):
         """The check that would have caught the generic_walk header defect on
@@ -375,13 +445,20 @@ class TestPointerFieldsPointSomewhereReal:
         pin it now rather than after the first one appears. Eleven walkers emit
         xrefs, so the surface is wide enough to regress quietly."""
         bad = []
-        for path, label, chunks, _warns in walked:
+        for path, label, chunks, warns in walked:
             fsize = os.path.getsize(path)
             for c in chunks:
+                cid = str(c.get("id"))
                 for fl in c.get("fields") or []:
                     x = fl.get("xref")
                     if isinstance(x, int) and not (0 <= x <= fsize):
-                        bad.append((label, str(c.get("id")), fl.get("name"), x,
+                        # a dangling pointer the walker already reported, by
+                        # chunk id or by the pointer's own value, is damage
+                        # described correctly, the same rule as the overshoot test
+                        if any(("EOF" in w or "past" in w)
+                               and (cid in w or f"0x{x:08x}" in w) for w in warns):
+                            continue
+                        bad.append((label, cid, fl.get("name"), x,
                                     fsize, os.path.basename(path)))
         assert not bad, (
             "pointer fields aimed outside their file:\n" + "\n".join(
