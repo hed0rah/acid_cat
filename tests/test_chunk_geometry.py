@@ -362,3 +362,37 @@ class TestSiblingsDoNotClaimTheSameBytes:
         assert nested > 0, (
             "no nested chunk anywhere in the corpus, so the enclosure filter "
             "is untested and this suite is not proving what it claims")
+
+
+class TestPointerFieldsPointSomewhereReal:
+    def test_no_xref_lands_outside_the_file(self, walked):
+        """A field marked `xref` is a POINTER: the TUI follows it and the
+        forensics layer resolves it. An offset past the end is a walker
+        publishing a destination it never checked, and the reader finds out by
+        arriving nowhere.
+
+        Clean across the corpus when this was written, which is the reason to
+        pin it now rather than after the first one appears. Eleven walkers emit
+        xrefs, so the surface is wide enough to regress quietly."""
+        bad = []
+        for path, label, chunks, _warns in walked:
+            fsize = os.path.getsize(path)
+            for c in chunks:
+                for fl in c.get("fields") or []:
+                    x = fl.get("xref")
+                    if isinstance(x, int) and not (0 <= x <= fsize):
+                        bad.append((label, str(c.get("id")), fl.get("name"), x,
+                                    fsize, os.path.basename(path)))
+        assert not bad, (
+            "pointer fields aimed outside their file:\n" + "\n".join(
+                f"  {lab} {cid!r}.{nm!r} -> {x} in a {fs}-byte file ({fn})"
+                for lab, cid, nm, x, fs, fn in bad[:8]))
+
+    def test_some_walker_actually_emits_an_xref(self, walked):
+        """The control. Without it the test above passes on a corpus where no
+        walker publishes a pointer at all, which is silence rather than
+        evidence."""
+        n = sum(1 for _p, _l, chunks, _w in walked for c in chunks
+                for fl in (c.get("fields") or [])
+                if isinstance(fl.get("xref"), int))
+        assert n > 0, "no xref anywhere in the corpus, so nothing was checked"
