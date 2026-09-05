@@ -289,7 +289,8 @@ def inspect_nsf(filepath, deep=False):
                                      ", banked" if banked else ""),
                        "fields": [], "warnings": [], "payload_base": _NSF_HEADER})
     if body_end < size:
-        trailer, tw = _nsfe_chunks(raw, body_end, size, bare=True)
+        trailer, tw = _nsfe_chunks(raw, body_end, size, bare=True,
+                                   base=body_end)
         warns.extend(tw)
         chunks.append({"id": "metadata", "offset": body_end, "size": size - body_end,
                        "summary": "NSFe metadata appended after the program data",
@@ -297,7 +298,7 @@ def inspect_nsf(filepath, deep=False):
     return chunks, warns
 
 
-def _nsfe_chunks(raw, start, end, bare=False):
+def _nsfe_chunks(raw, start, end, bare=False, base=0):
     """Walk an NSFe chunk sequence, returning fields describing what is there.
 
     The trap this exists to avoid: an NSFe chunk header is LENGTH FIRST, THEN
@@ -321,7 +322,7 @@ def _nsfe_chunks(raw, start, end, bare=False):
                          "end of the file" % (name, pos, format(length, ",")))
             break
         mandatory = 0x41 <= fourcc[0] <= 0x5A
-        fields.append(_f(pos, 8, name, "%s bytes" % format(length, ","),
+        fields.append(_f(pos - base, 8, name, "%s bytes" % format(length, ","),
                          "mandatory" if mandatory else "optional (skippable)"))
         n += 1
         pos += 8 + length
@@ -508,7 +509,7 @@ def inspect_sap(filepath, deep=False):
             warns.append("no FF FF anywhere, so the Atari executable never begins")
         return chunks, warns
 
-    blocks, bw = _sap_blocks(raw, cut, len(raw), deep)
+    blocks, bw = _sap_blocks(raw, cut, len(raw), deep, base=cut)
     warns.extend(bw)
     chunks.append({"id": "binary", "offset": cut, "size": size - cut,
                    "summary": "Atari executable, %d block(s)" % len(
@@ -517,7 +518,7 @@ def inspect_sap(filepath, deep=False):
     return chunks, warns
 
 
-def _sap_blocks(raw, pos, end, deep):
+def _sap_blocks(raw, pos, end, deep, base=0):
     """Walk the Atari executable blocks.
 
     Two things make this unforgiving. The FF FF is required only on the FIRST
@@ -546,12 +547,12 @@ def _sap_blocks(raw, pos, end, deep):
             warns.append("block %d claims %s bytes but only %s remain; the file "
                          "ends mid-block, which players tolerate"
                          % (n, format(length, ","), format(end - pos - 4, ",")))
-            fields.append(_f(pos, 4, "block %d" % n,
+            fields.append(_f(pos - base, 4, "block %d" % n,
                              "%s-%s" % (_addr(start), _addr(last)),
                              "truncated"))
             break
         if deep or n <= 16:
-            fields.append(_f(pos, 4, "block %d" % n,
+            fields.append(_f(pos - base, 4, "block %d" % n,
                              "%s-%s" % (_addr(start), _addr(last)),
                              "%s bytes, end address is inclusive"
                              % format(length, ",")))
