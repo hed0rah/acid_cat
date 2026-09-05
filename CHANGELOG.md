@@ -112,7 +112,10 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 ### Changed
 
 - Punctuation reformatted across the anatomy pages and the two builders that
-  generate them, so a regenerated page matches the rest.
+  generate them, so a regenerated page matches the rest. The leader mark before
+  a tree annotation is gone entirely: the span already styles the text as a
+  remark, so the mark was duplicating what the styling said. A full prose and
+  styling pass over the fleet is deferred to the next release.
 
 ## [1.3.2] - 2026-08-31
 

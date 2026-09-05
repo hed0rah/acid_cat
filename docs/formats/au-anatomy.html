@@ -212,12 +212,12 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
       <div class="sec">a header, laid out</div>
       <div class="tree">
-<b>Header</b>  ".snd"   <span class="kf">encoding 3, 44100 Hz, 1 ch</span>        <span class="kr">-- 24 bytes, big-endian</span>
+<b>Header</b>  ".snd"   <span class="kf">encoding 3, 44100 Hz, 1 ch</span>        <span class="kr">24 bytes, big-endian</span>
 &#9500;&#9472; <b>data_offset</b>  24            <span class="kf">where the audio begins</span>
 &#9500;&#9472; <b>data_size</b>     200           <span class="kf">or 0xFFFFFFFF = unknown</span>
 &#9492;&#9472; <b>encoding</b>      3             <span class="kf">the codec, not a bit depth</span>
-<b>Annotation</b>  optional comment, byte 24..data_offset   <span class="kr">-- NUL-padded ASCII</span>
-<b>PCM</b>  from data_offset to end of file        <span class="kr">-- raw, big-endian</span>
+<b>Annotation</b>  optional comment, byte 24..data_offset   <span class="kr">NUL-padded ASCII</span>
+<b>PCM</b>  from data_offset to end of file        <span class="kr">raw, big-endian</span>
       </div>
 
       <div class="sec">the format, dated</div>
