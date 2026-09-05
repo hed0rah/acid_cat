@@ -15,7 +15,7 @@ are the ones a plausible-looking walker gets wrong quietly:
 import os
 import struct
 
-from acidcat.core.infra import sniff
+from acidcat.core.infra import geometry, sniff
 from acidcat.core.walk import au
 
 
@@ -102,6 +102,37 @@ def test_an_annotation_is_read(tmp_path):
     chunks, _ = au.inspect_au(p)
     hdr = _chunk(chunks, "au")
     assert _field(hdr, "annotation")["value"] == "made by hand"
+
+
+def test_companded_audio_still_reports_a_duration(tmp_path):
+    # mu-law and A-law are a fixed byte per sample on disk, so their duration is
+    # exactly as computable as 8-bit linear PCM's. "not linear PCM" (the warning)
+    # and "duration unknown" are different questions.
+    for enc in (1, 27):
+        p = _one(tmp_path, au_file(encoding=enc, rate=8000, samples=b"\x7f" * 8000),
+                 name=f"{enc}.au")
+        chunks, _ = au.inspect_au(p)
+        data = _chunk(chunks, "data")
+        dur = next((f["value"] for f in data["fields"] if f["name"] == "duration"), None)
+        assert dur == "1.000 s", f"encoding {enc}: duration {dur!r}"
+        assert any("not linear PCM" in w for w in data["warnings"])   # still flagged
+
+
+# ── geometry: the header owns exactly its own bytes ─────────────────
+
+def test_header_and_data_do_not_overlap(tmp_path):
+    # the header has no RIFF-style 8-byte prefix, so it must declare its own
+    # payload base. left to the default (offset + 8) it claims 32 bytes where 24
+    # exist and overlaps the audio by 8 -- two siblings owning the same bytes,
+    # which is what the geometry contract forbids.
+    p = _one(tmp_path, au_file(encoding=3, samples=b"\x00\x01" * 100))
+    chunks, _ = au.inspect_au(p)
+    geometry.normalize(chunks, os.path.getsize(p))
+    hdr = _chunk(chunks, "au")
+    assert hdr["offset"] + hdr["extent_len"] == au._HDR_MIN        # 24, not 32
+    spans = sorted((c["offset"], c["offset"] + c["extent_len"]) for c in chunks)
+    assert all(a[1] <= b[0] for a, b in zip(spans, spans[1:])), spans
+    assert all(geometry.is_trustworthy(c) for c in chunks)
 
 
 # ── degrade, never raise ────────────────────────────────────────────

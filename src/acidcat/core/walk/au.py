@@ -72,6 +72,13 @@ _ENC = {
     26: ("5-bit G.723 ADPCM", 5, False, False),
     27: ("8-bit G.711 A-law", 8, False, False),
 }
+# codes whose on-disk width per sample is fixed, so size -> duration is exact:
+# the linear and float PCM, the companded G.711 pair (one byte per sample), the
+# fixed-point family and 16-bit emphasis. The compressed codes (19, 20) and the
+# ADPCM tail (23-26) are framed, not claimed: their bits are nominal or coded
+# widths that have not been checked against a real file, so duration stays
+# unknown rather than plausible.
+_FIXED_WIDTH = frozenset({1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 18, 27})
 
 
 def _annotation(data, data_offset):
@@ -100,9 +107,14 @@ def parse_header(data):
             "sample_rate": rate, "channels": ch}
 
 
-def _duration(size, rate, bits, channels, linear):
-    """Seconds of audio, or None when it is not computable from linear PCM."""
-    if not (linear and size and rate and bits and channels):
+def _duration(size, rate, bits, channels, fixed):
+    """Seconds of audio, or None when the on-disk sample width is not fixed.
+
+    `fixed` is the encoding's membership in _FIXED_WIDTH, deliberately separate
+    from `linear`: mu-law is not playable as PCM but is one byte per sample, so
+    its duration is as knowable as 8-bit PCM's.
+    """
+    if not (fixed and size and rate and bits and channels):
         return None
     per_sec = rate * channels * (bits / 8.0)
     return (size / per_sec) if per_sec > 0 else None
@@ -123,11 +135,12 @@ def inspect_au(filepath):
             "fields": [_f(0x00, 4, "magic", ".snd")],
             "warnings": [f"header truncated: {len(data)} of the {_HDR_MIN}-byte "
                          f"header are present"],
+            "payload_base": 0,
         }], file_warns)
 
     data_offset, data_size, encoding, rate, channels = struct.unpack_from(
         ">IIIII", data, 4)
-    name, bits, signed, linear = _ENC.get(
+    name, bits, _signed, linear = _ENC.get(
         encoding, (f"unknown encoding {encoding}", 0, False, False))
 
     # effective audio size: the declared size, or what follows the header when
@@ -168,15 +181,18 @@ def inspect_au(filepath):
         fields.append(_f(0x18, data_offset - _HDR_MIN, "annotation", annot,
                          "comment between the header and the audio"))
 
+    # payload_base 0: the field offsets are file-absolute and this header has no
+    # RIFF-style 8-byte prefix, so the default (offset + 8) would both misplace
+    # every field and make the header claim eight bytes the audio owns.
     chunks = [{
         "id": "au", "offset": 0, "size": hdr_size,
         "summary": (f"Sun/NeXT audio -- {name} @ {rate} Hz, {channels} ch, "
                     f"{eff_size:,} B"),
-        "fields": fields, "warnings": hdr_warns,
+        "fields": fields, "warnings": hdr_warns, "payload_base": 0,
     }]
 
     if data_offset <= file_size and eff_size > 0:
-        secs = _duration(eff_size, rate, bits, channels, linear)
+        secs = _duration(eff_size, rate, bits, channels, encoding in _FIXED_WIDTH)
         w = []
         if not linear:
             w.append(f"{name} is not linear PCM; these bytes are a codec and "
