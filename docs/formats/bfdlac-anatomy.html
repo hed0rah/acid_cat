@@ -187,7 +187,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">A <b>.bfdlac</b> is one drum hit for <b>FXpansion BFD</b>, the sampled acoustic-drum engine. The name is <b>BFD</b> + <b>lac</b> (a lossless audio codec), and the container is an <b>IFF chunk grid</b> &mdash; but a <b>big-endian</b> one, unusual for a Windows/Mac plugin. A <code>BFDC</code> magic and outer size, then four chunks: <b>fmt</b> (the audio descriptor), <b>BFDi</b> (a pack id), <b>Indx</b> (a block seek index for random access into the stream), and <b>data</b> (the compressed audio). Every known BFDC file is identical in shape: 24-bit, 44100 Hz, stereo. The container and the descriptor read cleanly; the <b>lac</b> codec itself is undocumented, so the audio stays opaque. The tabs open each chunk, drawn byte by byte from a real hit. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">A <b>.bfdlac</b> is one drum hit for <b>FXpansion BFD</b>, the sampled acoustic-drum engine. The name is <b>BFD</b> + <b>lac</b> (a lossless audio codec), and the container is an <b>IFF chunk grid</b> -- but a <b>big-endian</b> one, unusual for a Windows/Mac plugin. A <code>BFDC</code> magic and outer size, then four chunks: <b>fmt</b> (the audio descriptor), <b>BFDi</b> (a pack id), <b>Indx</b> (a block seek index for random access into the stream), and <b>data</b> (the compressed audio). Every known BFDC file is identical in shape: 24-bit, 44100 Hz, stereo. The container and the descriptor read cleanly; the <b>lac</b> codec itself is undocumented, so the audio stays opaque. The tabs open each chunk, drawn byte by byte from a real hit. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">brick</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -209,28 +209,28 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">BFD's sound library is enormous &mdash; thousands of hits per kit, every velocity and articulation captured &mdash; so each hit is its own small file, and it is compressed. A <code>.bfdlac</code> is an <b>IFF container</b> (magic <code>BFDC</code>, an outer size = file length &minus; 8) holding four chunks in a fixed order: <b>fmt</b> describes the audio, <b>BFDi</b> tags the pack, <b>Indx</b> is a seek index into the compressed stream, and <b>data</b> is the lossless-coded audio. The hit below is a real one from BFD Crush.</p>
+      <p class="plede">BFD's sound library is enormous -- thousands of hits per kit, every velocity and articulation captured -- so each hit is its own small file, and it is compressed. A <code>.bfdlac</code> is an <b>IFF container</b> (magic <code>BFDC</code>, an outer size = file length &minus; 8) holding four chunks in a fixed order: <b>fmt</b> describes the audio, <b>BFDi</b> tags the pack, <b>Indx</b> is a seek index into the compressed stream, and <b>data</b> is the lossless-coded audio. The hit below is a real one from BFD Crush.</p>
 
       <div class="sec">a real hit, laid out</div>
       <div class="tree">
-<b>BFDC</b>  outer_size 906,302                    <span class="kr">— magic + (file - 8)</span>
+<b>BFDC</b>  outer_size 906,302                    <span class="kr">-- magic + (file - 8)</span>
 &#9500;&#9472; <b>fmt </b>  <span class="kf">24-bit, 44100 Hz, stereo, 220,577 frames (5.00s)</span>
 &#9500;&#9472; <b>BFDi</b>  "BFCRU-..."   <span class="kf">pack / kit identifier</span>
-&#9500;&#9472; <b>Indx</b>  <span class="kf">1024-sample blocks, 216 frames, u32 offset table</span>   <span class="kr">— random access</span>
-&#9492;&#9472; <b>data</b>  905,342 bytes   <span class="kf">lac codec (undocumented)</span>       <span class="kr">— the compressed audio</span>
+&#9500;&#9472; <b>Indx</b>  <span class="kf">1024-sample blocks, 216 frames, u32 offset table</span>   <span class="kr">-- random access</span>
+&#9492;&#9472; <b>data</b>  905,342 bytes   <span class="kf">lac codec (undocumented)</span>       <span class="kr">-- the compressed audio</span>
       </div>
 
       <div class="sec">BFD, dated</div>
       <div class="timeline">
-        <div><span class="y">2003</span><span><b>FXpansion BFD</b> &mdash; a deeply multisampled acoustic-drum instrument: many mics, many velocity layers, round-robin hits. The sheer sample count made per-hit compression a necessity.</span></div>
-        <div><span class="y">2008</span><span><b>BFD2</b> &mdash; the engine that popularised the modern <code>.bfdlac</code> library layout: one compressed file per hit, indexed for random-access streaming.</span></div>
-        <div><span class="y">2013</span><span><b>BFD3</b> &mdash; the current generation; expansion packs (Horsepower, Crush, ...) all ship as <code>BFDC</code> files, uniform in structure.</span></div>
-        <div><span class="y">lac</span><span><b>a lossless codec.</b> The <code>data</code> chunk holds losslessly-compressed PCM at roughly <b>7 bits/byte</b> &mdash; enough entropy to be clearly compressed audio, but the codec is undocumented. The region and its geometry are readable, the samples are not.</span></div>
+        <div><span class="y">2003</span><span><b>FXpansion BFD</b> -- a deeply multisampled acoustic-drum instrument: many mics, many velocity layers, round-robin hits. The sheer sample count made per-hit compression a necessity.</span></div>
+        <div><span class="y">2008</span><span><b>BFD2</b> -- the engine that popularised the modern <code>.bfdlac</code> library layout: one compressed file per hit, indexed for random-access streaming.</span></div>
+        <div><span class="y">2013</span><span><b>BFD3</b> -- the current generation; expansion packs (Horsepower, Crush, ...) all ship as <code>BFDC</code> files, uniform in structure.</span></div>
+        <div><span class="y">lac</span><span><b>a lossless codec.</b> The <code>data</code> chunk holds losslessly-compressed PCM at roughly <b>7 bits/byte</b> -- enough entropy to be clearly compressed audio, but the codec is undocumented. The region and its geometry are readable, the samples are not.</span></div>
       </div>
 
-      <div class="callout"><b>big-endian, on an x86 plugin.</b> BFD is a Windows/Mac VST, yet <code>BFDC</code> chunk sizes and the fmt/Indx integers are all <b>big-endian</b> &mdash; the reverse of RIFF/WAV. It is an IFF-family container in the Amiga/Kurzweil tradition, a design choice, not a platform constraint. Read every multi-byte field high byte first. One place it may part from strict IFF: chunks advance by <code>8 + size</code> with no even-pad byte &mdash; but every known chunk size is even, so a pad byte would be invisible here either way.</div>
-      <div class="callout"><b>the Indx is why it streams.</b> A drum engine has to start a hit the instant a note lands and may layer dozens at once, so it cannot afford to decode a file from the top. <code>Indx</code> stores the byte offset of every <b>1024-sample block</b> into the <code>data</code> chunk, so the player seeks straight to the block it needs. The frame count (216) is <code>ceil(num_samples / block_size)</code> &mdash; a checkable invariant.</div>
-      <div class="callout"><b>uniform across the format.</b> Every known BFDC hit carries exactly <code>fmt</code>/<code>BFDi</code>/<code>Indx</code>/<code>data</code>, 24-bit / 44100 Hz / stereo. That uniformity is what lets a reader trust the layout and flag any file that deviates &mdash; a truncated <code>data</code>, a wrong outer size &mdash; rather than guess.</div>
+      <div class="callout"><b>big-endian, on an x86 plugin.</b> BFD is a Windows/Mac VST, yet <code>BFDC</code> chunk sizes and the fmt/Indx integers are all <b>big-endian</b> -- the reverse of RIFF/WAV. It is an IFF-family container in the Amiga/Kurzweil tradition, a design choice, not a platform constraint. Read every multi-byte field high byte first. One place it may part from strict IFF: chunks advance by <code>8 + size</code> with no even-pad byte -- but every known chunk size is even, so a pad byte would be invisible here either way.</div>
+      <div class="callout"><b>the Indx is why it streams.</b> A drum engine has to start a hit the instant a note lands and may layer dozens at once, so it cannot afford to decode a file from the top. <code>Indx</code> stores the byte offset of every <b>1024-sample block</b> into the <code>data</code> chunk, so the player seeks straight to the block it needs. The frame count (216) is <code>ceil(num_samples / block_size)</code> -- a checkable invariant.</div>
+      <div class="callout"><b>uniform across the format.</b> Every known BFDC hit carries exactly <code>fmt</code>/<code>BFDi</code>/<code>Indx</code>/<code>data</code>, 24-bit / 44100 Hz / stereo. That uniformity is what lets a reader trust the layout and flag any file that deviates -- a truncated <code>data</code>, a wrong outer size -- rather than guess.</div>
     </div>
 
     <!-- ===================== BFDC + FMT ===================== -->
@@ -238,13 +238,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="pfacts"><span>magic<b>"BFDC"</b></span><span>outer<b>file - 8</b></span><span>fmt<b>5 big-endian u32</b></span><span>audio<b>24-bit / 44100 / 2ch</b></span></div>
       <p class="plede">The file opens with the <b>BFDC</b> magic and a big-endian <b>outer size</b> = file length &minus; 8, the IFF convention. The first chunk, <b>fmt</b>, is the audio descriptor: five big-endian u32s giving bit depth, an encoding tag, the frame count, the sample rate, and the channel count. Everything a decoder needs to interpret the <code>data</code> stream, minus the codec itself. Both maps are from a real BFD Crush hit.</p>
       <div class="sec">BFDC header (8 bytes)</div>
-      <p class="note">Hover <span class="k-en">outer_size</span> &mdash; 906,302, exactly the file length minus 8.</p>
+      <p class="note">Hover <span class="k-en">outer_size</span> -- 906,302, exactly the file length minus 8.</p>
       <div id="bfdc-hdr" data-build></div>
       <div class="sec">fmt chunk (id + size + 20-byte body)</div>
       <p class="note">The descriptor, big-endian throughout. Hover any field to light its four bytes.</p>
       <div id="bfdc-fmt" data-build></div>
       <div class="callout"><b>outer size is IFF, not RIFF.</b> Like an IFF <code>FORM</code>, <code>outer_size</code> counts everything after the 8-byte magic+size pair, so it equals file length &minus; 8. Checked against the real file length, a mismatch is a fast integrity tell for a truncated or appended file.</div>
-      <div class="callout"><b>the encoding tag is a constant.</b> The second fmt word is always <code>10</code> &mdash; a codec/encoding id for the lac stream, not a variable. The values that <i>could</i> vary between packs would be the frame count and rate, yet even those are pinned: <b>24-bit, 44100 Hz, stereo</b>. A file that reports anything else is worth a second look.</div>
+      <div class="callout"><b>the encoding tag is a constant.</b> The second fmt word is always <code>10</code> -- a codec/encoding id for the lac stream, not a variable. The values that <i>could</i> vary between packs would be the frame count and rate, yet even those are pinned: <b>24-bit, 44100 Hz, stereo</b>. A file that reports anything else is worth a second look.</div>
     </div>
 
     <!-- ===================== INDX ===================== -->
@@ -252,21 +252,21 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="pfacts"><span>block_size<b>1024 samples</b></span><span>frames<b>216</b></span><span>table<b>u32 per block</b></span><span>purpose<b>random access</b></span></div>
       <p class="plede">The <b>Indx</b> chunk is a seek table over the compressed stream. It gives the <b>block size</b> (how many samples one compressed block decodes to) and the <b>frame count</b> (how many blocks), then a <b>u32 offset</b> for each block: the byte position of that block inside the <code>data</code> chunk. With it, the engine jumps straight to any point in the hit without decoding from the start. The map is the chunk header plus its first two table entries.</p>
       <div class="sec">Indx chunk (id + size + block/frame + first offsets)</div>
-      <p class="note">Hover <span class="k-en">frame_count</span> &mdash; 216 = ceil(220,577 / 1024).</p>
+      <p class="note">Hover <span class="k-en">frame_count</span> -- 216 = ceil(220,577 / 1024).</p>
       <div id="bfdc-indx" data-build></div>
-      <div class="callout"><b>compression breaks random access, so the index restores it.</b> A raw PCM file lets you seek by arithmetic: byte = frame &times; bytesPerFrame. A compressed stream does not &mdash; block <i>N</i> starts wherever block <i>N</i>&minus;1 happened to end. <code>Indx</code> stores those unpredictable boundaries so the decoder can start at any block. The first offset is always <code>0</code> (block 0 opens the <code>data</code> payload); each next entry is larger.</div>
-      <div class="callout"><b>frame_count is a checkable invariant.</b> With <code>block_size</code> and the fmt's <code>num_samples</code>, the frame count must be <code>ceil(num_samples / block_size)</code> &mdash; here <code>ceil(220577 / 1024) = 216</code>. Recompute it and reject a stored count off by more than one, catching a corrupt or mis-sized index before you trust its offsets.</div>
+      <div class="callout"><b>compression breaks random access, so the index restores it.</b> A raw PCM file lets you seek by arithmetic: byte = frame &times; bytesPerFrame. A compressed stream does not -- block <i>N</i> starts wherever block <i>N</i>&minus;1 happened to end. <code>Indx</code> stores those unpredictable boundaries so the decoder can start at any block. The first offset is always <code>0</code> (block 0 opens the <code>data</code> payload); each next entry is larger.</div>
+      <div class="callout"><b>frame_count is a checkable invariant.</b> With <code>block_size</code> and the fmt's <code>num_samples</code>, the frame count must be <code>ceil(num_samples / block_size)</code> -- here <code>ceil(220577 / 1024) = 216</code>. Recompute it and reject a stored count off by more than one, catching a corrupt or mis-sized index before you trust its offsets.</div>
     </div>
 
     <!-- ===================== DATA ===================== -->
     <div class="panel" data-panel="sample">
       <div class="pfacts"><span>content<b>lac-coded PCM</b></span><span>size<b>905,342 bytes</b></span><span>ratio<b>~7 bits/byte</b></span><span>codec<b>undocumented</b></span></div>
-      <p class="plede">The <b>data</b> chunk is the hit itself &mdash; the 24-bit stereo audio, losslessly compressed by BFD's <b>lac</b> codec. It is the last and by far the largest chunk (905,342 of the file's 906,310 bytes here). There is no public specification for the codec, so the payload is opaque: its position and size are known, its samples are not. The map is the chunk header and the first bytes of the stream.</p>
+      <p class="plede">The <b>data</b> chunk is the hit itself -- the 24-bit stereo audio, losslessly compressed by BFD's <b>lac</b> codec. It is the last and by far the largest chunk (905,342 of the file's 906,310 bytes here). There is no public specification for the codec, so the payload is opaque: its position and size are known, its samples are not. The map is the chunk header and the first bytes of the stream.</p>
       <div class="sec">data chunk (id + size + first stream bytes)</div>
-      <p class="note">The payload past the 8-byte header is the compressed stream &mdash; high-entropy, no readable structure.</p>
+      <p class="note">The payload past the 8-byte header is the compressed stream -- high-entropy, no readable structure.</p>
       <div id="bfdc-data" data-build></div>
-      <div class="callout"><b>~7 bits of entropy per byte.</b> The stream is clearly compressed audio: its entropy sits near <b>7 bits/byte</b>, well above readable structure but below the ~8 of encryption or random data &mdash; the signature of a lossless audio coder. That alone is enough to recognise the region as coded audio without knowing the codec.</div>
-      <div class="callout"><b>opaque by design.</b> The lac codec is unpublished, so a structural read ends at the chunk boundary: name the region, check the outer size and the index, stop. Extracting the <code>data</code> chunk yields the literal compressed stream, byte-for-byte &mdash; useful for archival or for feeding a real BFD engine, not decodable to WAV.</div>
+      <div class="callout"><b>~7 bits of entropy per byte.</b> The stream is clearly compressed audio: its entropy sits near <b>7 bits/byte</b>, well above readable structure but below the ~8 of encryption or random data -- the signature of a lossless audio coder. That alone is enough to recognise the region as coded audio without knowing the codec.</div>
+      <div class="callout"><b>opaque by design.</b> The lac codec is unpublished, so a structural read ends at the chunk boundary: name the region, check the outer size and the index, stop. Extracting the <code>data</code> chunk yields the literal compressed stream, byte-for-byte -- useful for archival or for feeding a real BFD engine, not decodable to WAV.</div>
     </div>
 
   </div>

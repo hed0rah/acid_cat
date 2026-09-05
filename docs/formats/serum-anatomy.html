@@ -187,7 +187,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">A <b>.SerumPreset</b> is a <b>text-and-binary hybrid</b>: an 8-byte <b>XferJson</b> magic, a tiny binary length preamble, a <b>UTF-8 JSON</b> metadata block (name, author, tags, product, version), then one opaque <b>binary blob</b> carrying the wavetable and modulation state. Because the head is JSON, the searchable metadata is plain text &mdash; readable verbatim, no binary decode &mdash; while the blob stays a black box. <b>Serum 2</b> adds a twist: it <b>zstd-compresses</b> that blob. The tabs open each region, drawn byte by byte from a real Serum 2 preset. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">A <b>.SerumPreset</b> is a <b>text-and-binary hybrid</b>: an 8-byte <b>XferJson</b> magic, a tiny binary length preamble, a <b>UTF-8 JSON</b> metadata block (name, author, tags, product, version), then one opaque <b>binary blob</b> carrying the wavetable and modulation state. Because the head is JSON, the searchable metadata is plain text -- readable verbatim, no binary decode -- while the blob stays a black box. <b>Serum 2</b> adds a twist: it <b>zstd-compresses</b> that blob. The tabs open each region, drawn byte by byte from a real Serum 2 preset. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">violet</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -209,47 +209,47 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">Most synth presets are all binary &mdash; you need a walker to read a single tag. Serum took the opposite bet: it leads with <b>plain JSON</b>. A <code>.SerumPreset</code> is three regions in a row: an 8-byte <b>XferJson</b> magic and a short binary length preamble, a <b>UTF-8 JSON</b> object holding every bit of searchable metadata, and then the <b>binary blob</b> that is the actual patch (the wavetables, the modulation matrix, embedded samples). The metadata is legible without decoding anything; only the blob is opaque. The preset below is a real Serum 2 patch.</p>
+      <p class="plede">Most synth presets are all binary -- you need a walker to read a single tag. Serum took the opposite bet: it leads with <b>plain JSON</b>. A <code>.SerumPreset</code> is three regions in a row: an 8-byte <b>XferJson</b> magic and a short binary length preamble, a <b>UTF-8 JSON</b> object holding every bit of searchable metadata, and then the <b>binary blob</b> that is the actual patch (the wavetables, the modulation matrix, embedded samples). The metadata is legible without decoding anything; only the blob is opaque. The preset below is a real Serum 2 patch.</p>
 
       <div class="sec">a real preset, laid out</div>
       <div class="tree">
-<b>XferJson</b>  8-byte magic + 9-byte preamble       <span class="kr">— u32 preamble = JSON length</span>
-&#9500;&#9472; <b>JSON</b>  335 bytes  <span class="kf">{ fileType, presetName, tags, product... }</span>   <span class="kr">— UTF-8 text</span>
-&#9492;&#9472; <b>blob</b>  67,762 bytes  <span class="kf">zstd frame (28 B5 2F FD)</span>       <span class="kr">— wavetable + mod state</span>
+<b>XferJson</b>  8-byte magic + 9-byte preamble       <span class="kr">-- u32 preamble = JSON length</span>
+&#9500;&#9472; <b>JSON</b>  335 bytes  <span class="kf">{ fileType, presetName, tags, product... }</span>   <span class="kr">-- UTF-8 text</span>
+&#9492;&#9472; <b>blob</b>  67,762 bytes  <span class="kf">zstd frame (28 B5 2F FD)</span>       <span class="kr">-- wavetable + mod state</span>
    product "Serum2"  v2.0.18   tags: Wavetable, Embedded-Data, Mono
       </div>
 
       <div class="sec">Serum, dated</div>
       <div class="timeline">
-        <div><span class="y">2014</span><span><b>Xfer Serum</b> ships &mdash; a wavetable synth that became the de-facto standard for modern electronic sound design. Serum 1 ships VST2 <code>.fxp</code> presets (the <b>CcnK</b> container); the native <code>.SerumPreset</code> with its <b>XferJson</b> magic arrives with Serum 2.</span></div>
-        <div><span class="y">JSON</span><span><b>the metadata is text.</b> presetName, author, description, product, version and a tag list live in a JSON object right after the magic &mdash; readable in any hex editor, indexable without a decoder.</span></div>
-        <div><span class="y">2024</span><span><b>Serum 2</b> &mdash; reports <code>product: "Serum2"</code>. It <b>zstd-compresses</b> the binary blob and can embed sample data (the <code>Embedded-Data</code> tag), so a preset carries its own audio.</span></div>
+        <div><span class="y">2014</span><span><b>Xfer Serum</b> ships -- a wavetable synth that became the de-facto standard for modern electronic sound design. Serum 1 ships VST2 <code>.fxp</code> presets (the <b>CcnK</b> container); the native <code>.SerumPreset</code> with its <b>XferJson</b> magic arrives with Serum 2.</span></div>
+        <div><span class="y">JSON</span><span><b>the metadata is text.</b> presetName, author, description, product, version and a tag list live in a JSON object right after the magic -- readable in any hex editor, indexable without a decoder.</span></div>
+        <div><span class="y">2024</span><span><b>Serum 2</b> -- reports <code>product: "Serum2"</code>. It <b>zstd-compresses</b> the binary blob and can embed sample data (the <code>Embedded-Data</code> tag), so a preset carries its own audio.</span></div>
         <div><span class="y">now</span><span><b>the JSON reads, the blob stays opaque.</b> presetName / author / tags / product lift straight out as text; the wavetable/mod blob is a region with no public format to decode.</span></div>
       </div>
 
-      <div class="callout"><b>find the JSON by the brace, not the preamble.</b> Locate the metadata by scanning for the first <code>{</code>, not by trusting the binary preamble &mdash; that is robust to preamble changes between Serum versions. The <b>u32 at offset 9</b> (just past the flag byte at offset 8) does encode the JSON byte length (<code>335</code> here), a useful cross-check, but the brace scan is what drives the parse.</div>
-      <div class="callout"><b>the blob is Zstandard.</b> In this Serum 2 preset the blob's bytes 8&ndash;11 are <code>28 B5 2F FD</code> &mdash; the <b>zstd magic</b> (little-endian <code>0xFD2FB528</code>). Serum 2 compresses the wavetable and modulation state; Serum 1 stored it raw. Two <code>u32</code>s precede the frame: the uncompressed size (<code>108,892</code> bytes here) at the blob's start, then a small count (<code>2</code>) immediately before the magic. The decompressed interior has no documented format either.</div>
-      <div class="callout"><b>JSON is self-describing, and that is the point.</b> Because the head is text, Serum's tags, author and product need no per-format walker &mdash; the same <code>presetName</code>/<code>tags</code> a human reads are what an indexer stores. Contrast Bitwig or Native Instruments, whose metadata is buried in binary trees that each need their own decoder.</div>
+      <div class="callout"><b>find the JSON by the brace, not the preamble.</b> Locate the metadata by scanning for the first <code>{</code>, not by trusting the binary preamble -- that is robust to preamble changes between Serum versions. The <b>u32 at offset 9</b> (just past the flag byte at offset 8) does encode the JSON byte length (<code>335</code> here), a useful cross-check, but the brace scan is what drives the parse.</div>
+      <div class="callout"><b>the blob is Zstandard.</b> In this Serum 2 preset the blob's bytes 8&ndash;11 are <code>28 B5 2F FD</code> -- the <b>zstd magic</b> (little-endian <code>0xFD2FB528</code>). Serum 2 compresses the wavetable and modulation state; Serum 1 stored it raw. Two <code>u32</code>s precede the frame: the uncompressed size (<code>108,892</code> bytes here) at the blob's start, then a small count (<code>2</code>) immediately before the magic. The decompressed interior has no documented format either.</div>
+      <div class="callout"><b>JSON is self-describing, and that is the point.</b> Because the head is text, Serum's tags, author and product need no per-format walker -- the same <code>presetName</code>/<code>tags</code> a human reads are what an indexer stores. Contrast Bitwig or Native Instruments, whose metadata is buried in binary trees that each need their own decoder.</div>
       <div class="callout"><b>a forged preset can blow the stack.</b> A recursive-descent JSON parser descends once per nesting level, so a hand-crafted preset with thousands of nested objects exhausts it. A reader must bound the nesting depth or catch the failure rather than crash on it.</div>
     </div>
 
     <!-- ===================== MAGIC + PREAMBLE ===================== -->
     <div class="panel" data-panel="header">
       <div class="pfacts"><span>magic<b>"XferJson"</b></span><span>size<b>8 + 9 bytes</b></span><span>preamble<b>u32 = JSON length</b></span><span>then<b>the JSON brace</b></span></div>
-      <p class="plede">The file opens with the 8-byte <b>XferJson</b> magic &mdash; the signature that identifies any Serum preset or <code>.fxp</code>. Immediately after sits a 9-byte binary <b>preamble</b>: a flag byte, a <b>u32 that equals the JSON block's byte length</b>, and a reserved word. Then the JSON begins at its opening <code>{</code>. The map is the full 17-byte head of a real Serum 2 preset.</p>
+      <p class="plede">The file opens with the 8-byte <b>XferJson</b> magic -- the signature that identifies any Serum preset or <code>.fxp</code>. Immediately after sits a 9-byte binary <b>preamble</b>: a flag byte, a <b>u32 that equals the JSON block's byte length</b>, and a reserved word. Then the JSON begins at its opening <code>{</code>. The map is the full 17-byte head of a real Serum 2 preset.</p>
       <div class="sec">magic + preamble (bytes 0x00&ndash;0x10)</div>
-      <p class="note">Hover <span class="k-en">json_length</span> &mdash; 0x0000014F = 335, exactly the JSON block's size.</p>
+      <p class="note">Hover <span class="k-en">json_length</span> -- 0x0000014F = 335, exactly the JSON block's size.</p>
       <div id="serum-hdr" data-build></div>
-      <div class="callout"><b>route on the magic, parse by the brace.</b> <code>"XferJson"</code> is the same first eight bytes for Serum presets, wavetables and FXP wrappers; use it only to identify the file, then find the metadata by scanning for the first <code>{</code>. The preamble's <code>json_length</code> is a cross-check, not the source of truth &mdash; so a version that resizes the preamble still parses.</div>
-      <div class="callout"><b>little-endian, like the plugin's host.</b> The preamble's length word is a little-endian u32 &mdash; Serum is an x86/ARM plugin, and the binary framing follows the host's byte order. Only the JSON in the middle is endianness-free (it is text).</div>
+      <div class="callout"><b>route on the magic, parse by the brace.</b> <code>"XferJson"</code> is the same first eight bytes for Serum presets, wavetables and FXP wrappers; use it only to identify the file, then find the metadata by scanning for the first <code>{</code>. The preamble's <code>json_length</code> is a cross-check, not the source of truth -- so a version that resizes the preamble still parses.</div>
+      <div class="callout"><b>little-endian, like the plugin's host.</b> The preamble's length word is a little-endian u32 -- Serum is an x86/ARM plugin, and the binary framing follows the host's byte order. Only the JSON in the middle is endianness-free (it is text).</div>
     </div>
 
     <!-- ===================== JSON METADATA ===================== -->
     <div class="panel" data-panel="json">
       <div class="pfacts"><span>encoding<b>UTF-8 JSON</b></span><span>size<b>335 bytes here</b></span><span>keys<b>11</b></span><span>indexed<b>as plain text</b></span></div>
-      <p class="plede">The metadata block is a single JSON object &mdash; ordinary UTF-8 text you can read in any hex viewer. It carries the preset's identity and every searchable field: <code>fileType</code>, <code>presetName</code>, <code>presetAuthor</code>, <code>presetDescription</code>, <code>product</code>, <code>productVersion</code>, a <code>tags</code> array, <code>vendor</code>, a content <code>hash</code>, and a struct <code>version</code>. These lift straight into a library index &mdash; no decoder, because there is nothing to decode.</p>
+      <p class="plede">The metadata block is a single JSON object -- ordinary UTF-8 text you can read in any hex viewer. It carries the preset's identity and every searchable field: <code>fileType</code>, <code>presetName</code>, <code>presetAuthor</code>, <code>presetDescription</code>, <code>product</code>, <code>productVersion</code>, a <code>tags</code> array, <code>vendor</code>, a content <code>hash</code>, and a struct <code>version</code>. These lift straight into a library index -- no decoder, because there is nothing to decode.</p>
       <div class="sec">the JSON, opening bytes</div>
-      <p class="note">The first 24 bytes of the block &mdash; plain ASCII. Hover any byte: it is just text.</p>
+      <p class="note">The first 24 bytes of the block -- plain ASCII. Hover any byte: it is just text.</p>
       <div id="serum-json" data-build></div>
       <div class="sec">decoded keys (this preset)</div>
       <div class="kv">
@@ -262,19 +262,19 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <div><span class="k">vendor</span><span class="v">Xfer Records</span></div>
         <div><span class="k">version</span><span class="v">7.0 (struct schema)</span></div>
       </div>
-      <div class="callout"><b>product tells the generation.</b> <code>product: "Serum2"</code> with <code>productVersion: "2.0.18"</code> marks a Serum 2 preset; a Serum 1 preset reports <code>"Serum"</code>. The <code>version</code> field (7.0 here) is the JSON schema version, distinct from the plugin version &mdash; two different numbers to keep apart.</div>
-      <div class="callout"><b>tags are the free win.</b> The <code>tags</code> array (<code>Wavetable</code>, <code>Embedded-Data</code>, <code>Mono</code>) is exactly what a library browser wants, sitting in plain text. <code>Embedded-Data</code> means the preset carries its own sample content inside the blob &mdash; it is self-contained, not referencing an external wavetable.</div>
+      <div class="callout"><b>product tells the generation.</b> <code>product: "Serum2"</code> with <code>productVersion: "2.0.18"</code> marks a Serum 2 preset; a Serum 1 preset reports <code>"Serum"</code>. The <code>version</code> field (7.0 here) is the JSON schema version, distinct from the plugin version -- two different numbers to keep apart.</div>
+      <div class="callout"><b>tags are the free win.</b> The <code>tags</code> array (<code>Wavetable</code>, <code>Embedded-Data</code>, <code>Mono</code>) is exactly what a library browser wants, sitting in plain text. <code>Embedded-Data</code> means the preset carries its own sample content inside the blob -- it is self-contained, not referencing an external wavetable.</div>
     </div>
 
     <!-- ===================== BLOB ===================== -->
     <div class="panel" data-panel="blob">
       <div class="pfacts"><span>content<b>wavetable + mod state</b></span><span>Serum 2<b>zstd-compressed</b></span><span>magic<b>28 B5 2F FD</b></span><span>status<b>region, not decoded</b></span></div>
-      <p class="plede">Everything the JSON does not say lives here: the wavetables, the modulation matrix, oscillator and effect state, and (when tagged <code>Embedded-Data</code>) the sample content itself. There is <b>no public format</b> for the interior &mdash; it reads as one opaque byte region. What is legible is the framing: this Serum 2 preset opens the blob with a small header and then a <b>Zstandard frame</b>. The map is the blob's first 16 bytes.</p>
+      <p class="plede">Everything the JSON does not say lives here: the wavetables, the modulation matrix, oscillator and effect state, and (when tagged <code>Embedded-Data</code>) the sample content itself. There is <b>no public format</b> for the interior -- it reads as one opaque byte region. What is legible is the framing: this Serum 2 preset opens the blob with a small header and then a <b>Zstandard frame</b>. The map is the blob's first 16 bytes.</p>
       <div class="sec">blob header (first 16 bytes)</div>
-      <p class="note">Hover <span class="k-en">zstd_magic</span> &mdash; the Zstandard signature that marks the compressed frame.</p>
+      <p class="note">Hover <span class="k-en">zstd_magic</span> -- the Zstandard signature that marks the compressed frame.</p>
       <div id="serum-blob" data-build></div>
-      <div class="callout"><b>Zstandard, since Serum 2.</b> Bytes 8&ndash;11 are <code>28 B5 2F FD</code>, the little-endian zstd magic <code>0xFD2FB528</code>. The uncompressed size (<code>0x0001A95C</code> = 108,892) sits at the blob's start, with a small count (<code>2</code>) between it and the magic; the byte after the magic is the zstd frame-header descriptor. Serum 1 wrote the blob uncompressed, so its byte-8 signature is absent &mdash; a quick way to tell the two generations apart beyond the <code>product</code> string.</div>
-      <div class="callout"><b>opaque by design.</b> The blob's offset and length are knowable, but the frame contents and the wavetable are not &mdash; there is no documented interior and no reason to guess. Carving the region yields the literal blob, replayable back into Serum, byte-for-byte.</div>
+      <div class="callout"><b>Zstandard, since Serum 2.</b> Bytes 8&ndash;11 are <code>28 B5 2F FD</code>, the little-endian zstd magic <code>0xFD2FB528</code>. The uncompressed size (<code>0x0001A95C</code> = 108,892) sits at the blob's start, with a small count (<code>2</code>) between it and the magic; the byte after the magic is the zstd frame-header descriptor. Serum 1 wrote the blob uncompressed, so its byte-8 signature is absent -- a quick way to tell the two generations apart beyond the <code>product</code> string.</div>
+      <div class="callout"><b>opaque by design.</b> The blob's offset and length are knowable, but the frame contents and the wavetable are not -- there is no documented interior and no reason to guess. Carving the region yields the literal blob, replayable back into Serum, byte-for-byte.</div>
     </div>
 
   </div>

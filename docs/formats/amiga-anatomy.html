@@ -187,7 +187,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">The Amiga gave home computers real sampled sound in <b>1985</b>, and a whole family of music formats grew around it &mdash; all <b>big-endian</b>, because the Amiga is a Motorola 68000. This page covers the four outside the mainstream tracker family (MOD/XM/IT): <b>SMUS</b>, the Sonix musical score (an IFF <code>FORM</code>, sibling of AIFF); <b>OKT</b>, the Oktalyzer 8-channel tracker; <b>MED</b> / OctaMED (magic <code>MMD0</code>&ndash;<code>MMD3</code>); and <b>Future Composer</b>, a synth-driver chiptune (<code>SMOD</code> / <code>FC14</code>). IFF &mdash; EA's Interchange File Format, born on the Amiga &mdash; is the direct ancestor of RIFF/WAV. The tabs open each, drawn byte by byte from real files. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">The Amiga gave home computers real sampled sound in <b>1985</b>, and a whole family of music formats grew around it -- all <b>big-endian</b>, because the Amiga is a Motorola 68000. This page covers the four outside the mainstream tracker family (MOD/XM/IT): <b>SMUS</b>, the Sonix musical score (an IFF <code>FORM</code>, sibling of AIFF); <b>OKT</b>, the Oktalyzer 8-channel tracker; <b>MED</b> / OctaMED (magic <code>MMD0</code>&ndash;<code>MMD3</code>); and <b>Future Composer</b>, a synth-driver chiptune (<code>SMOD</code> / <code>FC14</code>). IFF -- EA's Interchange File Format, born on the Amiga -- is the direct ancestor of RIFF/WAV. The tabs open each, drawn byte by byte from real files. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">cobalt</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -209,27 +209,27 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">Two shapes cover these four formats. <b>SMUS</b> is an <b>IFF</b> file &mdash; the same <code>FORM</code> + tagged-chunk structure as AIFF, big-endian &mdash; so it reads like a cousin of AIFF and 8SVX. The other three are <b>modules</b>: <b>OKT</b> (Oktalyzer) uses IFF-style id+size chunks after an <code>OKTASONG</code> magic; <b>MED</b> and <b>Future Composer</b> are <b>pointer-based</b>, a fixed header of offsets into song/pattern/sample regions. The IFF ones decode fully; the pointer-based ones give up only their header without chasing offsets.</p>
+      <p class="plede">Two shapes cover these four formats. <b>SMUS</b> is an <b>IFF</b> file -- the same <code>FORM</code> + tagged-chunk structure as AIFF, big-endian -- so it reads like a cousin of AIFF and 8SVX. The other three are <b>modules</b>: <b>OKT</b> (Oktalyzer) uses IFF-style id+size chunks after an <code>OKTASONG</code> magic; <b>MED</b> and <b>Future Composer</b> are <b>pointer-based</b>, a fixed header of offsets into song/pattern/sample regions. The IFF ones decode fully; the pointer-based ones give up only their header without chasing offsets.</p>
 
       <div class="sec">the four, at a glance</div>
       <div class="tree">
-<b>SMUS</b>  FORM/SMUS   <span class="kf">"Hava Nagila!"  5 tracks, 4 instruments</span>   <span class="kr">— IFF, like AIFF</span>
-<b>OKT </b>  OKTASONG    <span class="kf">8 voices, 36 samples</span>                    <span class="kr">— IFF-style chunks</span>
-<b>MED </b>  MMD0        <span class="kf">116,090-byte OctaMED module</span>           <span class="kr">— pointer-based</span>
-<b>FC  </b>  FC14        <span class="kf">Future Composer chiptune, seq 988 B</span>    <span class="kr">— offset table</span>
+<b>SMUS</b>  FORM/SMUS   <span class="kf">"Hava Nagila!"  5 tracks, 4 instruments</span>   <span class="kr">-- IFF, like AIFF</span>
+<b>OKT </b>  OKTASONG    <span class="kf">8 voices, 36 samples</span>                    <span class="kr">-- IFF-style chunks</span>
+<b>MED </b>  MMD0        <span class="kf">116,090-byte OctaMED module</span>           <span class="kr">-- pointer-based</span>
+<b>FC  </b>  FC14        <span class="kf">Future Composer chiptune, seq 988 B</span>    <span class="kr">-- offset table</span>
       </div>
 
       <div class="sec">the Amiga, dated</div>
       <div class="timeline">
-        <div><span class="y">1985</span><span><b>Commodore Amiga + IFF</b> &mdash; the Amiga shipped with four-channel sampled sound, and EA's <b>Interchange File Format</b> (<code>FORM</code>, tagged chunks, big-endian) to store it. IFF is the direct ancestor of AIFF and RIFF/WAV.</span></div>
-        <div><span class="y">Sonix</span><span><b>SMUS</b> &mdash; Aegis Sonix saved scores as <code>FORM SMUS</code>: an <code>SHDR</code> header (tempo, volume, track count), <code>NAME</code>, <code>INS1</code> instrument registers, and <code>TRAK</code> note tracks.</span></div>
-        <div><span class="y">trackers</span><span><b>OKT / OctaMED</b> &mdash; the tracker scene pushed the Amiga's four hardware channels to <b>eight</b> by software-mixing pairs. Oktalyzer and OctaMED are the eight-channel workhorses.</span></div>
-        <div><span class="y">chiptune</span><span><b>Future Composer</b> &mdash; not a sample tracker but a <b>synth driver</b>: tiny files that generate sound from waveform/frequency tables at playback, the roots of chiptune.</span></div>
+        <div><span class="y">1985</span><span><b>Commodore Amiga + IFF</b> -- the Amiga shipped with four-channel sampled sound, and EA's <b>Interchange File Format</b> (<code>FORM</code>, tagged chunks, big-endian) to store it. IFF is the direct ancestor of AIFF and RIFF/WAV.</span></div>
+        <div><span class="y">Sonix</span><span><b>SMUS</b> -- Aegis Sonix saved scores as <code>FORM SMUS</code>: an <code>SHDR</code> header (tempo, volume, track count), <code>NAME</code>, <code>INS1</code> instrument registers, and <code>TRAK</code> note tracks.</span></div>
+        <div><span class="y">trackers</span><span><b>OKT / OctaMED</b> -- the tracker scene pushed the Amiga's four hardware channels to <b>eight</b> by software-mixing pairs. Oktalyzer and OctaMED are the eight-channel workhorses.</span></div>
+        <div><span class="y">chiptune</span><span><b>Future Composer</b> -- not a sample tracker but a <b>synth driver</b>: tiny files that generate sound from waveform/frequency tables at playback, the roots of chiptune.</span></div>
       </div>
 
-      <div class="callout"><b>IFF is the granddaddy.</b> The <code>FORM</code> / 4-byte-id / big-endian-size / word-padded structure of SMUS is exactly what AIFF and 8SVX use, and RIFF/WAV is the little-endian rewrite of it. SMUS reads with the same IFF reader as AIFF &mdash; only the chunk meanings differ.</div>
-      <div class="callout"><b>eight channels from four.</b> The Amiga's Paula chip has four hardware voices; OKT and OctaMED double that to eight by mixing two software voices per hardware channel. That is why OKT's <code>CMOD</code> chunk stores per-channel <i>split</i> flags &mdash; a set flag turns one hardware channel into two voices.</div>
-      <div class="callout"><b>pointer-based, so header-only.</b> MED and FC do not lay their data out in walkable chunks &mdash; they open with a table of absolute offsets into song, pattern, and sample regions, meant to be chased in RAM. The header (magic, module length, sequence length) reads directly; a full pattern/sample decode means chasing those offsets by hand.</div>
+      <div class="callout"><b>IFF is the granddaddy.</b> The <code>FORM</code> / 4-byte-id / big-endian-size / word-padded structure of SMUS is exactly what AIFF and 8SVX use, and RIFF/WAV is the little-endian rewrite of it. SMUS reads with the same IFF reader as AIFF -- only the chunk meanings differ.</div>
+      <div class="callout"><b>eight channels from four.</b> The Amiga's Paula chip has four hardware voices; OKT and OctaMED double that to eight by mixing two software voices per hardware channel. That is why OKT's <code>CMOD</code> chunk stores per-channel <i>split</i> flags -- a set flag turns one hardware channel into two voices.</div>
+      <div class="callout"><b>pointer-based, so header-only.</b> MED and FC do not lay their data out in walkable chunks -- they open with a table of absolute offsets into song, pattern, and sample regions, meant to be chased in RAM. The header (magic, module length, sequence length) reads directly; a full pattern/sample decode means chasing those offsets by hand.</div>
     </div>
 
     <!-- ===================== SMUS ===================== -->
@@ -237,40 +237,40 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="pfacts"><span>form<b>FORM "SMUS"</b></span><span>endian<b>big</b></span><span>SHDR<b>tempo / vol / tracks</b></span><span>chunks<b>NAME / INS1 / TRAK</b></span></div>
       <p class="plede">A Sonix score is textbook <b>IFF</b>: a <b>FORM</b> wrapper of type <b>SMUS</b>, then tagged chunks. <b>SHDR</b> is the score header (tempo, master volume, track count); <b>NAME</b> is the title; each <b>INS1</b> registers an instrument by name; each <b>TRAK</b> is a stream of note events. The two maps are the FORM wrapper and the SHDR from a real score, <code>"Hava Nagila!"</code>.</p>
       <div class="sec">FORM wrapper (12 bytes)</div>
-      <p class="note">The IFF envelope &mdash; identical in shape to AIFF and 8SVX.</p>
+      <p class="note">The IFF envelope -- identical in shape to AIFF and 8SVX.</p>
       <div id="smus-form" data-build></div>
       <div class="sec">SHDR chunk (id + size + 4-byte body)</div>
-      <p class="note">Hover <span class="k-en">ctTrack</span> &mdash; this score has 5 note tracks.</p>
+      <p class="note">Hover <span class="k-en">ctTrack</span> -- this score has 5 note tracks.</p>
       <div id="smus-shdr" data-build></div>
-      <div class="callout"><b>same envelope as AIFF.</b> <code>FORM</code>, a big-endian size, a 4-byte form type, then word-padded chunks &mdash; SMUS shares its container with AIFF and 8SVX exactly. Only the chunk vocabulary (<code>SHDR</code>, <code>TRAK</code>, <code>INS1</code>, Sonix's private <code>SNX1</code>) is score-specific. Any IFF reader walks it unchanged.</div>
-      <div class="callout"><b>instruments are names, tracks are events.</b> An <code>INS1</code> chunk registers an instrument the score references (<code>"acoustic guitar"</code>, <code>"fender Bass"</code>...); the <code>TRAK</code> chunks are the actual note streams, one per voice. So a SMUS file is a small sequence, not a sample bank &mdash; the sounds come from Sonix's own instrument set.</div>
+      <div class="callout"><b>same envelope as AIFF.</b> <code>FORM</code>, a big-endian size, a 4-byte form type, then word-padded chunks -- SMUS shares its container with AIFF and 8SVX exactly. Only the chunk vocabulary (<code>SHDR</code>, <code>TRAK</code>, <code>INS1</code>, Sonix's private <code>SNX1</code>) is score-specific. Any IFF reader walks it unchanged.</div>
+      <div class="callout"><b>instruments are names, tracks are events.</b> An <code>INS1</code> chunk registers an instrument the score references (<code>"acoustic guitar"</code>, <code>"fender Bass"</code>...); the <code>TRAK</code> chunks are the actual note streams, one per voice. So a SMUS file is a small sequence, not a sample bank -- the sounds come from Sonix's own instrument set.</div>
     </div>
 
     <!-- ===================== OKT ===================== -->
     <div class="panel" data-panel="okt">
       <div class="pfacts"><span>magic<b>"OKTASONG"</b></span><span>chunks<b>CMOD / SAMP / SPEE</b></span><span>voices<b>up to 8</b></span><span>samples<b>32-byte entries</b></span></div>
-      <p class="plede">Oktalyzer opens with an 8-byte <b>OKTASONG</b> magic, then IFF-style id+size chunks. <b>CMOD</b> holds the channel setup &mdash; four words that decide how many voices the four hardware channels become; <b>SAMP</b> is the sample table (32 bytes per entry); <b>SPEE</b>, <b>SLEN</b>, <b>PLEN</b> carry speed and length. The maps are the magic and the CMOD from a real Oktalyzer song.</p>
+      <p class="plede">Oktalyzer opens with an 8-byte <b>OKTASONG</b> magic, then IFF-style id+size chunks. <b>CMOD</b> holds the channel setup -- four words that decide how many voices the four hardware channels become; <b>SAMP</b> is the sample table (32 bytes per entry); <b>SPEE</b>, <b>SLEN</b>, <b>PLEN</b> carry speed and length. The maps are the magic and the CMOD from a real Oktalyzer song.</p>
       <div class="sec">OKTASONG magic (8 bytes)</div>
-      <p class="note">The whole magic is one token &mdash; no version field.</p>
+      <p class="note">The whole magic is one token -- no version field.</p>
       <div id="okt-magic" data-build></div>
       <div class="sec">CMOD chunk (id + size + four channel words)</div>
-      <p class="note">Hover a channel word &mdash; each non-zero word splits one hardware channel into two voices.</p>
+      <p class="note">Hover a channel word -- each non-zero word splits one hardware channel into two voices.</p>
       <div id="okt-cmod" data-build></div>
-      <div class="callout"><b>CMOD is the eight-channel switch.</b> The Amiga has four hardware voices. Each of CMOD's four words is a per-channel flag: <b>0</b> leaves the channel as one voice, <b>non-zero</b> splits it into two. All four split here, so this song plays <b>8 voices</b> &mdash; the Oktalyzer signature. Summing them gives the voice count.</div>
-      <div class="callout"><b>samples are 32-byte records.</b> The <code>SAMP</code> chunk is a flat table &mdash; its size divided by 32 is the sample count (36 here). Each entry names a sample and gives its length and loop. The count and the names come free; the sample PCM sits in later regions the module points to.</div>
+      <div class="callout"><b>CMOD is the eight-channel switch.</b> The Amiga has four hardware voices. Each of CMOD's four words is a per-channel flag: <b>0</b> leaves the channel as one voice, <b>non-zero</b> splits it into two. All four split here, so this song plays <b>8 voices</b> -- the Oktalyzer signature. Summing them gives the voice count.</div>
+      <div class="callout"><b>samples are 32-byte records.</b> The <code>SAMP</code> chunk is a flat table -- its size divided by 32 is the sample count (36 here). Each entry names a sample and gives its length and loop. The count and the names come free; the sample PCM sits in later regions the module points to.</div>
     </div>
 
     <!-- ===================== MED + FC ===================== -->
     <div class="panel" data-panel="medfc">
       <div class="pfacts"><span>MED<b>MMD0&ndash;MMD3</b></span><span>FC<b>SMOD / FC14</b></span><span>shape<b>pointer tables</b></span><span>decode<b>header-level</b></span></div>
-      <p class="plede">MED/OctaMED and Future Composer are <b>pointer-based</b> rather than chunked: after a short magic and a length, the header is a table of absolute offsets into the song, pattern, sample and (for FC) waveform regions &mdash; laid out to be chased in memory, not walked as chunks. Both are identified by magic, and the header summarises cheaply; a full decode means chasing the tables. The maps are the headers of an OctaMED module and a Future Composer tune.</p>
+      <p class="plede">MED/OctaMED and Future Composer are <b>pointer-based</b> rather than chunked: after a short magic and a length, the header is a table of absolute offsets into the song, pattern, sample and (for FC) waveform regions -- laid out to be chased in memory, not walked as chunks. Both are identified by magic, and the header summarises cheaply; a full decode means chasing the tables. The maps are the headers of an OctaMED module and a Future Composer tune.</p>
       <div class="sec">MED header (MMD0, first 16 bytes)</div>
-      <p class="note">Hover <span class="k-en">modlen</span> &mdash; the declared module length, checked against the file size.</p>
+      <p class="note">Hover <span class="k-en">modlen</span> -- the declared module length, checked against the file size.</p>
       <div id="med-hdr" data-build></div>
       <div class="sec">Future Composer header (FC14, first 16 bytes)</div>
       <p class="note">The magic dates the version; the words after it are region lengths/offsets.</p>
       <div id="fc-hdr" data-build></div>
-      <div class="callout"><b>the magic dates the version.</b> MED steps <code>MMD0</code> &rarr; <code>MMD1</code> &rarr; <code>MMD2</code> &rarr; <code>MMD3</code> across MED, OctaMED, OctaMED Pro and SoundStudio; Future Composer is <code>SMOD</code> (v1.3) or <code>FC14</code> (v1.4). The four bytes map straight to the variant name &mdash; the one field these header-only formats give up cheaply.</div>
+      <div class="callout"><b>the magic dates the version.</b> MED steps <code>MMD0</code> &rarr; <code>MMD1</code> &rarr; <code>MMD2</code> &rarr; <code>MMD3</code> across MED, OctaMED, OctaMED Pro and SoundStudio; Future Composer is <code>SMOD</code> (v1.3) or <code>FC14</code> (v1.4). The four bytes map straight to the variant name -- the one field these header-only formats give up cheaply.</div>
       <div class="callout"><b>modlen is a file-integrity check.</b> The MMDx header's <code>modlen</code> should equal the file length; a mismatch is a quick tell for a truncated module. Future Composer instead leads with region lengths (sequence, pattern, sample tables) that a player adds up to find each section.</div>
       <div class="callout"><b>why the header is where it stops.</b> Chasing the pointer tables into pattern and sample data carries real ambiguity across the MMDx revisions. Magic, variant and module length are the fields that verify cleanly; the regions past them need version-specific handling.</div>
     </div>

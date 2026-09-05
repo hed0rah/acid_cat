@@ -187,7 +187,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">An <b>.akp</b> is a <b>keygroup program</b> for the Akai S5000/S6000 samplers &mdash; the map that tells the sampler which sample to play for each key and velocity. It is a <b>RIFF file</b> (form type <code>APRG</code>) of little-endian IFF chunks: a <b>prg</b> header, then <b>out</b>, <b>tune</b>, <b>lfo</b>, <b>mods</b>, and one <b>kgrp</b> per keygroup. Each <code>kgrp</code> is itself <b>nested IFF</b> &mdash; <b>kloc</b> (key range), three <b>env</b>, a <b>filt</b>, and up to four <b>zone</b> chunks, each naming the sample it plays. The audio itself lives in sibling <code>.wav</code> files, so the program holds <i>references</i>, not samples. The tabs open each structure, drawn byte by byte from a real S6000 program. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">An <b>.akp</b> is a <b>keygroup program</b> for the Akai S5000/S6000 samplers -- the map that tells the sampler which sample to play for each key and velocity. It is a <b>RIFF file</b> (form type <code>APRG</code>) of little-endian IFF chunks: a <b>prg</b> header, then <b>out</b>, <b>tune</b>, <b>lfo</b>, <b>mods</b>, and one <b>kgrp</b> per keygroup. Each <code>kgrp</code> is itself <b>nested IFF</b> -- <b>kloc</b> (key range), three <b>env</b>, a <b>filt</b>, and up to four <b>zone</b> chunks, each naming the sample it plays. The audio itself lives in sibling <code>.wav</code> files, so the program holds <i>references</i>, not samples. The tabs open each structure, drawn byte by byte from a real S6000 program. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">orange</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -209,13 +209,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">The Akai program is pure <b>mapping</b>: it carries no audio, only the rules that turn a MIDI note into a sample. The file is a <b>RIFF</b> of form type <code>APRG</code>, and the interesting part is that it nests &mdash; the top level lists program-wide chunks (<b>prg</b>, <b>out</b>, <b>tune</b>, <b>lfo</b>, <b>mods</b>), and then a <b>kgrp</b> chunk per keygroup that contains its <i>own</i> chunk stream (<b>kloc</b>, <b>env</b>, <b>filt</b>, <b>zone</b>). Each <code>zone</code> names an external <code>.wav</code>. The program below is a real S6000 acoustic-guitar patch.</p>
+      <p class="plede">The Akai program is pure <b>mapping</b>: it carries no audio, only the rules that turn a MIDI note into a sample. The file is a <b>RIFF</b> of form type <code>APRG</code>, and the interesting part is that it nests -- the top level lists program-wide chunks (<b>prg</b>, <b>out</b>, <b>tune</b>, <b>lfo</b>, <b>mods</b>), and then a <b>kgrp</b> chunk per keygroup that contains its <i>own</i> chunk stream (<b>kloc</b>, <b>env</b>, <b>filt</b>, <b>zone</b>). Each <code>zone</code> names an external <code>.wav</code>. The program below is a real S6000 acoustic-guitar patch.</p>
 
       <div class="sec">a real program, laid out</div>
       <div class="tree">
-<b>RIFF</b> "APRG"   <span class="kr">— note: RIFF size = 0 (Akai quirk)</span>
+<b>RIFF</b> "APRG"   <span class="kr">-- note: RIFF size = 0 (Akai quirk)</span>
 &#9500;&#9472; <b>prg </b>  <span class="kf">midi program 4, 9 keygroups</span>
-&#9500;&#9472; <b>out / tune / lfo / lfo / mods</b>   <span class="kr">— program-wide settings</span>
+&#9500;&#9472; <b>out / tune / lfo / lfo / mods</b>   <span class="kr">-- program-wide settings</span>
 &#9492;&#9472; <b>kgrp</b> &times;9   <span class="kf">each a nested IFF stream</span>
    &#9500;&#9472; <b>kloc</b>  <span class="kf">keys 88-127</span>
    &#9500;&#9472; <b>env</b> &times;3, <b>filt</b>
@@ -224,51 +224,51 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
       <div class="sec">the S-series, dated</div>
       <div class="timeline">
-        <div><span class="y">1988</span><span><b>Akai S1000</b> &mdash; the studio-standard hardware sampler of its era. Its program/keygroup model (a key map of velocity-split zones) is the ancestor of the <code>.akp</code> layout.</span></div>
-        <div><span class="y">1998</span><span><b>S5000 / S6000</b> &mdash; the generation that saved programs to disk as <code>.akp</code> (RIFF/APRG), samples as <code>.wav</code>, and multis as <code>.akm</code>. A three-file split: mapping, audio, and arrangement.</span></div>
+        <div><span class="y">1988</span><span><b>Akai S1000</b> -- the studio-standard hardware sampler of its era. Its program/keygroup model (a key map of velocity-split zones) is the ancestor of the <code>.akp</code> layout.</span></div>
+        <div><span class="y">1998</span><span><b>S5000 / S6000</b> -- the generation that saved programs to disk as <code>.akp</code> (RIFF/APRG), samples as <code>.wav</code>, and multis as <code>.akm</code>. A three-file split: mapping, audio, and arrangement.</span></div>
         <div><span class="y">keygroup</span><span><b>the unit of an Akai program.</b> A keygroup owns a key range and up to four velocity <b>zones</b>; the sampler picks the zone by how hard the key is struck. Layering four sampled velocities per key is how the S-series got its realism.</span></div>
         <div><span class="y">now</span><span><b>read by converters.</b> Chicken Systems Translator, Extreme Sample Converter and others still parse <code>.akp</code> to migrate S-series libraries into soft samplers.</span></div>
       </div>
 
-      <div class="callout"><b>nested IFF, not flat.</b> Most RIFF files are one level deep. An Akai program is two: a <code>kgrp</code> chunk's payload is <i>itself</i> a stream of IFF chunks (<code>kloc</code>, <code>env</code>, <code>filt</code>, <code>zone</code>). A reader walks the outer chunks, then re-enters each <code>kgrp</code> to walk its inner ones &mdash; the same IFF reader, recursed one level.</div>
-      <div class="callout"><b>RIFF size is unreliable.</b> Akai typically writes <code>0x00000000</code> for the RIFF size field rather than the real body length &mdash; a firmware quirk. A strict RIFF reader that trusts the size reads nothing; the real bound is the file length, so the chunks are walked regardless.</div>
-      <div class="callout"><b>the samples are elsewhere.</b> A <code>zone</code> stores a sample <i>name</i>, not audio &mdash; the S6000 loads the matching <code>.wav</code> from the same volume. So the zones are references: they name the samples a program needs, and a missing sibling <code>.wav</code> is a broken program, not a broken file.</div>
+      <div class="callout"><b>nested IFF, not flat.</b> Most RIFF files are one level deep. An Akai program is two: a <code>kgrp</code> chunk's payload is <i>itself</i> a stream of IFF chunks (<code>kloc</code>, <code>env</code>, <code>filt</code>, <code>zone</code>). A reader walks the outer chunks, then re-enters each <code>kgrp</code> to walk its inner ones -- the same IFF reader, recursed one level.</div>
+      <div class="callout"><b>RIFF size is unreliable.</b> Akai typically writes <code>0x00000000</code> for the RIFF size field rather than the real body length -- a firmware quirk. A strict RIFF reader that trusts the size reads nothing; the real bound is the file length, so the chunks are walked regardless.</div>
+      <div class="callout"><b>the samples are elsewhere.</b> A <code>zone</code> stores a sample <i>name</i>, not audio -- the S6000 loads the matching <code>.wav</code> from the same volume. So the zones are references: they name the samples a program needs, and a missing sibling <code>.wav</code> is a broken program, not a broken file.</div>
     </div>
 
     <!-- ===================== RIFF + PRG ===================== -->
     <div class="panel" data-panel="header">
       <div class="pfacts"><span>form<b>RIFF "APRG"</b></span><span>riff size<b>0 (quirk)</b></span><span>prg<b>program header</b></span><span>counts<b>keygroups</b></span></div>
-      <p class="plede">The file opens like any RIFF &mdash; a <b>RIFF</b> magic, a size, a form type &mdash; but the form type is <b>APRG</b> (Akai program) and the size field is left <b>zero</b>. The first chunk, <b>prg</b>, is the program header: its bytes carry the MIDI program number and the declared <b>keygroup count</b>, which should match the number of <code>kgrp</code> chunks the file actually holds. Both maps are from a real S6000 program.</p>
+      <p class="plede">The file opens like any RIFF -- a <b>RIFF</b> magic, a size, a form type -- but the form type is <b>APRG</b> (Akai program) and the size field is left <b>zero</b>. The first chunk, <b>prg</b>, is the program header: its bytes carry the MIDI program number and the declared <b>keygroup count</b>, which should match the number of <code>kgrp</code> chunks the file actually holds. Both maps are from a real S6000 program.</p>
       <div class="sec">RIFF header (12 bytes)</div>
-      <p class="note">Hover <span class="k-en">riff_size</span> &mdash; zero, not the body length.</p>
+      <p class="note">Hover <span class="k-en">riff_size</span> -- zero, not the body length.</p>
       <div id="akai-riff" data-build></div>
       <div class="sec">prg chunk (id + size + 6-byte body)</div>
-      <p class="note">The program header. Hover <span class="k-en">keygroups</span> &mdash; declared 9, matching the 9 kgrp chunks.</p>
+      <p class="note">The program header. Hover <span class="k-en">keygroups</span> -- declared 9, matching the 9 kgrp chunks.</p>
       <div id="akai-prg" data-build></div>
-      <div class="callout"><b>trust the file, not the size.</b> Because <code>riff_size</code> is 0, the walk is sized from the actual file length and chunks are read until they run out &mdash; the same degrade-gracefully rule a stale RIFF size calls for in WAV. Every Akai program does this, so it is expected, not an error.</div>
+      <div class="callout"><b>trust the file, not the size.</b> Because <code>riff_size</code> is 0, the walk is sized from the actual file length and chunks are read until they run out -- the same degrade-gracefully rule a stale RIFF size calls for in WAV. Every Akai program does this, so it is expected, not an error.</div>
       <div class="callout"><b>prg declares, kgrp confirms.</b> The <code>prg</code> body's third byte is the <b>keygroup count</b> (9 here). It should equal the number of <code>kgrp</code> chunks present; a mismatch marks a truncated or hand-edited program. The second byte is the MIDI program number the sampler assigns.</div>
     </div>
 
     <!-- ===================== KGRP + KLOC ===================== -->
     <div class="panel" data-panel="frame">
       <div class="pfacts"><span>kgrp<b>a keygroup</b></span><span>payload<b>nested IFF</b></span><span>kloc<b>key range</b></span><span>then<b>env / filt / zone</b></span></div>
-      <p class="plede">A <b>kgrp</b> chunk is one keygroup, and its payload is a whole IFF stream of its own. The first inner chunk is <b>kloc</b> &mdash; the key location: the low and high MIDI notes this keygroup answers to. After it come three <b>env</b> (amplitude/filter/aux envelopes), a <b>filt</b>, and the <b>zone</b> chunks. The map is the start of a real <code>kgrp</code>, showing its first inner chunk, <code>kloc</code>.</p>
+      <p class="plede">A <b>kgrp</b> chunk is one keygroup, and its payload is a whole IFF stream of its own. The first inner chunk is <b>kloc</b> -- the key location: the low and high MIDI notes this keygroup answers to. After it come three <b>env</b> (amplitude/filter/aux envelopes), a <b>filt</b>, and the <b>zone</b> chunks. The map is the start of a real <code>kgrp</code>, showing its first inner chunk, <code>kloc</code>.</p>
       <div class="sec">kgrp payload, opening kloc chunk (16 bytes)</div>
-      <p class="note">Hover <span class="k-en">low_key</span> / <span class="k-en">high_key</span> &mdash; this keygroup covers MIDI notes 88-127.</p>
+      <p class="note">Hover <span class="k-en">low_key</span> / <span class="k-en">high_key</span> -- this keygroup covers MIDI notes 88-127.</p>
       <div id="akai-kloc" data-build></div>
-      <div class="callout"><b>a keygroup is a key window plus velocity layers.</b> <code>kloc</code> sets the window (low..high MIDI note); the four <code>zone</code> chunks that follow are the velocity layers within it. A program spreads keygroups across the keyboard, each a slice of the range &mdash; nine of them here, covering the guitar top to bottom.</div>
-      <div class="callout"><b>the same reader, one level down.</b> There is nothing special about the inner chunks: they are ordinary IFF (4-byte id, little-endian u32 size, payload, word-padded). The <code>kgrp</code> body is re-entered with the same chunk iterator used at the top level &mdash; recursion, not a second parser.</div>
+      <div class="callout"><b>a keygroup is a key window plus velocity layers.</b> <code>kloc</code> sets the window (low..high MIDI note); the four <code>zone</code> chunks that follow are the velocity layers within it. A program spreads keygroups across the keyboard, each a slice of the range -- nine of them here, covering the guitar top to bottom.</div>
+      <div class="callout"><b>the same reader, one level down.</b> There is nothing special about the inner chunks: they are ordinary IFF (4-byte id, little-endian u32 size, payload, word-padded). The <code>kgrp</code> body is re-entered with the same chunk iterator used at the top level -- recursion, not a second parser.</div>
     </div>
 
     <!-- ===================== ZONE ===================== -->
     <div class="panel" data-panel="sample">
       <div class="pfacts"><span>zone<b>a velocity layer</b></span><span>names<b>the sample</b></span><span>layout<b>flag + len + name</b></span><span>audio<b>external .wav</b></span></div>
-      <p class="plede">A <b>zone</b> is one velocity layer of a keygroup, and its most important content is a <b>sample name</b>: the <code>.wav</code> the sampler plays when a key in this group is struck in this zone's velocity band. The name is stored length-prefixed &mdash; a flag byte, a length, then the ASCII &mdash; followed by the zone's tuning and level parameters. Up to four zones stack per keygroup; unused ones carry an empty name. The map is a real zone naming <code>"12 STRING G5"</code>.</p>
+      <p class="plede">A <b>zone</b> is one velocity layer of a keygroup, and its most important content is a <b>sample name</b>: the <code>.wav</code> the sampler plays when a key in this group is struck in this zone's velocity band. The name is stored length-prefixed -- a flag byte, a length, then the ASCII -- followed by the zone's tuning and level parameters. Up to four zones stack per keygroup; unused ones carry an empty name. The map is a real zone naming <code>"12 STRING G5"</code>.</p>
       <div class="sec">zone chunk (id + size + flag + name)</div>
-      <p class="note">Hover <span class="k-en">sample_name</span> &mdash; the external <code>.wav</code> this zone references.</p>
+      <p class="note">Hover <span class="k-en">sample_name</span> -- the external <code>.wav</code> this zone references.</p>
       <div id="akai-zone" data-build></div>
-      <div class="callout"><b>length-prefixed, not null-terminated.</b> The zone names its sample as <code>[flag][length][bytes]</code> &mdash; byte 1 is the name length, and exactly that many ASCII bytes follow. A length of <b>0</b> means an empty zone (no sample for that velocity band), so only a non-zero length names a real reference.</div>
-      <div class="callout"><b>this is the reference graph edge.</b> The zone is where an Akai program points outward: the stored name is a filename the S6000 resolves on the same volume. Every distinct zone name belongs to the program's sample dependency list &mdash; the set of <code>.wav</code>s you need alongside the <code>.akp</code> for it to make sound.</div>
+      <div class="callout"><b>length-prefixed, not null-terminated.</b> The zone names its sample as <code>[flag][length][bytes]</code> -- byte 1 is the name length, and exactly that many ASCII bytes follow. A length of <b>0</b> means an empty zone (no sample for that velocity band), so only a non-zero length names a real reference.</div>
+      <div class="callout"><b>this is the reference graph edge.</b> The zone is where an Akai program points outward: the stored name is a filename the S6000 resolves on the same volume. Every distinct zone name belongs to the program's sample dependency list -- the set of <code>.wav</code>s you need alongside the <code>.akp</code> for it to make sound.</div>
     </div>
 
   </div>

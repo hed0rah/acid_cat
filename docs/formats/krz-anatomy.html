@@ -191,7 +191,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">A <b>.KRZ</b> file is not a chunked container &mdash; it is a flat <b>object-database dump</b>. A 32-byte <b>PRAM</b> header, then a run of length-prefixed <b>object blocks</b> (Sample, Keymap, Program, Setup, Studio-FX...), an <b>int32 = 0</b> end marker, and one contiguous region of raw 16-bit PCM the samples point into by absolute word offset. Everything is <b>big-endian</b> &mdash; the K-series is a Motorola 68000 platform. Objects cross-reference by numeric <b>id</b>: a Program layer names a Keymap, a Keymap entry names a Sample. The tabs open each structure, drawn byte by byte from a real bank. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">A <b>.KRZ</b> file is not a chunked container -- it is a flat <b>object-database dump</b>. A 32-byte <b>PRAM</b> header, then a run of length-prefixed <b>object blocks</b> (Sample, Keymap, Program, Setup, Studio-FX...), an <b>int32 = 0</b> end marker, and one contiguous region of raw 16-bit PCM the samples point into by absolute word offset. Everything is <b>big-endian</b> -- the K-series is a Motorola 68000 platform. Objects cross-reference by numeric <b>id</b>: a Program layer names a Keymap, a Keymap entry names a Sample. The tabs open each structure, drawn byte by byte from a real bank. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">moss</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -216,38 +216,38 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">Where a WAV or AIFF is a self-describing tree of chunks, a Kurzweil bank is a <b>database dump</b>: a header, a flat list of independent objects, an end marker, then the audio. There is <b>no preset/voice/zone hierarchy inside an object</b> &mdash; instead a bank is three <i>kinds</i> of object that reference each other by numeric id. A <b>Program</b> (a VAST synth patch) names a <b>Keymap</b>; a Keymap's key entries name <b>Samples</b>; the Samples point by absolute word offset into one shared PCM blob at the end of the file. The object below is a real Sweetwater bank, <code>e3_bass.krz</code>.</p>
+      <p class="plede">Where a WAV or AIFF is a self-describing tree of chunks, a Kurzweil bank is a <b>database dump</b>: a header, a flat list of independent objects, an end marker, then the audio. There is <b>no preset/voice/zone hierarchy inside an object</b> -- instead a bank is three <i>kinds</i> of object that reference each other by numeric id. A <b>Program</b> (a VAST synth patch) names a <b>Keymap</b>; a Keymap's key entries name <b>Samples</b>; the Samples point by absolute word offset into one shared PCM blob at the end of the file. The object below is a real Sweetwater bank, <code>e3_bass.krz</code>.</p>
 
       <div class="sec">a real bank, laid out</div>
       <div class="tree">
-<b>PRAM</b>  <span class="kf">osize=1028</span>  OS v2.08                    <span class="kr">— 32-byte file header</span>
-&#9500;&#9472; <b>Sample</b>  #200  "UNNAMED WS"    39101 Hz loop, root C2    <span class="kr">— KSample + Soundfilehead</span>
+<b>PRAM</b>  <span class="kf">osize=1028</span>  OS v2.08                    <span class="kr">-- 32-byte file header</span>
+&#9500;&#9472; <b>Sample</b>  #200  "UNNAMED WS"    39101 Hz loop, root C2    <span class="kr">-- KSample + Soundfilehead</span>
 &#9500;&#9472; <b>Keymap</b>  #200  "E3 BASS  C2-C4"  <span class="kf">-&gt; sample 200</span>, 127 keys
 &#9500;&#9472; <b>Keymap</b>  #201  "E3 BASS    -L2"  <span class="kf">-&gt; sample 200</span>
 &#9492;&#9472; <b>Program</b> #200  "E3 BASS"        1 layer <span class="kf">-&gt; keymap 200</span>
-   <b>int32 = 0</b>                                            <span class="kr">— object-section end marker</span>
-<b>PCM</b>  0x0404 .. EOF   205,610 bytes  102,805 samples      <span class="kr">— raw 16-bit BIG-endian</span>
+   <b>int32 = 0</b>                                            <span class="kr">-- object-section end marker</span>
+<b>PCM</b>  0x0404 .. EOF   205,610 bytes  102,805 samples      <span class="kr">-- raw 16-bit BIG-endian</span>
       </div>
 
       <div class="sec">the K-series, dated</div>
       <div class="timeline">
-        <div><span class="y">1991</span><span><b>K2000</b> &mdash; Kurzweil's VAST engine (Variable Architecture Synthesis): sample playback into a DSP block chain. The <b>.KRZ</b> bank format is its disk-save.</span></div>
-        <div><span class="y">1996</span><span><b>K2500</b> &mdash; expanded VAST, more DSP, same bank model. Reads K2000 banks.</span></div>
-        <div><span class="y">1999</span><span><b>K2600</b> &mdash; the last of the line; the format is stable across all three, disambiguated by the OS version in the header.</span></div>
-        <div><span class="y">68k</span><span><b>big-endian throughout.</b> The K-series runs a Motorola 68000, so every size, id, and sample word is big-endian &mdash; the opposite of the little-endian RIFF/WAV world and of E-mu's E4B.</span></div>
+        <div><span class="y">1991</span><span><b>K2000</b> -- Kurzweil's VAST engine (Variable Architecture Synthesis): sample playback into a DSP block chain. The <b>.KRZ</b> bank format is its disk-save.</span></div>
+        <div><span class="y">1996</span><span><b>K2500</b> -- expanded VAST, more DSP, same bank model. Reads K2000 banks.</span></div>
+        <div><span class="y">1999</span><span><b>K2600</b> -- the last of the line; the format is stable across all three, disambiguated by the OS version in the header.</span></div>
+        <div><span class="y">68k</span><span><b>big-endian throughout.</b> The K-series runs a Motorola 68000, so every size, id, and sample word is big-endian -- the opposite of the little-endian RIFF/WAV world and of E-mu's E4B.</span></div>
       </div>
 
-      <div class="callout"><b>the type-in-the-hash trick.</b> Every object's 16-bit <b>hash</b> packs both a type and an id: <code>hash = (type &lt;&lt; 10) | id</code>. So <code>0x98C8</code> is <code>(38 &lt;&lt; 10) | 200</code> &mdash; type 38 (Sample), id 200. The reader recovers <code>type = hash &gt;&gt; 10</code> and <code>id = hash &amp; 0x3FF</code>. Hardware-confirmed types: 36 Program, 37 Keymap, 38 Sample; inferred from object names (tentative): 28 Studio/FX, 39 Setup, 25 Master. The three id spaces (sample/keymap/program) all start at 200 and can collide harmlessly &mdash; the type qualifies the id.</div>
-      <div class="callout"><b>walk by the negative length.</b> Each object opens with a <b>signed 32-bit blocksize stored negative</b> &mdash; a reader advances to the next object by adding <code>&minus;blocksize</code> to its position. The walk ends at an <code>int32 = 0</code>. After that marker sits one contiguous PCM region, word-addressed as <code>osize + word_index &times; 2</code>. A forged blocksize can point anywhere, so each step must be bounded to the file.</div>
-      <div class="callout"><b>RAM &ne; file.</b> The K2000's live SysEx object dump returns a fixed-layout <i>RAM</i> object, not this tagged-segment disk format &mdash; the firmware converts on load and save. These bytes describe the <b>.KRZ file</b>, the form a librarian or converter sees on disk.</div>
+      <div class="callout"><b>the type-in-the-hash trick.</b> Every object's 16-bit <b>hash</b> packs both a type and an id: <code>hash = (type &lt;&lt; 10) | id</code>. So <code>0x98C8</code> is <code>(38 &lt;&lt; 10) | 200</code> -- type 38 (Sample), id 200. The reader recovers <code>type = hash &gt;&gt; 10</code> and <code>id = hash &amp; 0x3FF</code>. Hardware-confirmed types: 36 Program, 37 Keymap, 38 Sample; inferred from object names (tentative): 28 Studio/FX, 39 Setup, 25 Master. The three id spaces (sample/keymap/program) all start at 200 and can collide harmlessly -- the type qualifies the id.</div>
+      <div class="callout"><b>walk by the negative length.</b> Each object opens with a <b>signed 32-bit blocksize stored negative</b> -- a reader advances to the next object by adding <code>&minus;blocksize</code> to its position. The walk ends at an <code>int32 = 0</code>. After that marker sits one contiguous PCM region, word-addressed as <code>osize + word_index &times; 2</code>. A forged blocksize can point anywhere, so each step must be bounded to the file.</div>
+      <div class="callout"><b>RAM &ne; file.</b> The K2000's live SysEx object dump returns a fixed-layout <i>RAM</i> object, not this tagged-segment disk format -- the firmware converts on load and save. These bytes describe the <b>.KRZ file</b>, the form a librarian or converter sees on disk.</div>
     </div>
 
     <!-- ===================== PRAM ===================== -->
     <div class="panel" data-panel="pram">
       <div class="pfacts"><span>magic<b>"PRAM"</b></span><span>size<b>32 bytes</b></span><span>endian<b>big</b></span><span>osize<b>points at PCM</b></span></div>
-      <p class="plede">The 32-byte file header. Four things matter: the <b>PRAM</b> magic, the <b>osize</b> pointer to where the PCM sample region begins (which is also the end of the object section), and the <b>software version</b> that dates the bank. The remaining words are reserved &mdash; the mpc2emu writer leaves them zero, but hardware-saved banks carry non-zero values whose meaning is not pinned down.</p>
+      <p class="plede">The 32-byte file header. Four things matter: the <b>PRAM</b> magic, the <b>osize</b> pointer to where the PCM sample region begins (which is also the end of the object section), and the <b>software version</b> that dates the bank. The remaining words are reserved -- the mpc2emu writer leaves them zero, but hardware-saved banks carry non-zero values whose meaning is not pinned down.</p>
       <div class="sec">PRAM header (32 bytes)</div>
-      <p class="note">Example: <code>e3_bass.krz</code> &mdash; a small 4-object bank, K2000 OS v2.08.</p>
+      <p class="note">Example: <code>e3_bass.krz</code> -- a small 4-object bank, K2000 OS v2.08.</p>
       <div id="pram-hdr" data-build></div>
       <div class="callout"><b>osize is a pointer, not a size.</b> The name is misleading: <code>osize</code> is the absolute byte <i>offset</i> where the PCM begins (written last, patched in after all objects are laid out). It doubles as the end of the object section. A file where <code>osize == filesize</code> has objects but no samples (a program-only or keymap-only bank).</div>
     </div>
@@ -255,52 +255,52 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== OBJECT BLOCK ===================== -->
     <div class="panel" data-panel="object">
       <div class="pfacts"><span>blocksize<b>negative i32</b></span><span>hash<b>type &lt;&lt; 10 | id</b></span><span>name<b>&le; 16 ASCII</b></span></div>
-      <p class="plede">Every object &mdash; whatever its kind &mdash; opens with the same framing: a <b>negative blocksize</b> to walk by, a <b>hash</b> carrying type and id, an <b>obj_size</b>, a <b>name offset</b>, the ASCII <b>name</b>, and word-alignment padding. Only after this common header does the type-specific body begin. The map below is the header of the Sample object from the bank on the Overview tab.</p>
+      <p class="plede">Every object -- whatever its kind -- opens with the same framing: a <b>negative blocksize</b> to walk by, a <b>hash</b> carrying type and id, an <b>obj_size</b>, a <b>name offset</b>, the ASCII <b>name</b>, and word-alignment padding. Only after this common header does the type-specific body begin. The map below is the header of the Sample object from the bank on the Overview tab.</p>
       <div class="sec">object block header (Sample #200)</div>
       <p class="note">The 22 bytes from block start to the object-specific data. Hover the <span class="k-en">hash</span> to see the type/id split.</p>
       <div id="object-hdr" data-build></div>
-      <div class="callout"><b>the name offset.</b> <code>name_ofs</code> is the distance from its own field to the start of the object data: <code>name_len + 3</code> for an odd-length name, <code>name_len + 4</code> for even (the extra byte word-aligns). "UNNAMED WS" is 10 chars (even), so <code>ofs = 14</code> and the data starts 14 bytes past the field &mdash; after the name and its two null pad bytes.</div>
+      <div class="callout"><b>the name offset.</b> <code>name_ofs</code> is the distance from its own field to the start of the object data: <code>name_len + 3</code> for an odd-length name, <code>name_len + 4</code> for even (the extra byte word-aligns). "UNNAMED WS" is 10 chars (even), so <code>ofs = 14</code> and the data starts 14 bytes past the field -- after the name and its two null pad bytes.</div>
     </div>
 
     <!-- ===================== SAMPLE ===================== -->
     <div class="panel" data-panel="sample">
       <div class="pfacts"><span>KSample<b>12 B</b></span><span>Soundfilehead<b>32 B</b></span><span>loop bit<b>0x80 inverted</b></span><span>rate<b>from period</b></span></div>
-      <p class="plede">A Sample object body is a 12-byte <b>KSample</b> header (mono/stereo, header count) then a 32-byte <b>Soundfilehead</b> per channel: root key, loop flag, the word offsets into the shared PCM blob, and the sample period from which the rate is derived. Two envelope structs follow (not drawn). The whole thing points <i>into</i> the PCM region &mdash; it carries no audio itself.</p>
+      <p class="plede">A Sample object body is a 12-byte <b>KSample</b> header (mono/stereo, header count) then a 32-byte <b>Soundfilehead</b> per channel: root key, loop flag, the word offsets into the shared PCM blob, and the sample period from which the rate is derived. Two envelope structs follow (not drawn). The whole thing points <i>into</i> the PCM region -- it carries no audio itself.</p>
       <div class="sec">KSample + Soundfilehead (44 bytes)</div>
       <p class="note">Example: Sample #200, 16-bit mono, 39101 Hz, looped, root C2. Hover <span class="k-en">sf_flags</span> for the loop encoding.</p>
       <div id="sample-body" data-build></div>
-      <div class="callout"><b>the inverted loop bit (HW-confirmed).</b> <code>Soundfilehead.flags</code> is <code>0x70</code> when <b>looped</b> and <code>0xF0</code> when <b>one-shot</b> &mdash; the loop on/off bit <code>0x80</code> is <b>inverted</b> (set = one-shot). The <code>0x10|0x20|0x40</code> bits are the load + playback-enable set; <code>0x40</code> alone loads the sample but produces <i>no sound</i> (the original "silent KRZ" bug). For a looped sample <code>sampleEnd</code> is the <b>loop end</b> word, not the PCM end.</div>
+      <div class="callout"><b>the inverted loop bit (HW-confirmed).</b> <code>Soundfilehead.flags</code> is <code>0x70</code> when <b>looped</b> and <code>0xF0</code> when <b>one-shot</b> -- the loop on/off bit <code>0x80</code> is <b>inverted</b> (set = one-shot). The <code>0x10|0x20|0x40</code> bits are the load + playback-enable set; <code>0x40</code> alone loads the sample but produces <i>no sound</i> (the original "silent KRZ" bug). For a looped sample <code>sampleEnd</code> is the <b>loop end</b> word, not the PCM end.</div>
       <div class="callout"><b>rate from period.</b> There is no sample-rate field. <code>samplePeriod</code> is a big-endian u32 = <code>round(1e9 / rate)</code> in nanoseconds, so <code>rate = round(1e9 / period)</code>. Here <code>0x000063E7 = 25575 ns &rarr; 39101 Hz</code>.</div>
     </div>
 
     <!-- ===================== KEYMAP ===================== -->
     <div class="panel" data-panel="keymap">
       <div class="pfacts"><span>header<b>28 B</b></span><span>entries<b>128 keys</b></span><span>method<b>0x03 / 0x13</b></span><span>maps<b>key -&gt; sample</b></span></div>
-      <p class="plede">A Keymap is one voice's key-to-sample map: a 28-byte header, then up to 128 fixed-size key entries. Each entry names the <b>Sample id</b> to play for that key (the K2000 auto-transposes it from the sample root). The entry width is set by the <b>method</b> field &mdash; and it is not the same in every bank, so the stride must be read, never assumed.</p>
+      <p class="plede">A Keymap is one voice's key-to-sample map: a 28-byte header, then up to 128 fixed-size key entries. Each entry names the <b>Sample id</b> to play for that key (the K2000 auto-transposes it from the sample root). The entry width is set by the <b>method</b> field -- and it is not the same in every bank, so the stride must be read, never assumed.</p>
       <div class="sec">KKeymap header (28 bytes)</div>
       <p class="note">Example: Keymap #200 from <code>e3_bass.krz</code>. Hover <span class="k-en">method</span> and <span class="k-en">entry_size</span>.</p>
       <div id="keymap-hdr" data-build></div>
       <div class="sec">key entry (3 bytes, method 0x03)</div>
-      <p class="note">One key's mapping. This bank uses <b>method 0x03</b> &mdash; a 3-byte entry with no per-key tuning.</p>
+      <p class="note">One key's mapping. This bank uses <b>method 0x03</b> -- a 3-byte entry with no per-key tuning.</p>
       <div id="keymap-entry" data-build></div>
-      <div class="callout"><b>two entry layouts in the wild.</b> The modern K2000 (and the mpc2emu writer) save <b>method 0x0013</b>: a 5-byte entry, <code>tuning[i16] &#124; sampleID[u16] &#124; SSNr[u8]</code>. But other banks use <b>method 0x0003</b>: a 3-byte entry, <code>sampleID[u16] &#124; SSNr[u8]</code> with <b>no tuning prefix</b> &mdash; so the Sample id sits at offset 0, not offset 2. A reader that hard-codes the 5-byte layout reads the wrong bytes here (it lands on <code>0x0100 = 256</code> instead of the real <code>0x00C8 = 200</code>). The <code>entry_size</code> field is the authoritative stride; the <code>method</code> low nibble bit <code>0x10</code> is what adds the tuning word.</div>
+      <div class="callout"><b>two entry layouts in the wild.</b> The modern K2000 (and the mpc2emu writer) save <b>method 0x0013</b>: a 5-byte entry, <code>tuning[i16] &#124; sampleID[u16] &#124; SSNr[u8]</code>. But other banks use <b>method 0x0003</b>: a 3-byte entry, <code>sampleID[u16] &#124; SSNr[u8]</code> with <b>no tuning prefix</b> -- so the Sample id sits at offset 0, not offset 2. A reader that hard-codes the 5-byte layout reads the wrong bytes here (it lands on <code>0x0100 = 256</code> instead of the real <code>0x00C8 = 200</code>). The <code>entry_size</code> field is the authoritative stride; the <code>method</code> low nibble bit <code>0x10</code> is what adds the tuning word.</div>
     </div>
 
     <!-- ===================== PROGRAM ===================== -->
     <div class="panel" data-panel="program">
       <div class="pfacts"><span>encoding<b>tagged segments</b></span><span>seg len<b>by tag &amp; 0xF8</b></span><span>ends<b>int16 = 0</b></span><span>layers<b>1 LYR each</b></span></div>
-      <p class="plede">A Program is a VAST patch: a stream of <b>tagged segments</b>, each a 1-byte tag then a fixed number of data bytes, terminated by <code>int16 = 0</code>. The segment length is keyed by <code>tag &amp; 0xF8</code> (a family), with one exact-tag exception. The shape is <b>PGM FX</b> once, then per layer a run of <b>LYR ... ENC ENV ENC CAL HOB HOB HOB HOB</b> &mdash; one LYR and one CAL (which names the layer's Keymap) per voice.</p>
+      <p class="plede">A Program is a VAST patch: a stream of <b>tagged segments</b>, each a 1-byte tag then a fixed number of data bytes, terminated by <code>int16 = 0</code>. The segment length is keyed by <code>tag &amp; 0xF8</code> (a family), with one exact-tag exception. The shape is <b>PGM FX</b> once, then per layer a run of <b>LYR ... ENC ENV ENC CAL HOB HOB HOB HOB</b> -- one LYR and one CAL (which names the layer's Keymap) per voice.</p>
       <div class="sec">program stream (first 24 bytes: PGM + FX)</div>
       <p class="note">Example: Program #200. Hover <span class="k-en">pgm_tag</span> / <span class="k-en">fx_tag</span> to see the two segment boundaries.</p>
       <div id="program-seg" data-build></div>
-      <div class="callout"><b>segment lengths (data bytes after the tag).</b> <code>0x08</code> PGM / <code>0x09</code> LYR = 15; <code>0x0F</code> FX = 7 (the exact-tag exception &mdash; it lives in the 0x08 family but is short); <code>0x18</code> FUN = 3; <code>0x10</code> ASR / <code>0x14</code> LFO / <code>0x68</code> KDFX = 7; <code>0x20</code> ENC / <code>0x50</code> HOB = 15; <code>0x40</code> CAL / <code>0x78</code> KB3 = 31. Counting <b>LYR (0x09)</b> tags gives the layer count; the per-parameter VAST decode (filter, envelopes, LFO) is undocumented.</div>
-      <div class="callout"><b>CAL holds the keymap link.</b> Each layer's <b>CAL</b> (0x40, 31 bytes) references its Keymap id in bytes <code>[11,12]</code> only &mdash; a second keymap slot at <code>[7,8]</code> must stay zero, or the K2000 claims two keymaps per layer and goes silent past four layers. This is the Program &rarr; Keymap edge of the reference graph.</div>
+      <div class="callout"><b>segment lengths (data bytes after the tag).</b> <code>0x08</code> PGM / <code>0x09</code> LYR = 15; <code>0x0F</code> FX = 7 (the exact-tag exception -- it lives in the 0x08 family but is short); <code>0x18</code> FUN = 3; <code>0x10</code> ASR / <code>0x14</code> LFO / <code>0x68</code> KDFX = 7; <code>0x20</code> ENC / <code>0x50</code> HOB = 15; <code>0x40</code> CAL / <code>0x78</code> KB3 = 31. Counting <b>LYR (0x09)</b> tags gives the layer count; the per-parameter VAST decode (filter, envelopes, LFO) is undocumented.</div>
+      <div class="callout"><b>CAL holds the keymap link.</b> Each layer's <b>CAL</b> (0x40, 31 bytes) references its Keymap id in bytes <code>[11,12]</code> only -- a second keymap slot at <code>[7,8]</code> must stay zero, or the K2000 claims two keymaps per layer and goes silent past four layers. This is the Program &rarr; Keymap edge of the reference graph.</div>
     </div>
 
     <!-- ===================== SROM ===================== -->
     <div class="panel" data-panel="srom">
       <div class="pfacts"><span>magic<b>"SROM"</b></span><span>not<b>PRAM</b></span><span>content<b>effects / sample ROM</b></span></div>
-      <p class="plede">Not every <b>.krz</b> is a PRAM bank. Effects and sample-ROM files use a different, simpler container that opens with <b>SROM</b> instead of PRAM &mdash; a magic, a declared size, then a zero-filled body. The header must be read on its own terms rather than parsed as an object bank; the SROM body layout is undocumented.</p>
+      <p class="plede">Not every <b>.krz</b> is a PRAM bank. Effects and sample-ROM files use a different, simpler container that opens with <b>SROM</b> instead of PRAM -- a magic, a declared size, then a zero-filled body. The header must be read on its own terms rather than parsed as an object bank; the SROM body layout is undocumented.</p>
       <div class="sec">SROM header (8 bytes)</div>
       <p class="note">Example: <code>verbhall.krz</code>, a reverb-hall effects file.</p>
       <div id="srom-hdr" data-build></div>

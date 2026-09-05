@@ -191,7 +191,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">Ableton writes a <b>.asd</b> beside every audio file it analyses. It is usually described as a waveform cache, and that is wrong: it holds <b>warp markers, loop points, onsets, pitch marks and time signature</b> &mdash; Live's whole reading of the audio. The head is a <b>frame-position grid</b> whose last entry is the source file's exact frame count and whose steps never exceed <b>30&nbsp;ms</b> of audio; because that ceiling is a fixed fraction of the sample rate, an <b>orphaned sidecar still describes audio that has been deleted</b>. The body is a serialised object tree whose field names are stored in <b>UTF-16</b>, which is why an ASCII scan makes the file look like noise. It also states a <b>tempo</b> -- not as a number, but as a mapping from seconds to beats that the tempo falls out of. <b>Hover</b> a field to light its bytes.</p>
+  <p class="plede lede">Ableton writes a <b>.asd</b> beside every audio file it analyses. It is usually described as a waveform cache, and that is wrong: it holds <b>warp markers, loop points, onsets, pitch marks and time signature</b> -- Live's whole reading of the audio. The head is a <b>frame-position grid</b> whose last entry is the source file's exact frame count and whose steps never exceed <b>30&nbsp;ms</b> of audio; because that ceiling is a fixed fraction of the sample rate, an <b>orphaned sidecar still describes audio that has been deleted</b>. The body is a serialised object tree whose field names are stored in <b>UTF-16</b>, which is why an ASCII scan makes the file look like noise. It also states a <b>tempo</b> -- not as a number, but as a mapping from seconds to beats that the tempo falls out of. <b>Hover</b> a field to light its bytes.</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">moss</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -261,14 +261,14 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <tr><td>duration</td><td>frame count / rate</td><td>inherits the rate's</td></tr>
         </tbody>
       </table>
-      <div class="callout"><b>This is the reason to walk the format.</b> An orphaned <code>.asd</code> in a folder is evidence about a file that no longer exists &mdash; its rate, its length, its exact sample count. Nothing else in the toolchain recovers that, because nothing else survives the audio.</div>
-      <div class="callout"><b>No tempo NUMBER is stored, but the tempo is recoverable.</b> The value appears nowhere &mdash; at no byte offset, as neither f32 nor f64, and in no derived form. Live keeps a mapping instead: warp markers pin seconds to beats, and the tempo falls out of any two of them. See the Warp tab.</div>
+      <div class="callout"><b>This is the reason to walk the format.</b> An orphaned <code>.asd</code> in a folder is evidence about a file that no longer exists -- its rate, its length, its exact sample count. Nothing else in the toolchain recovers that, because nothing else survives the audio.</div>
+      <div class="callout"><b>No tempo NUMBER is stored, but the tempo is recoverable.</b> The value appears nowhere -- at no byte offset, as neither f32 nor f64, and in no derived form. Live keeps a mapping instead: warp markers pin seconds to beats, and the tempo falls out of any two of them. See the Warp tab.</div>
     </div>
 
     <!-- ===================== OBJECTS ===================== -->
     <div class="panel" data-panel="objects">
       <div class="pfacts"><span>names<b>u32 + UTF-16LE</b></span><span>distinct<b>69</b></span><span>layout<b>interleaved</b></span><span>version<b>per object</b></span></div>
-      <p class="plede">After the grid comes a serialised object tree that <b>writes its own field names inline</b>. They are length-prefixed <b>UTF-16</b>, so every second byte is zero and an ASCII string scan returns nothing &mdash; which is most of why this format has a reputation for being opaque. The names are not gathered in a header; they are <b>interleaved with their data</b> across the whole file, so a parser can seek a field by name instead of by a version-specific offset.</p>
+      <p class="plede">After the grid comes a serialised object tree that <b>writes its own field names inline</b>. They are length-prefixed <b>UTF-16</b>, so every second byte is zero and an ASCII string scan returns nothing -- which is most of why this format has a reputation for being opaque. The names are not gathered in a header; they are <b>interleaved with their data</b> across the whole file, so a parser can seek a field by name instead of by a version-specific offset.</p>
       <div class="sec">a field name on disk (26 bytes)</div>
       <p class="note">Note the 0x00 after every character.</p>
       <div id="asd-name" data-build></div>
@@ -284,19 +284,19 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         </tbody>
       </table>
       <div class="callout"><b>Optional sections, not generations.</b> It is tempting to read the field set as a format version. It is not one: over 1,473 sidecars <b>62% declare BOTH</b> the beat-tracking set (<code>InitialBPM</code>, <code>Bpms</code>, <code>BeatTrackState</code>, <code>Tonalities</code>) and the overview set (<code>OverViewLevels</code>, <code>UnbiasedTempoEstimate</code>), so they cannot be generations of one another. Versioning is carried <i>per object</i> as individual <code>Version</code> ints, and there is no global version byte.</div>
-      <div class="callout"><b>OriginalFileSize is the staleness check.</b> Live records the source audio's byte size and re-analyses on mismatch &mdash; the same mechanism REAPER uses (mtime + size), arrived at independently. Of 1,200 sidecars sitting beside their real audio, <b>96% reference its current size</b>; one that does not is describing a version of the file that no longer exists. It detects an edit but cannot re-find the file after a rename: the binding is by filename alone, so moving the audio orphans it silently.</div>
-      <div class="callout"><b>Declared is not stored.</b> This schema is shared with the Live Set, so it names things the sidecar never carries. <code>LoopStart</code>, <code>LoopEnd</code>, <code>IsWarped</code>, <code>WarpMode</code>, <code>Numerator</code> and <code>Denominator</code> are all declared here &mdash; and <code>LoopEnd</code> is <b>absent from 91%</b> of files whose Set states a real one. Loop points belong to a CLIP, and one audio file can back many clips with different loops. What the sidecar holds is per-file ANALYSIS.</div>
+      <div class="callout"><b>OriginalFileSize is the staleness check.</b> Live records the source audio's byte size and re-analyses on mismatch -- the same mechanism REAPER uses (mtime + size), arrived at independently. Of 1,200 sidecars sitting beside their real audio, <b>96% reference its current size</b>; one that does not is describing a version of the file that no longer exists. It detects an edit but cannot re-find the file after a rename: the binding is by filename alone, so moving the audio orphans it silently.</div>
+      <div class="callout"><b>Declared is not stored.</b> This schema is shared with the Live Set, so it names things the sidecar never carries. <code>LoopStart</code>, <code>LoopEnd</code>, <code>IsWarped</code>, <code>WarpMode</code>, <code>Numerator</code> and <code>Denominator</code> are all declared here -- and <code>LoopEnd</code> is <b>absent from 91%</b> of files whose Set states a real one. Loop points belong to a CLIP, and one audio file can back many clips with different loops. What the sidecar holds is per-file ANALYSIS.</div>
     </div>
 
     <!-- ===================== WARP + TEMPO ===================== -->
     <div class="panel" data-panel="warp">
       <div class="pfacts"><span>record<b>31 bytes</b></span><span>SecTime<b>f64 seconds</b></span><span>BeatTime<b>f64 beats</b></span><span>tempo<b>derived</b></span></div>
-      <p class="plede">A warp marker pins one instant of the recording to one position in the bar. Each record carries its own class name inline, u8-length-prefixed, so the markers are <b>self-locating</b> &mdash; there is no count to find and no offset to derive.</p>
+      <p class="plede">A warp marker pins one instant of the recording to one position in the bar. Each record carries its own class name inline, u8-length-prefixed, so the markers are <b>self-locating</b> -- there is no count to find and no offset to derive.</p>
       <div class="sec">one warp marker (31 bytes)</div>
       <p class="note">Marker id 1 from a real project sidecar. The Live Set that wrote it states exactly these values.</p>
       <div id="asd-warp" data-build></div>
       <div class="callout"><b>The tempo is the mapping, not a number.</b> Nothing in a <code>.asd</code> stores a BPM, at any byte offset, as neither f32 nor f64, and in no derived form. But two markers give it directly: <code>(beats / seconds) x 60</code>. Here 0.03125 beats in 0.011029411764705883 s is <b>170 BPM</b>, and the Live Set declares 170. Across 40 clips the derivation matched the declared tempo every time, and over a 2,000-file sample it yields only clean musical values: 140, 170, 138, 120, 150, 145, 70, 172.</div>
-      <div class="callout"><b>Most files have none, and that is not a gap.</b> A one-shot nobody warped has nothing to pin, so most sidecars carry no markers at all. A clip the Live Set marks unwarped never has them. The presence of this section is not a format version: it appears under Live 9.7 through 12, and one project written by a single version contains sidecars both with and without it &mdash; a <code>.asd</code> is written when the audio is analysed, and outlives the projects that use it.</div>
+      <div class="callout"><b>Most files have none, and that is not a gap.</b> A one-shot nobody warped has nothing to pin, so most sidecars carry no markers at all. A clip the Live Set marks unwarped never has them. The presence of this section is not a format version: it appears under Live 9.7 through 12, and one project written by a single version contains sidecars both with and without it -- a <code>.asd</code> is written when the audio is analysed, and outlives the projects that use it.</div>
     </div>
 
     <!-- ===================== ONSETS ===================== -->
@@ -310,13 +310,13 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Sitting just above the onsets, in the order the Live Set declares them.</p>
       <div id="asd-clip" data-build></div>
       <div class="callout"><b>Two traps.</b> The arrays are <b>not</b> word-aligned to the end of the frame grid, so a 4-stepped scan walks straight past them. And a count of 1 carries no evidence: with a single position "strictly increasing" constrains nothing, so any stray pair of equal u32 satisfies the test. A one-shot is therefore indistinguishable from an unrelated pair of values on this field alone.</div>
-      <div class="callout"><b>Onsets are not warp markers.</b> Live snaps markers to detected transients, so a marker frequently lands exactly on an onset &mdash; 12 of 57 across five files. The counts are what separate them: one file carries 14 onsets and 9 markers. Reading one as the other looks convincing and is wrong.</div>
+      <div class="callout"><b>Onsets are not warp markers.</b> Live snaps markers to detected transients, so a marker frequently lands exactly on an onset -- 12 of 57 across five files. The counts are what separate them: one file carries 14 onsets and 9 markers. Reading one as the other looks convincing and is wrong.</div>
     </div>
 
     <!-- ===================== LIVE SET FAMILY ===================== -->
     <div class="panel" data-panel="liveset">
       <div class="pfacts"><span>container<b>gzip</b></span><span>payload<b>UTF-8 XML</b></span><span>expansion<b>~20x</b></span><span>root<b>&lt;Ableton&gt;</b></span></div>
-      <p class="plede">Sets, clips, racks and device presets are all the same thing: a gzip stream wrapping one XML document whose root is <code>&lt;Ableton&gt;</code>. The root carries the Live build that wrote it, which makes these the easiest provenance evidence in the whole ecosystem &mdash; an exact version string, not an inference.</p>
+      <p class="plede">Sets, clips, racks and device presets are all the same thing: a gzip stream wrapping one XML document whose root is <code>&lt;Ableton&gt;</code>. The root carries the Live build that wrote it, which makes these the easiest provenance evidence in the whole ecosystem -- an exact version string, not an inference.</p>
       <div class="sec">the root element</div>
       <pre class="code">&lt;Ableton MajorVersion="5" MinorVersion="12.0_12120"
          SchemaChangeCount="2" Creator="Ableton Live 12.1.5"
@@ -338,12 +338,12 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
     <!-- ===================== MAX FOR LIVE ===================== -->
     <div class="panel" data-panel="m4l">
       <div class="pfacts"><span>magic<b>"ampf"</b></span><span>header<b>12 bytes</b></span><span>chain<b>id + u32 length</b></span><span>payload<b>Max patcher JSON</b></span></div>
-      <p class="plede">A Max for Live device is an <b>Ableton Max Patch Format</b> container: the ASCII magic <code>ampf</code>, a version word, and then &mdash; before the chunk chain begins &mdash; a <b>four-byte marker</b>, <code>aaaa</code>. Only at offset 12 does the chain start: four-byte id, little-endian length, payload. The <code>ptch</code> chunk carries the Max patcher, a short binary preamble followed by JSON.</p>
+      <p class="plede">A Max for Live device is an <b>Ableton Max Patch Format</b> container: the ASCII magic <code>ampf</code>, a version word, and then -- before the chunk chain begins -- a <b>four-byte marker</b>, <code>aaaa</code>. Only at offset 12 does the chain start: four-byte id, little-endian length, payload. The <code>ptch</code> chunk carries the Max patcher, a short binary preamble followed by JSON.</p>
       <div class="sec">layout</div>
       <pre class="code">0x00  "ampf"  u32:version  "aaaa"      &lt;- 12-byte header
 0x0C  "meta"  u32:len      ...
 0x18  "ptch"  u32:len      mx@c ... { patcher JSON }</pre>
-      <div class="callout"><b>The marker is not a chunk, and mistaking it for one is loud.</b> Reading <code>aaaa</code> as an id makes the following four bytes &mdash; the ASCII <code>meta</code> &mdash; decode as a length of 1,635,018,093 bytes, and the whole chain collapses to one impossible chunk. The chain starts at <b>12</b>, not 8.</div>
+      <div class="callout"><b>The marker is not a chunk, and mistaking it for one is loud.</b> Reading <code>aaaa</code> as an id makes the following four bytes -- the ASCII <code>meta</code> -- decode as a length of 1,635,018,093 bytes, and the whole chain collapses to one impossible chunk. The chain starts at <b>12</b>, not 8.</div>
       <div class="callout"><b>The length field cannot be trusted.</b> A chunk claiming more bytes than remain must stop the walk rather than read past the end. The <code>ptch</code> chunk ends exactly on the last byte of the file, so a chain that stops short means something is missing.</div>
     </div>
 

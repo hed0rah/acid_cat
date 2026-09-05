@@ -187,7 +187,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">A <b>.au</b> (also <b>.snd</b>) file is the header that gave raw PCM a way to describe itself &mdash; the self-describing form that came before RIFF. A fixed <b>24-byte big-endian header</b> &mdash; magic, the offset where audio begins, its size, an <b>encoding code</b>, a sample rate and a channel count &mdash; then an optional annotation string, then the samples. It is where the <b>".snd"</b> magic and the <b>G.711</b> companded codecs of early Unix and NeXT workstations were written down, and it is deliberately minimal: everything a decoder needs sits in six 32-bit fields. Both maps below are drawn byte by byte from a real header. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">A <b>.au</b> (also <b>.snd</b>) file is the header that gave raw PCM a way to describe itself -- the self-describing form that came before RIFF. A fixed <b>24-byte big-endian header</b> -- magic, the offset where audio begins, its size, an <b>encoding code</b>, a sample rate and a channel count -- then an optional annotation string, then the samples. It is where the <b>".snd"</b> magic and the <b>G.711</b> companded codecs of early Unix and NeXT workstations were written down, and it is deliberately minimal: everything a decoder needs sits in six 32-bit fields. Both maps below are drawn byte by byte from a real header. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">teal</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -208,29 +208,29 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">There is no chunk grid and no table of pointers: a <code>.au</code> file is a <b>fixed 24-byte header</b>, an optional <b>annotation</b> (a comment sized by the data offset), then the audio. Six big-endian 32-bit words say everything &mdash; where the audio starts, how big it is, which codec it uses, the rate, and the channel count. The header below is drawn from a real 16-bit linear-PCM file.</p>
+      <p class="plede">There is no chunk grid and no table of pointers: a <code>.au</code> file is a <b>fixed 24-byte header</b>, an optional <b>annotation</b> (a comment sized by the data offset), then the audio. Six big-endian 32-bit words say everything -- where the audio starts, how big it is, which codec it uses, the rate, and the channel count. The header below is drawn from a real 16-bit linear-PCM file.</p>
 
       <div class="sec">a header, laid out</div>
       <div class="tree">
-<b>Header</b>  ".snd"   <span class="kf">encoding 3, 44100 Hz, 1 ch</span>        <span class="kr">— 24 bytes, big-endian</span>
+<b>Header</b>  ".snd"   <span class="kf">encoding 3, 44100 Hz, 1 ch</span>        <span class="kr">-- 24 bytes, big-endian</span>
 &#9500;&#9472; <b>data_offset</b>  24            <span class="kf">where the audio begins</span>
 &#9500;&#9472; <b>data_size</b>     200           <span class="kf">or 0xFFFFFFFF = unknown</span>
 &#9492;&#9472; <b>encoding</b>      3             <span class="kf">the codec, not a bit depth</span>
-<b>Annotation</b>  optional comment, byte 24..data_offset   <span class="kr">— NUL-padded ASCII</span>
-<b>PCM</b>  from data_offset to end of file        <span class="kr">— raw, big-endian</span>
+<b>Annotation</b>  optional comment, byte 24..data_offset   <span class="kr">-- NUL-padded ASCII</span>
+<b>PCM</b>  from data_offset to end of file        <span class="kr">-- raw, big-endian</span>
       </div>
 
       <div class="sec">the format, dated</div>
       <div class="timeline">
-        <div><span class="y">1972</span><span><b>G.711</b> &mdash; the ITU standardises <b>mu-law</b> and <b>A-law</b> companding for 8-bit telephone PCM. These are the codecs a <code>.au</code> later carries as encoding 1 and 27, decades before the container existed.</span></div>
-        <div><span class="y">1988</span><span><b>Sun &amp; NeXT</b> &mdash; the <code>.snd</code>/<code>.au</code> header appears across SunOS and NeXTSTEP, <b>big-endian</b> for the 68k and SPARC machines it was born on &mdash; the mirror image of the RIFF/Intel world that followed.</span></div>
-        <div><span class="y">1995</span><span><b>the early web</b> &mdash; small and self-describing, <code>.au</code> became a common sound for Java applets and early embedded web audio; <code>javax.sound</code> reads it to this day.</span></div>
-        <div><span class="y">now</span><span><b>still standard.</b> <b>libsndfile</b>, <b>sox</b> and <b>Audacity</b> read and write it, and acidcat walks it &mdash; a 24-byte header that outlived the workstations that defined it.</span></div>
+        <div><span class="y">1972</span><span><b>G.711</b> -- the ITU standardises <b>mu-law</b> and <b>A-law</b> companding for 8-bit telephone PCM. These are the codecs a <code>.au</code> later carries as encoding 1 and 27, decades before the container existed.</span></div>
+        <div><span class="y">1988</span><span><b>Sun &amp; NeXT</b> -- the <code>.snd</code>/<code>.au</code> header appears across SunOS and NeXTSTEP, <b>big-endian</b> for the 68k and SPARC machines it was born on -- the mirror image of the RIFF/Intel world that followed.</span></div>
+        <div><span class="y">1995</span><span><b>the early web</b> -- small and self-describing, <code>.au</code> became a common sound for Java applets and early embedded web audio; <code>javax.sound</code> reads it to this day.</span></div>
+        <div><span class="y">now</span><span><b>still standard.</b> <b>libsndfile</b>, <b>sox</b> and <b>Audacity</b> read and write it, and acidcat walks it -- a 24-byte header that outlived the workstations that defined it.</span></div>
       </div>
 
-      <div class="callout"><b>big-endian, always.</b> Every field is Motorola/SPARC byte order &mdash; the tell that the format comes from the 68k and SPARC side of the 1980s, not the RIFF/Intel side. Read the six words the opposite way from a WAV.</div>
-      <div class="callout"><b>the size can be a sentinel.</b> A <code>data_size</code> of <code>0xFFFFFFFF</code> does not mean four gigabytes of audio &mdash; it is the <i>length-not-known</i> marker of a stream written before its own length was. The real size is whatever bytes follow the header. Treating the literal 4294967295 as a byte count is the first way to get this format wrong.</div>
-      <div class="callout"><b>the encoding is a code, not a bit depth.</b> One 32-bit field names the sample format. Codes 2&ndash;7 are linear or float PCM with a real bit depth; codes 1 and 27 are <b>companded telephone codecs</b> (mu-law, A-law) &mdash; eight bits on disk but not linear PCM, so fed straight to a PCM player they play as noise.</div>
+      <div class="callout"><b>big-endian, always.</b> Every field is Motorola/SPARC byte order -- the tell that the format comes from the 68k and SPARC side of the 1980s, not the RIFF/Intel side. Read the six words the opposite way from a WAV.</div>
+      <div class="callout"><b>the size can be a sentinel.</b> A <code>data_size</code> of <code>0xFFFFFFFF</code> does not mean four gigabytes of audio -- it is the <i>length-not-known</i> marker of a stream written before its own length was. The real size is whatever bytes follow the header. Treating the literal 4294967295 as a byte count is the first way to get this format wrong.</div>
+      <div class="callout"><b>the encoding is a code, not a bit depth.</b> One 32-bit field names the sample format. Codes 2&ndash;7 are linear or float PCM with a real bit depth; codes 1 and 27 are <b>companded telephone codecs</b> (mu-law, A-law) -- eight bits on disk but not linear PCM, so fed straight to a PCM player they play as noise.</div>
     </div>
 
     <!-- ===================== HEADER ===================== -->
@@ -241,19 +241,19 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <p class="note">Example: 16-bit linear PCM, 44100 Hz, mono. Hover the <span class="k-en">encoding</span> for the code table.</p>
       <div id="au-header" data-build></div>
       <div class="callout"><b>data_offset does double duty.</b> It is both where the audio starts and the end of the annotation: the comment field runs from byte 24 up to <code>data_offset</code>, so a header with no comment sets it to exactly <code>24</code>. The floor is 24; anything smaller points inside the header itself, which acidcat reports as a warning rather than trusting.</div>
-      <div class="callout"><b>the header carries no bit depth.</b> Width, sign and float-vs-integer all come from the <code>encoding</code> code &mdash; there is no separate bits field. A reader that wants sample width looks the code up; it does not read it. Here encoding <code>3</code> means 16-bit signed linear PCM.</div>
+      <div class="callout"><b>the header carries no bit depth.</b> Width, sign and float-vs-integer all come from the <code>encoding</code> code -- there is no separate bits field. A reader that wants sample width looks the code up; it does not read it. Here encoding <code>3</code> means 16-bit signed linear PCM.</div>
     </div>
 
     <!-- ===================== STREAMING + CODECS ===================== -->
     <div class="panel" data-panel="stream">
       <div class="pfacts"><span>size<b>0xFFFFFFFF</b></span><span>meaning<b>unknown / streaming</b></span><span>encoding 1<b>mu-law</b></span><span>encoding 27<b>A-law</b></span></div>
-      <p class="plede">The same 24-byte header, written as a <b>stream</b>: the <code>data_size</code> is the <b>0xFFFFFFFF</b> sentinel, so the real length is whatever follows, and the <code>encoding</code> is <b>mu-law</b> &mdash; the G.711 telephone codec, eight bits and companded, not linear PCM. These are the two fields a naive reader misreads. Hover the <span class="k-fl">amber</span> ones.</p>
+      <p class="plede">The same 24-byte header, written as a <b>stream</b>: the <code>data_size</code> is the <b>0xFFFFFFFF</b> sentinel, so the real length is whatever follows, and the <code>encoding</code> is <b>mu-law</b> -- the G.711 telephone codec, eight bits and companded, not linear PCM. These are the two fields a naive reader misreads. Hover the <span class="k-fl">amber</span> ones.</p>
       <div class="sec">a streaming mu-law header (bytes 0x00&ndash;0x17)</div>
       <p class="note">Example: mu-law, 8000 Hz, mono, unknown length. The two <span class="k-fl">amber</span> fields are the traps.</p>
       <div id="au-stream" data-build></div>
-      <div class="callout"><b>0xFFFFFFFF is not a length.</b> It marks a stream whose size was not known when the header was written &mdash; a pipe, a live capture, network audio. acidcat reports it as <i>unknown (streaming)</i> and takes the effective size from the file, so the audio is still fully accounted for.</div>
-      <div class="callout"><b>mu-law and A-law are codecs.</b> Encoding <code>1</code> (mu-law) and <code>27</code> (A-law) are the <b>G.711</b> companding curves &mdash; a non-linear 8-bit mapping that folds roughly 14 bits of dynamic range into a byte for telephony. They are named and flagged, not passed off as samples: fed to a linear PCM player they play as loud noise. Decoding them back to linear PCM is a one-table lookup, which is what the convert path does.</div>
-      <div class="callout"><b>the id is "au"; the MPC ".snd" is not.</b> A different format shares the <code>.snd</code> extension &mdash; the Akai MPC2000 sound &mdash; but it has no <code>".snd"</code> magic (it opens <code>0x01 0x02</code>), so it is told apart from this one by content at sniff time and walks under the id <code>snd</code>.</div>
+      <div class="callout"><b>0xFFFFFFFF is not a length.</b> It marks a stream whose size was not known when the header was written -- a pipe, a live capture, network audio. acidcat reports it as <i>unknown (streaming)</i> and takes the effective size from the file, so the audio is still fully accounted for.</div>
+      <div class="callout"><b>mu-law and A-law are codecs.</b> Encoding <code>1</code> (mu-law) and <code>27</code> (A-law) are the <b>G.711</b> companding curves -- a non-linear 8-bit mapping that folds roughly 14 bits of dynamic range into a byte for telephony. They are named and flagged, not passed off as samples: fed to a linear PCM player they play as loud noise. Decoding them back to linear PCM is a one-table lookup, which is what the convert path does.</div>
+      <div class="callout"><b>the id is "au"; the MPC ".snd" is not.</b> A different format shares the <code>.snd</code> extension -- the Akai MPC2000 sound -- but it has no <code>".snd"</code> magic (it opens <code>0x01 0x02</code>), so it is told apart from this one by content at sniff time and walks under the id <code>snd</code>.</div>
     </div>
 
   </div>

@@ -187,7 +187,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">A <b>.PAT</b> file is one instrument for the <b>Gravis UltraSound</b> &mdash; the first mass PC wavetable card, which streamed samples from disk into its own on-board RAM. There is no chunk grid: it is a run of <b>fixed-size headers</b> nested four deep &mdash; a 129-byte <b>patch</b> header, then <b>instrument</b> (63 B), <b>layer</b> (47 B), and <b>sample</b> (96 B) records, each header immediately followed by its children, and the raw PCM sitting right after each sample header. Everything is <b>little-endian</b> (the card lived on the ISA bus of an x86 PC) &mdash; the mirror image of Kurzweil's 68k banks. The tabs open each structure, drawn byte by byte from a real factory patch. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">A <b>.PAT</b> file is one instrument for the <b>Gravis UltraSound</b> -- the first mass PC wavetable card, which streamed samples from disk into its own on-board RAM. There is no chunk grid: it is a run of <b>fixed-size headers</b> nested four deep -- a 129-byte <b>patch</b> header, then <b>instrument</b> (63 B), <b>layer</b> (47 B), and <b>sample</b> (96 B) records, each header immediately followed by its children, and the raw PCM sitting right after each sample header. Everything is <b>little-endian</b> (the card lived on the ISA bus of an x86 PC) -- the mirror image of Kurzweil's 68k banks. The tabs open each structure, drawn byte by byte from a real factory patch. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">teal</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -209,30 +209,30 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">Where a SoundFont packs a whole bank into one file, a GUS patch is <b>one instrument</b> &mdash; a full General MIDI set is 100-plus separate <code>.PAT</code> files, loaded into the card's RAM one at a time as a song calls for them. Inside, the shape is a strict four-level nest: a <b>patch</b> header counts <b>instruments</b>; each instrument counts <b>layers</b> (velocity/zone splits); each layer counts <b>samples</b>; and each sample header is followed immediately by its raw PCM. No offsets, no tables &mdash; you walk it by adding fixed header sizes and the PCM length. The patch below is a real factory instrument, <code>ALTOSAX.PAT</code>.</p>
+      <p class="plede">Where a SoundFont packs a whole bank into one file, a GUS patch is <b>one instrument</b> -- a full General MIDI set is 100-plus separate <code>.PAT</code> files, loaded into the card's RAM one at a time as a song calls for them. Inside, the shape is a strict four-level nest: a <b>patch</b> header counts <b>instruments</b>; each instrument counts <b>layers</b> (velocity/zone splits); each layer counts <b>samples</b>; and each sample header is followed immediately by its raw PCM. No offsets, no tables -- you walk it by adding fixed header sizes and the PCM length. The patch below is a real factory instrument, <code>ALTOSAX.PAT</code>.</p>
 
       <div class="sec">a real patch, laid out</div>
       <div class="tree">
-<b>Patch</b>  "GF1PATCH110"  <span class="kf">1 instrument, 3 waveforms</span>       <span class="kr">— 129-byte header</span>
-&#9492;&#9472; <b>Instrument</b> #0  "Alto Sax"   <span class="kf">1 layer</span>              <span class="kr">— 63-byte header</span>
-   &#9492;&#9472; <b>Layer</b> 0   <span class="kf">3 samples</span>                          <span class="kr">— 47-byte header</span>
+<b>Patch</b>  "GF1PATCH110"  <span class="kf">1 instrument, 3 waveforms</span>       <span class="kr">-- 129-byte header</span>
+&#9492;&#9472; <b>Instrument</b> #0  "Alto Sax"   <span class="kf">1 layer</span>              <span class="kr">-- 63-byte header</span>
+   &#9492;&#9472; <b>Layer</b> 0   <span class="kf">3 samples</span>                          <span class="kr">-- 47-byte header</span>
       &#9500;&#9472; <b>Sample</b> "NoName"  7,140 B  16-bit  22321 Hz  looped
       &#9500;&#9472; <b>Sample</b> ...        &#8592; PCM follows each header
       &#9492;&#9472; <b>Sample</b> ...        root ~E3, range A0..G4
-<b>PCM</b>  interleaved after each sample header    <span class="kr">— raw, little-endian</span>
+<b>PCM</b>  interleaved after each sample header    <span class="kr">-- raw, little-endian</span>
       </div>
 
       <div class="sec">the UltraSound, dated</div>
       <div class="timeline">
-        <div><span class="y">1992</span><span><b>Advanced Gravis UltraSound</b> &mdash; the first affordable PC card with real <b>wavetable</b> synthesis and on-board sample RAM (256 KB, up to 1 MB). Its <b>GF1</b> chip plays up to 32 voices from RAM; instruments are <code>.PAT</code> patches streamed off disk.</span></div>
-        <div><span class="y">1993</span><span><b>GF1PATCH110</b> &mdash; the patch version this reference draws (v1.10). An older <b>GF1PATCH100</b> exists; the magic's trailing three digits are the version.</span></div>
-        <div><span class="y">1994</span><span><b>DOS gaming</b> &mdash; the GUS became the audiophile's choice for demos and MOD players. Its patch set (the <code>ULTRASND</code> directory) is the canonical GM-to-PAT mapping.</span></div>
-        <div><span class="y">now</span><span><b>outlived the hardware.</b> <b>TiMidity++</b>, <b>WildMIDI</b> and <b>DOSBox</b> still render MIDI through GF1 patch sets &mdash; the format became a soft-synth patch standard long after the card was gone.</span></div>
+        <div><span class="y">1992</span><span><b>Advanced Gravis UltraSound</b> -- the first affordable PC card with real <b>wavetable</b> synthesis and on-board sample RAM (256 KB, up to 1 MB). Its <b>GF1</b> chip plays up to 32 voices from RAM; instruments are <code>.PAT</code> patches streamed off disk.</span></div>
+        <div><span class="y">1993</span><span><b>GF1PATCH110</b> -- the patch version this reference draws (v1.10). An older <b>GF1PATCH100</b> exists; the magic's trailing three digits are the version.</span></div>
+        <div><span class="y">1994</span><span><b>DOS gaming</b> -- the GUS became the audiophile's choice for demos and MOD players. Its patch set (the <code>ULTRASND</code> directory) is the canonical GM-to-PAT mapping.</span></div>
+        <div><span class="y">now</span><span><b>outlived the hardware.</b> <b>TiMidity++</b>, <b>WildMIDI</b> and <b>DOSBox</b> still render MIDI through GF1 patch sets -- the format became a soft-synth patch standard long after the card was gone.</span></div>
       </div>
 
-      <div class="callout"><b>walk by size, not by offset.</b> Every level is a fixed-width header carrying a child <i>count</i>, not a table of pointers. A reader advances by adding <code>129</code> (patch), then per instrument <code>63</code>, per layer <code>47</code>, per sample <code>96 + data_size</code>. The PCM for a sample sits in the <code>data_size</code> bytes immediately after its 96-byte header &mdash; there is no separate audio region.</div>
-      <div class="callout"><b>RAM streaming, not a bank.</b> The GUS had no ROM voices &mdash; to make a sound it first <i>loaded</i> the instrument's samples into card RAM. So a patch is deliberately one instrument: a game or tracker uploads only the patches a piece needs. This is the opposite trade from a SoundFont, which carries the whole orchestra in one file and never streams.</div>
-      <div class="callout"><b>little-endian throughout.</b> Sizes, counts, rates and the frequency words are all little-endian &mdash; the GUS is an ISA card in an x86 PC. Read it the way you read RIFF/WAV, and the opposite way from a Kurzweil <code>.KRZ</code> or an E-mu <code>.E4B</code>, both of which are big-endian 68k machines.</div>
+      <div class="callout"><b>walk by size, not by offset.</b> Every level is a fixed-width header carrying a child <i>count</i>, not a table of pointers. A reader advances by adding <code>129</code> (patch), then per instrument <code>63</code>, per layer <code>47</code>, per sample <code>96 + data_size</code>. The PCM for a sample sits in the <code>data_size</code> bytes immediately after its 96-byte header -- there is no separate audio region.</div>
+      <div class="callout"><b>RAM streaming, not a bank.</b> The GUS had no ROM voices -- to make a sound it first <i>loaded</i> the instrument's samples into card RAM. So a patch is deliberately one instrument: a game or tracker uploads only the patches a piece needs. This is the opposite trade from a SoundFont, which carries the whole orchestra in one file and never streams.</div>
+      <div class="callout"><b>little-endian throughout.</b> Sizes, counts, rates and the frequency words are all little-endian -- the GUS is an ISA card in an x86 PC. Read it the way you read RIFF/WAV, and the opposite way from a Kurzweil <code>.KRZ</code> or an E-mu <code>.E4B</code>, both of which are big-endian 68k machines.</div>
     </div>
 
     <!-- ===================== PATCH HEADER ===================== -->
@@ -245,21 +245,21 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="sec">counts (bytes 0x52&ndash;0x5C)</div>
       <p class="note">The header fields at offset 82&ndash;92 that size the nest.</p>
       <div id="gf1-counts" data-build></div>
-      <div class="callout"><b>the version lives in the magic.</b> The trailing digits of <code>"GF1PATCH110"</code> are the format version &mdash; <b>1.10</b> here, <b>1.00</b> in the oldest patches. The first 8 bytes (<code>"GF1PATCH"</code>) identify the format; the full 12 give the exact version. The 10-byte <code>"ID#000002"</code> that follows is a fixed internal structure id, not a per-file value.</div>
-      <div class="callout"><b>waveforms is the sample total.</b> <code>instruments</code> (here 1) counts the top-level instruments; <code>waveforms</code> (here 3) is the <i>total</i> number of samples across all layers &mdash; a cross-check for the walk. The <code>data_size</code> word is the summed PCM byte total. <code>voices</code> and <code>channels</code> are card-mixing hints, not structural, and carry fixed quirk values in most factory patches.</div>
+      <div class="callout"><b>the version lives in the magic.</b> The trailing digits of <code>"GF1PATCH110"</code> are the format version -- <b>1.10</b> here, <b>1.00</b> in the oldest patches. The first 8 bytes (<code>"GF1PATCH"</code>) identify the format; the full 12 give the exact version. The 10-byte <code>"ID#000002"</code> that follows is a fixed internal structure id, not a per-file value.</div>
+      <div class="callout"><b>waveforms is the sample total.</b> <code>instruments</code> (here 1) counts the top-level instruments; <code>waveforms</code> (here 3) is the <i>total</i> number of samples across all layers -- a cross-check for the walk. The <code>data_size</code> word is the summed PCM byte total. <code>voices</code> and <code>channels</code> are card-mixing hints, not structural, and carry fixed quirk values in most factory patches.</div>
     </div>
 
     <!-- ===================== INSTRUMENT + LAYER ===================== -->
     <div class="panel" data-panel="frame">
       <div class="pfacts"><span>instrument<b>63 B</b></span><span>layer<b>47 B</b></span><span>counts<b>layers, samples</b></span><span>names<b>16 / none</b></span></div>
-      <p class="plede">Between the patch header and the sample headers sit two thin framing records. An <b>instrument</b> (63 bytes) carries a numeric id, a 16-char name, its total size, and a <b>layer count</b>. A <b>layer</b> (47 bytes) is a velocity or key split: it carries a <b>sample count</b> and little else. Both are mostly reserved padding &mdash; their job is only to carry the next count down the nest. The maps are the fronts of the Instrument and Layer records from <code>ALTOSAX.PAT</code>.</p>
+      <p class="plede">Between the patch header and the sample headers sit two thin framing records. An <b>instrument</b> (63 bytes) carries a numeric id, a 16-char name, its total size, and a <b>layer count</b>. A <b>layer</b> (47 bytes) is a velocity or key split: it carries a <b>sample count</b> and little else. Both are mostly reserved padding -- their job is only to carry the next count down the nest. The maps are the fronts of the Instrument and Layer records from <code>ALTOSAX.PAT</code>.</p>
       <div class="sec">instrument header (first 23 of 63 bytes)</div>
       <p class="note">Example: Instrument #0, "Alto Sax". The remaining 40 bytes are reserved.</p>
       <div id="gf1-inst" data-build></div>
       <div class="sec">layer header (first 7 of 47 bytes)</div>
-      <p class="note">Example: Layer 0. Hover <span class="k-en">samples</span> &mdash; it is the count a reader loops on.</p>
+      <p class="note">Example: Layer 0. Hover <span class="k-en">samples</span> -- it is the count a reader loops on.</p>
       <div id="gf1-layer" data-build></div>
-      <div class="callout"><b>layers are the split mechanism.</b> A single instrument can stack multiple <b>layers</b>, each a full set of samples, to build velocity crossfades or key splits &mdash; the GF1 mixes the active layers. Most factory patches use one layer; the field exists so a richer instrument (a multi-velocity piano) can carry several. The <code>samples</code> byte in the layer is the innermost count of the nest.</div>
+      <div class="callout"><b>layers are the split mechanism.</b> A single instrument can stack multiple <b>layers</b>, each a full set of samples, to build velocity crossfades or key splits -- the GF1 mixes the active layers. Most factory patches use one layer; the field exists so a richer instrument (a multi-velocity piano) can carry several. The <code>samples</code> byte in the layer is the innermost count of the nest.</div>
     </div>
 
     <!-- ===================== SAMPLE HEADER ===================== -->
@@ -267,11 +267,11 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="pfacts"><span>header<b>96 B</b></span><span>PCM<b>right after</b></span><span>modes<b>1 byte, 8 flags</b></span><span>tuning<b>fixed-point Hz</b></span></div>
       <p class="plede">The sample header is where the format earns its keep: 96 bytes describing one waveform, then its raw PCM inline. It gives the <b>data size</b>, the <b>loop points</b>, the playback <b>rate</b>, three <b>frequency</b> words that set the key range and recorded pitch, an on-card <b>6-stage envelope</b>, tremolo/vibrato, and the crucial <b>modes</b> byte whose eight bits pick 16- vs 8-bit, signed vs unsigned, and the loop behaviour. The map draws the first 60 meaningful bytes (the last 36 are reserved).</p>
       <div class="sec">sample header (bytes 0x00&ndash;0x3B)</div>
-      <p class="note">Example: sample "NoName" from <code>ALTOSAX.PAT</code> &mdash; 16-bit, looped, 22321 Hz. Hover <span class="k-en">modes</span> for the bit flags.</p>
+      <p class="note">Example: sample "NoName" from <code>ALTOSAX.PAT</code> -- 16-bit, looped, 22321 Hz. Hover <span class="k-en">modes</span> for the bit flags.</p>
       <div id="gf1-sample" data-build></div>
-      <div class="callout"><b>the modes byte.</b> One byte, eight independent flags &mdash; <code>0x01</code> 16-bit, <code>0x02</code> unsigned, <code>0x04</code> loop-enable, <code>0x08</code> ping-pong (bidirectional loop), <code>0x10</code> reverse, <code>0x20</code> sustain, <code>0x40</code> envelope, <code>0x80</code> clamped-release. Here <code>0x67</code> = 16-bit + unsigned + loop + sustain + envelope. Bits 0 and 1 set the PCM width and sign; getting either wrong turns the audio to noise.</div>
-      <div class="callout"><b>frequencies are milliHertz.</b> <code>low_frequency</code>, <code>high_frequency</code> and <code>root_frequency</code> are fixed-point <b>Hz &times; 1000</b>. Here root = <code>164813</code> = <b>164.813 Hz</b> (~E3, the pitch the sample was recorded at), spanning <code>26.986 Hz</code> (~A0) to <code>399.765 Hz</code> (~G4) &mdash; the key range this sample covers before the next one takes over. The GF1 pitches each key by ratio from <code>root_frequency</code>, not from a MIDI note number.</div>
-      <div class="callout"><b>loop points are byte offsets.</b> <code>loop_start</code> and <code>loop_end</code> are offsets into this sample's PCM in <i>bytes</i>, with the <code>fractions</code> byte giving a sub-byte remainder for fine loop tuning &mdash; not sample indices. For a 16-bit sample the reader rounds them to even byte boundaries. Loop is only honoured when <code>modes &amp; 0x04</code> is set; here it is, so playback loops over <code>[5998, 7082]</code>.</div>
+      <div class="callout"><b>the modes byte.</b> One byte, eight independent flags -- <code>0x01</code> 16-bit, <code>0x02</code> unsigned, <code>0x04</code> loop-enable, <code>0x08</code> ping-pong (bidirectional loop), <code>0x10</code> reverse, <code>0x20</code> sustain, <code>0x40</code> envelope, <code>0x80</code> clamped-release. Here <code>0x67</code> = 16-bit + unsigned + loop + sustain + envelope. Bits 0 and 1 set the PCM width and sign; getting either wrong turns the audio to noise.</div>
+      <div class="callout"><b>frequencies are milliHertz.</b> <code>low_frequency</code>, <code>high_frequency</code> and <code>root_frequency</code> are fixed-point <b>Hz &times; 1000</b>. Here root = <code>164813</code> = <b>164.813 Hz</b> (~E3, the pitch the sample was recorded at), spanning <code>26.986 Hz</code> (~A0) to <code>399.765 Hz</code> (~G4) -- the key range this sample covers before the next one takes over. The GF1 pitches each key by ratio from <code>root_frequency</code>, not from a MIDI note number.</div>
+      <div class="callout"><b>loop points are byte offsets.</b> <code>loop_start</code> and <code>loop_end</code> are offsets into this sample's PCM in <i>bytes</i>, with the <code>fractions</code> byte giving a sub-byte remainder for fine loop tuning -- not sample indices. For a 16-bit sample the reader rounds them to even byte boundaries. Loop is only honoured when <code>modes &amp; 0x04</code> is set; here it is, so playback loops over <code>[5998, 7082]</code>.</div>
     </div>
 
   </div>

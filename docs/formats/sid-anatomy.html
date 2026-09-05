@@ -189,7 +189,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   order followed the host rather than the target. The C64 image after <code>dataOffset</code> is
   native little-endian.</p>
 
-  <div class="sec">header v1 &mdash; the fixed numeric block</div>
+  <div class="sec">header v1 -- the fixed numeric block</div>
   <p class="note">Offsets 0x00 through 0x15. Identical in every header version; v2 and later only
   append.</p>
   <div id="sid-head"></div>
@@ -202,9 +202,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         stricter runtime contract, because the tune needs a real C64 rather than the shortcuts
         early emulators took. A reader that meets an RSID breaking any of these must reject it.</p>
         <div class="kv">
-          <div><span class="k">PSID</span><span class="v">0x50534944 &mdash; permissive; runs on PlaySID and libsidplay1 era emulators</span></div>
-          <div><span class="k">RSID</span><span class="v">0x52534944 &mdash; requires a true C64 environment</span></div>
-          <div><span class="k-en">RSID: version</span><span class="v">2, 3 or 4 only &mdash; never 1</span></div>
+          <div><span class="k">PSID</span><span class="v">0x50534944 -- permissive; runs on PlaySID and libsidplay1 era emulators</span></div>
+          <div><span class="k">RSID</span><span class="v">0x52534944 -- requires a true C64 environment</span></div>
+          <div><span class="k-en">RSID: version</span><span class="v">2, 3 or 4 only -- never 1</span></div>
           <div><span class="k-en">RSID: loadAddress</span><span class="v">must be 0, so the address comes from the data</span></div>
           <div><span class="k-en">RSID: playAddress</span><span class="v">must be 0, so init installs its own interrupt handler</span></div>
           <div><span class="k-en">RSID: speed</span><span class="v">must be 0, so the tune configures its own timing</span></div>
@@ -219,7 +219,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody">
         <p class="note">A <code>loadAddress</code> of <b>0</b> does not mean address zero. It means
         the C64 data is an ordinary C64 binary whose <b>first two bytes are the load address,
-        little-endian</b> &mdash; the layout <code>SAVE</code> writes and <code>LOAD"FILE",8,1</code>
+        little-endian</b> -- the layout <code>SAVE</code> writes and <code>LOAD"FILE",8,1</code>
         expects. Those two bytes are then not code, and the image begins after them.</p>
         <p class="note">A non-zero <code>loadAddress</code> means the opposite: the data is all
         code and carries no address of its own. Nothing in the bytes distinguishes the two cases,
@@ -235,7 +235,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <p class="note"><code>initAddress</code> is called once per subtune with the subtune number
         in the accumulator. 0 means it equals the effective load address.</p>
         <p class="note"><code>playAddress</code> is called repeatedly to produce sound. 0 means
-        init installs its own interrupt handler and the player must not call anything &mdash;
+        init installs its own interrupt handler and the player must not call anything --
         always the case for RSID.</p>
         <p class="note"><code>speed</code> is one bit per subtune, bit 0 being subtune 1: a
         <b>0</b> bit selects the vertical blank interrupt (50 Hz PAL, 60 Hz NTSC), a <b>1</b> bit
@@ -250,7 +250,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         <code>playAddress</code> at 0 they should still be set, for players old enough to act on
         them; a player running in a real C64 environment ignores them in that case.</p>
         <div class="kv">
-          <div><span class="k">v1, or PlaySID-specific set</span><span class="v">bits wrap &mdash; subtune 33 reuses bit 0</span></div>
+          <div><span class="k">v1, or PlaySID-specific set</span><span class="v">bits wrap -- subtune 33 reuses bit 0</span></div>
           <div><span class="k">v2NG with that flag clear</span><span class="v">bit 31 repeats for every subtune above 32</span></div>
         </div>
         <p class="note">The wrapping rule above is the self-consistent reading, not the literal
@@ -271,9 +271,9 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         read that does not stop at 32 runs straight into the next field and produces a plausible,
         wrong string.</p>
         <div class="kv">
-          <div><span class="k">0x16</span><span class="v">name &mdash; 32 bytes</span></div>
-          <div><span class="k">0x36</span><span class="v">author &mdash; 32 bytes</span></div>
-          <div><span class="k">0x56</span><span class="v">released &mdash; 32 bytes, once called copyright</span></div>
+          <div><span class="k">0x16</span><span class="v">name -- 32 bytes</span></div>
+          <div><span class="k">0x36</span><span class="v">author -- 32 bytes</span></div>
+          <div><span class="k">0x56</span><span class="v">released -- 32 bytes, once called copyright</span></div>
         </div>
         <p class="note">Version 1 of the header ends at <b>0x76</b>, and the C64 data begins there.</p>
       </div>
@@ -302,7 +302,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
         rightmost cell here.</p>
         <div id="sid-flags"></div>
         <p class="note">Bit 1 carries two different meanings depending on the magic. In a PSID it
-        marks a tune as <b>PlaySID specific</b> &mdash; typically one using PlaySID volume samples,
+        marks a tune as <b>PlaySID specific</b> -- typically one using PlaySID volume samples,
         which no longer play on a real C64. In an RSID the same bit is the <b>C64 BASIC</b> flag,
         and when it is set <code>initAddress</code> must be 0 and the subtune number is written to
         $030C instead.</p>
@@ -314,7 +314,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
       <div class="rbody">
         <p class="note">Each byte encodes the middle of <b>$Dxx0</b>: 0x42 means <b>$D420</b>,
         0xFE means <b>$DFE0</b>. Only <b>even</b> values in 0x42-0x7F or 0xE0-0xFE are legal, and
-        any other value &mdash; including 0x00 &mdash; means no chip at that position.</p>
+        any other value -- including 0x00 -- means no chip at that position.</p>
         <p class="note">0x00-0x41 would collide with the first SID
         and the VIC-II; 0x80-0xDF lands in colour RAM and the CIAs. The third SID may not share
         the second SID's address.</p>

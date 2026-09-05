@@ -246,20 +246,20 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
   <div class="panel" data-panel="ump">
     <div class="pfacts"><span>magic<b>"SMF2CLIP"</b></span><span>packet<b>UMP . 1-4 x 32b words</b></span><span>endian<b>big (in files)</b></span><span>timing<b>Delta Clockstamp</b></span></div>
-    <p class="plede">MIDI 2.0 does not extend the <code>.mid</code> file &mdash; that format is frozen at 1.0. It replaces the wire and the file with the <b>Universal MIDI Packet</b>: 1 to 4 big-endian 32-bit words whose top nibble, the <b>Message Type</b>, alone fixes the packet size. That makes a UMP stream <b>self-delimiting</b> &mdash; no length prefixes &mdash; so the same bytes parse whether they arrive from a file or a pipe. A <b>MIDI Clip File</b> (<code>.midi2</code>) is just an 8-byte <b>SMF2CLIP</b> magic then one of those streams. <b>Hover</b> to light bytes, <b>click</b> a <span class="k-en">+</span> for its table.</p>
-    <p class="note">Scope note, honestly: real <code>.midi2</code> files are still rare (the spec is 2023, few producers). The format's home today is the live stream layer shipping in Windows MIDI Services, ALSA UMP and CoreMIDI &mdash; and because UMP is self-delimiting, the same grammar decodes off a file or a captured stream.</p>
+    <p class="plede">MIDI 2.0 does not extend the <code>.mid</code> file -- that format is frozen at 1.0. It replaces the wire and the file with the <b>Universal MIDI Packet</b>: 1 to 4 big-endian 32-bit words whose top nibble, the <b>Message Type</b>, alone fixes the packet size. That makes a UMP stream <b>self-delimiting</b> -- no length prefixes -- so the same bytes parse whether they arrive from a file or a pipe. A <b>MIDI Clip File</b> (<code>.midi2</code>) is just an 8-byte <b>SMF2CLIP</b> magic then one of those streams. <b>Hover</b> to light bytes, <b>click</b> a <span class="k-en">+</span> for its table.</p>
+    <p class="note">Scope note, honestly: real <code>.midi2</code> files are still rare (the spec is 2023, few producers). The format's home today is the live stream layer shipping in Windows MIDI Services, ALSA UMP and CoreMIDI -- and because UMP is self-delimiting, the same grammar decodes off a file or a captured stream.</p>
 
     <div class="sec">message types</div>
     <p class="note">The top 4 bits of word 1. The MT alone fixes the packet size, so a reader stays synchronized even through message types it does not understand.</p>
     <div class="rbody"><div class="kv">
-      <div><span class="k">0x0</span><span class="v">Utility &mdash; NOOP, JR clock/timestamp, DCTPQ, Delta Clockstamp (32b)</span></div>
+      <div><span class="k">0x0</span><span class="v">Utility -- NOOP, JR clock/timestamp, DCTPQ, Delta Clockstamp (32b)</span></div>
       <div><span class="k">0x1</span><span class="v">System real-time &amp; common (32b)</span></div>
-      <div><span class="k">0x2</span><span class="v">MIDI 1.0 channel voice &mdash; 7-bit, wrapped verbatim (32b)</span></div>
+      <div><span class="k">0x2</span><span class="v">MIDI 1.0 channel voice -- 7-bit, wrapped verbatim (32b)</span></div>
       <div><span class="k">0x3</span><span class="v">Data / SysEx7 (64b)</span></div>
-      <div><span class="k">0x4</span><span class="v">MIDI 2.0 channel voice &mdash; 16-bit velocity, 32-bit controllers (64b)</span></div>
+      <div><span class="k">0x4</span><span class="v">MIDI 2.0 channel voice -- 16-bit velocity, 32-bit controllers (64b)</span></div>
       <div><span class="k">0x5</span><span class="v">Data / SysEx8, Mixed Data Set (128b)</span></div>
-      <div><span class="k">0xD</span><span class="v">Flex Data &mdash; Set Tempo, Time Signature, metadata text (128b)</span></div>
-      <div><span class="k">0xF</span><span class="v">UMP Stream &mdash; endpoint discovery, Start / End of Clip (128b)</span></div>
+      <div><span class="k">0xD</span><span class="v">Flex Data -- Set Tempo, Time Signature, metadata text (128b)</span></div>
+      <div><span class="k">0xF</span><span class="v">UMP Stream -- endpoint discovery, Start / End of Clip (128b)</span></div>
     </div></div>
 
     <div class="sec">MIDI 2.0 Note On</div>

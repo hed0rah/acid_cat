@@ -187,7 +187,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
   </div>
 
   <div class="intro">
-  <p class="plede lede">A <b>.labx</b> is an <b>Arturia Analog Lab</b> bank &mdash; and under the hood it is just a <b>ZIP</b>. Each entry is one preset, stored uncompressed, its path spelling out the identity: <code>&lt;Engine&gt;/User|Factory/&lt;Bank&gt;/&lt;PresetName&gt;</code>, with a cover image at the top level. The entry <i>bytes</i> are a <b>Boost</b> C++ text-serialization archive &mdash; ASCII, length-prefixed strings &mdash; carrying the preset's name, bank, author, tags, save time, and engine version. So the whole bank is legible without a binary decoder: the zip census and the per-preset metadata read straight out of the text. The tabs open the zip framing and the archive, drawn byte by byte from a real bank. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
+  <p class="plede lede">A <b>.labx</b> is an <b>Arturia Analog Lab</b> bank -- and under the hood it is just a <b>ZIP</b>. Each entry is one preset, stored uncompressed, its path spelling out the identity: <code>&lt;Engine&gt;/User|Factory/&lt;Bank&gt;/&lt;PresetName&gt;</code>, with a cover image at the top level. The entry <i>bytes</i> are a <b>Boost</b> C++ text-serialization archive -- ASCII, length-prefixed strings -- carrying the preset's name, bank, author, tags, save time, and engine version. So the whole bank is legible without a binary decoder: the zip census and the per-preset metadata read straight out of the text. The tabs open the zip framing and the archive, drawn byte by byte from a real bank. <b>Hover</b> a field to light its bytes, <b>click</b> a field with a <span class="k-en">+</span> for its table. Color marks kind (see the key).</p>
   <aside class="sig" aria-label="color key">
     <div class="legrows">
     <div class="row"><span class="sw dark k-enum">plum</span><span class="swsep">&#8594;</span><span class="sw light k-enum">value</span></div>
@@ -208,7 +208,7 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 
     <!-- ===================== OVERVIEW ===================== -->
     <div class="panel on" data-panel="overview">
-      <p class="plede">Analog Lab is Arturia's front end to its whole <b>V Collection</b> &mdash; Pigments, the Piano, the Wurli, and the rest &mdash; and a <code>.labx</code> is a bank of presets exported from it. Open it with any unzip tool and you get a folder tree: one entry per preset, its path encoding <b>engine</b>, user-or-factory, <b>bank</b>, and preset name, plus a cover image. Every entry is <b>STORED</b> (uncompressed), and its content is a <b>Boost text archive</b> &mdash; readable ASCII. The bank below is a real one, <code>Solstice</code>.</p>
+      <p class="plede">Analog Lab is Arturia's front end to its whole <b>V Collection</b> -- Pigments, the Piano, the Wurli, and the rest -- and a <code>.labx</code> is a bank of presets exported from it. Open it with any unzip tool and you get a folder tree: one entry per preset, its path encoding <b>engine</b>, user-or-factory, <b>bank</b>, and preset name, plus a cover image. Every entry is <b>STORED</b> (uncompressed), and its content is a <b>Boost text archive</b> -- readable ASCII. The bank below is a real one, <code>Solstice</code>.</p>
 
       <div class="sec">a real bank, laid out</div>
       <div class="tree">
@@ -216,43 +216,43 @@ footer{margin-top:3.5rem;padding-top:0.9rem;border-top:1px solid var(--ink);disp
 &#9500;&#9472; <b>Pigments/User/'Solstice'/</b>90s - Solstice     <span class="kf">Boost archive</span>
 &#9500;&#9472; <b>Piano/User/'Solstice'/</b>Low Notes - Solstice   <span class="kf">Boost archive</span>
 &#9500;&#9472; <b>Wurli/User/'Solstice'/</b>Accountable - Solstice
-&#9492;&#9472; <b>Solstice.png</b>   <span class="kr">— cover image (top level)</span>
+&#9492;&#9472; <b>Solstice.png</b>   <span class="kr">-- cover image (top level)</span>
    path = Engine / User|Factory / Bank / PresetName
       </div>
 
       <div class="sec">Analog Lab, dated</div>
       <div class="timeline">
-        <div><span class="y">2013</span><span><b>Arturia Analog Lab</b> &mdash; one plugin that hosts presets from every Arturia engine, browsable by instrument, type and style. Banks of presets move between users as <code>.labx</code> files.</span></div>
-        <div><span class="y">zip</span><span><b>a plain archive.</b> No custom container &mdash; <code>.labx</code> is a standard ZIP. The presets are <b>STORED</b>, not deflated, so each entry's bytes sit verbatim in the file.</span></div>
-        <div><span class="y">Boost</span><span><b>text serialization.</b> Each preset is a Boost C++ <code>serialization::archive</code> in <i>text</i> mode: length-prefixed strings, space-separated &mdash; legible metadata, not a binary blob.</span></div>
+        <div><span class="y">2013</span><span><b>Arturia Analog Lab</b> -- one plugin that hosts presets from every Arturia engine, browsable by instrument, type and style. Banks of presets move between users as <code>.labx</code> files.</span></div>
+        <div><span class="y">zip</span><span><b>a plain archive.</b> No custom container -- <code>.labx</code> is a standard ZIP. The presets are <b>STORED</b>, not deflated, so each entry's bytes sit verbatim in the file.</span></div>
+        <div><span class="y">Boost</span><span><b>text serialization.</b> Each preset is a Boost C++ <code>serialization::archive</code> in <i>text</i> mode: length-prefixed strings, space-separated -- legible metadata, not a binary blob.</span></div>
         <div><span class="y">now</span><span><b>a marketplace format.</b> Producers sell Analog Lab banks; the census (engines, banks, preset count) and each preset's name / author / tags / save-time are all legible, which is enough to catalogue a bank.</span></div>
       </div>
 
-      <div class="callout"><b>the path is half the metadata.</b> Before reading a single byte of an entry, its zip path already gives engine, factory-vs-user, bank and preset name: <code>Pigments/User/'Solstice'/90s - Solstice</code>. the path carries identity and the archive body carries the rest &mdash; two sources that cross-check each other. The preset name ends the path with no file extension, so identity comes off the path <i>shape</i>: any entry three or more levels deep is a preset, the shallower ones (the cover) are assets.</div>
-      <div class="callout"><b>STORED means carveable.</b> Because entries are uncompressed, a <code>carve</code> of a preset's byte region is the <i>literal</i> Boost archive &mdash; drop it back into Analog Lab and it replays. each preset has a real offset and size, so the bank doubles as a directory of extractable presets.</div>
+      <div class="callout"><b>the path is half the metadata.</b> Before reading a single byte of an entry, its zip path already gives engine, factory-vs-user, bank and preset name: <code>Pigments/User/'Solstice'/90s - Solstice</code>. the path carries identity and the archive body carries the rest -- two sources that cross-check each other. The preset name ends the path with no file extension, so identity comes off the path <i>shape</i>: any entry three or more levels deep is a preset, the shallower ones (the cover) are assets.</div>
+      <div class="callout"><b>STORED means carveable.</b> Because entries are uncompressed, a <code>carve</code> of a preset's byte region is the <i>literal</i> Boost archive -- drop it back into Analog Lab and it replays. each preset has a real offset and size, so the bank doubles as a directory of extractable presets.</div>
       <div class="callout"><b>a cover ships with the bank.</b> Commercial banks include a top-level <code>.png</code>/<code>.jpg</code> cover (the artwork you see in a store listing). It is the bank's cover image, distinct from the preset entries.</div>
     </div>
 
     <!-- ===================== ZIP ENTRY ===================== -->
     <div class="panel" data-panel="zip">
       <div class="pfacts"><span>signature<b>PK 03 04</b></span><span>method<b>0 (STORED)</b></span><span>name<b>the preset path</b></span><span>data<b>the Boost archive</b></span></div>
-      <p class="plede">Each preset sits behind a standard ZIP <b>local file header</b>: the <code>PK\x03\x04</code> signature, a compression method, CRC, the compressed and uncompressed sizes, and the filename length &mdash; then the filename and, immediately after, the entry data. The method is <b>0 (STORED)</b>, so compressed size equals uncompressed size and the data is the raw archive. The map is a real preset's local header.</p>
+      <p class="plede">Each preset sits behind a standard ZIP <b>local file header</b>: the <code>PK\x03\x04</code> signature, a compression method, CRC, the compressed and uncompressed sizes, and the filename length -- then the filename and, immediately after, the entry data. The method is <b>0 (STORED)</b>, so compressed size equals uncompressed size and the data is the raw archive. The map is a real preset's local header.</p>
       <div class="sec">ZIP local file header (30 bytes)</div>
       <p class="note">Hover <span class="k-en">method</span> (0 = stored) and <span class="k-en">name_len</span> (42 = the preset path length).</p>
       <div id="labx-zip" data-build></div>
       <div class="callout"><b>method 0 is the whole trick.</b> A DEFLATE entry would need decompressing before you could read it; a STORED entry does not. Analog Lab writes every preset STORED, so <code>compressed_size == uncompressed_size</code> and the bytes right after the filename <i>are</i> the Boost archive. seek past the local header and the metadata reads in place.</div>
-      <div class="callout"><b>the data offset is not the header offset.</b> A zip entry's directory record points at the <b>local header</b>, not the payload &mdash; you must skip 30 bytes plus the filename and extra field to reach the data. compute that data offset or an extracted region begins with the PK header instead of the archive.</div>
+      <div class="callout"><b>the data offset is not the header offset.</b> A zip entry's directory record points at the <b>local header</b>, not the payload -- you must skip 30 bytes plus the filename and extra field to reach the data. compute that data offset or an extracted region begins with the PK header instead of the archive.</div>
     </div>
 
     <!-- ===================== BOOST ARCHIVE ===================== -->
     <div class="panel" data-panel="boost">
       <div class="pfacts"><span>format<b>Boost text archive</b></span><span>opens<b>serialization::archive</b></span><span>strings<b>length-prefixed</b></span><span>read<b>as plain ASCII</b></span></div>
-      <p class="plede">A preset's bytes are a <b>Boost serialization archive</b> in text mode &mdash; the C++ library's human-readable format. It opens with a length-prefixed class name, <code>serialization::archive</code>, then a run of version integers, then the object's fields as space-separated tokens where each string is written <code>&lt;length&gt; &lt;bytes&gt;</code>. the preset name, bank, author, tags, save time and engine version all read straight out of this text. The map is the archive's opening bytes.</p>
+      <p class="plede">A preset's bytes are a <b>Boost serialization archive</b> in text mode -- the C++ library's human-readable format. It opens with a length-prefixed class name, <code>serialization::archive</code>, then a run of version integers, then the object's fields as space-separated tokens where each string is written <code>&lt;length&gt; &lt;bytes&gt;</code>. the preset name, bank, author, tags, save time and engine version all read straight out of this text. The map is the archive's opening bytes.</p>
       <div class="sec">Boost archive header (opening 37 bytes)</div>
-      <p class="note">Hover <span class="k-en">len_prefix</span> &mdash; 22, the length of the class name that follows.</p>
+      <p class="note">Hover <span class="k-en">len_prefix</span> -- 22, the length of the class name that follows.</p>
       <div id="labx-boost" data-build></div>
-      <div class="callout"><b>every string is length-prefixed.</b> Boost text serialization writes a string as its byte count, a space, then the bytes &mdash; so <code>22 serialization::archive</code> means &ldquo;a 22-byte string: serialization::archive&rdquo;, and <code>20 Low Notes - Solstice</code> is the 20-byte preset name. That length prefix is how a value containing spaces can be read without guessing where it ends.</div>
-      <div class="callout"><b>the metadata is right there.</b> After the header, the archive lists its readable fields: preset name, bank, author, a comment, a Unix save time, the engine version, and a Characteristics/Genres/Styles tag blob. No decryption, no binary layout &mdash; the same tokens a human can read are what land in the index. A forged or truncated archive simply fails to yield them, which is itself the tell.</div>
+      <div class="callout"><b>every string is length-prefixed.</b> Boost text serialization writes a string as its byte count, a space, then the bytes -- so <code>22 serialization::archive</code> means &ldquo;a 22-byte string: serialization::archive&rdquo;, and <code>20 Low Notes - Solstice</code> is the 20-byte preset name. That length prefix is how a value containing spaces can be read without guessing where it ends.</div>
+      <div class="callout"><b>the metadata is right there.</b> After the header, the archive lists its readable fields: preset name, bank, author, a comment, a Unix save time, the engine version, and a Characteristics/Genres/Styles tag blob. No decryption, no binary layout -- the same tokens a human can read are what land in the index. A forged or truncated archive simply fails to yield them, which is itself the tell.</div>
     </div>
 
   </div>
