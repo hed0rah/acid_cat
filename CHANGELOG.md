@@ -4,36 +4,54 @@ All notable changes to acidcat. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project will
 adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
 
-## [Unreleased]
+## [1.4.1] - 2026-09-05
+
+### Fixed
+
+- **A field offset is relative to its chunk, not to the file.** Three walkers
+  handed `_f` an absolute cursor while their chunk declared a `payload_base`,
+  so the renderer added the base to an offset that already contained it and
+  every field pointed at twice the distance in. The SAP `binary` block and the
+  NSF2 appended metadata shipped that way in 1.3.2; the MPC2000 `.pgm` slot
+  table had the same defect, and its last slots escaped the chunk that
+  declared them. All three were caught the day a test first reached a real
+  file of the format, by a containment check that had existed the whole time.
+
+- **The Kurzweil PCM region claimed eight bytes past the end of every bank.**
+  The raw, headerless region after the object walk declared no `payload_base`,
+  so geometry substituted the RIFF `offset + 8` default: the fourth format
+  with the 1.4.0 "a byte belongs to one chunk" defect. It showed as an
+  overshoot rather than an overlap only because PCM is the last chunk. 39 of
+  40 real Sweetwater banks, silently; the existing corpus test asserts only
+  that the walker never raises, which is why it never saw this.
 
 ### Added
 
-- **Sun/NeXT audio (`.au`, also `.snd`).** The header that predated RIFF and
-  gave raw PCM a way to describe itself: a fixed 24-byte big-endian block --
-  magic, data offset, size, encoding code, sample rate, channels -- an optional
-  annotation, then samples. It is where the `.snd` magic and the G.711 companded
-  codecs of early Unix and NeXT workstations were written down.
+- **The geometry invariants can reach a real corpus.** `ACIDCAT_HUNT_CORPUS`
+  names one or more local roots of real specimens. Every file under them is
+  sniffed and the first 40 per format walked (`ACIDCAT_HUNT_PER_FORMAT`
+  overrides), bounded so a large tree stays finite. A walker that raises on a
+  real file fails a test that names the file instead of being skipped. The
+  floor the ratchet asserts is unchanged: a run with the corpus is stronger
+  evidence, never a stricter assertion. Its first run found the Kurzweil and
+  MPC2000 defects above in under a minute.
 
-  Two fields do not mean what they look like. A `data_size` of `0xFFFFFFFF` is
-  not four gigabytes of audio; it is the "length not known" sentinel of a stream
-  written before its own length was, so the real size is whatever follows the
-  header. And the eight-bit mu-law (code 1) and A-law (code 27) encodings are
-  companded telephone codecs, not linear PCM: fed straight to a PCM player they
-  play as noise, so they are named and flagged the way the VOC walker treats
-  them rather than passed off as samples. The linear and float codes carry a
-  usable bit depth; the fixed-point, emphasis, DSP-program and ADPCM codes are
-  framed from their documented layouts and named, not decoded.
+- **Eleven more seeds** (au, nsf, nsfe, sap, cdxa, cue, vag, sid, mdx, adx,
+  hps), lifted from the test modules that had each kept one privately. The
+  geometry invariants reach 21 formats in a fresh clone instead of 5, the
+  fuzz sweep picks the new seeds up automatically, and the floor is asserted
+  at 20 so reach can only rise on purpose. This widening is what exposed the
+  SAP and NSF2 defect.
 
-  The id is `au`; the MPC2000 `.snd` (id `snd`) is a different format with no
-  `.snd` magic, told apart from this one by content at sniff time.
+- **A pointer field has to point somewhere real.** A field marked `xref` is
+  followed by the TUI and resolved by the forensics layer; one aimed past the
+  end of the file is now an invariant failure, with the same rule as the
+  overshoot check: a dangling pointer the walker announced, in a truncated
+  module for instance, is damage described correctly.
 
-- **`convert` for `.au` -> 16-bit WAV.** mu-law and A-law decode through a new
-  `core/codecs/g711` table (the companding curves Python's `audioop` carried
-  until it was removed in 3.13); 8- and 16-bit big-endian linear PCM are re-framed
-  to little-endian. The wider linear codes and the floats are named by the walker
-  but refused by convert for now, cleanly, rather than emitting noise. Same
-  decode-not-bypass class as the NCW and 8SVX conversions. Also ships an anatomy
-  page for the format.
+- **`scripts/sync_anatomy_mirror.py`** publishes the anatomy pages from canon
+  to the site mirror, CRLF there and LF here, and refuses to invent an index
+  card for a page that has none.
 
 ## [1.4.0] - 2026-09-05
 
