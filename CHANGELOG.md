@@ -35,6 +35,85 @@ adopt [Semantic Versioning](https://semver.org/spec/v2.0.0.html) at 1.0.
   decode-not-bypass class as the NCW and 8SVX conversions. Also ships an anatomy
   page for the format.
 
+## [1.4.0] - 2026-09-05
+
+### Added
+
+- **Sun/NeXT audio (`.au`, also `.snd`).** The self-describing form of the raw
+  PCM that came before it, and the format where the `.snd` magic and the mu-law
+  codec of early Unix and NeXT workstations were written down. A fixed 24-byte
+  big-endian header carries everything a decoder needs in six 32-bit fields,
+  then an optional annotation, then samples.
+
+  Two things in it are easy to get wrong and both are handled. The data size may
+  be `0xFFFFFFFF`, meaning "not known" for a stream written before its own length
+  was, so reading that literal as a byte count is the first mistake available.
+  And the encoding CODE, not a bit-depth field, names the sample format: the
+  companded telephone codecs are eight bits on disk but are not linear PCM, so
+  they are named and flagged rather than passed off as samples that would play
+  as noise.
+
+  Duration is reported for every encoding whose on-disk sample width is fixed,
+  which includes the companded pair. The ADPCM tail is framed and named but its
+  duration stays unknown rather than plausible, because those coded widths have
+  not been checked against a real file.
+
+  An anatomy page documents the layout, and `convert` turns an `.au` into a WAV
+  through a new G.711 codec written against Sun's reference and checked at its
+  fixed points. That codec is new rather than reused: the VOC walker only
+  *labels* mu-law and A-law, and `audioop`, which could decode them, was removed
+  in Python 3.13.
+
+  Formats 67 -> 68.
+
+### Fixed
+
+- **A byte belongs to one chunk.** A chunk that never declared `payload_base`
+  had `offset + 8` substituted for it, the RIFF convention of an eight-byte
+  chunk header, in formats that have no such header. Its extent then ran exactly
+  eight bytes past its own size, into whatever started next: the VOC header
+  claimed 26 bytes and occupied 34, over the top of the first sound block, and
+  the Serum json run overlapped its blob.
+
+  Invisible from every angle but one. Each chunk's `size` was correct, the
+  trustworthy check passed for both members of the pair, and nothing left the
+  file, so the existing overshoot test saw nothing either. Only comparing
+  extents across siblings shows it, and that comparison is now an invariant at
+  the walker contract rather than a fix in two walkers.
+
+- **Six robustness findings from an adversarial audit**, all reachable from the
+  CLI with files under 100 KB:
+
+  - four walkers raised `struct.error` on input shorter than their own headers,
+    breaking the degrade-with-warnings promise; one was reachable from ordinary
+    sniff dispatch
+  - `geometry.normalize` ran outside the walk boundary's guard, so a geometry
+    edge produced by a walker bug escaped the net that exists to contain walker
+    bugs
+  - the sniffer inflated a whole zip member to keep 40 bytes of it, upstream of
+    every walker cap: a 61 KB file peaked at 144 MB
+  - the codec layer behind `extract` and `convert` trusted header counts the
+    walkers refuse to trust, including a block size of zero that never advanced
+    a decode loop
+  - a forged MP4 sample-table count took `repair`, `validate` and `audit` down
+    with an uncaught `struct.error`, and two of those are batch entry points, so
+    one hostile file ended a whole corpus sweep
+  - a pad byte after an odd nested LIST was consumed by the leaf parser but not
+    the container parser, so repair wrote a master size ending before the audio.
+    Fifty readable frames before, zero after, exit code 0
+
+- **A WAV written to a pipe is not a damaged WAV.** A writer streaming to stdout
+  cannot know its length, so it writes a placeholder. All three in circulation
+  were reported in the words a truncated file gets, and the zero case was worse
+  than noisy: it reported a file holding real audio as empty, silently. A
+  genuinely wrong size still complains, and a zero size with no bytes after it
+  is still an empty chunk.
+
+### Changed
+
+- Punctuation reformatted across the anatomy pages and the two builders that
+  generate them, so a regenerated page matches the rest.
+
 ## [1.3.2] - 2026-08-31
 
 ### Added
