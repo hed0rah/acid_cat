@@ -213,7 +213,7 @@ def inspect_voc(filepath):
 
     total = sum(s["size"] for s in info["streams"])
     chunks = [{
-        "id": "VOC", "offset": 0, "size": _HDR_MIN,
+        "id": "VOC", "offset": 0, "size": _HDR_MIN, "payload_base": 0,
         "summary": (f"Creative Voice File v{_version(info['version'])} -- "
                     f"{len(info['streams'])} stream(s), {total:,} B of samples"),
         "fields": [

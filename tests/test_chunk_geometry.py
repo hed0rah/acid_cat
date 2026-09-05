@@ -108,6 +108,45 @@ def _overshoots(chunks, fsize):
     return out
 
 
+
+def _collisions(chunks):
+    """Sibling pairs whose extents overlap without one enclosing the other.
+
+    Enclosure is the reason this is not simply "do the ranges intersect". Several
+    walkers emit a container and the chunks inside it in one flat list, so a
+    parent spanning its children is the normal shape and reads as an overlap to
+    any test that only compares adjacent spans. A first pass written that way
+    flagged eighteen formats and was wrong about seventeen.
+
+    What is left after filtering enclosure is two chunks each claiming bytes the
+    other also claims, at different starts -- which no correct walker does,
+    because the bytes belong to one of them.
+
+    Read through `geometry.extent_of` rather than re-deriving offset+size here,
+    for the reason the module docstring gives: a test carrying its own copy of
+    the rule keeps passing after the copy it polices is fixed.
+    """
+    spans = []
+    for c in chunks:
+        if c.get("geometry") == geometry.UNPOSITIONED:
+            continue
+        off, ext = geometry.extent_of(c)
+        if isinstance(off, int) and isinstance(ext, int) and ext >= 0:
+            spans.append((off, off + ext, str(c.get("id"))))
+    spans.sort()
+    out = []
+    for i, a in enumerate(spans):
+        for b in spans[i + 1:]:
+            if b[0] >= a[1]:
+                break                      # sorted: nothing further can touch a
+            if a[0] <= b[0] and b[1] <= a[1]:
+                continue                   # a encloses b: nesting, not collision
+            if b[0] <= a[0] and a[1] <= b[1]:
+                continue                   # b encloses a
+            out.append((a[2], a[0], a[1], b[2], b[0], b[1]))
+    return out
+
+
 @pytest.fixture(scope="module")
 def walked():
     got = list(_corpus())
@@ -216,3 +255,76 @@ class TestFieldsLandInsideTheirChunk:
             "fields outside the chunk that declares them:\n" + "\n".join(
                 f"  {lab} {cid!r}.{nm!r} at 0x{at:x}, payload 0x{b:x}+{s}"
                 f" ({fn})" for lab, cid, nm, at, b, s, fn in bad[:8]))
+
+
+# (walker label, chunk id) -> the sibling it collides with. Shrink only.
+#
+# Empty, and it got here the same way KNOWN_DEFECTS did -- by the two entries
+# being fixed rather than recorded. Both were one defect: a chunk that never declared `payload_base`,
+# so `geometry.normalize` substituted `offset + DEFAULT_HEADER` -- the RIFF
+# convention of an eight-byte chunk header -- for a format that has no such
+# header. The extent then runs exactly eight bytes past the chunk's own size,
+# into whatever starts next.
+#
+# It is invisible from every angle except this one. Each chunk's `size` is
+# correct, `is_trustworthy` returns True for both members of the pair, and
+# nothing leaves the file, so the overshoot test above sees nothing either.
+KNOWN_COLLISIONS = set()
+
+
+class TestSiblingsDoNotClaimTheSameBytes:
+    def test_no_new_chunk_overlaps_one_it_does_not_enclose(self, walked):
+        """A byte belongs to one chunk. Two chunks claiming it means at least
+        one is describing bytes it does not own, and a reader following either
+        lands somewhere the walker did not intend.
+
+        Found on `.au`, whose 24-byte header inherited an 8-byte chunk header it
+        does not have and ran into its own audio. The same substitution is why
+        the two entries above collide, and why this test exists at the contract
+        rather than in one walker's own file."""
+        new = {}
+        for path, label, chunks, _warns in walked:
+            for aid, a0, a1, bid, b0, b1 in _collisions(chunks):
+                if (label, aid) in KNOWN_COLLISIONS:
+                    continue
+                new.setdefault((label, aid), (os.path.basename(path), a0, a1,
+                                              bid, b0, b1))
+        assert not new, (
+            "chunks overlapping a sibling they do not enclose:\n" + "\n".join(
+                f"  {lab} {cid!r} in {fn}: {a0}..{a1} into {bid!r} {b0}..{b1}"
+                for (lab, cid), (fn, a0, a1, bid, b0, b1) in sorted(new.items())))
+
+    def test_the_known_collisions_are_still_real(self, walked):
+        """The same ratchet the overshoot list gets. A known-failure entry that
+        outlives its failure re-freezes a fixed bug in silence."""
+        still = set()
+        for _path, label, chunks, _warns in walked:
+            for aid, _a0, _a1, _bid, _b0, _b1 in _collisions(chunks):
+                still.add((label, aid))
+        stale = sorted(k for k in KNOWN_COLLISIONS if k not in still)
+        assert not stale, (
+            f"these no longer collide and should leave KNOWN_COLLISIONS: {stale}")
+
+    def test_enclosure_is_not_counted_as_a_collision(self, walked):
+        """The control, and the reason the helper is not a one-line intersect.
+
+        Container walkers emit a parent and its children in one list. If
+        enclosure counted, this suite would fail on every one of them and the
+        real defect would be invisible inside the noise -- which is exactly what
+        the first draft of the sweep did."""
+        nested = 0
+        for _path, _label, chunks, _warns in walked:
+            spans = []
+            for c in chunks:
+                if c.get("geometry") == geometry.UNPOSITIONED:
+                    continue
+                off, ext = geometry.extent_of(c)
+                if isinstance(off, int) and isinstance(ext, int):
+                    spans.append((off, off + ext))
+            for i, a in enumerate(spans):
+                for b in spans[i + 1:]:
+                    if a[0] <= b[0] and b[1] <= a[1] and a != b:
+                        nested += 1
+        assert nested > 0, (
+            "no nested chunk anywhere in the corpus, so the enclosure filter "
+            "is untested and this suite is not proving what it claims")

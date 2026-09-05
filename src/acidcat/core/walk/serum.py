@@ -60,6 +60,7 @@ def inspect_serum(filepath, ctx=None):
     # is best-effort.
     end_bytes = len(text[:end].encode("utf-8"))
     chunks.append({"id": "json", "offset": json_start, "size": end_bytes,
+                   "payload_base": json_start,
                    "summary": f"'{name}' metadata, {len(parsed)} keys",
                    "fields": fields, "warnings": []})
 
