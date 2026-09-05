@@ -285,22 +285,37 @@ class TestTheKeysThemselvesWork:
         """The state the region keys are live in: something located."""
         regions = await _scanned(app, pilot)
         tree = app.query_one("#tree")
-        tree.focus()
-        tree.move_cursor(regions[0])
-        # Both of these, and in this order. The pause is not redundant with
-        # the wait below: `until` returns immediately when its condition is
-        # already true, so replacing the pause with it removed the tick the app
-        # needs to drain pending work before a key arrives -- and every test
-        # that pressed a key here started failing, deterministically, in the
-        # direction the wait was supposed to prevent.
-        #
-        # A flat pause was doing two jobs. Waiting for focus is the one it
-        # looked like it was doing; letting the app run is the one it was
-        # actually load-bearing for.
+        # The pause first, and it is not redundant with the loop below: the app
+        # needs a tick to drain pending work before a key will land, and an
+        # `until` whose condition is already true returns without giving it one.
+        # Removing this pause once made every key-pressing test fail.
         await pilot.pause()
-        assert await until(
-            pilot, lambda: tree.has_focus and tree.cursor_node is regions[0]), (
-            "the tree never took focus with the cursor on the first region, "
+
+        # Then CONVERGE on the state rather than setting it and waiting.
+        #
+        # This used to be `tree.focus()` once, then `until(has_focus and
+        # cursor is regions[0])`. That is a race, not a wait: setting focus and
+        # then watching for it assumes nothing takes it back, and on a loaded
+        # runner the tail of the scan lands after the focus() call and moves it.
+        # The condition was briefly true and then was not, so a ten-second poll
+        # timed out on a tree that had been focused and lost it.
+        #
+        # It failed twice in two days on CI -- ubuntu 3.10 once, ubuntu 3.13 the
+        # next -- and passed on re-run both times, which is the signature of a
+        # race rather than of a slow machine. Re-applying inside the loop
+        # converges regardless of what else is still settling. Arranging a
+        # precondition is exactly where driving beats waiting; the assertions
+        # these tests actually make are further down.
+        ok = False
+        for _ in range(100):
+            if tree.has_focus and tree.cursor_node is regions[0]:
+                ok = True
+                break
+            tree.focus()
+            tree.move_cursor(regions[0])
+            await pilot.pause(0.1)
+        assert ok or (tree.has_focus and tree.cursor_node is regions[0]), (
+            "the tree never held focus with the cursor on the first region, "
             "so any key pressed from here lands somewhere else")
         return regions
 
