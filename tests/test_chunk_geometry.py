@@ -43,6 +43,7 @@ specimens are COMMITTED.
 """
 
 import glob
+import io
 import os
 
 import pytest
@@ -72,6 +73,20 @@ KNOWN_DEFECTS = {}
 
 
 def _corpus():
+    """Real specimens from `data/`, then a built one for every seeded format.
+
+    The specimens are the better evidence and the seeds are the wider net, and
+    the split matters because of where each exists. `data/test_formats/` is
+    gitignored, so a development machine walks around thirty-six formats here
+    and a CLONE walks five -- and the clone is where CI gates. An invariant that
+    covers thirty-six locally and five on the runner is telling you about the
+    machine that wrote it.
+
+    `tests/seeds.py` is committed code, so a seeded format is examined
+    everywhere. A seed is minimal and cannot show what a real file's oddities
+    would, but for a geometry rule -- do these chunks describe bytes they own --
+    a minimal valid file exercises the arithmetic exactly as well.
+    """
     for path in sorted(glob.glob(os.path.join(_DATA, "**", "*.*"),
                                  recursive=True)):
         try:
@@ -80,6 +95,21 @@ def _corpus():
         except OSError:
             continue
         try:
+            label, chunks, warns = walk_file(path, deep=False)
+        except Exception:
+            continue
+        yield path, label, chunks, (warns or [])
+
+    import tempfile
+
+    import seeds as _seeds
+
+    tmp = tempfile.mkdtemp(prefix="acidcat-geom-seeds-")
+    for name, (build, ext, _sniffs) in sorted(_seeds.SEEDS.items()):
+        path = os.path.join(tmp, name + ext)
+        try:
+            with io.open(path, "wb") as fh:
+                fh.write(build())
             label, chunks, warns = walk_file(path, deep=False)
         except Exception:
             continue
@@ -216,7 +246,7 @@ class TestTheRatchetSaysWhatItCovers:
         assert len(walked) >= 7, f"only {len(walked)} files walked"
         assert chunks >= 56, f"only {chunks} chunks examined"
 
-    def test_its_reach_is_five_walkers_not_thirty(self, walked):
+    def test_it_says_how_far_it_reaches(self, walked):
         """Stated rather than implied. A clone's data/ exercises five formats;
         the repo has roughly thirty walkers, so a clean run here is evidence
         about those five and silence about the rest. The gap is corpus, not
@@ -224,8 +254,12 @@ class TestTheRatchetSaysWhatItCovers:
         a development machine carrying data/test_formats/ already covers more
         than this asserts."""
         labels = {lab for _p, lab, _c, _w in walked}
-        assert len(labels) >= 5, sorted(labels)
-        assert {"RIFF/WAVE", "MP4/M4A", "FLAC"} <= labels, sorted(labels)
+        # The floor is what a CLONE reaches: five formats from the committed
+        # fixtures, plus one per seeded format. It rises when a specimen is
+        # COMMITTED or a seed is ADDED, and both are things someone did on
+        # purpose -- never when a gitignored directory happens to be present.
+        assert len(labels) >= 20, sorted(labels)
+        assert {"RIFF/WAVE", "FLAC"} <= labels, sorted(labels)
 
 
 class TestFieldsLandInsideTheirChunk:
