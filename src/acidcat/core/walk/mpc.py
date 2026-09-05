@@ -465,7 +465,7 @@ def _inspect_pgm_mpc2000(data, size, prog):
                "summary": f"MPC2000 program '{prog}': {distinct} sample(s)",
                "fields": fields, "warnings": []}]
     if entries:
-        sf = [_f(o, 16, f"[{j}]", n)
+        sf = [_f(o - 2, 16, f"[{j}]", n)                     # relative to payload_base
               for j, (o, n) in enumerate(entries[:_PGM_PAD_CAP])]
         sw = ([f"{len(entries)} slots; listing first {_PGM_PAD_CAP}"]
               if len(entries) > _PGM_PAD_CAP else [])

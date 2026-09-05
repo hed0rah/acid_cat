@@ -326,3 +326,21 @@ def test_pgm_mpc2000(tmp_path):
     assert f["referenced_samples"] == 3
     samples = next(c for c in chunks if c["id"] == "samples")
     assert [x["value"] for x in samples["fields"]] == ["Kick", "Snare", "Hat"]
+
+
+def test_pgm2000_sample_slots_sit_inside_their_chunk():
+    """Field offsets are relative to payload_base. The slot table starts at byte
+    2 and the walker handed _f the absolute cursor, so the base was counted
+    twice and the last slots escaped the chunk that declared them. Caught on
+    three real MPC2000 kits the day the invariants first reached the format."""
+    from acidcat.core.infra import geometry
+    from acidcat.core.infra.fieldcodec import _field_abs
+    recs = b"".join(("SMP%02d" % j).ljust(16).encode() + bytes(1) for j in range(16))
+    data = bytes(2) + recs
+    chunks, _w = mpc._inspect_pgm_mpc2000(data, len(data), "kit")
+    smp = next(c for c in chunks if c["id"] == "samples")
+    base, size = geometry.payload_of(smp)
+    for fl in smp["fields"]:
+        at = _field_abs(smp, fl)
+        assert base <= at and at + fl["len"] <= base + size, (
+            fl["name"], at, base, size)

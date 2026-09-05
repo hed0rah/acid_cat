@@ -116,10 +116,12 @@ def inspect_krz(filepath):
     # the PCM sample region after the end marker
     if 0 < osize < len(b):
         pcm = file_size - osize
+        # payload_base declared: this is a raw region with no header, so the
+        # default (offset + 8) would claim eight bytes past the end of the file
         chunks.append({"id": "PCM", "offset": osize, "size": pcm,
                        "summary": f"raw 16-bit big-endian PCM, {pcm:,} bytes "
                                   f"({pcm // 2:,} samples)",
-                       "fields": [], "warnings": []})
+                       "fields": [], "warnings": [], "payload_base": osize})
     summary = ", ".join(f"{v} {k}" for k, v in sorted(kinds.items()))
     if summary:
         chunks[0]["summary"] += f" ({summary})"

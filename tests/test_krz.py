@@ -174,3 +174,22 @@ def test_corpus_never_raises():
         + glob.glob(_CORPUS + "/**/*.KRZ", recursive=True)
     for f in files:
         walk_file(f)                               # must not raise on any specimen
+
+
+def test_pcm_region_owns_exactly_its_bytes(tmp_path):
+    """The PCM region is raw, headerless bytes after the object walk. Without a
+    declared payload_base it inherited geometry's RIFF default of offset + 8
+    and claimed eight bytes past the end of the file. It did so on 39 of 40
+    real Sweetwater banks, silently, because PCM is the last chunk and nothing
+    sat after it to collide with."""
+    import os
+    from acidcat.core.infra import geometry
+    pcm = bytes([0, 1]) * 100
+    p = tmp_path / "bank.krz"
+    p.write_bytes(_bank([], pcm=pcm))
+    _label, chunks, _w = walk_file(str(p))
+    geometry.normalize(chunks, os.path.getsize(p))
+    region = next(c for c in chunks if c["id"] == "PCM")
+    base, n = geometry.payload_of(region)
+    assert base == region["offset"], "PCM has no header to skip"
+    assert base + n == os.path.getsize(p), (base, n, os.path.getsize(p))
