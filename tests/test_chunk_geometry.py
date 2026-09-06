@@ -135,6 +135,10 @@ _HUNT_SECONDS = 600
 # than being demoted to a warning. A corpus sweep that quietly skipped a
 # crashing walker would be the green-run-that-checked-nothing defect again.
 HUNT_RAISED = []
+# how many real files the sweep actually walked. Without this, a corpus
+# variable pointing somewhere empty produces an empty HUNT_RAISED and
+# reads exactly like a clean run over fifty thousand files.
+HUNT_WALKED = []
 
 
 def _hunt():
@@ -169,6 +173,7 @@ def _hunt():
                     HUNT_RAISED.append((path, repr(exc)))
                     continue
                 taken[fid] = taken.get(fid, 0) + 1
+                HUNT_WALKED.append(fid)
                 yield path, label, chunks, (warns or [])
 
 
@@ -330,6 +335,28 @@ class TestTheHuntCorpusWalks:
         assert not HUNT_RAISED, (
             f"{len(HUNT_RAISED)} real file(s) made a walker raise:\n" + "\n".join(
                 f"  {os.path.basename(p)}: {e}" for p, e in HUNT_RAISED[:10]))
+
+    def test_the_sweep_actually_reached_real_files(self):
+        """The control, and the reason the assertion above means anything.
+
+        `ACIDCAT_HUNT_CORPUS` pointed at a path that does not exist, or at an
+        empty directory, or at a tree this process cannot read, produces an
+        empty HUNT_RAISED -- which is indistinguishable from a clean sweep over
+        fifty thousand files. Both were verified to pass before this existed.
+
+        So when the variable is set, the sweep has to show it walked something.
+        When it is not set, there is nothing to check and saying so is honest;
+        the seeds and fixtures are the floor, and they are asserted elsewhere."""
+        if not os.environ.get("ACIDCAT_HUNT_CORPUS"):
+            pytest.skip("ACIDCAT_HUNT_CORPUS not set; seeds and fixtures are the floor")
+        assert HUNT_WALKED, (
+            "ACIDCAT_HUNT_CORPUS is set but the sweep walked no file at all. "
+            "The path is wrong, unreadable, or holds nothing this tool reads, "
+            "and every hunt assertion above passed on an empty set.")
+        assert len(set(HUNT_WALKED)) >= 3, (
+            "the sweep reached only %d format(s) (%s); a corpus that narrow is "
+            "not evidence about the fleet"
+            % (len(set(HUNT_WALKED)), sorted(set(HUNT_WALKED))))
 
 
 class TestFieldsLandInsideTheirChunk:
